@@ -66,7 +66,18 @@ public enum VoipParamType {
      * The count marker that pairs immediately after an {@link #ARRAY} entry to carry the
      * array's runtime element count, keyed under code {@code 5}.
      */
-    ARRAY_COUNT(5);
+    ARRAY_COUNT(5),
+
+    /**
+     * The type of a wire field with no recovered native descriptor, keyed under code {@code 0}.
+     *
+     * <p>A {@code <voip_settings>} leaf that resolves to no modelled {@link VoipParamKey} is carried
+     * by an {@linkplain VoipParamKey#unknown(String) unknown} key whose type is this constant. It is not one of the five engine
+     * descriptor codes ({@code 1} to {@code 5}); it marks a value retained by wire path whose engine
+     * value type is unknown, so it is read back through whichever {@link VoipParams} accessor coerces
+     * the raw value the deserializer stored.
+     */
+    UNKNOWN(0);
 
     /**
      * The integer value-type code the engine stores in the descriptor's type byte.

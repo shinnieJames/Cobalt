@@ -16,12 +16,12 @@ import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyD
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.model.signal.KeyIdBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionEntry;
+import com.github.auties00.cobalt.model.sync.action.SyncActionEntry;
 import com.github.auties00.cobalt.model.sync.SyncCollectionMetadata;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.*;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.*;
@@ -119,7 +119,7 @@ public final class MutationRequestBuilder {
      * Builds an outgoing sync IQ for a single collection.
      *
      * <p>Used when only one collection has dirty patches to push. The returned
-     * {@link SyncRequest} carries the built {@link NodeBuilder} (still mutable so callers can
+     * {@link SyncRequest} carries the built {@link StanzaBuilder} (still mutable so callers can
      * attach an id) and, when mutations were encoded, the {@link SyncRequest.UploadedPatchInfo}
      * the success path needs after the server ACKs. When the collection has not yet been
      * bootstrapped its pending patches are skipped and the request returns a snapshot-requesting
@@ -132,7 +132,7 @@ public final class MutationRequestBuilder {
      *
      * @param patchType the collection type to sync
      * @param patches the pending mutations to include; may be empty
-     * @return the {@link SyncRequest} containing the IQ {@link NodeBuilder} and (when applicable)
+     * @return the {@link SyncRequest} containing the IQ {@link StanzaBuilder} and (when applicable)
      *         the {@link SyncRequest.UploadedPatchInfo}
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdRequestBuilder", exports = "buildAppStateSyncRequest", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -142,7 +142,7 @@ public final class MutationRequestBuilder {
 
         var bootstrapped = collectionState.bootstrapped();
 
-        var collectionBuilder = new NodeBuilder()
+        var collectionBuilder = new StanzaBuilder()
                 .description("collection")
                 .attribute("name", patchType.toString())
                 .attribute("version", collectionState.version())
@@ -160,7 +160,7 @@ public final class MutationRequestBuilder {
             var compacted = compactPatch(patches);
             if (!compacted.isEmpty()) {
                 var buildResult = buildPatchProtobuf(patchType, compacted, collectionState, List.copyOf(allMutationIds));
-                var patchNode = new NodeBuilder()
+                var patchNode = new StanzaBuilder()
                         .description("patch")
                         .content(buildResult.bytes())
                         .build();
@@ -174,12 +174,12 @@ public final class MutationRequestBuilder {
 
         var collectionNode = collectionBuilder.build();
 
-        var syncNode = new NodeBuilder()
+        var syncNode = new StanzaBuilder()
                 .description("sync")
                 .content(collectionNode)
                 .build();
 
-        var node = new NodeBuilder()
+        var node = new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "set")
                 .attribute("xmlns", "w:sync:app:state")
@@ -209,12 +209,12 @@ public final class MutationRequestBuilder {
      * were dropped, either because the collection was not yet bootstrapped or because compaction
      * reduced them to empty.
      *
-     * @param node the IQ {@link NodeBuilder}
+     * @param node the IQ {@link StanzaBuilder}
      * @param uploadInfos per-collection upload metadata; immutable
      * @param skippedUploads collections whose mutations were dropped from the request; immutable
      */
     public record BatchedSyncRequest(
-            NodeBuilder node,
+            StanzaBuilder node,
             Map<SyncPatchType, SyncRequest.UploadedPatchInfo> uploadInfos,
             Set<SyncPatchType> skippedUploads
     ) {
@@ -607,13 +607,13 @@ public final class MutationRequestBuilder {
      * defaults to {@code false} so default-config callers see no difference.
      *
      * @param collectionPatches map of collection types to their pending mutations
-     * @return the {@link BatchedSyncRequest} carrying the IQ {@link NodeBuilder}, the
+     * @return the {@link BatchedSyncRequest} carrying the IQ {@link StanzaBuilder}, the
      *         per-collection upload metadata, and the skipped collection set
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdRequestBuilder", exports = "buildAppStateSyncRequest", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSyncdRequestBuilderBuild", exports = "buildSyncIqNode", adaptation = WhatsAppAdaptation.ADAPTED)
     public BatchedSyncRequest buildBatchedSyncRequest(Map<SyncPatchType, SequencedCollection<SyncPendingMutation>> collectionPatches) {
-        var collectionNodes = new ArrayList<Node>();
+        var collectionNodes = new ArrayList<Stanza>();
         var uploadInfos = new LinkedHashMap<SyncPatchType, SyncRequest.UploadedPatchInfo>();
         var skippedUploads = new LinkedHashSet<SyncPatchType>();
         for (var entry : collectionPatches.entrySet()) {
@@ -624,7 +624,7 @@ public final class MutationRequestBuilder {
 
             var bootstrapped = collectionState.bootstrapped();
 
-            var collectionBuilder = new NodeBuilder()
+            var collectionBuilder = new StanzaBuilder()
                     .description("collection")
                     .attribute("name", patchType.toString())
                     .attribute("version", collectionState.version())
@@ -641,7 +641,7 @@ public final class MutationRequestBuilder {
                 var compacted = compactPatch(patches);
                 if (!compacted.isEmpty()) {
                     var buildResult = buildPatchProtobuf(patchType, compacted, collectionState, List.copyOf(allMutationIds));
-                    var patchNode = new NodeBuilder()
+                    var patchNode = new StanzaBuilder()
                             .description("patch")
                             .content(buildResult.bytes())
                             .build();
@@ -661,13 +661,13 @@ public final class MutationRequestBuilder {
             collectionNodes.add(collectionBuilder.build());
         }
 
-        var syncNode = new NodeBuilder()
+        var syncNode = new StanzaBuilder()
                 .description("sync")
                 .content(collectionNodes)
                 .build();
 
         return new BatchedSyncRequest(
-                new NodeBuilder()
+                new StanzaBuilder()
                         .description("iq")
                         .attribute("type", "set")
                         .attribute("xmlns", "w:sync:app:state")

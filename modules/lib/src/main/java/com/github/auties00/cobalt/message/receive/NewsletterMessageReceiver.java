@@ -8,8 +8,8 @@ import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageStatus;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.time.Instant;
 
@@ -17,7 +17,7 @@ import java.time.Instant;
  * Inbound receiver that turns a plaintext newsletter {@code <message>} stanza into a
  * fully populated {@link NewsletterMessageInfo}.
  *
- * <p>Selected by {@link MessageReceivingService#process(Node)} whenever the {@code from}
+ * <p>Selected by {@link MessageReceivingService#process(Stanza)} whenever the {@code from}
  * JID belongs to the {@code @newsletter} server; the resulting posts back the Channels
  * feature. Newsletter messages are not Signal-encrypted, so this receiver skips the
  * entire decryption pipeline used by {@link ChatMessageReceiver}.
@@ -26,7 +26,7 @@ import java.time.Instant;
  * This implementation collapses WhatsApp Web's
  * {@code WAWebHandleNewsletterMsg.default} processor and the
  * {@code WAWebNewsletterMsgParser} parser into a single member-by-member parse against
- * the {@link Node} attributes; the WA Web path also runs the message through
+ * the {@link Stanza} attributes; the WA Web path also runs the message through
  * {@code WAWebNewsletterMsgProcessor.preprocessNewsletterMsg} for add-on votes and
  * orphan detection, neither of which Cobalt currently models.
  */
@@ -67,15 +67,15 @@ final class NewsletterMessageReceiver extends MessageReceiver<NewsletterMessageI
     @WhatsAppWebExport(moduleName = "WAWebHandleNewsletterMsg", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    NewsletterMessageInfo receive(Node node, Jid fromJid) {
-        var id = node.getRequiredAttributeAsString("id");
-        var timestampSeconds = node.getRequiredAttributeAsLong("t");
+    NewsletterMessageInfo receive(Stanza stanza, Jid fromJid) {
+        var id = stanza.getRequiredAttributeAsString("id");
+        var timestampSeconds = stanza.getRequiredAttributeAsLong("t");
         var timestamp = Instant.ofEpochSecond(timestampSeconds);
-        var serverId = node.getRequiredAttributeAsInt("server_id");
-        var isSender = "true".equals(node.getAttributeAsString("is_sender", null));
+        var serverId = stanza.getRequiredAttributeAsInt("server_id");
+        var isSender = "true".equals(stanza.getAttributeAsString("is_sender", null));
 
-        var plaintext = node.getChild("plaintext")
-                .flatMap(Node::toContentBytes)
+        var plaintext = stanza.getChild("plaintext")
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
         if (plaintext == null || plaintext.length == 0) {
             LOGGER.log(System.Logger.Level.DEBUG,

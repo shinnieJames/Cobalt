@@ -2,10 +2,11 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.WhatsAppLinkedClientErrorHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -15,7 +16,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>The sync dispatcher would route incoming {@code usernameChatStartMode} mutations here if the
  * server ever emits one. The handler persists the
  * {@link UsernameChatStartModeAction.ChatStartMode} value through
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore#setUsernameChatStartMode(UsernameChatStartModeAction.ChatStartMode)}
+ * {@link LinkedWhatsAppStore#setUsernameChatStartMode(UsernameChatStartModeAction.ChatStartMode)}
  * so any chat the user opens from the username discovery surface uses the preferred identifier.
  *
  * @implNote
@@ -76,7 +77,7 @@ public final class UsernameChatStartModeHandler implements WebAppStateActionHand
      * The decoded value must be a {@link UsernameChatStartModeAction} with a populated
      * {@link UsernameChatStartModeAction#chatStartMode()}, otherwise the mutation is
      * {@link MutationApplicationResult#malformed()}. The resolved enum is written into
-     * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore#setUsernameChatStartMode(UsernameChatStartModeAction.ChatStartMode)}.
+     * {@link LinkedWhatsAppStore#setUsernameChatStartMode(UsernameChatStartModeAction.ChatStartMode)}.
      *
      * @implNote
      * This implementation follows the canonical shape used by sibling handlers because WA Web ships

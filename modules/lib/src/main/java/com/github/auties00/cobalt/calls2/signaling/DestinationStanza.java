@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.List;
 import java.util.Objects;
@@ -91,20 +91,20 @@ public record DestinationStanza(List<Jid> devices) implements CallMessage {
     }
 
     /**
-     * Builds the {@code <destination> <to jid="..."/>* </destination>} block node.
+     * Builds the {@code <destination> <to jid="..."/>* </destination>} block stanza.
      *
      * <p>Each addressed device becomes a keyless {@code <to jid="..."/>} child; a block addressing no
      * devices produces an empty {@code <destination/>} element.
      *
-     * @return the destination block node
+     * @return the destination block stanza
      */
     @Override
-    public Node toNode() {
-        var builder = new NodeBuilder()
+    public Stanza toStanza() {
+        var builder = new StanzaBuilder()
                 .description(ELEMENT);
         if (!devices.isEmpty()) {
             var children = devices.stream()
-                    .map(device -> new NodeBuilder()
+                    .map(device -> new StanzaBuilder()
                             .description(TO_ELEMENT)
                             .attribute(JID_ATTRIBUTE, device)
                             .build())
@@ -115,24 +115,24 @@ public record DestinationStanza(List<Jid> devices) implements CallMessage {
     }
 
     /**
-     * Decodes a {@code <destination>} node into a {@link DestinationStanza}.
+     * Decodes a {@code <destination>} stanza into a {@link DestinationStanza}.
      *
      * <p>Each {@code <to>} child contributes its {@code jid} attribute to the addressed-device list; a
-     * {@code <to>} child without a parseable {@code jid} attribute is skipped. A node that is not a
+     * {@code <to>} child without a parseable {@code jid} attribute is skipped. A stanza that is not a
      * {@code <destination>} element yields an empty result so callers iterating a mixed child list can
      * skip it.
      *
-     * @param node the {@code <destination>} node
-     * @return the decoded destination block, or an empty result when the node is not a
+     * @param stanza the {@code <destination>} stanza
+     * @return the decoded destination block, or an empty result when the stanza is not a
      *         {@code <destination>} element
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @throws NullPointerException if {@code stanza} is {@code null}
      */
-    public static Optional<DestinationStanza> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        if (!node.hasDescription(ELEMENT)) {
+    public static Optional<DestinationStanza> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        if (!stanza.hasDescription(ELEMENT)) {
             return Optional.empty();
         }
-        var devices = node.streamChildren(TO_ELEMENT)
+        var devices = stanza.streamChildren(TO_ELEMENT)
                 .flatMap(child -> child.streamAttributeAsJid(JID_ATTRIBUTE))
                 .toList();
         return Optional.of(new DestinationStanza(devices));

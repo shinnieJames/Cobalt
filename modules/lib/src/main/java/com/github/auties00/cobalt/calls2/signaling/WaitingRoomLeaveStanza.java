@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.NoSuchElementException;
 import java.util.List;
@@ -66,32 +66,32 @@ public record WaitingRoomLeaveStanza(String callId, Jid callCreator, Optional<St
     }
 
     /**
-     * Builds the {@code <waiting_room_leave call-id call-creator link-token/>} action node.
+     * Builds the {@code <waiting_room_leave call-id call-creator link-token/>} action stanza.
      *
      * <p>An absent link token is omitted; the element carries no {@code <user>} children.
      *
-     * @return the waiting-room leave action node
+     * @return the waiting-room leave action stanza
      */
     @Override
-    public Node toNode() {
+    public Stanza toStanza() {
         return WaitingRoomStanzas.build(type().wireTag().orElseThrow(), callId, callCreator,
                 Optional.empty(), linkToken, Optional.empty(), List.of());
     }
 
     /**
-     * Decodes a {@code <waiting_room_leave>} action node into a {@link WaitingRoomLeaveStanza}.
+     * Decodes a {@code <waiting_room_leave>} action stanza into a {@link WaitingRoomLeaveStanza}.
      *
-     * @param node the {@code <waiting_room_leave>} node
+     * @param stanza the {@code <waiting_room_leave>} stanza
      * @return the decoded waiting-room leave signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static WaitingRoomLeaveStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var linkToken = WaitingRoomStanzas.linkToken(node);
+    public static WaitingRoomLeaveStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var linkToken = WaitingRoomStanzas.linkToken(stanza);
         return new WaitingRoomLeaveStanza(callId, callCreator, linkToken);
     }
 }

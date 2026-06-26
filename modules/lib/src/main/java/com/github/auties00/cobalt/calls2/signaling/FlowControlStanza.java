@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.NoSuchElementException;
@@ -17,7 +17,7 @@ import java.util.OptionalInt;
  * It carries the universal call header, a numeric {@code transaction-id} attribute correlating the
  * request, and up to three child elements holding integer text content: {@code <bitrate>} (the target
  * encoding bitrate), {@code <width>} (the target frame width), and {@code <fps>} (the target frame
- * rate). Each child is optional; absent targets are omitted from the node entirely.
+ * rate). Each child is optional; absent targets are omitted from the stanza entirely.
  *
  * <p>On the wire the element is
  * {@snippet lang="xml" :
@@ -131,27 +131,27 @@ public record FlowControlStanza(String callId, Jid callCreator, int transactionI
 
     /**
      * Builds the {@code <flowcontrol transaction-id> <bitrate/> <width/> <fps/> </flowcontrol>} action
-     * node.
+     * stanza.
      *
      * <p>The {@code transaction-id} attribute and each of the {@code bitrate}, {@code width}, and
-     * {@code fps} child elements are omitted when their value is absent; a flow-control node with no
+     * {@code fps} child elements are omitted when their value is absent; a flow-control stanza with no
      * targets carries only the common header.
      *
-     * @return the flow-control action node
+     * @return the flow-control action stanza
      */
     @Override
-    public Node toNode() {
-        var children = new ArrayList<Node>(3);
+    public Stanza toStanza() {
+        var children = new ArrayList<Stanza>(3);
         if (bitrate >= 0) {
-            children.add(new NodeBuilder().description(BITRATE_ELEMENT).content(bitrate).build());
+            children.add(new StanzaBuilder().description(BITRATE_ELEMENT).content(bitrate).build());
         }
         if (width >= 0) {
-            children.add(new NodeBuilder().description(WIDTH_ELEMENT).content(width).build());
+            children.add(new StanzaBuilder().description(WIDTH_ELEMENT).content(width).build());
         }
         if (fps >= 0) {
-            children.add(new NodeBuilder().description(FPS_ELEMENT).content(fps).build());
+            children.add(new StanzaBuilder().description(FPS_ELEMENT).content(fps).build());
         }
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(TRANSACTION_ID_ATTRIBUTE, transactionId, transactionId >= 0);
         if (!children.isEmpty()) {
             builder.content(children);
@@ -160,37 +160,37 @@ public record FlowControlStanza(String callId, Jid callCreator, int transactionI
     }
 
     /**
-     * Decodes a {@code <flowcontrol>} action node into a {@link FlowControlStanza}.
+     * Decodes a {@code <flowcontrol>} action stanza into a {@link FlowControlStanza}.
      *
      * <p>An absent {@code transaction-id} attribute and any absent child element decode to {@code -1}.
      *
-     * @param node the {@code <flowcontrol>} node
+     * @param stanza the {@code <flowcontrol>} stanza
      * @return the decoded flow-control action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static FlowControlStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var transactionId = node.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, -1);
-        var bitrate = childInt(node, BITRATE_ELEMENT);
-        var width = childInt(node, WIDTH_ELEMENT);
-        var fps = childInt(node, FPS_ELEMENT);
+    public static FlowControlStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var transactionId = stanza.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, -1);
+        var bitrate = childInt(stanza, BITRATE_ELEMENT);
+        var width = childInt(stanza, WIDTH_ELEMENT);
+        var fps = childInt(stanza, FPS_ELEMENT);
         return new FlowControlStanza(callId, callCreator, transactionId, bitrate, width, fps);
     }
 
     /**
      * Reads the integer text content of a named child element.
      *
-     * @param node    the parent node
+     * @param stanza    the parent stanza
      * @param element the child element tag to read
      * @return the child's integer content, or {@code -1} when the child is absent or non-numeric
      */
-    private static int childInt(Node node, String element) {
-        return node.getChild(element)
-                .flatMap(Node::toContentInt)
+    private static int childInt(Stanza stanza, String element) {
+        return stanza.getChild(element)
+                .flatMap(Stanza::toContentInt)
                 .orElse(-1);
     }
 }

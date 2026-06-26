@@ -193,14 +193,6 @@ public final class Calls2Runtime {
      * @param key the call key, defensively copied; {@code null} clears it
      */
     public void callKey(byte[] key) {
-        if (key != null) {
-            var hex = new StringBuilder(key.length * 2);
-            for (var b : key) {
-                hex.append(String.format("%02x", b & 0xFF));
-            }
-            System.getLogger(Calls2Runtime.class.getName()).log(System.Logger.Level.INFO,
-                    "calls2 E2E call key set ({0} bytes): {1}", key.length, hex);
-        }
         this.callKey = key == null ? null : key.clone();
     }
 

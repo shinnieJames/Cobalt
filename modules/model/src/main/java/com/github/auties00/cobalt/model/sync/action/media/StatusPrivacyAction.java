@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.model.sync.action.media;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionEmptyArgs;
-import com.github.auties00.cobalt.model.sync.SyncAction;
+import com.github.auties00.cobalt.model.sync.action.SyncActionEmptyArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
 import java.util.Collections;

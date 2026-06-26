@@ -3,7 +3,8 @@ package com.github.auties00.cobalt.sync.factory;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValue;
 import com.github.auties00.cobalt.model.sync.action.setting.PushNameSetting;
 import com.github.auties00.cobalt.model.sync.action.setting.PushNameSettingBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -49,7 +50,7 @@ public final class PushNameSettingMutationFactory {
      * account and {@code indexArgs} is always empty.
      *
      * @param timestamp the mutation timestamp recorded on both the outer mutation and the inner
-     *                  {@link com.github.auties00.cobalt.model.sync.SyncActionValue}
+     *                  {@link SyncActionValue}
      * @param name      the new pushname to broadcast; may be {@code null} or empty to clear the
      *                  pushname (the receiver substitutes the empty string and logs the bootstrap
      *                  invalid stage in that case)

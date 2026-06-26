@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.chat;
 
 
-import com.github.auties00.cobalt.model.sync.SyncActionArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncActionArgs;
 
 /**
  * Index arguments for a {@link QuickReplyAction}.

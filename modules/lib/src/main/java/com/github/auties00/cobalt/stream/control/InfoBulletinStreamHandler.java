@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.control;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedTosNoticesChangedListener;
@@ -10,9 +11,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.node.smax.clientexpiration.SmaxClientExpirationResponse;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.stanza.smax.clientexpiration.SmaxClientExpirationResponse;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.wam.WamService;
@@ -217,60 +217,60 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
     @Override
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handle(Node node) {
+    public void handle(Stanza stanza) {
         try {
-            if (node.hasChild(INFO_TYPE_DIRTY)) {
-                handleDirty(node);
+            if (stanza.hasChild(INFO_TYPE_DIRTY)) {
+                handleDirty(stanza);
                 return;
             }
 
-            var routing = node.getChild(INFO_TYPE_ROUTING);
+            var routing = stanza.getChild(INFO_TYPE_ROUTING);
             if (routing.isPresent()) {
                 handleRouting(routing.get());
                 return;
             }
 
-            var offline = node.getChild(INFO_TYPE_OFFLINE);
+            var offline = stanza.getChild(INFO_TYPE_OFFLINE);
             if (offline.isPresent()) {
                 handleOffline(offline.get());
                 return;
             }
 
-            if (node.hasChild(INFO_TYPE_OFFLINE_PRIORITY_COMPLETE)) {
+            if (stanza.hasChild(INFO_TYPE_OFFLINE_PRIORITY_COMPLETE)) {
                 handleOfflinePriorityComplete();
                 return;
             }
 
-            var preview = node.getChild(INFO_TYPE_OFFLINE_PREVIEW);
+            var preview = stanza.getChild(INFO_TYPE_OFFLINE_PREVIEW);
             if (preview.isPresent()) {
                 handleOfflinePreview(preview.get());
                 return;
             }
 
-            var tos = node.getChild(INFO_TYPE_TOS);
+            var tos = stanza.getChild(INFO_TYPE_TOS);
             if (tos.isPresent()) {
                 handleTos(tos.get());
                 return;
             }
 
-            var threadMeta = node.getChild(INFO_TYPE_THREAD_META);
+            var threadMeta = stanza.getChild(INFO_TYPE_THREAD_META);
             if (threadMeta.isPresent()) {
                 handleThreadMeta(threadMeta.get());
                 return;
             }
 
-            if (node.hasChild(INFO_TYPE_CLIENT_EXPIRATION)) {
-                handleClientExpiration(node);
+            if (stanza.hasChild(INFO_TYPE_CLIENT_EXPIRATION)) {
+                handleClientExpiration(stanza);
                 return;
             }
 
             LOGGER.log(System.Logger.Level.WARNING,
                     "handleInfoBulletin unrecognized info bulletin {0}",
-                    node.getAttributeAsString("id", "[missing-id]"));
+                    stanza.getAttributeAsString("id", "[missing-id]"));
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle info bulletin {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"),
+                    stanza.getAttributeAsString("id", "[missing-id]"),
                     throwable.getMessage());
         }
     }
@@ -290,18 +290,18 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * subscription. Account-sync subsystem refreshes are deferred to the next caller through the
      * {@code setSyncedXxx(false)} flags rather than issued imperatively.
      *
-     * @param node the parent {@code <ib>} stanza
+     * @param stanza the parent {@code <ib>} stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleDirtyBits", exports = "handleDirtyBits",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleDirty(Node node) {
+    private void handleDirty(Stanza stanza) {
         var collectionsToSync = new LinkedHashSet<SyncPatchType>();
-        var allDirtyEntries = new ArrayList<Node>();
+        var allDirtyEntries = new ArrayList<Stanza>();
         var supportedTypes = new ArrayList<String>();
         var unsupportedTypes = new ArrayList<String>();
         var syncOwnDevices = false;
 
-        for (var dirtyNode : node.getChildren(INFO_TYPE_DIRTY)) {
+        for (var dirtyNode : stanza.getChildren(INFO_TYPE_DIRTY)) {
             allDirtyEntries.add(dirtyNode);
             var type = dirtyNode.getAttributeAsString("type", null);
 
@@ -390,13 +390,13 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      */
     @WhatsAppWebExport(moduleName = "WAWebClearDirtyBitsJob", exports = "clearDirtyBits",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private void clearDirtyBits(List<Node> dirtyEntries) {
+    private void clearDirtyBits(List<Stanza> dirtyEntries) {
         if (dirtyEntries.isEmpty()) {
             return;
         }
 
         var cleanChildren = dirtyEntries.stream()
-                .map(dirty -> new NodeBuilder()
+                .map(dirty -> new StanzaBuilder()
                         .description("clean")
                         .attribute("type", dirty.getAttributeAsString("type", null))
                         .attribute("timestamp", dirty.getAttributeAsString("timestamp", null))
@@ -404,7 +404,7 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
                 .toList();
 
         try {
-            whatsapp.sendNode(new NodeBuilder()
+            whatsapp.sendNode(new StanzaBuilder()
                     .description("iq")
                     .attribute("to", Jid.userServer())
                     .attribute("type", "set")
@@ -434,16 +434,16 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation rejects domain values outside {@code {"fb", "sl"}} inline; the domain decoder
      * cannot produce other values.
      *
-     * @param routingNode the {@code <edge_routing/>} child node
+     * @param routingStanza the {@code <edge_routing/>} child stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleRoutingInfo", exports = "handleRoutingInfo",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleRouting(Node routingNode) {
-        var edgeRouting = routingNode.getChild("routing_info")
-                .flatMap(Node::toContentBytes)
+    private void handleRouting(Stanza routingStanza) {
+        var edgeRouting = routingStanza.getChild("routing_info")
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
-        var domain = routingNode.getChild("dns_domain")
-                .flatMap(Node::toContentString)
+        var domain = routingStanza.getChild("dns_domain")
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
         if (domain != null && !"fb".equals(domain) && !"sl".equals(domain)) {
             domain = null;
@@ -481,7 +481,7 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * connect. WA Web's UI bookkeeping has no Cobalt analogue. The scheduled device sync runs on a fresh virtual
      * thread; an {@link InterruptedException} during the delay sets the interrupt flag and returns quietly.
      *
-     * @param offlineNode the {@code <offline/>} child node
+     * @param offlineStanza the {@code <offline/>} child stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -491,8 +491,8 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
     @WhatsAppWebExport(moduleName = "WAWebOfflineHandler",
             exports = "OfflineMessageHandlerImpl",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleOffline(Node offlineNode) {
-        var count = offlineNode.getAttributeAsInt("count", 0);
+    private void handleOffline(Stanza offlineStanza) {
+        var count = offlineStanza.getAttributeAsInt("count", 0);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Received offline bulletin with count={0}", count);
         offlineNotificationsReporter.report();
@@ -555,7 +555,7 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation skips WA Web's chat-sort listener throttle and the open-tab-limit refresh path
      * because both are UI-only side effects with no Cobalt analogue on the headless client.
      *
-     * @param previewNode the {@code <offline_preview/>} child node
+     * @param previewStanza the {@code <offline_preview/>} child stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -565,15 +565,15 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
     @WhatsAppWebExport(moduleName = "WAWebOfflineHandler",
             exports = "OfflineMessageHandlerImpl",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleOfflinePreview(Node previewNode) {
-        var messageCount = previewNode.getAttributeAsInt("message", 0);
+    private void handleOfflinePreview(Stanza previewStanza) {
+        var messageCount = previewStanza.getAttributeAsInt("message", 0);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Received offline preview bulletin count={0} message={1} receipt={2} notification={3} call={4}",
-                previewNode.getAttributeAsInt("count", 0),
+                previewStanza.getAttributeAsInt("count", 0),
                 messageCount,
-                previewNode.getAttributeAsInt("receipt", 0),
-                previewNode.getAttributeAsInt("notification", 0),
-                previewNode.getAttributeAsInt("call", 0));
+                previewStanza.getAttributeAsInt("receipt", 0),
+                previewStanza.getAttributeAsInt("notification", 0),
+                previewStanza.getAttributeAsInt("call", 0));
 
         var store = whatsapp.store();
         if (store.connectionStore().isResumeFromRestartComplete()) {
@@ -631,12 +631,12 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation does not run the dirty-bit-driven consent-collection pipeline that WA Web fires
      * from the {@code account_sync/notice} branch; the IDs are pure metadata and the embedder owns the consent flow.
      *
-     * @param tosNode the {@code <tos/>} child node
+     * @param tosStanza the {@code <tos/>} child stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleTos(Node tosNode) {
-        var notices = tosNode.getChildren("notice").stream()
+    private void handleTos(Stanza tosStanza) {
+        var notices = tosStanza.getChildren("notice").stream()
                 .map(entry -> entry.getAttributeAsString("id", null))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
@@ -658,13 +658,13 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * has no equivalent UI state and so the payload is parsed for validation only; each {@code <item/>} carries a
      * {@code from} JID plus a {@code t} timestamp.
      *
-     * @param threadMetaNode the {@code <thread_metadata/>} child node
+     * @param threadMetaStanza the {@code <thread_metadata/>} child stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleThreadMeta(Node threadMetaNode) {
+    private void handleThreadMeta(Stanza threadMetaStanza) {
         var itemCount = 0;
-        for (var item : threadMetaNode.getChildren("item")) {
+        for (var item : threadMetaStanza.getChildren("item")) {
             var from = item.getAttributeAsJid("from").orElse(null);
             var timestamp = item.getAttributeAsLong("t", (Long) null);
             if (from == null || timestamp == null) {
@@ -693,18 +693,18 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation has no hard-expire build constant, so the upper-bound clamp is skipped; the final
      * value is {@code max(minFloor, newExpiration)}.
      *
-     * @param node the {@code <ib>} envelope; never {@code null}
+     * @param stanza the {@code <ib>} envelope; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxClientExpirationClientExpirationRPC",
             exports = "receiveClientExpirationRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebHandleServerClientExpiration",
             exports = "handleServerClientExpiration", adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleClientExpiration(Node node) {
-        var parsed = SmaxClientExpirationResponse.of(node).orElse(null);
+    private void handleClientExpiration(Stanza stanza) {
+        var parsed = SmaxClientExpirationResponse.of(stanza).orElse(null);
         if (!(parsed instanceof SmaxClientExpirationResponse.Inbound inbound)) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to parse client_expiration bulletin {0}",
-                    node.getAttributeAsString("id", "[missing-id]"));
+                    stanza.getAttributeAsString("id", "[missing-id]"));
             return;
         }
 

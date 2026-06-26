@@ -76,7 +76,7 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Writes the type discriminator and the type-specific node for the container's active content.
+     * Writes the type discriminator and the type-specific stanza for the container's active content.
      *
      * @param root      the request body being assembled
      * @param container the message content
@@ -152,7 +152,7 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Writes a media node, referencing the asset by hosted link or by media id.
+     * Writes a media stanza, referencing the asset by hosted link or by media id.
      *
      * @param root    the request body being assembled
      * @param type    the media type discriminator, for example {@code "image"}
@@ -170,10 +170,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a Cloud contact node from a vCard-backed contact message.
+     * Builds a Cloud contact stanza from a vCard-backed contact message.
      *
      * @param contact the contact message
-     * @return the Cloud contact node
+     * @return the Cloud contact stanza
      */
     private static JSONObject contactNode(ContactMessage contact) {
         var node = new JSONObject();
@@ -212,13 +212,13 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a Cloud template node from a {@link TemplateMessage}.
+     * Builds a Cloud template stanza from a {@link TemplateMessage}.
      *
      * <p>The structured-content title becomes the header component, the highly-structured body becomes
      * the body parameters, and the template buttons become button components keyed by their index.
      *
      * @param template the template message
-     * @return the Cloud {@code template} node
+     * @return the Cloud {@code template} stanza
      */
     private static JSONObject templateNode(TemplateMessage template) {
         var node = new JSONObject();
@@ -254,10 +254,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a Cloud template node directly from a highly structured message.
+     * Builds a Cloud template stanza directly from a highly structured message.
      *
      * @param hsm the highly structured message
-     * @return the Cloud {@code template} node
+     * @return the Cloud {@code template} stanza
      */
     private static JSONObject hsmTemplateNode(HighlyStructuredMessage hsm) {
         var node = new JSONObject();
@@ -272,9 +272,9 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Writes the template name and language from a highly structured message into a template node.
+     * Writes the template name and language from a highly structured message into a template stanza.
      *
-     * @param node the template node being assembled
+     * @param node the template stanza being assembled
      * @param hsm  the highly structured message carrying the identity
      */
     private static void applyHsmIdentity(JSONObject node, HighlyStructuredMessage hsm) {
@@ -369,10 +369,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a media parameter node referencing an asset by link or id.
+     * Builds a media parameter stanza referencing an asset by link or id.
      *
      * @param ref the media reference, or {@code null}
-     * @return the media parameter node
+     * @return the media parameter stanza
      */
     private static JSONObject mediaParam(String ref) {
         var node = new JSONObject();
@@ -381,10 +381,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Writes a media reference into a node, as a hosted {@code link} when it is an {@code http(s)} URL
+     * Writes a media reference into a stanza, as a hosted {@code link} when it is an {@code http(s)} URL
      * and as a media {@code id} otherwise.
      *
-     * @param node the node to write into
+     * @param node the stanza to write into
      * @param ref  the media reference, or {@code null} to write nothing
      */
     private static void putMediaReference(JSONObject node, String ref) {
@@ -448,10 +448,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a Cloud interactive node of type {@code button} from a buttons message.
+     * Builds a Cloud interactive stanza of type {@code button} from a buttons message.
      *
      * @param buttons the buttons message
-     * @return the Cloud {@code interactive} node
+     * @return the Cloud {@code interactive} stanza
      */
     private static JSONObject buttonsNode(ButtonsMessage buttons) {
         var node = new JSONObject();
@@ -477,10 +477,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a Cloud interactive node of type {@code list} from a list message.
+     * Builds a Cloud interactive stanza of type {@code list} from a list message.
      *
      * @param list the list message
-     * @return the Cloud {@code interactive} node
+     * @return the Cloud {@code interactive} stanza
      */
     private static JSONObject listNode(ListMessage list) {
         var node = new JSONObject();
@@ -511,7 +511,7 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a Cloud {@code interactive} node from an interactive message.
+     * Builds a Cloud {@code interactive} stanza from an interactive message.
      *
      * <p>The native flow content variant maps onto one of the Cloud native-flow shapes
      * ({@code cta_url}, {@code flow}, {@code location_request_message} or {@code address_message}),
@@ -519,7 +519,7 @@ public final class CloudMessageEncoder {
      * representation.
      *
      * @param interactive the interactive message
-     * @return the Cloud {@code interactive} node
+     * @return the Cloud {@code interactive} stanza
      * @throws IllegalArgumentException if the content variant has no Cloud API representation
      */
     private static JSONObject interactiveNode(InteractiveMessage interactive) {
@@ -533,7 +533,7 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds a Cloud {@code interactive} node from an interactive native flow message.
+     * Builds a Cloud {@code interactive} stanza from an interactive native flow message.
      *
      * <p>The single native-flow button name selects the Cloud shape. {@code cta_url} yields a
      * call-to-action URL message; {@code send_location} a location request; {@code address_message} an
@@ -542,7 +542,7 @@ public final class CloudMessageEncoder {
      *
      * @param parent the interactive message carrying the sections and native flow content
      * @param flow   the native flow content variant
-     * @return the Cloud {@code interactive} node
+     * @return the Cloud {@code interactive} stanza
      * @throws IllegalArgumentException if the button name has no Cloud API representation
      */
     private static JSONObject nativeFlowNode(InteractiveMessage parent, InteractiveMessage.NativeFlowMessage flow) {
@@ -596,7 +596,7 @@ public final class CloudMessageEncoder {
      * <p>A media header (image, video or document) is preferred over a text header when the header
      * carries a downloadable media reference; otherwise the header title is written as a text header.
      *
-     * @param node   the interactive node being assembled
+     * @param node   the interactive stanza being assembled
      * @param parent the interactive message carrying the sections
      */
     private static void applyInteractiveSections(JSONObject node, InteractiveMessage parent) {
@@ -620,7 +620,7 @@ public final class CloudMessageEncoder {
      *
      * @param type the header media type, for example {@code "image"}
      * @param ref  the media reference (a link or a media id), or {@code null}
-     * @return the header node
+     * @return the header stanza
      */
     private static JSONObject interactiveMediaHeader(String type, String ref) {
         var node = new JSONObject();
@@ -633,7 +633,7 @@ public final class CloudMessageEncoder {
      * Builds the {@code cta_url} action from a native flow button.
      *
      * @param button the native flow button named {@code cta_url}
-     * @return the Cloud {@code action} node
+     * @return the Cloud {@code action} stanza
      */
     private static JSONObject ctaUrlAction(InteractiveMessage.NativeFlowMessage.NativeFlowButton button) {
         var action = new JSONObject();
@@ -664,7 +664,7 @@ public final class CloudMessageEncoder {
      * {@code flow_metadata} member is uncommon and is passed through unchanged when present.
      *
      * @param button the native flow button carrying the flow parameters
-     * @return the Cloud {@code action} node
+     * @return the Cloud {@code action} stanza
      */
     private static JSONObject flowAction(InteractiveMessage.NativeFlowMessage.NativeFlowButton button) {
         var action = new JSONObject();
@@ -694,10 +694,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds an interactive {@code text} body or footer node.
+     * Builds an interactive {@code text} body or footer stanza.
      *
      * @param text the text content
-     * @return the node carrying the text
+     * @return the stanza carrying the text
      */
     private static JSONObject textNode(String text) {
         var node = new JSONObject();
@@ -706,10 +706,10 @@ public final class CloudMessageEncoder {
     }
 
     /**
-     * Builds an interactive header node of type {@code text}.
+     * Builds an interactive header stanza of type {@code text}.
      *
      * @param text the header text
-     * @return the header node
+     * @return the header stanza
      */
     private static JSONObject headerTextNode(String text) {
         var node = new JSONObject();

@@ -6,10 +6,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import com.github.auties00.cobalt.sync.ConflictResolution;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
@@ -124,10 +125,10 @@ public final class ArchiveChatHandler implements WebAppStateActionHandler {
      *
      * <p>Resolves the local-vs-remote tie by comparing the message ranges
      * carried inside each {@link ArchiveChatAction} via
-     * {@link MessageRangeUtils#compareMessageRanges(com.github.auties00.cobalt.model.sync.SyncActionMessageRange, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
-     * Returns {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the
+     * {@link MessageRangeUtils#compareMessageRanges(SyncActionMessageRange, SyncActionMessageRange)}.
+     * Returns {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the
      * remote range encloses the local one,
-     * {@link ConflictResolutionState#SKIP_REMOTE} when the local range encloses
+     * {@link MutationConflictResolutionState#SKIP_REMOTE} when the local range encloses
      * the remote one, a timestamp tiebreaker when ranges are equal, and a merged
      * {@link ConflictResolution} (combining both ranges and the newer side's
      * {@link ArchiveChatAction#archived()} flag) when ranges partially overlap.
@@ -138,7 +139,7 @@ public final class ArchiveChatHandler implements WebAppStateActionHandler {
      * {@code lockForMessageRangeSync} writes the merged state to the
      * chat DB during conflict resolution; Cobalt separates resolution
      * from application so the caller controls when the write lands. A
-     * defensive {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL}
+     * defensive {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL}
      * is returned when either side lacks a {@link ArchiveChatAction} or
      * a message range, replacing WA Web's
      * {@code nullthrows} which would throw.
@@ -156,25 +157,25 @@ public final class ArchiveChatHandler implements WebAppStateActionHandler {
                 .orElse(null);
 
         if (localAction == null || remoteAction == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         var localRange = localAction.messageRange().orElse(null);
         var remoteRange = remoteAction.messageRange().orElse(null);
 
         if (localRange == null || remoteRange == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         return switch (MessageRangeUtils.compareMessageRanges(remoteRange, localRange)) {
             case RANGE_A_ENCLOSES_RANGE_B ->
-                    ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+                    ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
             case RANGE_B_ENCLOSES_RANGE_A ->
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_ARE_EQUAL ->
                     localMutation.timestamp().compareTo(remoteMutation.timestamp()) <= 0
-                            ? ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
-                            : ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                            ? ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
+                            : ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_NOT_ENCLOSING -> {
                 var localWins = localMutation.timestamp().compareTo(remoteMutation.timestamp()) > 0;
                 var archived = localWins ? localAction.archived() : remoteAction.archived();

@@ -8,7 +8,7 @@ import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.device.DevicePlatformType;
+import com.github.auties00.cobalt.model.device.pairing.DevicePlatformType;
 import com.github.auties00.cobalt.model.device.DevicePropsBuilder;
 import com.github.auties00.cobalt.model.device.DevicePropsHistorySyncConfigBuilder;
 import com.github.auties00.cobalt.model.device.DevicePropsSpec;
@@ -19,11 +19,11 @@ import com.github.auties00.cobalt.model.signal.CertChainSpec;
 import com.github.auties00.cobalt.model.signal.NoiseCertificateCertChainDetailsSpec;
 import com.github.auties00.cobalt.model.signal.NoiseCertificateDetailsSpec;
 import com.github.auties00.cobalt.model.signal.NoiseCertificateSpec;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.binary.NodeReader;
-import com.github.auties00.cobalt.node.binary.NodeTokens;
-import com.github.auties00.cobalt.node.binary.NodeSizer;
-import com.github.auties00.cobalt.node.binary.NodeWriter;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.binary.StanzaReader;
+import com.github.auties00.cobalt.stanza.binary.StanzaTokens;
+import com.github.auties00.cobalt.stanza.binary.StanzaSizer;
+import com.github.auties00.cobalt.stanza.binary.StanzaWriter;
 import com.github.auties00.cobalt.socket.datagram.WhatsAppDatagramInputStream;
 import com.github.auties00.cobalt.socket.datagram.WhatsAppDatagramOutputStream;
 import com.github.auties00.cobalt.socket.tunnel.HttpTunnel;
@@ -31,7 +31,7 @@ import com.github.auties00.cobalt.socket.tunnel.SocksTunnel;
 import com.github.auties00.cobalt.socket.websocket.WebSocketFrameInputStream;
 import com.github.auties00.cobalt.socket.websocket.WebSocketFrameOutputStream;
 import com.github.auties00.cobalt.socket.websocket.WebSocketUpgrade;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
@@ -101,10 +101,10 @@ import java.util.Objects;
  * the datagram streams via
  * {@link WhatsAppDatagramInputStream#setReadKey(SecretKey)} and
  * {@link WhatsAppDatagramOutputStream#setWriteKey(SecretKey)}, and
- * every subsequent {@link #sendNode(Node)} is encoded straight into
- * the wire by {@link NodeWriter#toStream(OutputStream)}; the reader
+ * every subsequent {@link #sendNode(Stanza)} is encoded straight into
+ * the wire by {@link StanzaWriter#toStream(OutputStream)}; the reader
  * thread mirrors the same chain by decoding nodes from the datagram
- * input stream with {@link NodeReader#fromStream(InputStream)}.
+ * input stream with {@link StanzaReader#fromStream(InputStream)}.
  *
  * <p>HTTP {@code CONNECT} and SOCKS4/4a/5/5h proxies are supported
  * on every form factor through {@link HttpTunnel} and
@@ -144,7 +144,7 @@ public sealed abstract class WhatsAppSocketClient {
      * <p>This footer is used by every companion (browser, Windows Electron,
      * macOS native app).
      */
-    private static final byte[] WEB_VERSION = new byte[]{6, NodeTokens.DICTIONARY_VERSION};
+    private static final byte[] WEB_VERSION = new byte[]{6, StanzaTokens.DICTIONARY_VERSION};
 
     /**
      * The handshake prologue advertised by companion-device clients.
@@ -156,7 +156,7 @@ public sealed abstract class WhatsAppSocketClient {
      * {@link #WHATSAPP_VERSION_HEADER} to form the mobile handshake
      * prologue.
      */
-    private static final byte[] MOBILE_VERSION = new byte[]{5, NodeTokens.DICTIONARY_VERSION};
+    private static final byte[] MOBILE_VERSION = new byte[]{5, StanzaTokens.DICTIONARY_VERSION};
 
     /**
      * The handshake prologue advertised by native mobile clients
@@ -309,9 +309,9 @@ public sealed abstract class WhatsAppSocketClient {
     private volatile SecretKeySpec readKey;
 
     /**
-     * The mutex that serialises concurrent {@link #sendNode(Node)}
+     * The mutex that serialises concurrent {@link #sendNode(Stanza)}
      * callers so the datagram output stream observes one complete
-     * node-encode per acquired monitor, with no interleaving across
+     * stanza-encode per acquired monitor, with no interleaving across
      * senders.
      */
     private final Object writeLock = new Object();
@@ -923,7 +923,7 @@ public sealed abstract class WhatsAppSocketClient {
     }
 
     /**
-     * Serialises a {@link Node} and sends it as one encrypted
+     * Serialises a {@link Stanza} and sends it as one encrypted
      * datagram.
      *
      * <p>This is the standard send primitive for every outbound stanza: the
@@ -935,18 +935,18 @@ public sealed abstract class WhatsAppSocketClient {
      * {@link WhatsAppDatagramOutputStream#beginDatagram(byte[], int)} through
      * the closing {@link OutputStream#flush()}.
      *
-     * @param node the node to send
+     * @param stanza the stanza to send
      * @throws IOException if serialisation or the underlying write
      *         fails
      */
     @WhatsAppWebExport(moduleName = "WAFrameSocket", exports = "FrameSocket", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WANoiseSocket", exports = "NoiseSocket", adaptation = WhatsAppAdaptation.ADAPTED)
-    public final void sendNode(Node node) throws IOException {
-        Objects.requireNonNull(node, "node cannot be null");
+    public final void sendNode(Stanza stanza) throws IOException {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
         synchronized (writeLock) {
-            out.beginDatagram(null, NodeSizer.sizeOf(node));
-            try (var encoder = NodeWriter.toStream(out)) {
-                encoder.writeNode(node);
+            out.beginDatagram(null, StanzaSizer.sizeOf(stanza));
+            try (var encoder = StanzaWriter.toStream(out)) {
+                encoder.writeStanza(stanza);
             }
         }
     }
@@ -1054,7 +1054,7 @@ public sealed abstract class WhatsAppSocketClient {
     /**
      * Spawns the reader virtual thread that drains datagrams from
      * the datagram input stream, decodes each one into a
-     * {@link Node} and dispatches it to the application listener.
+     * {@link Stanza} and dispatches it to the application listener.
      */
     private void startReaderThread() {
         this.readerThread = Thread.ofVirtual()
@@ -1072,7 +1072,7 @@ public sealed abstract class WhatsAppSocketClient {
      * {@code <xmlstreamend>} without necessarily closing the transport. During a
      * clean server-initiated teardown (after a {@code <stream:error>}, a logout,
      * or a conflict) the server closes the socket right after, so the next
-     * {@link NodeReader#fromStream(InputStream)} observes a frame-boundary
+     * {@link StanzaReader#fromStream(InputStream)} observes a frame-boundary
      * end-of-stream and throws {@link EOFException}, which this loop treats as an
      * orderly close (it stops without surfacing an error). The server may trail a
      * few bytes that never form a whole datagram before closing; the datagram
@@ -1103,11 +1103,11 @@ public sealed abstract class WhatsAppSocketClient {
     private void runReaderLoop() {
         try {
             while (!closed && isTransportOpen()) {
-                Node node;
-                try (var decoder = NodeReader.fromStream(in)) {
-                    node = decoder.decode();
+                Stanza stanza;
+                try (var decoder = StanzaReader.fromStream(in)) {
+                    stanza = decoder.decode();
                 }
-                listener.onNode(node);
+                listener.onNode(stanza);
             }
         } catch (EOFException e) {
             // Frame-boundary end-of-stream: an orderly server close (typically right after a

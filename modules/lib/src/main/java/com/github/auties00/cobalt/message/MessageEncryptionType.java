@@ -25,7 +25,7 @@ public enum MessageEncryptionType {
      * <p>The first {@code <enc type="pkmsg">} that reaches a device carries the
      * ephemeral keys needed to establish the Signal session; subsequent
      * payloads to the same device switch to {@link #MSG}. PreKey-bearing
-     * fanouts must also ship the linked device's {@code <device-identity>} node
+     * fanouts must also ship the linked device's {@code <device-identity>} stanza
      * for ADV signature validation. Round-trips from
      * {@link SignalCiphertextMessage#PRE_KEY_TYPE}.
      */
@@ -107,7 +107,7 @@ public enum MessageEncryptionType {
     /**
      * Maps a freshly produced {@link SignalCiphertextMessage} to the matching
      * wire variant so the outbound encryption pipeline can stamp the correct
-     * {@code type} on the {@code <enc>} node.
+     * {@code type} on the {@code <enc>} stanza.
      *
      * <p>Bot payloads never reach this method. Their Signal type byte still
      * indicates {@link SignalCiphertextMessage#WHISPER_TYPE} or
@@ -133,7 +133,7 @@ public enum MessageEncryptionType {
     }
 
     /**
-     * Parses the {@code type} attribute of an incoming {@code <enc>} node into
+     * Parses the {@code type} attribute of an incoming {@code <enc>} stanza into
      * the matching variant.
      *
      * <p>Inputs other than the four canonical wire strings are rejected rather
@@ -162,7 +162,7 @@ public enum MessageEncryptionType {
      * fresh Signal session.
      *
      * <p>Callers use this to decide whether the outbound fanout must include the
-     * linked device's {@code <device-identity>} child node for ADV signature
+     * linked device's {@code <device-identity>} child stanza for ADV signature
      * validation.
      *
      * @return {@code true} when this is {@link #PKMSG}

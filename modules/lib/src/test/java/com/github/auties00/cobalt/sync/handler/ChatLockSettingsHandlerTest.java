@@ -10,9 +10,9 @@ import com.github.auties00.cobalt.model.setting.TransformerArgUserPasswordValueB
 import com.github.auties00.cobalt.model.setting.UserPassword;
 import com.github.auties00.cobalt.model.setting.UserPasswordBuilder;
 import com.github.auties00.cobalt.model.setting.UserPasswordTransformerArgBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -250,7 +250,7 @@ class ChatLockSettingsHandlerTest {
         void newerRemoteApplies() {
             var local = mutation(false, null, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(true, null, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new ChatLockSettingsHandler().resolveConflicts(local, remote).state());
         }
 
@@ -259,7 +259,7 @@ class ChatLockSettingsHandlerTest {
         void olderRemoteSkipped() {
             var local = mutation(false, null, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(true, null, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     new ChatLockSettingsHandler().resolveConflicts(local, remote).state());
         }
     }

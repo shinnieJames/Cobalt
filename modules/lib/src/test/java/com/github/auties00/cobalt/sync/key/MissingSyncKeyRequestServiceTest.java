@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKeyBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncdCoordinator;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import org.junit.jupiter.api.AfterEach;

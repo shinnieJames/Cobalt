@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 
@@ -106,19 +106,19 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
         var identityNode = payload.isPreKeyMessage()
                 ? buildIdentityNode() : null;
 
-        var encNode = new NodeBuilder()
+        var encNode = new StanzaBuilder()
                 .description("enc")
                 .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                 .attribute("type", payload.type().protocolValue())
                 .content(payload.ciphertext())
                 .build();
 
-        var metaNode = new NodeBuilder()
+        var metaNode = new StanzaBuilder()
                 .description("meta")
                 .attribute("appdata", "default")
                 .build();
 
-        var stanza = new NodeBuilder()
+        var stanza = new StanzaBuilder()
                 .description("message")
                 .attribute("id", messageInfo.key().id().orElseThrow())
                 .attribute("to", targetDevice)

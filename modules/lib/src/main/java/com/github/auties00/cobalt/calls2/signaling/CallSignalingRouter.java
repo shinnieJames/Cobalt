@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -12,7 +12,7 @@ import java.util.Optional;
  * <p>This is the pure-classification half of the wa-voip inbound dispatch: given the single child
  * element of a {@code <call>} stanza and the envelope context it arrived in, it reproduces the header
  * validation and the per-message routing decision the engine makes before any handler runs. It holds
- * no per-call or engine state; it reads the node and returns a {@link Verdict} the receiver acts on,
+ * no per-call or engine state; it reads the stanza and returns a {@link Verdict} the receiver acts on,
  * so the same instance can classify every inbound call regardless of which calls are active.
  *
  * <p>Classification proceeds in three stages. First the universal header is validated the way
@@ -47,7 +47,7 @@ import java.util.Optional;
  * hex id), which is rejected here alongside the absent and empty cases. The native validator also
  * rejects {@code len < 100} and a per-type fixed-header length mismatch against the table at
  * {@code DAT 0xb887e}; those are buffer-layout checks with no analogue in the typed
- * {@link Node} model, so they are not ported and the per-type length is carried for reference by
+ * {@link Stanza} model, so they are not ported and the per-type length is carried for reference by
  * {@link Calls2SignalingType#fixedHeaderLength()}. The unsupported-tag drop is the native
  * {@code "handle_incoming_xmpp_msg: msg tag %s not supported"} log (strings.json address
  * {@code 0x0ee90}) and the malformed-header drop is {@code "handle_incoming_xmpp_msg: invalid message
@@ -95,7 +95,7 @@ public final class CallSignalingRouter {
          * Marks a message the receiver buffers for replay because its call object does not yet exist.
          *
          * <p>Applies to an offer and to an in-call action that races ahead of the call it belongs to;
-         * the receiver stores it through {@link CallMessageBuffer#buffer(String, Node)} and replays it
+         * the receiver stores it through {@link CallMessageBuffer#buffer(String, Stanza)} and replays it
          * once the call is created.
          */
         BUFFER
@@ -167,7 +167,7 @@ public final class CallSignalingRouter {
      * @return the classification verdict; never {@code null}
      * @throws NullPointerException if {@code payload} is {@code null}
      */
-    public Verdict classify(Node payload, Jid senderLid, boolean callExists) {
+    public Verdict classify(Stanza payload, Jid senderLid, boolean callExists) {
         Objects.requireNonNull(payload, "payload cannot be null");
 
         var callId = payload.getAttributeAsString(CALL_ID_ATTRIBUTE, null);

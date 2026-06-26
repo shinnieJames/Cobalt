@@ -4,15 +4,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.preference.StickerBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.StickerAction;
 import com.github.auties00.cobalt.model.sync.action.media.StickerActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.FavoriteStickerMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
  * through {@link TestWhatsAppClient} so the
- * {@link com.github.auties00.cobalt.store.SettingsStore#findFavouriteSticker(String)} read-back can be asserted
+ * {@link LinkedWhatsAppSettingsStore#findFavouriteSticker(String)} read-back can be asserted
  * directly. The {@code "favorite_sticker"} primary feature flag is toggled via
  * the store's primary-features set so the gating branch is deterministic.
  */
@@ -265,7 +266,7 @@ class FavoriteStickerHandlerTest {
             var remote = new DecryptedMutation.Trusted(local.index(), remoteValue, SyncdOperation.SET, remoteTs, 7);
 
             var resolution = new FavoriteStickerHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     resolution.state());
         }
 
@@ -288,7 +289,7 @@ class FavoriteStickerHandlerTest {
             var remote = new DecryptedMutation.Trusted(local.index(), remoteValue, SyncdOperation.SET, remoteTs, 7);
 
             var resolution = new FavoriteStickerHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     resolution.state());
         }
     }

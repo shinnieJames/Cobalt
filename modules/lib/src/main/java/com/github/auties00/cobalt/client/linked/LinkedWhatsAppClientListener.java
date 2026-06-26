@@ -22,7 +22,6 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.group.GroupPastParticipant;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
-import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
@@ -30,8 +29,8 @@ import com.github.auties00.cobalt.model.privacy.AccountDisappearingMode;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
 import com.github.auties00.cobalt.model.setting.privacy.OptOutEntry;
-import com.github.auties00.cobalt.model.sync.SyncAction;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.model.sync.action.SyncAction;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.Collection;
 import java.util.List;
@@ -112,17 +111,16 @@ public non-sealed interface LinkedWhatsAppClientListener extends LinkedListener,
         LinkedCallPeerStateChangedListener,
         LinkedCallOfferNoticeListener,
         LinkedDeviceIdentityChangedListener,
-        LinkedAccountTypeChangedListener,
         LinkedGraphQlSessionChangedListener,
         LinkedFacebookGraphQlSessionChangedListener,
         LinkedBusinessPrivacySettingChangedListener,
         LinkedTosNoticesChangedListener {
     @Override
-    default void onNodeSent(LinkedWhatsAppClient whatsapp, Node outgoing) {
+    default void onNodeSent(LinkedWhatsAppClient whatsapp, Stanza outgoing) {
     }
 
     @Override
-    default void onNodeReceived(LinkedWhatsAppClient whatsapp, Node incoming) {
+    default void onNodeReceived(LinkedWhatsAppClient whatsapp, Stanza incoming) {
     }
 
     @Override
@@ -327,9 +325,5 @@ public non-sealed interface LinkedWhatsAppClientListener extends LinkedListener,
 
     @Override
     default void onDeviceIdentityChanged(LinkedWhatsAppClient whatsapp, Jid userJid, Set<Jid> changedDevices) {
-    }
-
-    @Override
-    default void onAccountTypeChanged(LinkedWhatsAppClient whatsapp, Jid userJid, ADVEncryptionType oldType, ADVEncryptionType newType) {
     }
 }

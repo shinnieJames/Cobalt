@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.model.cloud.analytics.CloudPricingAnalyticsQue
 import com.github.auties00.cobalt.model.cloud.analytics.CloudTemplateAnalytics;
 import com.github.auties00.cobalt.model.cloud.analytics.CloudTemplateAnalyticsQueryBuilder;
 import com.github.auties00.cobalt.model.cloud.analytics.CloudTemplateGroupAnalyticsQueryBuilder;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -34,8 +35,8 @@ class CloudAnalyticsTest {
     private static final String PHONE_ID = "1234567890";
     private static final String WABA_ID = "102290129340398";
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .whatsappBusinessAccountId(WABA_ID)
                 .apiVersion(CloudApiVersion.V25_0)
@@ -59,7 +60,7 @@ class CloudAnalyticsTest {
     class Messaging {
         @Test
         @DisplayName("emits the analytics field expansion and parses sent/delivered data points")
-        void parsesDataPoints() {
+        void parsesDataPoints() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"analytics":{"phone_numbers":["19035551234"],"country_codes":[],"granularity":"DAILY",
@@ -87,7 +88,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("reads start/end as epoch seconds and the sent/delivered counts confirmed against wapi.go")
-        void parsesConfirmedFieldNames() {
+        void parsesConfirmedFieldNames() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"analytics":{"phone_numbers":[],"granularity":"DAY","data_points":[
@@ -109,7 +110,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("reads an absent data_points array as an empty data-point list")
-        void absentDataPoints() {
+        void absentDataPoints() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"analytics":{"phone_numbers":["19035551234"],"granularity":"DAY"},
@@ -128,7 +129,7 @@ class CloudAnalyticsTest {
     class Conversation {
         @Test
         @DisplayName("flattens data[].data_points[] and emits dimension/metric filters")
-        void parsesDataPoints() {
+        void parsesDataPoints() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"conversation_analytics":{"data":[{"data_points":[
@@ -156,7 +157,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("reads start/end, conversation, cost, and all five dimension fields from data_points")
-        void parsesAllDimensions() {
+        void parsesAllDimensions() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"conversation_analytics":{"data":[{"data_points":[
@@ -191,7 +192,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("flattens data_points across multiple data[] entries")
-        void flattensMultipleDataEntries() {
+        void flattensMultipleDataEntries() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"conversation_analytics":{"data":[
@@ -215,7 +216,7 @@ class CloudAnalyticsTest {
     class Pricing {
         @Test
         @DisplayName("emits metric/dimension filters and flattens data points")
-        void parsesDataPoints() {
+        void parsesDataPoints() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"pricing_analytics":{"data":[{"data_points":[
@@ -242,7 +243,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("emits the pricing_categories, pricing_types, and tiers filter segments")
-        void emitsFilters() {
+        void emitsFilters() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("{\"pricing_analytics\":{\"data\":[]},\"id\":\"102290129340398\"}");
             client(http).queryPricingAnalytics(new CloudPricingAnalyticsQueryBuilder()
@@ -271,7 +272,7 @@ class CloudAnalyticsTest {
     class Template {
         @Test
         @DisplayName("emits template ids and default metrics, parses clicked breakdown")
-        void parsesDataPoints() {
+        void parsesDataPoints() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"template_analytics":{"data":[{"granularity":"DAILY","data_points":[
@@ -305,7 +306,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("returns empty list when template_analytics is absent")
-        void absentNode() {
+        void absentNode() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("{\"id\":\"102290129340398\"}");
             var analytics = client(http).queryTemplateAnalytics(new CloudTemplateAnalyticsQueryBuilder()
@@ -318,7 +319,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("defaults product_type to CLOUD_API and omits use_waba_timezone")
-        void defaultProductType() {
+        void defaultProductType() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("{\"id\":\"102290129340398\"}");
             client(http).queryTemplateAnalytics(new CloudTemplateAnalyticsQueryBuilder()
@@ -333,7 +334,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("emits the requested product_type and use_waba_timezone segments")
-        void productTypeAndTimezone() {
+        void productTypeAndTimezone() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("{\"id\":\"102290129340398\"}");
             client(http).queryTemplateAnalytics(new CloudTemplateAnalyticsQueryBuilder()
@@ -354,7 +355,7 @@ class CloudAnalyticsTest {
     class TemplateGroup {
         @Test
         @DisplayName("hits template_group_analytics with template_group_ids and reuses the data-point model")
-        void parsesDataPoints() {
+        void parsesDataPoints() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("""
                     {"template_group_analytics":{"data":[{"granularity":"DAILY","data_points":[
@@ -380,7 +381,7 @@ class CloudAnalyticsTest {
 
         @Test
         @DisplayName("returns empty list when template_group_analytics is absent")
-        void absentNode() {
+        void absentNode() throws Exception {
             var http = new RecordingHttpClient();
             http.respondWith("{\"id\":\"102290129340398\"}");
             var analytics = client(http).queryTemplateGroupAnalytics(new CloudTemplateGroupAnalyticsQueryBuilder()

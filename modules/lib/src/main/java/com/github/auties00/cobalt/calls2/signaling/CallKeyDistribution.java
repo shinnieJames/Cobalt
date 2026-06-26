@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -30,7 +30,7 @@ import java.util.Optional;
  * @implNote This implementation models the per-device fanout slot that {@code add_destination_if_needed}
  * (fn11610) builds and that the offer encryption shared elements consume in the wa-voip WASM module
  * {@code ff-tScznZ8P}: a {@code <to>} element with a {@code jid} attribute wrapping an {@code <enc>}
- * key node ({@code fill_call_key}, fn11634). The Signal envelope shape ({@code v="2"},
+ * key stanza ({@code fill_call_key}, fn11634). The Signal envelope shape ({@code v="2"},
  * {@code type="msg|pkmsg"}, {@code count="0"}) matches Cobalt's regular message fanout; the
  * ciphertext is the encrypted {@code MessageContainer} carrying the call key and is produced by the
  * reused message-encryption pipeline, not by this record.
@@ -158,19 +158,19 @@ public record CallKeyDistribution(Jid deviceJid, int version, String type, int c
     }
 
     /**
-     * Builds the {@code <to jid="..."><enc .../></to>} node for this fanout slot.
+     * Builds the {@code <to jid="..."><enc .../></to>} stanza for this fanout slot.
      *
-     * <p>A bare destination produces a keyless {@code <to jid="..."/>} node with no {@code <enc>}
-     * child; a keyed slot wraps the {@code <enc>} key node.
+     * <p>A bare destination produces a keyless {@code <to jid="..."/>} stanza with no {@code <enc>}
+     * child; a keyed slot wraps the {@code <enc>} key stanza.
      *
-     * @return the fanout slot node
+     * @return the fanout slot stanza
      */
-    public Node toNode() {
-        var builder = new NodeBuilder()
+    public Stanza toStanza() {
+        var builder = new StanzaBuilder()
                 .description(TO_ELEMENT)
                 .attribute(JID_ATTRIBUTE, deviceJid);
         if (ciphertext != null) {
-            builder.content(new NodeBuilder()
+            builder.content(new StanzaBuilder()
                     .description(ENC_ELEMENT)
                     .attribute(VERSION_ATTRIBUTE, version, version >= 0)
                     .attribute(TYPE_ATTRIBUTE, type)
@@ -188,17 +188,17 @@ public record CallKeyDistribution(Jid deviceJid, int version, String type, int c
      * {@code <enc>} child, or an {@code <enc>} with no content, decodes to a {@link #bare(Jid) bare}
      * slot.
      *
-     * @param node the {@code <to>} node
-     * @return the decoded fanout slot, or an empty result when the node carries no device JID
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @param stanza the {@code <to>} stanza
+     * @return the decoded fanout slot, or an empty result when the stanza carries no device JID
+     * @throws NullPointerException if {@code stanza} is {@code null}
      */
-    public static Optional<CallKeyDistribution> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var deviceJid = node.getAttributeAsJid(JID_ATTRIBUTE);
+    public static Optional<CallKeyDistribution> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var deviceJid = stanza.getAttributeAsJid(JID_ATTRIBUTE);
         if (deviceJid.isEmpty()) {
             return Optional.empty();
         }
-        var enc = node.getChild(ENC_ELEMENT);
+        var enc = stanza.getChild(ENC_ELEMENT);
         if (enc.isEmpty()) {
             return Optional.of(bare(deviceJid.get()));
         }

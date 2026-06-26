@@ -9,9 +9,9 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageInfo;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
 import com.github.auties00.libsignal.key.SignalPreKeyPair;
@@ -147,7 +147,7 @@ public final class MessageReceiptHandler {
         var shouldSetRecipient = !isPeer && isSender && recipientJid != null;
 
         var toJid = from.toUserJid();
-        var receipt = new NodeBuilder()
+        var receipt = new StanzaBuilder()
                 .description("receipt")
                 .attribute("id", stanza.id())
                 .attribute("type", receiptType.protocolValue())
@@ -188,7 +188,7 @@ public final class MessageReceiptHandler {
             return;
         }
 
-        var retryNode = new NodeBuilder()
+        var retryNode = new StanzaBuilder()
                 .description("retry")
                 .attribute("v", "1")
                 .attribute("count", retryCount)
@@ -197,7 +197,7 @@ public final class MessageReceiptHandler {
                 .attribute("error", retryReason.protocolValue())
                 .build();
 
-        var registrationNode = new NodeBuilder()
+        var registrationNode = new StanzaBuilder()
                 .description("registration")
                 .content(DataUtils.intToBytes(store.signalStore().registrationId(), 4))
                 .build();
@@ -231,7 +231,7 @@ public final class MessageReceiptHandler {
             }
         }
 
-        var receipt = new NodeBuilder()
+        var receipt = new StanzaBuilder()
                 .description("receipt")
                 .attribute("id", stanza.id())
                 .attribute("type", MessageReceiptType.RETRY.protocolValue())
@@ -272,7 +272,7 @@ public final class MessageReceiptHandler {
                     .orElse(null);
         }
 
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("id", stanza.id())
                 .attribute("to", to)
@@ -335,15 +335,15 @@ public final class MessageReceiptHandler {
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendNack",
             adaptation = WhatsAppAdaptation.DIRECT)
     public void sendNackReceipt(MessageReceiveStanza stanza, int errorCode, Integer failureReason) {
-        Node metaNode = null;
+        Stanza metaStanza = null;
         if (errorCode == 491 && failureReason != null) {
-            metaNode = new NodeBuilder()
+            metaStanza = new StanzaBuilder()
                     .description("meta")
                     .attribute("failure_reason", failureReason)
                     .build();
         }
 
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("id", stanza.id())
                 .attribute("class", "message")
@@ -353,7 +353,7 @@ public final class MessageReceiptHandler {
                         resolveReceiptParticipant(stanza))
                 .attribute("type", stanza.stanzaType())
                 .attribute("error", errorCode)
-                .content(metaNode);
+                .content(metaStanza);
         client.sendNodeWithNoResponse(ack.build());
     }
 
@@ -372,11 +372,11 @@ public final class MessageReceiptHandler {
      * logged and the method returns {@code null} so the retry receipt still goes out without
      * the bundle.
      *
-     * @return the {@code <keys>} node, or {@code null} when the bundle cannot be built
+     * @return the {@code <keys>} stanza, or {@code null} when the bundle cannot be built
      */
     @WhatsAppWebExport(moduleName = "WAWebSendRetryReceiptJob", exports = "sendRetryReceipt",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Node buildKeyBundleNode() {
+    private Stanza buildKeyBundleNode() {
         try {
             var preKey = store.signalStore().hasPreKeys()
                     ? store.signalStore().preKeys().getFirst()
@@ -385,55 +385,55 @@ public final class MessageReceiptHandler {
                 store.signalStore().addPreKey(preKey);
             }
 
-            var typeNode = new NodeBuilder()
+            var typeNode = new StanzaBuilder()
                     .description("type")
                     .content(new byte[]{SignalIdentityPublicKey.type()})
                     .build();
 
-            var identityNode = new NodeBuilder()
+            var identityNode = new StanzaBuilder()
                     .description("identity")
                     .content(store.signalStore().identityKeyPair().publicKey().toEncodedPoint())
                     .build();
 
-            var preKeyIdNode = new NodeBuilder()
+            var preKeyIdNode = new StanzaBuilder()
                     .description("id")
                     .content(DataUtils.intToBytes(preKey.id(), 3))
                     .build();
-            var preKeyValueNode = new NodeBuilder()
+            var preKeyValueNode = new StanzaBuilder()
                     .description("value")
                     .content(preKey.publicKey().toEncodedPoint())
                     .build();
-            var preKeyNode = new NodeBuilder()
+            var preKeyNode = new StanzaBuilder()
                     .description("key")
                     .content(preKeyIdNode, preKeyValueNode)
                     .build();
 
             var signedKeyPair = store.signalStore().signedKeyPair();
-            var skeyIdNode = new NodeBuilder()
+            var skeyIdNode = new StanzaBuilder()
                     .description("id")
                     .content(DataUtils.intToBytes(signedKeyPair.id(), 3))
                     .build();
-            var skeyValueNode = new NodeBuilder()
+            var skeyValueNode = new StanzaBuilder()
                     .description("value")
                     .content(signedKeyPair.publicKey().toEncodedPoint())
                     .build();
-            var skeySigNode = new NodeBuilder()
+            var skeySigNode = new StanzaBuilder()
                     .description("signature")
                     .content(signedKeyPair.signature())
                     .build();
-            var skeyNode = new NodeBuilder()
+            var skeyNode = new StanzaBuilder()
                     .description("skey")
                     .content(skeyIdNode, skeyValueNode, skeySigNode)
                     .build();
 
             var deviceIdentityNode = store.signalStore().signedDeviceIdentity()
-                    .map(id -> new NodeBuilder()
+                    .map(id -> new StanzaBuilder()
                             .description("device-identity")
                             .content(ADVSignedDeviceIdentitySpec.encode(id))
                             .build())
                     .orElse(null);
 
-            return new NodeBuilder()
+            return new StanzaBuilder()
                     .description("keys")
                     .content(typeNode, identityNode, preKeyNode, skeyNode, deviceIdentityNode)
                     .build();

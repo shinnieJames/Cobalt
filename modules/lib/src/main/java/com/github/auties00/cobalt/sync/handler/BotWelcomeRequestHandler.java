@@ -7,10 +7,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.bot.BotWelcomeRequestStateBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -20,7 +21,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * been delivered once. When the welcome request lands on another device, the
  * server replays it here as a {@link BotWelcomeRequestAction}, and the result
  * is read back via
- * {@link com.github.auties00.cobalt.store.BusinessStore#findBotWelcomeRequestState(Jid)}.
+ * {@link LinkedWhatsAppBusinessStore#findBotWelcomeRequestState(Jid)}.
  *
  * @implNote
  * This implementation stores the requested flag in a typed quintet

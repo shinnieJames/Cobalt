@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -7,8 +9,6 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,9 +27,9 @@ import java.util.List;
  * notification, matching WA Web's {@code WAWebHandleDeviceNotification.handleDevicesNotification}
  * which builds the dual entry list {@code [{wid: pn, ...}, {wid: lid, ...}]} before fanning out.
  * The {@code update} branch re-queries via {@link DeviceService#getDeviceLists(java.util.Collection, String, String, boolean)};
- * {@code add} and {@code remove} normalise the action node (wrapping inline {@code <device>}
- * children in a {@code <device-list>} node when the stanza lacks one) before delegating to
- * {@link DeviceService#handleDeviceNotification(Node, String, Jid)}.
+ * {@code add} and {@code remove} normalise the action stanza (wrapping inline {@code <device>}
+ * children in a {@code <device-list>} stanza when the stanza lacks one) before delegating to
+ * {@link DeviceService#handleDeviceNotification(Stanza, String, Jid)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleDeviceNotification")
 public final class NotificationDeviceStreamHandler extends SocketStreamHandler.Concurrent {
@@ -83,15 +83,15 @@ public final class NotificationDeviceStreamHandler extends SocketStreamHandler.C
      * failures are caught and logged so a single failure does not skip the remaining entry. The ACK
      * is sent unconditionally at the end.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "devices")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "devices")) {
             return;
         }
 
-        var userJid = node.getAttributeAsJid("from")
+        var userJid = stanza.getAttributeAsJid("from")
                 .map(Jid::toUserJid)
                 .orElse(null);
         if (userJid == null) {
@@ -100,17 +100,17 @@ public final class NotificationDeviceStreamHandler extends SocketStreamHandler.C
             return;
         }
 
-        var lidUser = node.getAttributeAsJid("lid")
+        var lidUser = stanza.getAttributeAsJid("lid")
                 .map(Jid::toUserJid)
                 .orElse(null);
 
-        var actionNode = node.getChild("remove")
-                .or(() -> node.getChild("add"))
-                .or(() -> node.getChild("update"))
+        var actionNode = stanza.getChild("remove")
+                .or(() -> stanza.getChild("add"))
+                .or(() -> stanza.getChild("update"))
                 .orElse(null);
         if (actionNode == null) {
             LOGGER.log(System.Logger.Level.WARNING,
-                    "[devices] notif missing \"remove\" or \"add\" node");
+                    "[devices] notif missing \"remove\" or \"add\" stanza");
             return;
         }
         var actionType = actionNode.description();
@@ -143,14 +143,14 @@ public final class NotificationDeviceStreamHandler extends SocketStreamHandler.C
             }
         }
 
-        sendNotificationAck(node, userJid);
+        sendNotificationAck(stanza, userJid);
     }
 
     /**
      * Routes the action to {@link DeviceService} based on its type.
      *
-     * <p>The {@code add} and {@code remove} actions normalise the action node and delegate to
-     * {@link DeviceService#handleDeviceNotification(Node, String, Jid)}. The {@code update} action
+     * <p>The {@code add} and {@code remove} actions normalise the action stanza and delegate to
+     * {@link DeviceService#handleDeviceNotification(Stanza, String, Jid)}. The {@code update} action
      * delegates to {@link DeviceService#getDeviceLists(java.util.Collection, String, String, boolean)}
      * with context {@code "notification"} to refresh the list from USync. Any other action
      * description is warning-logged and ignored.
@@ -161,14 +161,14 @@ public final class NotificationDeviceStreamHandler extends SocketStreamHandler.C
      *
      * @param entryJid   the user JID being processed (PN or LID)
      * @param actionType the action description ({@code "add"}, {@code "remove"}, {@code "update"})
-     * @param actionNode the action child node
+     * @param actionStanza the action child stanza
      * @param hash       the {@code hash} attribute value for {@code update}, or {@code null}
      */
-    private void processDeviceEntry(Jid entryJid, String actionType, Node actionNode, String hash) {
+    private void processDeviceEntry(Jid entryJid, String actionType, Stanza actionStanza, String hash) {
         switch (actionType) {
             case "add", "remove" -> {
                 deviceService.handleDeviceNotification(
-                        normalizeDeviceActionNode(actionNode),
+                        normalizeDeviceActionNode(actionStanza),
                         actionType,
                         entryJid
                 );
@@ -188,40 +188,40 @@ public final class NotificationDeviceStreamHandler extends SocketStreamHandler.C
 
     /**
      * Wraps inline {@code <device>} children in a synthetic {@code <device-list>} child when the
-     * action node lacks one.
+     * action stanza lacks one.
      *
-     * <p>{@link DeviceService#handleDeviceNotification(Node, String, Jid)} expects an action node
+     * <p>{@link DeviceService#handleDeviceNotification(Stanza, String, Jid)} expects an action stanza
      * with a {@code <device-list>} child and a {@code <key-index-list>} sibling. This helper
      * synthesises the {@code <device-list>} from inline {@code <device>} children when a stanza
-     * ships them flat. The action node is returned unchanged when a {@code <device-list>} is
+     * ships them flat. The action stanza is returned unchanged when a {@code <device-list>} is
      * already present, when no {@code <key-index-list>} is present, or when there are no inline
      * {@code <device>} children to wrap.
      *
-     * @param actionNode the action child node
-     * @return the normalised action node
+     * @param actionStanza the action child stanza
+     * @return the normalised action stanza
      */
-    private Node normalizeDeviceActionNode(Node actionNode) {
-        if (actionNode.getChild("device-list").isPresent()
-                || actionNode.getChild("key-index-list").isEmpty()) {
-            return actionNode;
+    private Stanza normalizeDeviceActionNode(Stanza actionStanza) {
+        if (actionStanza.getChild("device-list").isPresent()
+            || actionStanza.getChild("key-index-list").isEmpty()) {
+            return actionStanza;
         }
 
-        var deviceChildren = actionNode.getChildren("device");
+        var deviceChildren = actionStanza.getChildren("device");
         if (deviceChildren.isEmpty()) {
-            return actionNode;
+            return actionStanza;
         }
 
-        var deviceListNode = new NodeBuilder()
+        var deviceListNode = new StanzaBuilder()
                 .description("device-list")
                 .content(deviceChildren)
                 .build();
 
-        var rebuiltChildren = new ArrayList<Node>();
+        var rebuiltChildren = new ArrayList<Stanza>();
         rebuiltChildren.add(deviceListNode);
-        actionNode.getChild("key-index-list").ifPresent(rebuiltChildren::add);
+        actionStanza.getChild("key-index-list").ifPresent(rebuiltChildren::add);
 
-        return new NodeBuilder()
-                .description(actionNode.description())
+        return new StanzaBuilder()
+                .description(actionStanza.description())
                 .content(rebuiltChildren)
                 .build();
     }
@@ -233,10 +233,10 @@ public final class NotificationDeviceStreamHandler extends SocketStreamHandler.C
      * <p>The ACK carries no {@code type} attribute and targets the user-level JID extracted from
      * {@code from} rather than the raw device JID.
      *
-     * @param node    the original {@code <notification>} stanza
+     * @param stanza    the original {@code <notification>} stanza
      * @param userJid the user-level JID extracted from {@code from}
      */
-    private void sendNotificationAck(Node node, Jid userJid) {
-        ackSender.ack(AckClass.NOTIFICATION, node).to(userJid).type(null).send();
+    private void sendNotificationAck(Stanza stanza, Jid userJid) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).to(userJid).type(null).send();
     }
 }

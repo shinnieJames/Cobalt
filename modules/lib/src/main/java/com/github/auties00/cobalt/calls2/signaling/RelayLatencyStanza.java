@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -110,21 +110,21 @@ public record RelayLatencyStanza(String callId,
     }
 
     /**
-     * Builds the {@code <relaylatency>} action node for this message.
+     * Builds the {@code <relaylatency>} action stanza for this message.
      *
-     * <p>The node stamps {@code call-id} and {@code call-creator} as every action does; {@code has-bot}
+     * <p>The stanza stamps {@code call-id} and {@code call-creator} as every action does; {@code has-bot}
      * is written only when set and {@code transaction-id} is omitted when absent. Each latency entry
      * becomes a {@code <te>} child.
      *
-     * @return the relay-latency action node
+     * @return the relay-latency action stanza
      */
     @Override
-    public Node toNode() {
-        var children = new ArrayList<Node>(entries.size());
+    public Stanza toStanza() {
+        var children = new ArrayList<Stanza>(entries.size());
         for (var entry : entries) {
             children.add(entry.toNode());
         }
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(HAS_BOT_ATTRIBUTE, FLAG_TRUE, hasBot)
                 .attribute(TRANSACTION_ID_ATTRIBUTE, transactionId, transactionId != UNSET);
         if (!children.isEmpty()) {
@@ -134,25 +134,25 @@ public record RelayLatencyStanza(String callId,
     }
 
     /**
-     * Decodes a {@code <relaylatency>} action node into a {@link RelayLatencyStanza}.
+     * Decodes a {@code <relaylatency>} action stanza into a {@link RelayLatencyStanza}.
      *
-     * <p>The {@code <te>} children are decoded through {@link RelayLatencyEntry#of(Node)}; a {@code <te>}
+     * <p>The {@code <te>} children are decoded through {@link RelayLatencyEntry#of(Stanza)}; a {@code <te>}
      * that does not decode is skipped.
      *
-     * @param node the {@code <relaylatency>} node
+     * @param stanza the {@code <relaylatency>} stanza
      * @return the decoded message
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static RelayLatencyStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var hasBot = FLAG_TRUE.equals(node.getAttributeAsString(HAS_BOT_ATTRIBUTE, null));
-        var transactionId = node.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, UNSET);
+    public static RelayLatencyStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var hasBot = FLAG_TRUE.equals(stanza.getAttributeAsString(HAS_BOT_ATTRIBUTE, null));
+        var transactionId = stanza.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, UNSET);
         var entries = new ArrayList<RelayLatencyEntry>();
-        for (var child : node.getChildren(RelayLatencyEntry.ELEMENT)) {
+        for (var child : stanza.getChildren(RelayLatencyEntry.ELEMENT)) {
             RelayLatencyEntry.of(child).ifPresent(entries::add);
         }
         return new RelayLatencyStanza(callId, callCreator, hasBot, transactionId, entries);

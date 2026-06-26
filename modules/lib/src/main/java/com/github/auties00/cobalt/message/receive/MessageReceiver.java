@@ -8,8 +8,8 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.MessageInfo;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.Objects;
 
@@ -19,12 +19,12 @@ import java.util.Objects;
  *
  * <p>The base owns the shared protobuf decoder and the self-account JID comparison so
  * both subclasses agree on which messages are self-authored. Subclasses are
- * package-private and only reachable through {@link MessageReceivingService#process(Node)};
+ * package-private and only reachable through {@link MessageReceivingService#process(Stanza)};
  * neither is instantiated nor subclassed outside this package.
  *
  * @implSpec
- * A subclass must convert a raw inbound {@code <message>} node into the appropriate
- * {@link MessageInfo} subtype via {@link #receive(Node, Jid)}; returning {@code null}
+ * A subclass must convert a raw inbound {@code <message>} stanza into the appropriate
+ * {@link MessageInfo} subtype via {@link #receive(Stanza, Jid)}; returning {@code null}
  * is reserved for stanzas that the receiver intentionally drops without raising an
  * error (for example unavailable fanout placeholders or newsletter messages with no
  * payload).
@@ -60,10 +60,10 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
     }
 
     /**
-     * Processes an incoming {@code <message>} node into the receiver's concrete
+     * Processes an incoming {@code <message>} stanza into the receiver's concrete
      * {@link MessageInfo} subtype.
      *
-     * <p>Invoked by {@link MessageReceivingService#process(Node)} after the router has
+     * <p>Invoked by {@link MessageReceivingService#process(Stanza)} after the router has
      * selected the receiver from the {@code from} JID. A {@code null} return means the
      * message was intentionally dropped (an unavailable fanout placeholder or a
      * newsletter with no payload) and the caller acknowledges with a plain ack.
@@ -75,14 +75,14 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      * subtype for failures so the orchestrator can decide between retry, NACK, and
      * dedup.
      *
-     * @param node    the raw incoming {@code <message>} node
+     * @param stanza    the raw incoming {@code <message>} stanza
      * @param fromJid the JID parsed from the stanza's {@code from} attribute
      * @return the processed message info, or {@code null} for an intentional silent
      *         drop
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsg", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    abstract T receive(Node node, Jid fromJid);
+    abstract T receive(Stanza stanza, Jid fromJid);
 
     /**
      * Returns the logged-in device's PN JID or fails fast when no session is active.

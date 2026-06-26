@@ -16,7 +16,7 @@ import java.io.UncheckedIOException;
  *
  * <p>The single {@code videoId} GraphQL variable is the Facebook video object identifier whose
  * playable URL is being resolved; the compiled document maps it to the {@code id} argument of the
- * {@code fetch__Video} root field. The {@code videoId} is a numeric Facebook node id rather than a
+ * {@code fetch__Video} root field. The {@code videoId} is a numeric Facebook stanza id rather than a
  * WhatsApp address, so it is kept as a {@link String}. The query returns the video's playable URL and
  * identifier; the reply is consumed through {@link BizAdPreviewDrawerVideoFacebookGraphQlResponse}.
  *

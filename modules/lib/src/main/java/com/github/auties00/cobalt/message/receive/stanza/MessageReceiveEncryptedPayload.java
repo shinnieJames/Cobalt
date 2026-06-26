@@ -38,13 +38,13 @@ public final class MessageReceiveEncryptedPayload {
     private final String encMediaType;
 
     /**
-     * The raw encrypted bytes read from the {@code <enc>} node's content
+     * The raw encrypted bytes read from the {@code <enc>} stanza's content
      * region.
      */
     private final byte[] ciphertext;
 
     /**
-     * The {@code count} attribute on the {@code <enc>} node, reporting how many
+     * The {@code count} attribute on the {@code <enc>} stanza, reporting how many
      * times the sender has already retried delivery of this ciphertext.
      */
     private final int retryCount;

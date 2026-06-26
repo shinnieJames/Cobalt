@@ -6,8 +6,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
 import com.github.auties00.libsignal.state.SignalPreKeyBundle;
@@ -156,7 +156,7 @@ public final class DevicePreKeyHandler {
      * devices without bundles while the remaining batches still resolve.
      *
      * @param deviceJids            the device JIDs to fetch pre-keys for
-     * @param hasUserReasonIdentity whether to set {@code reason="identity"} on each {@code <user>} node
+     * @param hasUserReasonIdentity whether to set {@code reason="identity"} on each {@code <user>} stanza
      * @return the {@link PreKeyFetchResult} carrying the resolved bundles and the depleted count
      * @throws NullPointerException if {@code deviceJids} is {@code null}
      * @throws RuntimeException     wrapping {@link InterruptedException} when the calling thread is interrupted while waiting for the batches
@@ -299,7 +299,7 @@ public final class DevicePreKeyHandler {
      * {@link #fetchAndProcessPreKeyBundles(Collection, boolean)}.
      *
      * @param deviceJids            the devices included in this batch
-     * @param hasUserReasonIdentity whether to set {@code reason="identity"} on each {@code <user>} node
+     * @param hasUserReasonIdentity whether to set {@code reason="identity"} on each {@code <user>} stanza
      * @return the parsed bundles and the depleted count for this batch
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchPrekeysJob",
@@ -357,16 +357,16 @@ public final class DevicePreKeyHandler {
      * an identity prefetch so the server can route the request differently.
      *
      * @param deviceJids            the device JIDs to query
-     * @param hasUserReasonIdentity whether to include {@code reason="identity"} on every {@code <user>} node
-     * @return the IQ node builder ready to send
+     * @param hasUserReasonIdentity whether to include {@code reason="identity"} on every {@code <user>} stanza
+     * @return the IQ stanza builder ready to send
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchPrekeysJob",
             exports = "fetchPrekeys",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildPreKeyQuery(List<Jid> deviceJids, boolean hasUserReasonIdentity) {
+    private StanzaBuilder buildPreKeyQuery(List<Jid> deviceJids, boolean hasUserReasonIdentity) {
         var userNodes = deviceJids.stream()
                 .map(jid -> {
-                    var builder = new NodeBuilder()
+                    var builder = new StanzaBuilder()
                             .description("user")
                             .attribute("jid", jid);
                     if (hasUserReasonIdentity) {
@@ -376,12 +376,12 @@ public final class DevicePreKeyHandler {
                 })
                 .toList();
 
-        var keyNode = new NodeBuilder()
+        var keyNode = new StanzaBuilder()
                 .description("key")
                 .content(userNodes)
                 .build();
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", ENCRYPT_XMLNS)
                 .attribute("to", JidServer.user())
@@ -404,7 +404,7 @@ public final class DevicePreKeyHandler {
      * telemetry; Cobalt does not currently emit {@code PostPrekeysDepletionMetric}, and this field
      * is exposed for embedders that mirror WA Web's WAM surface.
      *
-     * @param response the IQ response node
+     * @param response the IQ response stanza
      * @return the bundles and depleted count for this batch
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchPrekeysJob",
@@ -413,7 +413,7 @@ public final class DevicePreKeyHandler {
     @WhatsAppWebExport(moduleName = "WAWebProcessKeyBundle",
             exports = "splitKeyBundles",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private PreKeyBatchResult parsePreKeyResponse(Node response) {
+    private PreKeyBatchResult parsePreKeyResponse(Stanza response) {
         var result = new HashMap<Jid, SignalPreKeyBundle>();
         var depletedPrekeyCount = 0;
 
@@ -456,39 +456,39 @@ public final class DevicePreKeyHandler {
      * via {@link #convertBytesToUint(byte[], int)} because the wire format uses raw big-endian
      * unsigned bytes rather than an ASCII number string.
      *
-     * @param userNode the {@code <user>} node for this device
+     * @param userStanza the {@code <user>} stanza for this device
      * @return the parsed pre-key bundle
      * @throws IllegalArgumentException if any required field is missing
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchPrekeysJob",
             exports = "fetchPrekeys",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private SignalPreKeyBundle parseUserPreKeyBundle(Node userNode) {
-        var registrationId = userNode.getChild("registration")
-                .flatMap(Node::toContentBytes)
+    private SignalPreKeyBundle parseUserPreKeyBundle(Stanza userStanza) {
+        var registrationId = userStanza.getChild("registration")
+                .flatMap(Stanza::toContentBytes)
                 .map(bytes -> convertBytesToUint(bytes, 4))
                 .orElseThrow(() -> new IllegalArgumentException("Missing registration ID"));
 
-        var identityKey = userNode.getChild("identity")
-                .flatMap(Node::toContentBytes)
+        var identityKey = userStanza.getChild("identity")
+                .flatMap(Stanza::toContentBytes)
                 .map(SignalIdentityPublicKey::ofDirect)
                 .orElseThrow(() -> new IllegalArgumentException("Missing identity key"));
 
-        var signedPreKeyNode = userNode.getChild("skey")
+        var signedPreKeyNode = userStanza.getChild("skey")
                 .orElseThrow(() -> new IllegalArgumentException("Missing signed prekey"));
 
         var signedPreKeyId = signedPreKeyNode.getChild("id")
-                .flatMap(Node::toContentBytes)
+                .flatMap(Stanza::toContentBytes)
                 .map(bytes -> convertBytesToUint(bytes, 3))
                 .orElseThrow(() -> new IllegalArgumentException("Missing signed prekey ID"));
 
         var signedPreKeyValue = signedPreKeyNode.getChild("value")
-                .flatMap(Node::toContentBytes)
+                .flatMap(Stanza::toContentBytes)
                 .map(SignalIdentityPublicKey::ofDirect)
                 .orElseThrow(() -> new IllegalArgumentException("Missing signed prekey value"));
 
         var signedPreKeySignature = signedPreKeyNode.getChild("signature")
-                .flatMap(Node::toContentBytes)
+                .flatMap(Stanza::toContentBytes)
                 .orElseThrow(() -> new IllegalArgumentException("Missing signed prekey signature"));
 
         var builder = new SignalPreKeyBundleBuilder()
@@ -499,15 +499,15 @@ public final class DevicePreKeyHandler {
                 .signedPreKeySignature(signedPreKeySignature)
                 .identityKey(identityKey);
 
-        var preKeyNode = userNode.getChild("key");
+        var preKeyNode = userStanza.getChild("key");
         if (preKeyNode.isPresent()) {
             var preKeyId = preKeyNode.get().getChild("id")
-                    .flatMap(Node::toContentBytes)
+                    .flatMap(Stanza::toContentBytes)
                     .map(bytes -> convertBytesToUint(bytes, 3))
                     .orElse(null);
 
             var preKeyValue = preKeyNode.get().getChild("value")
-                    .flatMap(Node::toContentBytes)
+                    .flatMap(Stanza::toContentBytes)
                     .map(SignalIdentityPublicKey::ofDirect)
                     .orElse(null);
 
@@ -531,7 +531,7 @@ public final class DevicePreKeyHandler {
      * This implementation accumulates {@code n = (n << 8) | (bytes[i] & 0xFF)} for the first
      * {@code byteCount} bytes, matching {@code WAParsableXmlNode.convertBytesToUint} exactly.
      *
-     * @param bytes     the raw content bytes from the wire-format node
+     * @param bytes     the raw content bytes from the wire-format stanza
      * @param byteCount the number of leading bytes to interpret
      * @return the decoded big-endian unsigned integer
      * @throws IllegalArgumentException if {@code bytes} is {@code null} or holds fewer than {@code byteCount} bytes
@@ -732,25 +732,25 @@ public final class DevicePreKeyHandler {
      * {@code WAWebGetIdentityKeysJob}'s inner {@code m} function.
      *
      * @param userJids the users in this batch
-     * @return the IQ node builder ready to send
+     * @return the IQ stanza builder ready to send
      */
     @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
             exports = "getAndStoreIdentityKeys",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildIdentityKeyQuery(List<Jid> userJids) {
+    private StanzaBuilder buildIdentityKeyQuery(List<Jid> userJids) {
         var userNodes = userJids.stream()
-                .map(jid -> new NodeBuilder()
+                .map(jid -> new StanzaBuilder()
                         .description("user")
                         .attribute("jid", jid.toUserJid().withDevice(0))
                         .build())
                 .toList();
 
-        var identityNode = new NodeBuilder()
+        var identityNode = new StanzaBuilder()
                 .description("identity")
                 .content(userNodes)
                 .build();
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", ENCRYPT_XMLNS)
                 .attribute("to", JidServer.user())
@@ -771,12 +771,12 @@ public final class DevicePreKeyHandler {
      * {@link SignalIdentityPublicKey#ofDirect(byte[])}, mirroring WA Web's {@code contentBytes(32)}
      * length-checked accessor.
      *
-     * @param response the IQ response node
+     * @param response the IQ response stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
             exports = "getAndStoreIdentityKeys",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private void parseAndStoreIdentityKeyResponse(Node response) {
+    private void parseAndStoreIdentityKeyResponse(Stanza response) {
         var listNode = response.getChild("list");
         if (listNode.isEmpty()) {
             return;
@@ -794,7 +794,7 @@ public final class DevicePreKeyHandler {
                 var deviceJid = userNode.getRequiredAttributeAsJid("jid");
 
                 var identityKeyBytes = userNode.getChild("identity")
-                        .flatMap(Node::toContentBytes)
+                        .flatMap(Stanza::toContentBytes)
                         .orElse(null);
 
                 if (identityKeyBytes == null || identityKeyBytes.length != 32) {

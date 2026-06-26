@@ -7,9 +7,9 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.StarAction;
@@ -235,7 +235,7 @@ class StarMessageHandlerTest {
             var remote = starMutation(true, PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(200L));
 
             var resolution = new StarMessageHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -245,7 +245,7 @@ class StarMessageHandlerTest {
             var remote = starMutation(false, PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(200L));
 
             var resolution = new StarMessageHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
     }
 

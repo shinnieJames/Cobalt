@@ -18,7 +18,7 @@ import java.io.UncheckedIOException;
  * {@code lwi.boosted_component_wrapper(caller: "CTWA_SMB_WEB_AD_CREATE_FLOW", draft_id: $draftID,
  * input: $input)}; it is declared opaquely in the compiled document and no caller building it is
  * present in the analysed bundle, so the caller supplies it already JSON-encoded. The {@code draftID}
- * and {@code pageID} variables are Facebook node ids (the ad draft and the page), so each is kept as a
+ * and {@code pageID} variables are Facebook stanza ids (the ad draft and the page), so each is kept as a
  * {@link String} rather than a {@link com.github.auties00.cobalt.model.jid.Jid}. The
  * {@code isFBAccount} and {@code isWAAccount} variables are include-condition booleans gating the
  * Facebook-profile and WhatsApp-onboarding sub-selections respectively. The
@@ -76,7 +76,7 @@ public final class BizAdCreationRootFacebookGraphQlRequest implements FacebookGr
     private final String inputJson;
 
     /**
-     * The {@code draftID} GraphQL variable carrying the Facebook ad-draft node id, or {@code null} to
+     * The {@code draftID} GraphQL variable carrying the Facebook ad-draft stanza id, or {@code null} to
      * omit it.
      */
     private final String draftId;
@@ -94,7 +94,7 @@ public final class BizAdCreationRootFacebookGraphQlRequest implements FacebookGr
     private final Boolean isWaAccount;
 
     /**
-     * The {@code pageID} GraphQL variable carrying the Facebook page node id, or {@code null} to omit
+     * The {@code pageID} GraphQL variable carrying the Facebook page stanza id, or {@code null} to omit
      * it.
      */
     private final String pageId;
@@ -112,7 +112,7 @@ public final class BizAdCreationRootFacebookGraphQlRequest implements FacebookGr
      * <p>The {@code inputJson} is the already-JSON-encoded {@code input} object identifying the
      * boosted component; its field names are defined by the server-side
      * {@code CTWABoostedComponentInput} type and are not modelled here (see the class
-     * {@code @implNote}). The {@code draftId} and {@code pageId} are Facebook node ids. The
+     * {@code @implNote}). The {@code draftId} and {@code pageId} are Facebook stanza ids. The
      * {@code isFbAccount} and {@code isWaAccount} flags gate the optional account-context
      * sub-selections. The {@code igUserIdDoubleWriteEnabled} flag toggles the Instagram user-id
      * double-write sub-selections and is serialized under
@@ -121,13 +121,13 @@ public final class BizAdCreationRootFacebookGraphQlRequest implements FacebookGr
      *
      * @param inputJson                  the already-JSON-encoded {@code input} object, or {@code null}
      *                                   to omit the variable
-     * @param draftId                    the Facebook ad-draft node id, or {@code null} to omit the
+     * @param draftId                    the Facebook ad-draft stanza id, or {@code null} to omit the
      *                                   variable
      * @param isFbAccount                whether the linked account is a Facebook account, or
      *                                   {@code null} to omit the variable
      * @param isWaAccount                whether the linked account is a WhatsApp account, or
      *                                   {@code null} to omit the variable
-     * @param pageId                     the Facebook page node id, or {@code null} to omit the
+     * @param pageId                     the Facebook page stanza id, or {@code null} to omit the
      *                                   variable
      * @param igUserIdDoubleWriteEnabled whether the Instagram user-id double-write sub-selections are
      *                                   enabled, or {@code null} to omit the variable

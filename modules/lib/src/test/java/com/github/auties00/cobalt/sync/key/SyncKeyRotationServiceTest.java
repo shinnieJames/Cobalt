@@ -5,7 +5,6 @@ import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
-import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKeyBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
@@ -14,8 +13,7 @@ import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyD
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyIdBuilder;
 import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
-import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import org.junit.jupiter.api.DisplayName;

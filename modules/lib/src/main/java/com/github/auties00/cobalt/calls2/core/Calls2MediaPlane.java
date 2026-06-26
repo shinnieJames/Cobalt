@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.calls2.core;
 import com.github.auties00.cobalt.calls2.core.participant.CallMembership;
 import com.github.auties00.cobalt.calls2.net.transport.AppDataController;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.List;
 import java.util.Optional;
@@ -92,6 +92,11 @@ public interface Calls2MediaPlane {
      *                         devices
      * @param peerDeviceJid    the peer's device JID on a one-to-one call, keying the inbound end-to-end SRTP
      *                         master, or {@code null} when not yet known or on a group call
+     * @param electedRelayName the {@linkplain com.github.auties00.cobalt.calls2.signaling.RelayEndpoint#relayName()
+     *                         name} of the relay the peer-aware election chose, restricting the relay-endpoint
+     *                         selection to that relay so both ends bind the relay they share; an
+     *                         {@linkplain Optional#empty() empty} value leaves the implementer on its local
+     *                         lowest-latency pick, the fallback before the peer's latency report has arrived
      * @return the live media-plane session; never {@code null}
      * @throws NullPointerException                                                if {@code callId},
      *                                                                             {@code relay},
@@ -103,9 +108,9 @@ public interface Calls2MediaPlane {
      *                                                                             media plane cannot be
      *                                                                             brought up
      */
-    Session bringUp(String callId, Node relay, List<Node> voipSettings, byte[] callKey, boolean isCaller,
+    Session bringUp(String callId, Stanza relay, List<Stanza> voipSettings, byte[] callKey, boolean isCaller,
                     boolean video, int participantCount, CallMembership membership,
-                    Calls2MediaStreams streams, Jid peerDeviceJid);
+                    Calls2MediaStreams streams, Jid peerDeviceJid, Optional<String> electedRelayName);
 
     /**
      * A live media-plane session the controller holds for a call's lifetime.

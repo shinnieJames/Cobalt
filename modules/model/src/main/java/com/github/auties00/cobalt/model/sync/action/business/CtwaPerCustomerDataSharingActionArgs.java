@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.model.sync.action.business;
 
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncActionArgs;
 
 /**
  * Index arguments identifying a {@link CtwaPerCustomerDataSharingAction} inside a sync patch.

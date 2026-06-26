@@ -8,8 +8,9 @@ import com.github.auties00.cobalt.model.contact.ContactTextStatusBuilder;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -64,7 +65,7 @@ public sealed class LinkedWhatsAppClientBuilder {
      * @return the web client builder
      */
     public Client.Web webClient() {
-        return new Client.Web(WhatsAppStoreFactory.persistent());
+        return new Client.Web(LinkedWhatsAppStoreFactory.persistent());
     }
 
     /**
@@ -74,7 +75,7 @@ public sealed class LinkedWhatsAppClientBuilder {
      * @return the web client builder
      * @throws NullPointerException if {@code factory} is {@code null}
      */
-    public Client.Web webClient(WhatsAppStoreFactory factory) {
+    public Client.Web webClient(LinkedWhatsAppStoreFactory factory) {
         Objects.requireNonNull(factory, "factory must not be null");
         return new Client.Web(factory);
     }
@@ -88,7 +89,7 @@ public sealed class LinkedWhatsAppClientBuilder {
      * @return the mobile client builder
      */
     public Client.Mobile mobileClient() {
-        return new Client.Mobile(WhatsAppStoreFactory.persistent());
+        return new Client.Mobile(LinkedWhatsAppStoreFactory.persistent());
     }
 
     /**
@@ -98,14 +99,14 @@ public sealed class LinkedWhatsAppClientBuilder {
      * @return the mobile client builder
      * @throws NullPointerException if {@code factory} is {@code null}
      */
-    public Client.Mobile mobileClient(WhatsAppStoreFactory factory) {
+    public Client.Mobile mobileClient(LinkedWhatsAppStoreFactory factory) {
         Objects.requireNonNull(factory, "factory must not be null");
         return new Client.Mobile(factory);
     }
 
     /**
      * Returns a low-level builder that bypasses the
-     * {@link WhatsAppStoreFactory} flow and accepts a pre-built
+     * {@link LinkedWhatsAppStoreFactory} flow and accepts a pre-built
      * {@link LinkedWhatsAppStore} directly.
      *
      * @return the custom client builder
@@ -116,7 +117,7 @@ public sealed class LinkedWhatsAppClientBuilder {
 
     /**
      * A builder stage that selects an existing persisted session or
-     * provisions a new one, backed by a {@link WhatsAppStoreFactory}.
+     * provisions a new one, backed by a {@link LinkedWhatsAppStoreFactory}.
      *
      * <p>Sub-types {@link Web} and {@link Mobile} specialise the behaviour
      * to the respective client flavour. Every {@code loadXxx} method
@@ -127,7 +128,7 @@ public sealed class LinkedWhatsAppClientBuilder {
         /**
          * The store factory that loads or creates the session on disk.
          */
-        final WhatsAppStoreFactory factory;
+        final LinkedWhatsAppStoreFactory factory;
 
         /**
          * Constructs a new {@code Client} stage backed by the given
@@ -136,7 +137,7 @@ public sealed class LinkedWhatsAppClientBuilder {
          * @param factory the store factory; must not be {@code null}
          * @throws NullPointerException if {@code factory} is {@code null}
          */
-        private Client(WhatsAppStoreFactory factory) {
+        private Client(LinkedWhatsAppStoreFactory factory) {
             this.factory = Objects.requireNonNull(factory, "factory must not be null");
         }
 
@@ -242,7 +243,7 @@ public sealed class LinkedWhatsAppClientBuilder {
              *
              * @param factory the store factory for the web client
              */
-            private Web(WhatsAppStoreFactory factory) {
+            private Web(LinkedWhatsAppStoreFactory factory) {
                 super(factory);
             }
             
@@ -364,7 +365,7 @@ public sealed class LinkedWhatsAppClientBuilder {
              *
              * @param factory the store factory for the mobile client
              */
-            private Mobile(WhatsAppStoreFactory factory) {
+            private Mobile(LinkedWhatsAppStoreFactory factory) {
                 super(factory);
             }
 
@@ -1317,13 +1318,13 @@ public sealed class LinkedWhatsAppClientBuilder {
 
     /**
      * A low-level builder stage that bypasses the
-     * {@link WhatsAppStoreFactory} flow and lets the caller supply a
+     * {@link LinkedWhatsAppStoreFactory} flow and lets the caller supply a
      * pre-built {@link LinkedWhatsAppStore}.
      *
      * <p>{@code Custom} is useful for test harnesses or for integrators
      * that already own a store (for example, one loaded from an external
      * database). The caller is responsible for ensuring the store's
-     * {@link com.github.auties00.cobalt.store.AccountStore#clientType()} matches the intended flavour and
+     * {@link LinkedWhatsAppAccountStore#clientType()} matches the intended flavour and
      * that the keys stored inside it are consistent with any identifiers
      * passed elsewhere in the build chain.
      */

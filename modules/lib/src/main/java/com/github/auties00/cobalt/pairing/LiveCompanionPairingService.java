@@ -7,8 +7,9 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
@@ -299,7 +300,7 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      * user is linking against.
      *
      * <p>This is captured from
-     * {@link com.github.auties00.cobalt.store.AccountStore#phoneNumber}
+     * {@link LinkedWhatsAppAccountStore#phoneNumber}
      * at {@link #start} time and echoed into the {@code companion_hello}
      * and {@code companion_finish} IQs.
      */
@@ -567,7 +568,7 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      * @return the exception to throw, or {@code null} when the response
      *         is not an error
      */
-    private WhatsAppRegistrationException extractIqError(Node response, String flow) {
+    private WhatsAppRegistrationException extractIqError(Stanza response, String flow) {
         if (response == null || !response.hasAttribute("type", "error")) {
             return null;
         }
@@ -587,7 +588,7 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      * always-zero link-code pairing nonce up to the WhatsApp relay.
      *
      * @implNote
-     * This implementation issues the IQ at the {@link NodeBuilder} level
+     * This implementation issues the IQ at the {@link StanzaBuilder} level
      * rather than going through WA Web's
      * {@code WASmaxMdCompanionHelloRPC}-generated RPC. The
      * {@code link_code_pairing_nonce} element is always emitted with a
@@ -614,32 +615,32 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      */
     @WhatsAppWebExport(moduleName = "WAWebAltDeviceLinkingIq", exports = "sendCompanionHello", adaptation = WhatsAppAdaptation.DIRECT)
     private byte[] sendCompanionHello(Jid phoneJid, byte[] linkCodePairingWrappedCompanionEphemeralPub) {
-        var wrappedChild = new NodeBuilder()
+        var wrappedChild = new StanzaBuilder()
                 .description("link_code_pairing_wrapped_companion_ephemeral_pub")
                 .content(linkCodePairingWrappedCompanionEphemeralPub)
                 .build();
 
-        var companionServerAuthKeyPub = new NodeBuilder()
+        var companionServerAuthKeyPub = new StanzaBuilder()
                 .description("companion_server_auth_key_pub")
                 .content(whatsapp.store().signalStore().noiseKeyPair().publicKey().toEncodedPoint())
                 .build();
 
-        var companionPlatformId = new NodeBuilder()
+        var companionPlatformId = new StanzaBuilder()
                 .description("companion_platform_id")
                 .content(companionPlatformId().getBytes(StandardCharsets.UTF_8))
                 .build();
 
-        var companionPlatformDisplay = new NodeBuilder()
+        var companionPlatformDisplay = new StanzaBuilder()
                 .description("companion_platform_display")
                 .content(companionPlatformDisplay().getBytes(StandardCharsets.UTF_8))
                 .build();
 
-        var linkCodePairingNonce = new NodeBuilder()
+        var linkCodePairingNonce = new StanzaBuilder()
                 .description("link_code_pairing_nonce")
                 .content(new byte[]{0})
                 .build();
 
-        var linkCodeCompanionReg = new NodeBuilder()
+        var linkCodeCompanionReg = new StanzaBuilder()
                 .description("link_code_companion_reg")
                 .attribute("jid", phoneJid)
                 .attribute("stage", "companion_hello")
@@ -647,7 +648,7 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
                 .content(wrappedChild, companionServerAuthKeyPub, companionPlatformId, companionPlatformDisplay, linkCodePairingNonce)
                 .build();
 
-        var iq = new NodeBuilder()
+        var iq = new StanzaBuilder()
                 .description("iq")
                 .attribute("to", Jid.userServer())
                 .attribute("type", "set")
@@ -671,7 +672,7 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      * this IQ with the earlier {@code companion_hello}.
      *
      * @implNote
-     * This implementation builds the stanza at the {@link NodeBuilder}
+     * This implementation builds the stanza at the {@link StanzaBuilder}
      * level rather than through WA Web's
      * {@code WASmaxMdCompanionFinishRPC}. The element ordering (wrapped
      * bundle, companion identity, pairing ref) matches the order WA Web
@@ -688,29 +689,29 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      */
     @WhatsAppWebExport(moduleName = "WAWebAltDeviceLinkingIq", exports = "sendCompanionFinish", adaptation = WhatsAppAdaptation.DIRECT)
     private void sendCompanionFinish(Jid phoneJid, byte[] linkCodePairingWrappedKeyBundle, byte[] companionIdentityPublic, byte[] ref) {
-        var wrappedKeyBundle = new NodeBuilder()
+        var wrappedKeyBundle = new StanzaBuilder()
                 .description("link_code_pairing_wrapped_key_bundle")
                 .content(linkCodePairingWrappedKeyBundle)
                 .build();
 
-        var companionIdentity = new NodeBuilder()
+        var companionIdentity = new StanzaBuilder()
                 .description("companion_identity_public")
                 .content(companionIdentityPublic)
                 .build();
 
-        var pairingRef = new NodeBuilder()
+        var pairingRef = new StanzaBuilder()
                 .description("link_code_pairing_ref")
                 .content(ref)
                 .build();
 
-        var linkCodeCompanionReg = new NodeBuilder()
+        var linkCodeCompanionReg = new StanzaBuilder()
                 .description("link_code_companion_reg")
                 .attribute("jid", phoneJid)
                 .attribute("stage", "companion_finish")
                 .content(wrappedKeyBundle, companionIdentity, pairingRef)
                 .build();
 
-        var iq = new NodeBuilder()
+        var iq = new StanzaBuilder()
                 .description("iq")
                 .attribute("to", Jid.userServer())
                 .attribute("type", "set")
@@ -806,17 +807,17 @@ public final class LiveCompanionPairingService implements CompanionPairingServic
      * malformed server response shows up in the diagnostic log even
      * though the caller raises a generic error.
      *
-     * @param response the IQ result node, or {@code null}
+     * @param response the IQ result stanza, or {@code null}
      * @return the raw ref bytes, or {@code null} if the response or the
      *         ref child is absent
      */
-    private byte[] extractRef(Node response) {
+    private byte[] extractRef(Stanza response) {
         if (response == null) {
             return null;
         }
         var ref = response.getChild("link_code_companion_reg")
                 .flatMap(node -> node.getChild("link_code_pairing_ref"))
-                .flatMap(Node::toContentBytes)
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
         if (ref == null) {
             var logger = System.getLogger(LiveCompanionPairingService.class.getName());

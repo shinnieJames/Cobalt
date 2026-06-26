@@ -1,5 +1,6 @@
 import com.github.auties00.cobalt.listener.WhatsAppListener;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 /**
  * Defines the Cobalt library, a Java reimplementation of the WhatsApp Web, Desktop, and Mobile clients.
@@ -17,12 +18,12 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
  *   <li>Event delivery through {@link WhatsAppListener} and its
  *       aggregator {@link LinkedWhatsAppClientListener}, the
  *       callback interfaces for incoming messages, presence, calls, and other asynchronous notifications.</li>
- *   <li>Session and entity persistence through {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore},
+ *   <li>Session and entity persistence through {@link LinkedWhatsAppStore},
  *       which holds chats, contacts, messages, and the Signal protocol material for a session.</li>
  *   <li>The {@code calls2} packages, which expose voice and video calling together with audio and video
  *       frame sources, sinks, and filters.</li>
- *   <li>The {@code node} packages, which expose the stanza model used to build and read IQ, MEX, SMAX,
- *       and USync protocol nodes.</li>
+ *   <li>The {@code stanza} packages, which expose the stanza model used to build and read IQ, MEX, SMAX,
+ *       and USync protocol stanzas.</li>
  *   <li>The {@code exception} package, which exposes the configurable error hierarchy raised across the
  *       library.</li>
  *   <li>The {@code wam.event} and {@code wam.type} packages, which expose the metrics event
@@ -102,17 +103,24 @@ module com.github.auties00.cobalt {
     // Exceptions
     exports com.github.auties00.cobalt.exception;
 
-    // Node/Stanza
+    // Stanza queries
     // Exported so the user can make his own queries
-    exports com.github.auties00.cobalt.node;
-    exports com.github.auties00.cobalt.node.iq;
-    exports com.github.auties00.cobalt.node.mex;
-    exports com.github.auties00.cobalt.node.smax;
-    exports com.github.auties00.cobalt.node.usync;
+    exports com.github.auties00.cobalt.stanza;
+    exports com.github.auties00.cobalt.stanza.iq;
+    exports com.github.auties00.cobalt.stanza.mex;
+    exports com.github.auties00.cobalt.stanza.smax;
+    exports com.github.auties00.cobalt.stanza.usync;
+
+    // GraphQL queries
+    // Exported so the user can make his own queries
+    exports com.github.auties00.cobalt.graphql.facebook;
+    exports com.github.auties00.cobalt.graphql.whatsapp;
 
     // Store
     // Exported for obvious reasons
     exports com.github.auties00.cobalt.store;
+    exports com.github.auties00.cobalt.store.linked;
+    exports com.github.auties00.cobalt.store.cloud;
 
     // Metrics
     // Export the codegen event specs + types so that users can send their own WAM events through LinkedWhatsAppClient

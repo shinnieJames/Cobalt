@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.stream.notification.business;
 
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -12,10 +15,8 @@ import com.github.auties00.cobalt.model.business.BusinessDataSharingConsent;
 import com.github.auties00.cobalt.model.business.BusinessSubscriptionBuilder;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.node.smax.biz.SmaxNonceNotificationResponse;
-import com.github.auties00.cobalt.node.smax.biz.SmaxSyncPrivacySettingResponse;
+import com.github.auties00.cobalt.stanza.smax.biz.SmaxNonceNotificationResponse;
+import com.github.auties00.cobalt.stanza.smax.biz.SmaxSyncPrivacySettingResponse;
 
 import java.time.Instant;
 
@@ -69,73 +70,73 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * Validates the stanza shape, dispatches to the per-type sub-handler, and always sends the protocol-level ack.
      *
      * <p>Stanzas whose description is not {@code notification} or that carry no {@code type} are dropped. The
-     * {@code type} attribute routes between {@code business} (handled by {@link #handleBusinessNotification(Node)}),
-     * {@code digital_commerce_subscription} (handled by {@link #handleDigitalCommerceSubscription(Node)}), and
-     * {@code fb:update} (handled by {@link #handleBotProfileUpdate(Node)}).
+     * {@code type} attribute routes between {@code business} (handled by {@link #handleBusinessNotification(Stanza)}),
+     * {@code digital_commerce_subscription} (handled by {@link #handleDigitalCommerceSubscription(Stanza)}), and
+     * {@code fb:update} (handled by {@link #handleBotProfileUpdate(Stanza)}).
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification")) {
             return;
         }
 
-        var type = node.getAttributeAsString("type", null);
+        var type = stanza.getAttributeAsString("type", null);
         if (type == null) {
             return;
         }
 
         switch (type) {
-            case "business" -> handleBusinessNotification(node);
-            case "digital_commerce_subscription" -> handleDigitalCommerceSubscription(node);
-            case "fb:update" -> handleBotProfileUpdate(node);
+            case "business" -> handleBusinessNotification(stanza);
+            case "digital_commerce_subscription" -> handleDigitalCommerceSubscription(stanza);
+            case "fb:update" -> handleBotProfileUpdate(stanza);
             default -> {
             }
         }
     }
 
     /**
-     * Routes a {@code business}-type stanza through {@link #dispatch(Node)} and sends the ack with the side-list child
+     * Routes a {@code business}-type stanza through {@link #dispatch(Stanza)} and sends the ack with the side-list child
      * the dispatch requested.
      *
      * <p>The side-list flag asks the server to redistribute the notification to companions that may hold the contact
      * record this device could not resolve from a hash. A failure during dispatch is logged and the ack is still sent.
      *
-     * @param node the {@code <notification type="business"/>} stanza
+     * @param stanza the {@code <notification type="business"/>} stanza
      */
-    private void handleBusinessNotification(Node node) {
+    private void handleBusinessNotification(Stanza stanza) {
         var needsSideList = false;
         try {
-            needsSideList = dispatch(node);
+            needsSideList = dispatch(stanza);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle business notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
+                    stanza.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
         } finally {
-            sendBusinessAck(node, needsSideList);
+            sendBusinessAck(stanza, needsSideList);
         }
     }
 
     /**
-     * Routes a {@code digital_commerce_subscription}-type stanza through the shared {@link #handleSubscriptions(Node)}
+     * Routes a {@code digital_commerce_subscription}-type stanza through the shared {@link #handleSubscriptions(Stanza)}
      * path and sends the dedicated digital-commerce ack.
      *
      * <p>The notification type is distinct from {@code business} so the server can route it based on subscriber
      * eligibility, but the wire shape and the applied subscription and feature-flag fields are identical. A failure
      * during processing is logged and the ack is still sent.
      *
-     * @param node the {@code <notification type="digital_commerce_subscription"/>} stanza
+     * @param stanza the {@code <notification type="digital_commerce_subscription"/>} stanza
      */
-    private void handleDigitalCommerceSubscription(Node node) {
+    private void handleDigitalCommerceSubscription(Stanza stanza) {
         try {
-            handleSubscriptions(node);
+            handleSubscriptions(stanza);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle digital_commerce_subscription notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
+                    stanza.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
         } finally {
-            sendDigitalCommerceSubscriptionAck(node);
+            sendDigitalCommerceSubscriptionAck(stanza);
         }
     }
 
@@ -151,12 +152,12 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * This implementation only logs the bot JID and category. Cobalt does not maintain an in-memory bot-profile
      * collection and lets callers re-query on demand, so no refresh is fired per bot id.
      *
-     * @param node the {@code <notification type="fb:update"/>} stanza
+     * @param stanza the {@code <notification type="fb:update"/>} stanza
      */
-    private void handleBotProfileUpdate(Node node) {
+    private void handleBotProfileUpdate(Stanza stanza) {
         try {
             var pruned = false;
-            for (var child : node.children()) {
+            for (var child : stanza.children()) {
                 if (!"update".equals(child.description())) {
                     continue;
                 }
@@ -185,9 +186,9 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle fb:update notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
+                    stanza.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
         } finally {
-            sendBotProfileAck(node);
+            sendBotProfileAck(stanza);
         }
     }
 
@@ -201,51 +202,51 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * remove, verified-name, and profile branches return {@code true} when their targeting is hash-based and the
      * contact could not be resolved; all other branches return {@code false}.
      *
-     * @param node the full {@code <notification>} stanza
+     * @param stanza the full {@code <notification>} stanza
      * @return {@code true} when a hash-based lookup failed and the ack should include {@code <user side_list="out"/>}; {@code false} otherwise
      */
-    private boolean dispatch(Node node) {
-        if (node.hasChild("remove")) {
-            return handleRemove(node.getRequiredChild("remove"));
+    private boolean dispatch(Stanza stanza) {
+        if (stanza.hasChild("remove")) {
+            return handleRemove(stanza.getRequiredChild("remove"));
         }
 
-        if (node.hasChild("verified_name")) {
-            return handleVerifiedName(node.getRequiredChild("verified_name"));
+        if (stanza.hasChild("verified_name")) {
+            return handleVerifiedName(stanza.getRequiredChild("verified_name"));
         }
 
-        if (node.hasChild("profile")) {
-            return handleProfile(node, node.getRequiredChild("profile"));
+        if (stanza.hasChild("profile")) {
+            return handleProfile(stanza, stanza.getRequiredChild("profile"));
         }
 
-        if (node.hasChild("product_catalog")) {
-            handleProductCatalog(node.getRequiredChild("product_catalog"));
+        if (stanza.hasChild("product_catalog")) {
+            handleProductCatalog(stanza.getRequiredChild("product_catalog"));
             return false;
         }
 
-        if (node.hasChild("subscriptions")) {
-            handleSubscriptions(node);
+        if (stanza.hasChild("subscriptions")) {
+            handleSubscriptions(stanza);
             return false;
         }
 
-        if (node.hasChild("ctwa_suggestion")) {
+        if (stanza.hasChild("ctwa_suggestion")) {
             // TODO: implement the CTWA action-banner suggestion pipeline once Cobalt has an equivalent of WAWebHandleCTWASuggestion.
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Received ctwa_suggestion business notification (not implemented)");
             return false;
         }
 
-        if (node.hasChild("privacy")) {
-            handlePrivacy(node);
+        if (stanza.hasChild("privacy")) {
+            handlePrivacy(stanza);
             return false;
         }
 
-        if (node.hasChild("wa_ad_account_nonce")) {
-            handleAdAccountNonce(node);
+        if (stanza.hasChild("wa_ad_account_nonce")) {
+            handleAdAccountNonce(stanza);
             return false;
         }
 
-        if (node.hasChild("mm_campaign")) {
-            handleMarketingCampaign(node);
+        if (stanza.hasChild("mm_campaign")) {
+            handleMarketingCampaign(stanza);
             return false;
         }
 
@@ -267,11 +268,11 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * This implementation does not emit an in-thread privacy system message on removal; Cobalt's message-generation
      * pipeline runs from a different stream.
      *
-     * @param removeNode the {@code <remove>} child node
+     * @param removeStanza the {@code <remove>} child stanza
      * @return {@code true} when hash-based lookup failed; {@code false} otherwise
      */
-    private boolean handleRemove(Node removeNode) {
-        var jid = removeNode.getAttributeAsJid("jid").orElse(null);
+    private boolean handleRemove(Stanza removeStanza) {
+        var jid = removeStanza.getAttributeAsJid("jid").orElse(null);
         if (jid != null) {
             var targetJid = jid.withoutData();
             if (isSelf(targetJid)) {
@@ -287,7 +288,7 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
         }
 
         // TODO: resolve the contact via hash and apply the remove locally. Today Cobalt requests side-list redistribution so a companion that owns the contact applies it instead.
-        var hash = removeNode.getAttributeAsString("hash", null);
+        var hash = removeStanza.getAttributeAsString("hash", null);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Cannot handle hash-based business removal (hash={0}), requesting side-list redistribution",
                 hash);
@@ -304,11 +305,11 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * {@link LinkedWhatsAppClient#queryBusinessProfile(com.github.auties00.cobalt.model.jid.JidProvider)}. The hash branch
      * always returns {@code true} because Cobalt has no hash-keyed contact lookup.
      *
-     * @param verifiedNameNode the {@code <verified_name>} child node
+     * @param verifiedNameStanza the {@code <verified_name>} child stanza
      * @return {@code true} when hash-based and the contact was not resolved; {@code false} otherwise
      */
-    private boolean handleVerifiedName(Node verifiedNameNode) {
-        var jid = verifiedNameNode.getAttributeAsJid("jid").orElse(null);
+    private boolean handleVerifiedName(Stanza verifiedNameStanza) {
+        var jid = verifiedNameStanza.getAttributeAsJid("jid").orElse(null);
         if (jid != null) {
             var targetJid = jid.withoutData();
             if (isSelf(targetJid)) {
@@ -322,7 +323,7 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
         }
 
         // TODO: resolve the contact via hash. Today Cobalt requests side-list redistribution so a companion that owns the contact applies the verified-name change instead.
-        var hash = verifiedNameNode.getAttributeAsString("hash", null);
+        var hash = verifiedNameStanza.getAttributeAsString("hash", null);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Cannot handle hash-based verified name change (hash={0}), requesting side-list redistribution",
                 hash);
@@ -338,14 +339,14 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * target the queried profile is discarded after the server-side state is refreshed. The hash branch always returns
      * {@code true} because Cobalt cannot resolve a contact from a hash.
      *
-     * @param node        the full {@code <notification>} stanza, used to read {@code from}
-     * @param profileNode the {@code <profile>} child node
+     * @param stanza        the full {@code <notification>} stanza, used to read {@code from}
+     * @param profileStanza the {@code <profile>} child stanza
      * @return {@code true} when hash-based and the contact cannot be resolved; {@code false} otherwise
      */
-    private boolean handleProfile(Node node, Node profileNode) {
-        var hash = profileNode.getAttributeAsString("hash", null);
+    private boolean handleProfile(Stanza stanza, Stanza profileStanza) {
+        var hash = profileStanza.getAttributeAsString("hash", null);
         if (hash == null || hash.isEmpty()) {
-            var targetJid = node.getAttributeAsJid("from")
+            var targetJid = stanza.getAttributeAsJid("from")
                     .map(Jid::withoutData)
                     .orElse(null);
             if (targetJid != null) {
@@ -373,11 +374,11 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * change is observable only on the next explicit
      * {@link LinkedWhatsAppClient#queryBusinessCatalog(com.github.auties00.cobalt.model.jid.JidProvider)} call.
      *
-     * @param catalogNode the {@code <product_catalog>} child node
+     * @param catalogStanza the {@code <product_catalog>} child stanza
      */
-    private void handleProductCatalog(Node catalogNode) {
-        if (catalogNode.hasChild("product")) {
-            var productIds = catalogNode.getChildren("product").stream()
+    private void handleProductCatalog(Stanza catalogStanza) {
+        if (catalogStanza.hasChild("product")) {
+            var productIds = catalogStanza.getChildren("product").stream()
                     .flatMap(product -> product.getChild("id").stream())
                     .flatMap(idNode -> idNode.toContentString().stream())
                     .toList();
@@ -385,8 +386,8 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Received product catalog notification for {0} products", productIds.size());
             }
-        } else if (catalogNode.hasChild("collection")) {
-            var collectionCount = catalogNode.getChildren("collection").size();
+        } else if (catalogStanza.hasChild("collection")) {
+            var collectionCount = catalogStanza.getChildren("collection").size();
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Received collection catalog notification for {0} collections", collectionCount);
         }
@@ -408,7 +409,7 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
     /**
      * Returns whether the given JID identifies the authenticated account.
      *
-     * <p>Used by {@link #handleRemove(Node)}, {@link #handleVerifiedName(Node)}, and {@link #handleProfile(Node, Node)}
+     * <p>Used by {@link #handleRemove(Stanza)}, {@link #handleVerifiedName(Stanza)}, and {@link #handleProfile(Stanza, Stanza)}
      * to distinguish self-business mutations from peer-business mutations.
      *
      * @param jid the JID to check
@@ -430,10 +431,10 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * status, expiration, and creation time are preserved and only the supplied fields are overwritten. A subscription
      * id with no status, expiration, or creation time is still applied so the record is created.
      *
-     * @param node the full {@code <notification>} stanza
+     * @param stanza the full {@code <notification>} stanza
      */
-    private void handleSubscriptions(Node node) {
-        node.getChild("feature_flags").ifPresent(featureFlagsNode -> {
+    private void handleSubscriptions(Stanza stanza) {
+        stanza.getChild("feature_flags").ifPresent(featureFlagsNode -> {
             featureFlagsNode.getChildren("feature_flag").forEach(featureFlag -> {
                 var name = featureFlag.getAttributeAsString("name", null);
                 var enabled = featureFlag.getAttributeAsString("enabled", null);
@@ -446,7 +447,7 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
             });
         });
 
-        node.getChild("subscriptions").ifPresent(subscriptionsNode -> {
+        stanza.getChild("subscriptions").ifPresent(subscriptionsNode -> {
             subscriptionsNode.getChildren("subscription").forEach(subscription -> {
                 var id = subscription.getAttributeAsString("id", null);
                 if (id == null) {
@@ -481,16 +482,16 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * store.
      *
      * <p>The wire literal ({@code "false"}, {@code "notset"}, or {@code "true"}) is persisted directly via
-     * {@link com.github.auties00.cobalt.store.BusinessStore#setBusinessPrivacySetting(String)}.
+     * {@link LinkedWhatsAppBusinessStore#setBusinessPrivacySetting(String)}.
      *
      * @implNote
      * This implementation routes through the typed {@link SmaxSyncPrivacySettingResponse} parser so that the SMAX
      * export remains the single source of truth for envelope validation.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handlePrivacy(Node node) {
-        var consent = SmaxSyncPrivacySettingResponse.of(node)
+    private void handlePrivacy(Stanza stanza) {
+        var consent = SmaxSyncPrivacySettingResponse.of(stanza)
                 .flatMap(SmaxSyncPrivacySettingResponse.Notification::dataSharingConsent)
                 .orElse(null);
         if (consent == null) {
@@ -510,15 +511,15 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * Stores the ad-account nonce parsed from a {@code <wa_ad_account_nonce>} child.
      *
      * <p>The nonce is a short-lived token consumed by the next ad-creation authentication call. It is written to the
-     * store via {@link com.github.auties00.cobalt.store.BusinessStore#setBusinessAccountNonce(String)}.
+     * store via {@link LinkedWhatsAppBusinessStore#setBusinessAccountNonce(String)}.
      *
      * @implNote
      * This implementation routes through the typed {@link SmaxNonceNotificationResponse} parser before the store write.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handleAdAccountNonce(Node node) {
-        SmaxNonceNotificationResponse.of(node)
+    private void handleAdAccountNonce(Stanza stanza) {
+        SmaxNonceNotificationResponse.of(stanza)
                 .map(SmaxNonceNotificationResponse.Notification::nonce)
                 .ifPresent(whatsapp.store().businessStore()::setBusinessAccountNonce);
     }
@@ -534,10 +535,10 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * SMAX, because the notification already carries the fields the campaign store needs and a second parser pass adds
      * no validation.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handleMarketingCampaign(Node node) {
-        var campaignNode = node.getChild("mm_campaign").orElse(null);
+    private void handleMarketingCampaign(Stanza stanza) {
+        var campaignNode = stanza.getChild("mm_campaign").orElse(null);
         if (campaignNode == null) {
             return;
         }
@@ -565,13 +566,13 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * <p>Fire-and-forget. The side-list child asks the server to redistribute the notification to companions that may
      * own the contact record this device could not resolve.
      *
-     * @param node          the original {@code <notification>} stanza
+     * @param stanza          the original {@code <notification>} stanza
      * @param needsSideList whether the ack should include the side-list child
      */
-    private void sendBusinessAck(Node node, boolean needsSideList) {
-        var builder = ackSender.ack(AckClass.NOTIFICATION, node).type("business");
+    private void sendBusinessAck(Stanza stanza, boolean needsSideList) {
+        var builder = ackSender.ack(AckClass.NOTIFICATION, stanza).type("business");
         if (needsSideList) {
-            builder.child(new NodeBuilder()
+            builder.child(new StanzaBuilder()
                     .description("user")
                     .attribute("side_list", "out")
                     .build());
@@ -584,10 +585,10 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      *
      * <p>Fire-and-forget.
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendDigitalCommerceSubscriptionAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("digital_commerce_subscription").send();
+    private void sendDigitalCommerceSubscriptionAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("digital_commerce_subscription").send();
     }
 
     /**
@@ -596,10 +597,10 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * <p>Fire-and-forget. The {@code type} attribute reflects the original notification's type read back from the
      * stanza, defaulting to {@code fb:update} when absent.
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendBotProfileAck(Node node) {
-        var type = node.getAttributeAsString("type", "fb:update");
-        ackSender.ack(AckClass.NOTIFICATION, node).type(type).send();
+    private void sendBotProfileAck(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", "fb:update");
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type(type).send();
     }
 }

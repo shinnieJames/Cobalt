@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.calls2.signaling.TransportStanza;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.call.CallState;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -80,7 +80,7 @@ class Calls2CapturedCallReplayTest {
 
     private static AcceptStanza oneToOneAccept() {
         return new AcceptStanza(ONE_TO_ONE_CALL_ID, CALLER_LID_DEVICE, 3, List.of(), List.of(), List.of(),
-                null, null, null);
+                null, null, null, null);
     }
 
     private static PreacceptStanza oneToOnePreaccept() {
@@ -105,7 +105,7 @@ class Calls2CapturedCallReplayTest {
         @Test
         @DisplayName("a LID offer for an unknown call is BUFFERed until the call object exists")
         void offerBuffersBeforeCall() {
-            var payload = oneToOneOffer().toNode();
+            var payload = oneToOneOffer().toStanza();
             var verdict = signalingRouter.classify(payload, CALLER_LID_DEVICE, false);
             assertSame(Disposition.BUFFER, verdict.disposition());
             assertEquals(ONE_TO_ONE_CALL_ID, verdict.callId().orElseThrow());
@@ -114,8 +114,8 @@ class Calls2CapturedCallReplayTest {
         @Test
         @DisplayName("the in-call legs PROCESS once the call object exists")
         void inCallLegsProcess() {
-            for (var payload : List.of(oneToOneAccept().toNode(), oneToOneTransport().toNode(),
-                    oneToOneTerminate().toNode())) {
+            for (var payload : List.of(oneToOneAccept().toStanza(), oneToOneTransport().toStanza(),
+                    oneToOneTerminate().toStanza())) {
                 var verdict = signalingRouter.classify(payload, CALLER_LID_DEVICE, true);
                 assertSame(Disposition.PROCESS, verdict.disposition(),
                         payload.description() + " must PROCESS when the call exists");
@@ -129,14 +129,14 @@ class Calls2CapturedCallReplayTest {
             var pnOffer = new OfferStanza(ONE_TO_ONE_CALL_ID, CALLER_PN, CALLER_PN, null, null, null, null, null,
                     true, false, null, -1, 3, List.of(), List.of(), List.of(), List.of(), null, null, null, null,
                     null, null, null, List.of(), null);
-            var verdict = signalingRouter.classify(pnOffer.toNode(), null, false);
+            var verdict = signalingRouter.classify(pnOffer.toStanza(), null, false);
             assertSame(Disposition.DROP, verdict.disposition());
         }
 
         @Test
         @DisplayName("a payload with no call-id is dropped as a malformed header")
         void missingHeaderDropped() {
-            var malformed = new NodeBuilder().description("offer").build();
+            var malformed = new StanzaBuilder().description("offer").build();
             assertSame(Disposition.DROP, signalingRouter.classify(malformed, CALLER_LID_DEVICE, false).disposition());
         }
     }
@@ -149,20 +149,20 @@ class Calls2CapturedCallReplayTest {
         @Test
         @DisplayName("the 1:1 lifecycle tags parse to Offer/Preaccept/Accept/Transport/Terminate")
         void oneToOneTagsDecode() {
-            assertInstanceOf(OfferStanza.class, Calls2CallStanza.parse(oneToOneOffer().toNode()).orElseThrow());
+            assertInstanceOf(OfferStanza.class, Calls2CallStanza.parse(oneToOneOffer().toStanza()).orElseThrow());
             assertInstanceOf(PreacceptStanza.class,
-                    Calls2CallStanza.parse(oneToOnePreaccept().toNode()).orElseThrow());
-            assertInstanceOf(AcceptStanza.class, Calls2CallStanza.parse(oneToOneAccept().toNode()).orElseThrow());
+                    Calls2CallStanza.parse(oneToOnePreaccept().toStanza()).orElseThrow());
+            assertInstanceOf(AcceptStanza.class, Calls2CallStanza.parse(oneToOneAccept().toStanza()).orElseThrow());
             assertInstanceOf(TransportStanza.class,
-                    Calls2CallStanza.parse(oneToOneTransport().toNode()).orElseThrow());
+                    Calls2CallStanza.parse(oneToOneTransport().toStanza()).orElseThrow());
             assertInstanceOf(TerminateStanza.class,
-                    Calls2CallStanza.parse(oneToOneTerminate().toNode()).orElseThrow());
+                    Calls2CallStanza.parse(oneToOneTerminate().toStanza()).orElseThrow());
         }
 
         @Test
         @DisplayName("the decoded offer preserves the captured call-id, creator, joinable and audio call shape")
         void offerAttributesPreserved() {
-            var offer = (OfferStanza) Calls2CallStanza.parse(oneToOneOffer().toNode()).orElseThrow();
+            var offer = (OfferStanza) Calls2CallStanza.parse(oneToOneOffer().toStanza()).orElseThrow();
             assertEquals(ONE_TO_ONE_CALL_ID, offer.callId());
             assertEquals(CALLER_LID_DEVICE, offer.callCreator());
             assertTrue(offer.joinable());

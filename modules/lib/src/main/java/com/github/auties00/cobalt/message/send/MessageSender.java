@@ -43,11 +43,12 @@ import com.github.auties00.cobalt.model.message.system.*;
 import com.github.auties00.cobalt.model.message.system.history.MessageHistoryNotice;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.E2eMessageSendEventBuilder;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
@@ -269,7 +270,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * survive a process crash immediately after the wire write.
      *
      * <p>Every subclass calls this after building the stanza and before
-     * invoking {@link LinkedWhatsAppClient#sendNode(NodeBuilder)}; a persistence
+     * invoking {@link LinkedWhatsAppClient#sendNode(StanzaBuilder)}; a persistence
      * failure is routed through the client's
      * {@link LinkedWhatsAppClient#handleFailure(com.github.auties00.cobalt.exception.WhatsAppException)} error handler as a
      * {@link WhatsAppCorruptedStoreException}.
@@ -320,7 +321,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * carrying only the sender ICDC; non-self recipient devices receive both
      * the sender and recipient ICDC. Devices whose encryption raises any
      * exception are logged and dropped from the result; the receipts recorded
-     * against them via {@link com.github.auties00.cobalt.store.SignalStore#updateIdentityRange} still cover the
+     * against them via {@link LinkedWhatsAppSignalStore#updateIdentityRange} still cover the
      * full input list so identity ranges stay aligned with the dispatched
      * fanout.
      *
@@ -616,13 +617,13 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * first contact; subclasses emit the child only when at least one per-device
      * payload is PKMSG.
      *
-     * @return the {@code <device-identity>} {@link Node}, or {@code null}
+     * @return the {@code <device-identity>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureApi", exports = "getADVEncodedIdentity",
             adaptation = WhatsAppAdaptation.DIRECT)
-    Node buildIdentityNode() {
+    Stanza buildIdentityNode() {
         return store.signalStore().signedDeviceIdentity()
-                .map(identity -> new NodeBuilder()
+                .map(identity -> new StanzaBuilder()
                         .description("device-identity")
                         .content(ADVSignedDeviceIdentitySpec.encode(identity))
                         .build())

@@ -5,15 +5,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingChannelsPersonalisedRecommendationAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingChannelsPersonalisedRecommendationActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Covers {@link PrivacySettingChannelsPersonalisedRecommendationHandler}, which accepts
  * only {@link SyncdOperation#SET}, persists the resolved {@code isUserOptedOut} boolean
- * via {@link com.github.auties00.cobalt.store.SettingsStore#setChannelsPersonalisedRecommendationOptOut}, rejects a
+ * via {@link LinkedWhatsAppSettingsStore#setChannelsPersonalisedRecommendationOptOut}, rejects a
  * wrong-typed value as {@link SyncActionState#MALFORMED}, reports
  * {@link SyncActionState#UNSUPPORTED} for {@link SyncdOperation#REMOVE}, and resolves
  * conflicts by timestamp. The handler is driven through its package-private singleton
@@ -161,7 +162,7 @@ class PrivacySettingChannelsPersonalisedRecommendationHandlerTest {
             var local = build(action, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(action, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
 
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -173,7 +174,7 @@ class PrivacySettingChannelsPersonalisedRecommendationHandlerTest {
             var local = build(action, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(action, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
 
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
     }

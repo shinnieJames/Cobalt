@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.calls2.core.participant;
 
 import com.github.auties00.cobalt.calls2.signaling.CallCapability;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +18,7 @@ import java.util.OptionalInt;
  * <p>A group-info roster carries its members as a list of either {@code <user>} children or
  * {@code <participant>} children (never a mix); this record is the typed projection of one such entry.
  * It pins a member by its user {@link #jid() JID} and decorates it with the full identity vocabulary the
- * engine fills from the node: the phone-number and LID forms of the address, the display username, the
+ * engine fills from the stanza: the phone-number and LID forms of the address, the display username, the
  * push and guest names, the {@link #accountKind() account kind}, the country code, the
  * {@link #userType() user type}, the server-projected {@link #state() membership state literal}, an
  * optional NACK {@link #error() error code} and {@link #reason() reason}, the server-assigned
@@ -303,7 +303,7 @@ public record CallParticipantUserNode(ChildForm childForm,
     }
 
     /**
-     * Builds the {@code <user>} or {@code <participant>} roster entry node.
+     * Builds the {@code <user>} or {@code <participant>} roster entry stanza.
      *
      * <p>The element tag is taken from the {@link #childForm() child form}; each optional attribute is
      * omitted when its backing component is absent rather than written as a sentinel; the
@@ -312,18 +312,18 @@ public record CallParticipantUserNode(ChildForm childForm,
      * devices and the optional {@code <dec>} video-decoder token are emitted as children. An entry with
      * no children produces an element with only its attributes.
      *
-     * @return the roster entry node
+     * @return the roster entry stanza
      */
-    public Node toNode() {
-        var children = new ArrayList<Node>();
+    public Stanza toNode() {
+        var children = new ArrayList<Stanza>();
         for (var device : devices) {
             children.add(device.toNode());
         }
-        decoderCapability.ifPresent(token -> children.add(new NodeBuilder()
+        decoderCapability.ifPresent(token -> children.add(new StanzaBuilder()
                 .description(DECODER_CAPABILITY_ELEMENT)
                 .content(token)
                 .build()));
-        var builder = new NodeBuilder()
+        var builder = new StanzaBuilder()
                 .description(childForm.element())
                 .attribute(JID_ATTRIBUTE, jid)
                 .attribute(USER_PN_ATTRIBUTE, userPn.orElse(null), userPn.isPresent())
@@ -348,28 +348,28 @@ public record CallParticipantUserNode(ChildForm childForm,
     }
 
     /**
-     * Decodes a {@code <user>} or {@code <participant>} roster entry node into a
+     * Decodes a {@code <user>} or {@code <participant>} roster entry stanza into a
      * {@link CallParticipantUserNode}.
      *
-     * <p>The {@link #childForm() child form} is taken from the node's description. The integer
+     * <p>The {@link #childForm() child form} is taken from the stanza's description. The integer
      * {@code error} and {@code pid} attributes decode to {@code -1} when absent; the boolean
      * {@code tos_not_accepted} and {@code rekey} flags decode to {@code false} when absent; the
      * {@code account_kind} and {@code type} tokens are resolved through their enum mappings, with an
      * unclassifiable {@code type} token yielding an empty {@link #userType()} rather than a failure; and
-     * each {@code <device>} child is decoded through {@link Device#of(Node)}. A node that is neither a
+     * each {@code <device>} child is decoded through {@link Device#of(Stanza)}. A stanza that is neither a
      * {@code <user>} nor a {@code <participant>} element yields an empty result so callers iterating a
      * mixed child list can skip it.
      *
-     * @param node the roster entry node
-     * @return the decoded entry, or an empty result when the node is not a usable roster entry
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @param stanza the roster entry stanza
+     * @return the decoded entry, or an empty result when the stanza is not a usable roster entry
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code jid} attribute is absent
      */
-    public static Optional<CallParticipantUserNode> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
+    public static Optional<CallParticipantUserNode> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
         ChildForm childForm = null;
         for (var form : ChildForm.values()) {
-            if (node.hasDescription(form.element())) {
+            if (stanza.hasDescription(form.element())) {
                 childForm = form;
                 break;
             }
@@ -377,27 +377,27 @@ public record CallParticipantUserNode(ChildForm childForm,
         if (childForm == null) {
             return Optional.empty();
         }
-        var jid = node.getRequiredAttributeAsJid(JID_ATTRIBUTE);
-        var userPn = node.getAttributeAsJid(USER_PN_ATTRIBUTE);
-        var userLid = node.getAttributeAsJid(USER_LID_ATTRIBUTE);
-        var username = node.getAttributeAsString(USERNAME_ATTRIBUTE);
-        var pushName = node.getAttributeAsString(PUSH_NAME_ATTRIBUTE);
-        var guestName = node.getAttributeAsString(GUEST_NAME_ATTRIBUTE);
-        var accountKind = node.getAttributeAsString(ACCOUNT_KIND_ATTRIBUTE)
+        var jid = stanza.getRequiredAttributeAsJid(JID_ATTRIBUTE);
+        var userPn = stanza.getAttributeAsJid(USER_PN_ATTRIBUTE);
+        var userLid = stanza.getAttributeAsJid(USER_LID_ATTRIBUTE);
+        var username = stanza.getAttributeAsString(USERNAME_ATTRIBUTE);
+        var pushName = stanza.getAttributeAsString(PUSH_NAME_ATTRIBUTE);
+        var guestName = stanza.getAttributeAsString(GUEST_NAME_ATTRIBUTE);
+        var accountKind = stanza.getAttributeAsString(ACCOUNT_KIND_ATTRIBUTE)
                 .map(CallParticipantAccountKind::ofToken);
-        var countryCode = node.getAttributeAsString(COUNTRY_CODE_ATTRIBUTE);
-        var userType = node.getAttributeAsString(TYPE_ATTRIBUTE)
+        var countryCode = stanza.getAttributeAsString(COUNTRY_CODE_ATTRIBUTE);
+        var userType = stanza.getAttributeAsString(TYPE_ATTRIBUTE)
                 .flatMap(CallParticipantUserType::ofToken);
-        var state = node.getAttributeAsString(STATE_ATTRIBUTE);
-        var error = node.getAttributeAsInt(ERROR_ATTRIBUTE, ABSENT);
-        var reason = node.getAttributeAsString(REASON_ATTRIBUTE);
-        var pid = node.getAttributeAsInt(PID_ATTRIBUTE, ABSENT);
-        var metadata = node.getAttributeAsBytes(METADATA_ATTRIBUTE);
-        var tosNotAccepted = node.getAttributeAsBool(TOS_NOT_ACCEPTED_ATTRIBUTE, false);
-        var rekey = node.getAttributeAsBool(REKEY_ATTRIBUTE, false);
-        var decoderCapability = node.getChild(DECODER_CAPABILITY_ELEMENT)
-                .flatMap(Node::toContentString);
-        var devices = node.streamChildren(Device.ELEMENT)
+        var state = stanza.getAttributeAsString(STATE_ATTRIBUTE);
+        var error = stanza.getAttributeAsInt(ERROR_ATTRIBUTE, ABSENT);
+        var reason = stanza.getAttributeAsString(REASON_ATTRIBUTE);
+        var pid = stanza.getAttributeAsInt(PID_ATTRIBUTE, ABSENT);
+        var metadata = stanza.getAttributeAsBytes(METADATA_ATTRIBUTE);
+        var tosNotAccepted = stanza.getAttributeAsBool(TOS_NOT_ACCEPTED_ATTRIBUTE, false);
+        var rekey = stanza.getAttributeAsBool(REKEY_ATTRIBUTE, false);
+        var decoderCapability = stanza.getChild(DECODER_CAPABILITY_ELEMENT)
+                .flatMap(Stanza::toContentString);
+        var devices = stanza.streamChildren(Device.ELEMENT)
                 .map(Device::of)
                 .flatMap(Optional::stream)
                 .toList();
@@ -474,46 +474,46 @@ public record CallParticipantUserNode(ChildForm childForm,
         }
 
         /**
-         * Builds the {@code <device jid platform pid>[<capability/>]</device>} node.
+         * Builds the {@code <device jid platform pid>[<capability/>]</device>} stanza.
          *
          * <p>The {@code platform} token, the {@code pid} attribute, and the inline {@code <capability>}
          * child are each omitted when absent rather than written as a sentinel.
          *
-         * @return the device node
+         * @return the device stanza
          */
-        public Node toNode() {
-            var builder = new NodeBuilder()
+        public Stanza toNode() {
+            var builder = new StanzaBuilder()
                     .description(ELEMENT)
                     .attribute(JID_ATTRIBUTE, jid)
                     .attribute(PLATFORM_ATTRIBUTE, platform.map(CallParticipantPlatform::token).orElse(null), platform.isPresent())
                     .attribute(PID_ATTRIBUTE, pid, pid != ABSENT);
-            capability.ifPresent(value -> builder.content(value.toNode()));
+            capability.ifPresent(value -> builder.content(value.toStanza()));
             return builder.build();
         }
 
         /**
-         * Decodes a {@code <device>} node into a {@link Device}.
+         * Decodes a {@code <device>} stanza into a {@link Device}.
          *
          * <p>The {@code platform} token resolves through {@link CallParticipantPlatform#ofToken(String)};
          * the {@code pid} attribute decodes to {@code -1} when absent; the inline {@code <capability>}
-         * child decodes through {@link CallCapability#of(Node)}. A node that is not a {@code <device>}
+         * child decodes through {@link CallCapability#of(Stanza)}. A stanza that is not a {@code <device>}
          * element yields an empty result so callers iterating a mixed child list can skip it.
          *
-         * @param node the {@code <device>} node
-         * @return the decoded device, or an empty result when the node is not a usable device element
-         * @throws NullPointerException   if {@code node} is {@code null}
+         * @param stanza the {@code <device>} stanza
+         * @return the decoded device, or an empty result when the stanza is not a usable device element
+         * @throws NullPointerException   if {@code stanza} is {@code null}
          * @throws NoSuchElementException if the required {@code jid} attribute is absent
          */
-        public static Optional<Device> of(Node node) {
-            Objects.requireNonNull(node, "node cannot be null");
-            if (!node.hasDescription(ELEMENT)) {
+        public static Optional<Device> of(Stanza stanza) {
+            Objects.requireNonNull(stanza, "stanza cannot be null");
+            if (!stanza.hasDescription(ELEMENT)) {
                 return Optional.empty();
             }
-            var jid = node.getRequiredAttributeAsJid(JID_ATTRIBUTE);
-            var platform = node.getAttributeAsString(PLATFORM_ATTRIBUTE)
+            var jid = stanza.getRequiredAttributeAsJid(JID_ATTRIBUTE);
+            var platform = stanza.getAttributeAsString(PLATFORM_ATTRIBUTE)
                     .map(CallParticipantPlatform::ofToken);
-            var pid = node.getAttributeAsInt(PID_ATTRIBUTE, ABSENT);
-            var capability = node.getChild(CallCapability.ELEMENT)
+            var pid = stanza.getAttributeAsInt(PID_ATTRIBUTE, ABSENT);
+            var capability = stanza.getChild(CallCapability.ELEMENT)
                     .flatMap(CallCapability::of);
             return Optional.of(new Device(jid, platform, pid, capability));
         }

@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.sync.factory;
 
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction.Status;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignActionBuilder;

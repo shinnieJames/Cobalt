@@ -4,10 +4,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.AndroidUnsupportedActions;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
@@ -20,7 +21,7 @@ import java.util.logging.Logger;
  * handler reads the {@link AndroidUnsupportedActions#allowed()} flag from each
  * {@code android_unsupported_actions} mutation and, when it is {@code true},
  * latches the
- * {@link com.github.auties00.cobalt.store.SyncStore#primaryAllowsAllMutations()}
+ * {@link LinkedWhatsAppSyncStore#primaryAllowsAllMutations()}
  * flag so the rest of Cobalt's sync engine knows it is safe to author action
  * types the primary may not yet understand.
  *

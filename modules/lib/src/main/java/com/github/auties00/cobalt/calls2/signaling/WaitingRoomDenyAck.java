@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -43,19 +43,19 @@ public record WaitingRoomDenyAck(String callId, Jid callCreator, List<WaitingRoo
     }
 
     /**
-     * Decodes a waiting-room deny ack node into a {@link WaitingRoomDenyAck}.
+     * Decodes a waiting-room deny ack stanza into a {@link WaitingRoomDenyAck}.
      *
-     * @param node the echoed waiting-room deny node from the {@code <receipt>} body
+     * @param stanza the echoed waiting-room deny stanza from the {@code <receipt>} body
      * @return the decoded deny ack
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static WaitingRoomDenyAck of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var users = WaitingRoomStanzas.users(node);
+    public static WaitingRoomDenyAck of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var users = WaitingRoomStanzas.users(stanza);
         return new WaitingRoomDenyAck(callId, callCreator, users);
     }
 }

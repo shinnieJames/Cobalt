@@ -3,7 +3,6 @@ package com.github.auties00.cobalt.client.linked;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.device.DevicePlatformType;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.util.DataUtils;
@@ -37,7 +36,6 @@ import java.util.Objects;
  * {@code UWP}, Darwin hosts pick {@code CATALINA}).
  *
  * @see LinkedWhatsAppClientType
- * @see DevicePlatformType
  */
 @ProtobufMessage
 @WhatsAppWebModule(moduleName = "WAWebProtobufsCompanionReg.pb")

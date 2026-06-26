@@ -8,7 +8,7 @@ import java.util.Arrays;
  * group or community.
  *
  * <p>Each constant carries the HTTP-style numeric code emitted in the
- * {@code error} attribute of the {@code <participant/>} node in responses to
+ * {@code error} attribute of the {@code <participant/>} stanza in responses to
  * {@code addGroupParticipants}, {@code removeGroupParticipants},
  * {@code promoteGroupParticipants} and {@code demoteGroupParticipants} IQs.
  * The code {@link #OK} (200) denotes success; every other constant signals
@@ -95,7 +95,7 @@ public enum GroupParticipantStatus {
      *
      * @param code the numeric status code, typically the value of the
      *             {@code error} attribute of a {@code <participant/>}
-     *             node in the IQ response
+     *             stanza in the IQ response
      * @return the matching status, or {@link #UNKNOWN} if none matches
      */
     public static GroupParticipantStatus of(int code) {

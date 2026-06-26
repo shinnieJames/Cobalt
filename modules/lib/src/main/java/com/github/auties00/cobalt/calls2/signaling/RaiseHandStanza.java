@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -98,45 +98,45 @@ public record RaiseHandStanza(String callId, Jid callCreator, boolean raised, bo
     }
 
     /**
-     * Builds the {@code <raise_hand call-id call-creator raise-hand-state broadcast/>} action node.
+     * Builds the {@code <raise_hand call-id call-creator raise-hand-state broadcast/>} action stanza.
      *
      * <p>The {@code raise-hand-state} attribute serializes to {@code 1} when {@link #raised()} is
      * {@code true} and {@code 0} otherwise; the {@code broadcast} attribute is omitted unless
      * {@link #broadcast()} is {@code true}.
      *
-     * @return the raise-hand action node
+     * @return the raise-hand action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(RAISE_HAND_STATE_ATTRIBUTE, raised ? FLAG_TRUE : FLAG_FALSE)
                 .attribute(BROADCAST_ATTRIBUTE, FLAG_TRUE, broadcast)
                 .build();
     }
 
     /**
-     * Decodes a {@code <raise_hand>} action node into a {@link RaiseHandStanza}.
+     * Decodes a {@code <raise_hand>} action stanza into a {@link RaiseHandStanza}.
      *
      * <p>The raise-hand state is read from {@code raise-hand-state}, falling back to the legacy
      * {@code hand-raise-state} spelling; the required state attribute is the literal {@code 1} or
      * {@code 0}. An absent {@code broadcast} decodes to {@code false}.
      *
-     * @param node the {@code <raise_hand>} node
+     * @param stanza the {@code <raise_hand>} stanza
      * @return the decoded raise-hand action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent, or if neither {@code raise-hand-state} nor
      *                                {@code hand-raise-state} is present
      */
-    public static RaiseHandStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var state = node.getAttributeAsString(RAISE_HAND_STATE_ATTRIBUTE)
-                .or(() -> node.getAttributeAsString(HAND_RAISE_STATE_ATTRIBUTE))
+    public static RaiseHandStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var state = stanza.getAttributeAsString(RAISE_HAND_STATE_ATTRIBUTE)
+                .or(() -> stanza.getAttributeAsString(HAND_RAISE_STATE_ATTRIBUTE))
                 .orElseThrow(() -> new NoSuchElementException(
                         "raise_hand requires raise-hand-state or hand-raise-state"));
-        var broadcast = FLAG_TRUE.equals(node.getAttributeAsString(BROADCAST_ATTRIBUTE, FLAG_FALSE));
+        var broadcast = FLAG_TRUE.equals(stanza.getAttributeAsString(BROADCAST_ATTRIBUTE, FLAG_FALSE));
         return new RaiseHandStanza(callId, callCreator, FLAG_TRUE.equals(state), broadcast);
     }
 }

@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -290,11 +290,11 @@ public interface DeviceService {
      * Implementations must apply the add or remove against the cached device list for
      * {@code userJid} and must ignore notifications that are older than the cached record.
      *
-     * @param node    the {@code <devices>} child node
+     * @param stanza    the {@code <devices>} child stanza
      * @param action  the action string ({@code "add"} or {@code "remove"})
      * @param userJid the user JID whose device list changed
      */
-    void handleDeviceNotification(Node node, String action, Jid userJid);
+    void handleDeviceNotification(Stanza stanza, String action, Jid userJid);
 
     /**
      * Rebuilds the cached device-list record for one self identity from an inline {@code <devices>}
@@ -320,10 +320,10 @@ public interface DeviceService {
      * notification timestamp.
      *
      * @param wid         the self identity (phone-number or LID user JID) whose record is rebuilt
-     * @param devicesNode the {@code <devices>} child node carrying {@code <device>} children and an
+     * @param devicesStanza the {@code <devices>} child stanza carrying {@code <device>} children and an
      *                    optional {@code <key-index-list>}
      */
-    void refreshOwnDeviceList(Jid wid, Node devicesNode);
+    void refreshOwnDeviceList(Jid wid, Stanza devicesStanza);
 
     /**
      * Synchronises the local user's own device list with the server.
@@ -582,7 +582,7 @@ public interface DeviceService {
 
     /**
      * Extracts and validates the local signed device identity from a {@code <device-identity>}
-     * pairing node.
+     * pairing stanza.
      *
      * <p>This is called once during pairing, when the server's {@code pair-success} envelope
      * carries the device-identity HMAC and signed payload. It returns the validated identity (which
@@ -593,10 +593,10 @@ public interface DeviceService {
      * Implementations must validate the HMAC and account signature before returning a present
      * value and must return empty on any validation failure.
      *
-     * @param deviceIdentityNode the {@code <device-identity>} pairing node
+     * @param deviceIdentityStanza the {@code <device-identity>} pairing stanza
      * @return the validated signed device identity, or empty when invalid
      */
-    Optional<ADVSignedDeviceIdentity> extractAndValidateLocalSignedDeviceIdentity(Node deviceIdentityNode);
+    Optional<ADVSignedDeviceIdentity> extractAndValidateLocalSignedDeviceIdentity(Stanza deviceIdentityStanza);
 
     /**
      * Persists the local device identity emitted from a successful pair-success exchange.

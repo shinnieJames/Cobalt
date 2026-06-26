@@ -3,7 +3,6 @@ package com.github.auties00.cobalt.device;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.listener.linked.LinkedAccountTypeChangedListener;
 import com.github.auties00.cobalt.listener.linked.LinkedDeviceIdentityChangedListener;
 import com.github.auties00.cobalt.listener.NewMessageListener;
 import com.github.auties00.cobalt.device.adv.DeviceADVChecker;
@@ -19,7 +18,9 @@ import com.github.auties00.cobalt.device.key.DevicePreKeyHandler;
 import com.github.auties00.cobalt.device.stanza.DeviceUSyncQueryBuilder;
 import com.github.auties00.cobalt.device.stanza.DeviceUSyncResponseParser;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
-import com.github.auties00.cobalt.node.usync.UsyncContext;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.stanza.usync.UsyncContext;
 import com.github.auties00.cobalt.device.timestamp.DeviceExpectedTsUtils;
 import com.github.auties00.cobalt.exception.WhatsAppAdvValidationException;
 import com.github.auties00.cobalt.exception.WhatsAppDeviceSyncException;
@@ -40,10 +41,8 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.props.ABProp;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.*;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.CoexPrivacySysMsgEventBuilder;
@@ -358,7 +357,7 @@ public final class LiveDeviceService implements DeviceService {
      * deleted records that were not flagged as deleted-changed-to-host fall back to the
      * primary-only device list rather than a server fetch, also matching WA Web. It re-keys each
      * cache-hit record to the queried JID through {@link DeviceList#withUserJid(Jid)}, because
-     * {@link com.github.auties00.cobalt.store.ContactStore#findDeviceList(Jid)} may satisfy a query through its PN/LID alias
+     * {@link LinkedWhatsAppContactStore#findDeviceList(Jid)} may satisfy a query through its PN/LID alias
      * fallback and return a record owned by the alternate identity; re-keying makes the resolved
      * devices render in the caller's addressing mode, matching WA Web's
      * {@code WAWebDBDeviceListFanout.getFanOutList}, which mints every device WID from the queried
@@ -370,7 +369,7 @@ public final class LiveDeviceService implements DeviceService {
      *
      * @param userJids              the user JIDs to resolve
      * @param context               the USync context wire literal, one of the
-     *                              {@link com.github.auties00.cobalt.node.usync.UsyncContext} values
+     *                              {@link com.github.auties00.cobalt.stanza.usync.UsyncContext} values
      *                              (for example {@code "message"}, {@code "interactive"},
      *                              {@code "notification"})
      * @param expectedPhash         the phash to compare against the local device list, or
@@ -1182,7 +1181,7 @@ public final class LiveDeviceService implements DeviceService {
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private List<DeviceListResult> getDevicesFetchedResults(List<NodeBuilder> batches) {
+    private List<DeviceListResult> getDevicesFetchedResults(List<StanzaBuilder> batches) {
         // TODO: Use https://openjdk.org/jeps/505 when it comes out of preview
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var tasks = batches.stream()
@@ -1216,9 +1215,7 @@ public final class LiveDeviceService implements DeviceService {
      * <p>This is triggered when the USync flow in
      * {@link #fetchDeviceListsFromServer(Collection, String)} detects a different
      * {@code advAccountType} from the cached record, or when a {@link DeviceListResult.Omitted}
-     * carries an implicit {@code HOSTED -> E2EE} transition. Clients listening on
-     * {@link LinkedWhatsAppClient#store()} receive
-     * {@link LinkedWhatsAppClientListener#onAccountTypeChanged onAccountTypeChanged}.
+     * carries an implicit {@code HOSTED -> E2EE} transition.
      *
      * @implNote
      * This implementation rejects {@code -> HOSTED} transitions for JIDs absent from the
@@ -1226,8 +1223,8 @@ public final class LiveDeviceService implements DeviceService {
      * {@code WAWebBizCoexHostedAddVerification.assertThrowsWidAdvTypeFromVerificationCache}),
      * clears every Signal session belonging to {@code oldList}, replaces the record with a
      * {@code deletedChangedToHost} tombstone on {@code -> HOSTED}, updates the contact's
-     * encryption type, fans the change out to listeners on virtual threads, and inserts the
-     * system message via {@link #createAccountTypeChangeSystemMessage(Jid, ADVEncryptionType, ADVEncryptionType)}.
+     * encryption type, and inserts the system message via
+     * {@link #createAccountTypeChangeSystemMessage(Jid, ADVEncryptionType, ADVEncryptionType)}.
      *
      * @param userJid the user JID whose account type changed
      * @param oldType the previous {@link ADVEncryptionType}
@@ -1255,14 +1252,6 @@ public final class LiveDeviceService implements DeviceService {
         }
 
         store.contactStore().findContactByJid(userJid).ifPresent(contact -> contact.setEncryptionType(newType));
-
-        for (var listener : client.store().listeners()) {
-            if (listener instanceof LinkedAccountTypeChangedListener typed) {
-                Thread.startVirtualThread(() ->
-                        typed.onAccountTypeChanged(client, userJid, oldType, newType)
-                );
-            }
-        }
 
         createAccountTypeChangeSystemMessage(userJid, oldType, newType);
     }
@@ -1540,7 +1529,7 @@ public final class LiveDeviceService implements DeviceService {
      * @implNote
      * This implementation rethrows any {@link DeviceListResult.Error} encountered in the input
      * as a {@link WhatsAppDeviceSyncException}, then walks the requested JIDs and looks up the
-     * matching LID via {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(Jid)}; non-regular-user PNs
+     * matching LID via {@link LinkedWhatsAppContactStore#findLidByPhone(Jid)}; non-regular-user PNs
      * (announcements, bots, LIDs) are skipped to match the {@code isRegularUserPn()} filter
      * applied at the WA Web call site.
      *
@@ -1792,7 +1781,7 @@ public final class LiveDeviceService implements DeviceService {
      *
      * @implNote This implementation rebuilds a minimal {@code <notification>} target from the stored
      * id and sender and routes it through {@link AckSender}, rather than retaining the original inbound
-     * node, so the ack survives serialization of the {@link PendingDeviceSync}. The {@code account_sync}
+     * stanza, so the ack survives serialization of the {@link PendingDeviceSync}. The {@code account_sync}
      * type matches the ack the stream handler would otherwise have sent inline.
      *
      * @param sync the completed pending sync, possibly carrying a deferred ack
@@ -1802,7 +1791,7 @@ public final class LiveDeviceService implements DeviceService {
         if (notificationId == null) {
             return;
         }
-        var ackTarget = new NodeBuilder()
+        var ackTarget = new StanzaBuilder()
                 .description("notification")
                 .attribute("id", notificationId)
                 .attribute("from", sync.notificationFrom())
@@ -1829,7 +1818,7 @@ public final class LiveDeviceService implements DeviceService {
      * This implementation runs the whole reconciliation under
      * {@link #withDeviceUpdateLock(Runnable)} to serialise against device-list mutations,
      * exits silently when no JID is set or the cached list is missing or tombstoned, and
-     * relies on {@link com.github.auties00.cobalt.store.SyncStore#missingSyncKeys()} for the unbatched view of the
+     * relies on {@link LinkedWhatsAppSyncStore#missingSyncKeys()} for the unbatched view of the
      * missing-key records that WA Web reads from {@code MissingKeyStore} inside an IDB
      * transaction.
      */
@@ -1883,7 +1872,7 @@ public final class LiveDeviceService implements DeviceService {
      * {@link #resolveMyDeviceJid(Jid)} so that LID-addressed chats use the LID-side
      * me-device, then asks the {@link DeviceFanoutCalculator} to drop self and apply
      * hosted-device gating, and finally strips devices in
-     * {@link com.github.auties00.cobalt.store.SignalStore#unconfirmedIdentityChanges()} so messages do not silently
+     * {@link LinkedWhatsAppSignalStore#unconfirmedIdentityChanges()} so messages do not silently
      * land on a recipient whose security code has changed but not been re-verified.
      *
      * @param chatJid       the recipient user JID
@@ -2198,7 +2187,7 @@ public final class LiveDeviceService implements DeviceService {
      * {@link #withDeviceUpdateLock(Runnable)} so the add and remove handlers serialise
      * against the daily ADV check and against {@link #handleADVDeviceUpdateForMessage}.
      *
-     * @param node    the {@code <notification>} root carrying {@code device-list} and
+     * @param stanza    the {@code <notification>} root carrying {@code device-list} and
      *                {@code key-index-list} children
      * @param action  the {@code "add"} or {@code "remove"} action tag
      * @param userJid the user whose device list is being mutated
@@ -2207,13 +2196,13 @@ public final class LiveDeviceService implements DeviceService {
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = {"handleDeviceAddNotification", "handleDeviceRemoveNotification"},
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handleDeviceNotification(Node node, String action, Jid userJid) {
-        Objects.requireNonNull(node, "node cannot be null");
+    public void handleDeviceNotification(Stanza stanza, String action, Jid userJid) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
         Objects.requireNonNull(action, "action cannot be null");
         Objects.requireNonNull(userJid, "userJid cannot be null");
 
-        var deviceListNode = node.getChild("device-list", null);
-        var keyIndexListNode = node.getChild("key-index-list");
+        var deviceListNode = stanza.getChild("device-list", null);
+        var keyIndexListNode = stanza.getChild("key-index-list");
         if (keyIndexListNode.isEmpty()) {
             LOGGER.log(System.Logger.Level.WARNING, "Device notification missing key-index-list for {0}", userJid);
             return;
@@ -2262,11 +2251,11 @@ public final class LiveDeviceService implements DeviceService {
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvKeyIndexResultApi",
             exports = "handleKeyIndexResultSync",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void refreshOwnDeviceList(Jid wid, Node devicesNode) {
+    public void refreshOwnDeviceList(Jid wid, Stanza devicesStanza) {
         Objects.requireNonNull(wid, "wid cannot be null");
-        Objects.requireNonNull(devicesNode, "devicesNode cannot be null");
+        Objects.requireNonNull(devicesStanza, "devicesStanza cannot be null");
 
-        var keyIndexListNode = devicesNode.getChild("key-index-list").orElse(null);
+        var keyIndexListNode = devicesStanza.getChild("key-index-list").orElse(null);
         if (keyIndexListNode == null) {
             return;
         }
@@ -2278,7 +2267,7 @@ public final class LiveDeviceService implements DeviceService {
             return;
         }
 
-        var validated = validateKeyIndexList(wid, devicesNode, keyIndexListNode);
+        var validated = validateKeyIndexList(wid, devicesStanza, keyIndexListNode);
         if (validated == null) {
             return;
         }
@@ -2303,7 +2292,7 @@ public final class LiveDeviceService implements DeviceService {
         }
 
         var merged = new LinkedHashMap<Integer, DeviceInfo>();
-        for (var deviceNode : devicesNode.getChildren("device")) {
+        for (var deviceNode : devicesStanza.getChildren("device")) {
             var deviceJid = deviceNode.getAttributeAsJid("jid").orElse(null);
             if (deviceJid == null || !deviceNode.hasAttribute("key-index")) {
                 continue;
@@ -2357,7 +2346,7 @@ public final class LiveDeviceService implements DeviceService {
      *
      * <p>This drives the cache update performed when a user's primary device pushes a new companion
      * (a new linked phone, tablet or Web/Desktop session) to its contacts. When no cached record
-     * exists the call is bounced to {@link #triggerUsyncForCoexDeviceAdd(Node, Jid)} so the full
+     * exists the call is bounced to {@link #triggerUsyncForCoexDeviceAdd(Stanza, Jid)} so the full
      * list is fetched instead of being synthesised from the notification alone.
      *
      * @implNote
@@ -2375,8 +2364,8 @@ public final class LiveDeviceService implements DeviceService {
      * {@link #handleAccountTypeTransition} call before the merge.
      *
      * @param userJid          the user whose device list is being mutated
-     * @param deviceListNode   the {@code device-list} child node, possibly {@code null}
-     * @param keyIndexListNode the {@code key-index-list} child node
+     * @param deviceListStanza   the {@code device-list} child stanza, possibly {@code null}
+     * @param keyIndexListStanza the {@code key-index-list} child stanza
      * @param timestamp        the notification timestamp in Unix seconds
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
@@ -2384,8 +2373,8 @@ public final class LiveDeviceService implements DeviceService {
             adaptation = WhatsAppAdaptation.DIRECT)
     private void handleDeviceAddNotification(
             Jid userJid,
-            Node deviceListNode,
-            Node keyIndexListNode,
+            Stanza deviceListStanza,
+            Stanza keyIndexListStanza,
             long timestamp
     ) {
         var cachedList = store.contactStore().findDeviceList(userJid);
@@ -2394,12 +2383,12 @@ public final class LiveDeviceService implements DeviceService {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Device add notification for {0} without cached record, queueing for USync", userJid);
 
-            triggerUsyncForCoexDeviceAdd(deviceListNode, userJid);
+            triggerUsyncForCoexDeviceAdd(deviceListStanza, userJid);
 
             return;
         }
 
-        var signedKeyIndexBytes = keyIndexListNode.toContentBytes();
+        var signedKeyIndexBytes = keyIndexListStanza.toContentBytes();
         if (signedKeyIndexBytes.isEmpty()) {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Device add notification missing signedKeyIndexBytes for {0}, ignoring", userJid);
@@ -2413,14 +2402,14 @@ public final class LiveDeviceService implements DeviceService {
             return;
         }
 
-        if (deviceListNode == null) {
+        if (deviceListStanza == null) {
             LOGGER.log(System.Logger.Level.WARNING, "Device add notification missing device-list for {0}", userJid);
             return;
         }
 
-        var keyIndexMap = buildKeyIndexMap(deviceListNode);
+        var keyIndexMap = buildKeyIndexMap(deviceListStanza);
 
-        var validatedKeyIndexInfo = validateKeyIndexList(userJid, deviceListNode, keyIndexListNode);
+        var validatedKeyIndexInfo = validateKeyIndexList(userJid, deviceListStanza, keyIndexListStanza);
 
         if (validatedKeyIndexInfo != null && validatedKeyIndexInfo.timestamp().getEpochSecond() != timestamp) {
             LOGGER.log(System.Logger.Level.WARNING,
@@ -2429,11 +2418,11 @@ public final class LiveDeviceService implements DeviceService {
             return;
         }
 
-        var devices = deviceListNode.streamChildren("device")
+        var devices = deviceListStanza.streamChildren("device")
                 .flatMap(deviceNode -> parseAndValidateAddedDevice(deviceNode, keyIndexMap, validatedKeyIndexInfo))
                 .toList();
 
-        var expectedTsSeconds = keyIndexListNode.getAttributeAsLong("expected_ts", null);
+        var expectedTsSeconds = keyIndexListStanza.getAttributeAsLong("expected_ts", null);
         var expectedTs = expectedTsSeconds != null
                 ? Instant.ofEpochSecond(expectedTsSeconds)
                 : null;
@@ -2572,7 +2561,7 @@ public final class LiveDeviceService implements DeviceService {
      * Parses a single {@code <device>} entry from an add-notification and applies the
      * notification-only validation gate.
      *
-     * <p>This is a helper for {@link #handleDeviceAddNotification(Jid, Node, Node, long)}; it
+     * <p>This is a helper for {@link #handleDeviceAddNotification(Jid, Stanza, Stanza, long)}; it
      * returns an empty stream rather than throwing so the caller can {@code flatMap} the children
      * without nullable plumbing.
      *
@@ -2587,10 +2576,10 @@ public final class LiveDeviceService implements DeviceService {
      * {@link #isBizHostedDevicesEnabled()}; when the gate is off, the hosted device is
      * silently dropped rather than rejected.
      *
-     * @param deviceNode            the {@code <device>} child node
+     * @param deviceStanza            the {@code <device>} child stanza
      * @param keyIndexMap           the {@code (id, keyIndex)} map for the whole
      *                              device-list, as produced by
-     *                              {@link #buildKeyIndexMap(Node)}
+     *                              {@link #buildKeyIndexMap(Stanza)}
      * @param validatedKeyIndexInfo the verified key-index list, or {@code null} when no
      *                              signed list was provided
      * @return a single-element stream with the parsed device, or empty when rejected
@@ -2598,8 +2587,8 @@ public final class LiveDeviceService implements DeviceService {
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = "handleDeviceAddNotification",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Stream<DeviceInfo> parseAndValidateAddedDevice(Node deviceNode, Map<Integer, Integer> keyIndexMap, ValidatedKeyIndexListResult validatedKeyIndexInfo) {
-        var id = deviceNode.getAttributeAsInt("id");
+    private Stream<DeviceInfo> parseAndValidateAddedDevice(Stanza deviceStanza, Map<Integer, Integer> keyIndexMap, ValidatedKeyIndexListResult validatedKeyIndexInfo) {
+        var id = deviceStanza.getAttributeAsInt("id");
         if (id.isEmpty()) {
             return Stream.empty();
         }
@@ -2642,19 +2631,19 @@ public final class LiveDeviceService implements DeviceService {
      * present under a fresh key); the primary device is dropped from the cache filter
      * and unconditionally re-appended last so the resulting list always has it. Removed
      * devices have their Signal sessions cleaned up via
-     * {@link com.github.auties00.cobalt.store.SignalStore#cleanupSignalSessions(Jid)}.
+     * {@link LinkedWhatsAppSignalStore#cleanupSignalSessions(Jid)}.
      *
      * @param userJid          the user whose device list is being mutated
-     * @param deviceListNode   the {@code device-list} child node listing the removed
+     * @param deviceListStanza   the {@code device-list} child stanza listing the removed
      *                         devices, possibly {@code null} for a no-op remove
-     * @param keyIndexListNode the {@code key-index-list} child node (unused by this
+     * @param keyIndexListStanza the {@code key-index-list} child stanza (unused by this
      *                         branch, retained for parity with the add path)
      * @param timestamp        the notification timestamp in Unix seconds
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = "handleDeviceRemoveNotification",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private void handleDeviceRemoveNotification(Jid userJid, Node deviceListNode, Node keyIndexListNode, long timestamp) {
+    private void handleDeviceRemoveNotification(Jid userJid, Stanza deviceListStanza, Stanza keyIndexListStanza, long timestamp) {
         var cachedList = store.contactStore().findDeviceList(userJid);
         if (cachedList.isEmpty() || cachedList.get().deleted()) {
             LOGGER.log(System.Logger.Level.DEBUG, "No cached device list for {0}, ignoring remove", userJid);
@@ -2669,8 +2658,8 @@ public final class LiveDeviceService implements DeviceService {
             return;
         }
 
-        var removedDevicesMap = deviceListNode != null
-                ? buildKeyIndexMap(deviceListNode)
+        var removedDevicesMap = deviceListStanza != null
+                ? buildKeyIndexMap(deviceListStanza)
                 : Map.<Integer, Integer>of();
 
         var remainingDevices = oldList.devices().stream()
@@ -2723,26 +2712,26 @@ public final class LiveDeviceService implements DeviceService {
 
     /**
      * Returns the {@code (deviceId, keyIndex)} projection of the {@code <device>}
-     * children of {@code keyIndexListNode}.
+     * children of {@code keyIndexListStanza}.
      *
-     * <p>Both {@link #handleDeviceAddNotification(Jid, Node, Node, long)} and
-     * {@link #handleDeviceRemoveNotification(Jid, Node, Node, long)} use this to translate the
+     * <p>Both {@link #handleDeviceAddNotification(Jid, Stanza, Stanza, long)} and
+     * {@link #handleDeviceRemoveNotification(Jid, Stanza, Stanza, long)} use this to translate the
      * stanza shape into the lookup table the merge logic expects.
      *
      * @implNote
      * This implementation collects through {@link Collectors#toUnmodifiableMap} so
      * downstream code cannot mutate the table; entries with a missing JID or an
      * unparseable {@code key-index} attribute are silently dropped by
-     * {@link #parseDevice(Node)}.
+     * {@link #parseDevice(Stanza)}.
      *
-     * @param keyIndexListNode the node whose {@code device} children are parsed
+     * @param keyIndexListStanza the stanza whose {@code device} children are parsed
      * @return the unmodifiable {@code id -> keyIndex} map
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = "handleDeviceAddNotification",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static Map<Integer, Integer> buildKeyIndexMap(Node keyIndexListNode) {
-        return keyIndexListNode.streamChildren("device")
+    private static Map<Integer, Integer> buildKeyIndexMap(Stanza keyIndexListStanza) {
+        return keyIndexListStanza.streamChildren("device")
                 .flatMap(LiveDeviceService::parseDevice)
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
@@ -2751,30 +2740,30 @@ public final class LiveDeviceService implements DeviceService {
      * Parses a single {@code <device jid="..." key-index="...">} child into a
      * {@code (deviceId, keyIndex)} {@link Map.Entry}.
      *
-     * <p>This is a helper for {@link #buildKeyIndexMap(Node)}; it returns a stream so callers may
+     * <p>This is a helper for {@link #buildKeyIndexMap(Stanza)}; it returns a stream so callers may
      * {@code flatMap} without nullable handling for malformed children.
      *
      * @implNote
      * This implementation extracts the {@link Jid#device()} portion via
-     * {@link Node#getAttributeAsJid(String)} and validates {@code key-index} via the
-     * {@link Node#getAttributeAsInt(String, int)} sentinel form; the WA Web counterpart
+     * {@link Stanza#getAttributeAsJid(String)} and validates {@code key-index} via the
+     * {@link Stanza#getAttributeAsInt(String, int)} sentinel form; the WA Web counterpart
      * relies on the JS parser producing {@code undefined} for missing attributes and is
      * structurally equivalent.
      *
-     * @param deviceNode the {@code <device>} child node
+     * @param deviceStanza the {@code <device>} child stanza
      * @return a single-element stream with the parsed entry, or an empty stream when
      *         the {@code jid} or {@code key-index} attribute is missing or unparseable
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = "handleDeviceAddNotification",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private static Stream<Map.Entry<Integer, Integer>> parseDevice(Node deviceNode) {
-        var jid = deviceNode.getAttributeAsJid("jid");
+    private static Stream<Map.Entry<Integer, Integer>> parseDevice(Stanza deviceStanza) {
+        var jid = deviceStanza.getAttributeAsJid("jid");
         if (jid.isEmpty()) {
             return Stream.empty();
         }
 
-        var keyIndex = deviceNode.getAttributeAsInt("key-index", -1);
+        var keyIndex = deviceStanza.getAttributeAsInt("key-index", -1);
         if (keyIndex == -1) {
             return Stream.empty();
         }
@@ -2786,7 +2775,7 @@ public final class LiveDeviceService implements DeviceService {
      * Returns the decoded and signature-verified {@link ValidatedKeyIndexListResult}
      * carried by an ADV device notification.
      *
-     * <p>This is called by {@link #handleDeviceAddNotification(Jid, Node, Node, long)} before the
+     * <p>This is called by {@link #handleDeviceAddNotification(Jid, Stanza, Stanza, long)} before the
      * merge decides whether to trust the notification's device list.
      *
      * @implNote
@@ -2802,9 +2791,9 @@ public final class LiveDeviceService implements DeviceService {
      *
      * @param userJid          the user whose stored primary identity is the verification
      *                         key in the non-hosted branch
-     * @param deviceListNode   the {@code device-list} child node, inspected for the
+     * @param deviceListStanza   the {@code device-list} child stanza, inspected for the
      *                         hosted-device sentinel
-     * @param keyIndexListNode the {@code key-index-list} child whose content bytes carry
+     * @param keyIndexListStanza the {@code key-index-list} child whose content bytes carry
      *                         the signed protobuf
      * @return the validated key-index data, or {@code null} when validation fails
      */
@@ -2813,17 +2802,17 @@ public final class LiveDeviceService implements DeviceService {
             adaptation = WhatsAppAdaptation.DIRECT)
     private ValidatedKeyIndexListResult validateKeyIndexList(
             Jid userJid,
-            Node deviceListNode,
-            Node keyIndexListNode
+            Stanza deviceListStanza,
+            Stanza keyIndexListStanza
     ) {
-        var signedKeyIndexBytes = keyIndexListNode.toContentBytes();
+        var signedKeyIndexBytes = keyIndexListStanza.toContentBytes();
         if (signedKeyIndexBytes.isEmpty()) {
             return null;
         }
 
-        var useHostedPath = deviceListNode != null
-                && advValidator.isBizHostedDevicesEnabled()
-                && deviceListNode.streamChildren("device")
+        var useHostedPath = deviceListStanza != null
+                            && advValidator.isBizHostedDevicesEnabled()
+                            && deviceListStanza.streamChildren("device")
                         .anyMatch(d -> d.hasAttribute("is_hosted", true));
         var validated = useHostedPath
                 ? advValidator.verifySKeyIndexWithAccSigKey(signedKeyIndexBytes.get())
@@ -2841,8 +2830,8 @@ public final class LiveDeviceService implements DeviceService {
      * notification arrives without a cached record.
      *
      * <p>The entry point is the no-cached-record branch of
-     * {@link #handleDeviceAddNotification(Jid, Node, Node, long)}. The follow-up USync carries the
-     * {@link com.github.auties00.cobalt.node.usync.UsyncContext#NOTIFICATION} context since it is
+     * {@link #handleDeviceAddNotification(Jid, Stanza, Stanza, long)}. The follow-up USync carries the
+     * {@link com.github.auties00.cobalt.stanza.usync.UsyncContext#NOTIFICATION} context since it is
      * driven by an inbound device notification.
      *
      * @implNote
@@ -2853,15 +2842,15 @@ public final class LiveDeviceService implements DeviceService {
      * suspended sync queue once the socket reaches steady state, matching WA Web's
      * {@code OfflinePendingDeviceCache.addOfflinePendingDevice} path.
      *
-     * @param deviceListNode the {@code device-list} child node, possibly {@code null};
+     * @param deviceListStanza the {@code device-list} child stanza, possibly {@code null};
      *                       a hosted-device sentinel inside it only changes the log line
      * @param userJid        the user whose device list needs syncing
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "triggerUsyncForCoexDeviceAdd",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private void triggerUsyncForCoexDeviceAdd(Node deviceListNode, Jid userJid) {
-        var isHostedDevice = deviceListNode != null && hasHostedDevice(deviceListNode);
+    private void triggerUsyncForCoexDeviceAdd(Stanza deviceListStanza, Jid userJid) {
+        var isHostedDevice = deviceListStanza != null && hasHostedDevice(deviceListStanza);
 
         if (store.connectionStore().isResumeFromRestartComplete()) {
             getDeviceLists(List.of(userJid), UsyncContext.NOTIFICATION.wireValue(), null, false);
@@ -2879,21 +2868,21 @@ public final class LiveDeviceService implements DeviceService {
     }
 
     /**
-     * Returns whether {@code deviceListNode} contains a child {@code <device>} with the
+     * Returns whether {@code deviceListStanza} contains a child {@code <device>} with the
      * hosted sentinel id {@link DeviceConstants#HOSTED_DEVICE_ID}.
      *
-     * <p>This is a diagnostic helper for {@link #triggerUsyncForCoexDeviceAdd(Node, Jid)}; it is
+     * <p>This is a diagnostic helper for {@link #triggerUsyncForCoexDeviceAdd(Stanza, Jid)}; it is
      * used only to enrich the queued-during-resume log line so operators can tell hosted-device
      * notifications apart in the logs without inspecting the raw stanza.
      *
-     * @param deviceListNode the {@code device-list} node
+     * @param deviceListStanza the {@code device-list} stanza
      * @return {@code true} when any child device carries the hosted id
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "triggerUsyncForCoexDeviceAdd",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private static boolean hasHostedDevice(Node deviceListNode) {
-        return deviceListNode.streamChildren("device")
+    private static boolean hasHostedDevice(Stanza deviceListStanza) {
+        return deviceListStanza.streamChildren("device")
                 .anyMatch(deviceNode -> deviceNode.hasAttribute("id", DeviceConstants.HOSTED_DEVICE_ID));
     }
 
@@ -2908,8 +2897,8 @@ public final class LiveDeviceService implements DeviceService {
      * after they emit a retry receipt.
      *
      * @implNote
-     * This implementation resolves both me-JIDs to user form via {@link com.github.auties00.cobalt.store.AccountStore#jid()} and
-     * {@link com.github.auties00.cobalt.store.AccountStore#lid()} and issues a forced USync sweep through
+     * This implementation resolves both me-JIDs to user form via {@link LinkedWhatsAppAccountStore#jid()} and
+     * {@link LinkedWhatsAppAccountStore#lid()} and issues a forced USync sweep through
      * {@link #fetchDeviceListsFromServer(Collection, String)} rather than the cache-aware
      * {@link #getDeviceLists(Collection, String, String, boolean)}, so a stale-but-cached self list is
      * reconciled against the server hash instead of being read straight from the cache. A session that
@@ -2960,8 +2949,8 @@ public final class LiveDeviceService implements DeviceService {
      * This implementation issues a single focused USync LID-protocol IQ built by
      * {@link DeviceUSyncQueryBuilder#buildLidQuery(Jid, String)} on the {@link UsyncContext#VOIP}
      * context, parses the {@code <lid val>} children via
-     * {@link DeviceUSyncResponseParser#parseLidMappings(Node)}, and writes each learned pair through
-     * {@link com.github.auties00.cobalt.store.ContactStore#registerLidMapping(Jid, Jid)} so the call
+     * {@link DeviceUSyncResponseParser#parseLidMappings(Stanza)}, and writes each learned pair through
+     * {@link LinkedWhatsAppContactStore#registerLidMapping(Jid, Jid)} so the call
      * path and every later lookup resolve from cache. A transport failure is swallowed and reported as
      * an empty result, matching the abort-without-PN-fallback contract of the call placement path.
      */
@@ -2975,7 +2964,7 @@ public final class LiveDeviceService implements DeviceService {
             return cached;
         }
 
-        Node response;
+        Stanza response;
         try {
             var query = DeviceUSyncQueryBuilder.buildLidQuery(user, UsyncContext.VOIP.wireValue());
             response = client.sendNode(query);
@@ -3098,7 +3087,7 @@ public final class LiveDeviceService implements DeviceService {
      *
      * @implNote
      * This implementation iterates the records sequentially, invoking
-     * {@link com.github.auties00.cobalt.store.ContactStore#addDeviceList(DeviceList)} and
+     * {@link LinkedWhatsAppContactStore#addDeviceList(DeviceList)} and
      * {@link #warnIfDeletingOwnDeviceList(DeviceList)} per record; WA Web wraps the same
      * loop in an IDB bulk write, which Cobalt has no per-record cost to amortise.
      *
@@ -3298,8 +3287,8 @@ public final class LiveDeviceService implements DeviceService {
      * self-tombstone reaches the persistence layer.
      *
      * @implNote
-     * This implementation considers both the PN ({@link com.github.auties00.cobalt.store.AccountStore#jid()}) and LID
-     * ({@link com.github.auties00.cobalt.store.AccountStore#lid()}) projections of the local user; the warning is
+     * This implementation considers both the PN ({@link LinkedWhatsAppAccountStore#jid()}) and LID
+     * ({@link LinkedWhatsAppAccountStore#lid()}) projections of the local user; the warning is
      * logged-only and never blocks the write because the deletion is sometimes the
      * deliberate outcome of an account-type transition.
      *
@@ -3331,8 +3320,8 @@ public final class LiveDeviceService implements DeviceService {
      * @implNote
      * This implementation short-circuits via the local me-user pair when the input
      * matches one of them (returning the other side without a store lookup); otherwise
-     * it consults {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(Jid)} or
-     * {@link com.github.auties00.cobalt.store.ContactStore#findPhoneByLid(Jid)} as appropriate. Device-scoped JIDs are
+     * it consults {@link LinkedWhatsAppContactStore#findLidByPhone(Jid)} or
+     * {@link LinkedWhatsAppContactStore#findPhoneByLid(Jid)} as appropriate. Device-scoped JIDs are
      * tolerated (no throw, unlike WA Web's {@code getAlternateUserWid} which rejects
      * device wids), because Cobalt callers may pass them without first downcasting to
      * user level.
@@ -3784,7 +3773,7 @@ public final class LiveDeviceService implements DeviceService {
      * {@code keyIndex} (the same check that
      * {@link #handleNoListReset(Jid, DeviceList, DeviceList)} runs for full syncs);
      * identity changes that surface in the cached-vs-new diff are recorded via
-     * {@link com.github.auties00.cobalt.store.SignalStore#markIdentityChange(Jid)} and their Signal sessions cleaned
+     * {@link LinkedWhatsAppSignalStore#markIdentityChange(Jid)} and their Signal sessions cleaned
      * up, matching the {@code mismatch.identityChangedDevices} branch.
      *
      * @param deviceJid   the companion's full device JID
@@ -3954,7 +3943,7 @@ public final class LiveDeviceService implements DeviceService {
 
     /**
      * Returns the validated {@link ADVSignedDeviceIdentity} extracted from the
-     * {@code <device-identity>} node of a pair-success stanza.
+     * {@code <device-identity>} stanza of a pair-success stanza.
      *
      * <p>This drives the pair-success handling sequence: it validates the
      * {@code ADVSignedDeviceIdentityHMAC} against the {@code advSecretKey}, verifies the embedded
@@ -3968,16 +3957,16 @@ public final class LiveDeviceService implements DeviceService {
      * matching WA Web's path that logs a pair error and triggers
      * {@code WAWebCompanionRegUtils.logoutAfterValidationFail} without rethrowing to the caller.
      *
-     * @param deviceIdentityNode the {@code device-identity} node from the pair-success
+     * @param deviceIdentityStanza the {@code device-identity} stanza from the pair-success
      *                           stanza
      * @return the validated identity, or {@link Optional#empty()} when validation fails
      */
     @WhatsAppWebExport(moduleName = "WAWebHandlePairSuccess",
             exports = "handlePairSuccess",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public Optional<ADVSignedDeviceIdentity> extractAndValidateLocalSignedDeviceIdentity(Node deviceIdentityNode) {
+    public Optional<ADVSignedDeviceIdentity> extractAndValidateLocalSignedDeviceIdentity(Stanza deviceIdentityStanza) {
         try {
-            var signedDeviceIdentity = advValidator.extractAndValidateLocalSignedDeviceIdentity(deviceIdentityNode);
+            var signedDeviceIdentity = advValidator.extractAndValidateLocalSignedDeviceIdentity(deviceIdentityStanza);
             return Optional.of(signedDeviceIdentity);
         } catch (WhatsAppAdvValidationException exception) {
             client.handleFailure(exception);

@@ -8,7 +8,7 @@ import java.time.Duration;
  *
  * <p>The implementation issues the WhatsApp {@code w:p} ping and waits up to the
  * given timeout; it returns normally when the reply arrives and throws a runtime
- * exception (a node timeout or a closed session) when the link is dead.
+ * exception (a stanza timeout or a closed session) when the link is dead.
  */
 @FunctionalInterface
 public interface KeepAlivePinger {

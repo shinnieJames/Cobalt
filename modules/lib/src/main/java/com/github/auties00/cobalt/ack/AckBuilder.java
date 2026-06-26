@@ -4,8 +4,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,8 +15,8 @@ import java.util.Objects;
  * Assembles and dispatches the outbound {@code <ack>} stanza shipped in response to an inbound
  * stanza.
  *
- * <p>An instance is obtained through {@link AckSender#ack(AckClass, Node)}, bound to a target
- * {@link AckClass} and the inbound {@link Node} being acknowledged. The fluent setters layer
+ * <p>An instance is obtained through {@link AckSender#ack(AckClass, Stanza)}, bound to a target
+ * {@link AckClass} and the inbound {@link Stanza} being acknowledged. The fluent setters layer
  * per-call overrides on top of the per-class defaults, and {@link #send()} resolves the final
  * attribute set, builds the stanza, and dispatches it through the owning {@link AckSender}. The
  * per-class defaults make the common shapes ({@code <ack class="message">},
@@ -30,7 +30,7 @@ import java.util.Objects;
  * @implNote This implementation collapses four WA Web call shapes ({@code sendAck},
  * {@code buildReceiptAck}, the synthesised nack, and the {@code <meta failure_reason=...>} append on
  * the {@code InvalidProtobuf} path) into a single override matrix so consumers no longer hand-roll a
- * {@link NodeBuilder} per call site.
+ * {@link StanzaBuilder} per call site.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgSendAck")
 @WhatsAppWebModule(moduleName = "WAWebReceiptAck")
@@ -56,7 +56,7 @@ public final class AckBuilder {
      * and the inherited {@code type} and {@code participant} values when the per-class default
      * inherits from the inbound stanza.
      */
-    private final Node inbound;
+    private final Stanza inbound;
 
     /**
      * Tracks whether {@link #type(String)} has been called.
@@ -139,7 +139,7 @@ public final class AckBuilder {
     private NackReason error = null;
 
     /**
-     * The {@code failure_reason} string carried on a child {@code <meta>} node for the
+     * The {@code failure_reason} string carried on a child {@code <meta>} stanza for the
      * {@link NackReason#INVALID_PROTOBUF} nack, or {@code null} when no such child is required.
      */
     private String failureReason = null;
@@ -148,19 +148,19 @@ public final class AckBuilder {
      * The list of arbitrary child nodes appended to the outbound ack stanza, in insertion order, or
      * {@code null} when no children have been added.
      */
-    private List<Node> children = null;
+    private List<Stanza> children = null;
 
     /**
      * Constructs a builder bound to the given {@link AckSender}, stanza class, and inbound stanza.
      *
      * <p>Package-private so instance creation stays centralised on {@link AckSender}; callers obtain
-     * a builder through {@link AckSender#ack(AckClass, Node)}.
+     * a builder through {@link AckSender#ack(AckClass, Stanza)}.
      *
      * @param owner    the {@link AckSender} that dispatches the assembled stanza on {@link #send()}
      * @param ackClass the {@link AckClass} written into the {@code class} attribute
      * @param inbound  the inbound stanza being acknowledged
      */
-    AckBuilder(AckSender owner, AckClass ackClass, Node inbound) {
+    AckBuilder(AckSender owner, AckClass ackClass, Stanza inbound) {
         this.owner = owner;
         this.ackClass = ackClass;
         this.inbound = inbound;
@@ -261,7 +261,7 @@ public final class AckBuilder {
      * <p>Writes the integer error code returned by {@link NackReason#code()} into the {@code error}
      * attribute. For {@link NackReason#INVALID_PROTOBUF} the caller should also supply a failure
      * reason via {@link #failureReason(String)} so the server receives the mandatory
-     * {@code <meta failure_reason="..."/>} child node.
+     * {@code <meta failure_reason="..."/>} child stanza.
      *
      * @param reason the {@link NackReason} stamped into the {@code error} attribute, or {@code null}
      *               to clear a previous error
@@ -275,10 +275,10 @@ public final class AckBuilder {
     }
 
     /**
-     * Records the failure-reason hint carried on the {@code <meta failure_reason="..."/>} child node
+     * Records the failure-reason hint carried on the {@code <meta failure_reason="..."/>} child stanza
      * of the outbound NACK.
      *
-     * <p>The child node is emitted by {@link #send()} only when the NACK reason is
+     * <p>The child stanza is emitted by {@link #send()} only when the NACK reason is
      * {@link NackReason#INVALID_PROTOBUF} and a non-{@code null} reason is present; the server logs
      * the value against the offending stanza. A {@code null} value clears any previous failure
      * reason.
@@ -294,14 +294,14 @@ public final class AckBuilder {
     }
 
     /**
-     * Appends an arbitrary child node to the outbound ack stanza.
+     * Appends an arbitrary child stanza to the outbound ack stanza.
      *
      * <p>Multiple calls preserve insertion order. A {@code null} argument is ignored.
      *
-     * @param child the {@link Node} to append, or {@code null} to skip
+     * @param child the {@link Stanza} to append, or {@code null} to skip
      * @return this builder for chaining
      */
-    public AckBuilder child(Node child) {
+    public AckBuilder child(Stanza child) {
         if (child == null) {
             return this;
         }
@@ -347,7 +347,7 @@ public final class AckBuilder {
         var resolvedType = resolveType();
         var resolvedParticipant = resolveParticipant(to);
 
-        var builder = new NodeBuilder()
+        var builder = new StanzaBuilder()
                 .description("ack")
                 .attribute("id", id)
                 .attribute("class", ackClass.wireToken())
@@ -429,19 +429,19 @@ public final class AckBuilder {
     }
 
     /**
-     * Builds the optional {@code <meta failure_reason="..."/>} child node.
+     * Builds the optional {@code <meta failure_reason="..."/>} child stanza.
      *
      * <p>Returns {@code null} unless the NACK reason is {@link NackReason#INVALID_PROTOBUF} and a
      * non-{@code null} failure reason was supplied via {@link #failureReason(String)}, in which case
-     * the value is written into the {@code failure_reason} attribute of the child node.
+     * the value is written into the {@code failure_reason} attribute of the child stanza.
      *
      * @return the {@code <meta>} child, or {@code null} when no such child is needed
      */
-    private Node buildMetaChild() {
+    private Stanza buildMetaChild() {
         if (error != NackReason.INVALID_PROTOBUF || failureReason == null) {
             return null;
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("meta")
                 .attribute("failure_reason", failureReason)
                 .build();

@@ -6,10 +6,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.LocaleSetting;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -26,7 +27,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * @implNote
  * This implementation persists the locale into
- * {@link com.github.auties00.cobalt.store.AccountStore#setLocale(String)} and
+ * {@link LinkedWhatsAppAccountStore#setLocale(String)} and
  * notifies every registered
  * {@link LinkedWhatsAppClientListener#onLocaleChanged(LinkedWhatsAppClient, String, String)}
  * on its own virtual thread, since Cobalt has no UI layer to delegate to.

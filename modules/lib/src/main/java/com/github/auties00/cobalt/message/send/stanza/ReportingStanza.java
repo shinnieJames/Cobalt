@@ -13,8 +13,8 @@ import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
 import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 
@@ -76,11 +76,11 @@ public final class ReportingStanza {
      * @param messageInfo the outgoing {@link ChatMessageInfo}
      * @param selfJid     the sender's user {@link Jid}
      * @param remoteJid   the recipient or group {@link Jid}
-     * @return the {@code <reporting>} {@link Node}, or {@code null}
+     * @return the {@code <reporting>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "genReportingTokenBody",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node build(ChatMessageInfo messageInfo, Jid selfJid, Jid remoteJid) {
+    public Stanza build(ChatMessageInfo messageInfo, Jid selfJid, Jid remoteJid) {
         var senderVersion = getSenderReportingTokenVersion();
         if (!isReportingTokenSendingEnabled(senderVersion)) {
             return null;
@@ -117,12 +117,12 @@ public final class ReportingStanza {
                 return null;
             }
 
-            var reportingBody = new NodeBuilder()
+            var reportingBody = new StanzaBuilder()
                     .description("reporting_token")
                     .attribute("v", String.valueOf(reportingToken.get().version()))
                     .content(reportingToken.get().token())
                     .build();
-            return new NodeBuilder()
+            return new StanzaBuilder()
                     .description("reporting")
                     .content(reportingBody)
                     .build();

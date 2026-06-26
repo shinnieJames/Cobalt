@@ -4,10 +4,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.NctSaltSyncAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
@@ -96,7 +97,7 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
      *       {@link MutationApplicationResult#malformed()} via
      *       {@link SyncdIndexUtils#malformedActionIndex(String, String)};</li>
      *   <li>the resolved {@code byte[]} salt is written via
-     *       {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore#setNotificationContentTokenSalt(byte[])}.</li>
+     *       {@link LinkedWhatsAppStore#setNotificationContentTokenSalt(byte[])}.</li>
      * </ul>
      *
      * @implNote

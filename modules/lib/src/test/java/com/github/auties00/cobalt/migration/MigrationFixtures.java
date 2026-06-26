@@ -6,10 +6,10 @@ import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResumeState;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -28,7 +28,7 @@ import java.util.Optional;
  * exposes them to JUnit tests. Both fixture families live under
  * {@code src/test/resources/fixtures/migration/} and are discovered on the classpath; missing fixtures
  * are reported by {@link #isAvailable(String)} so a corpus-less checkout can opt in cleanly. Two shapes
- * are supported: JSONL stanza captures decoded back into {@link Node} instances via {@link #loadEvents(String)}
+ * are supported: JSONL stanza captures decoded back into {@link Stanza} instances via {@link #loadEvents(String)}
  * and {@link #buildNode(JSONObject)}, and eval-style oracle outputs exposed verbatim through
  * {@link #loadExpected(String)} or unwrapped through {@link #loadOracle(String)}.
  */
@@ -114,32 +114,32 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a captured event, for driving
+     * Reconstructs a Cobalt {@link Stanza} from the {@code stanza} sub-tree of a captured event, for driving
      * the Cobalt stanza receivers against captured input.
      *
      * @param event the event object returned by
      *              {@link #loadEvents(String)}
-     * @return the reconstructed {@link Node}
+     * @return the reconstructed {@link Stanza}
      * @throws IllegalArgumentException when the tree is malformed
      */
-    public static Node buildNodeFromEvent(JSONObject event) {
+    public static Stanza buildNodeFromEvent(JSONObject event) {
         Objects.requireNonNull(event, "event");
-        var nodeTree = event.getJSONObject("node");
+        var nodeTree = event.getJSONObject("stanza");
         if (nodeTree == null) {
-            throw new IllegalArgumentException("event missing 'node' subtree");
+            throw new IllegalArgumentException("event missing 'stanza' subtree");
         }
         return buildNode(nodeTree);
     }
 
     /**
-     * Reconstructs a {@link Node} from a bare plain-JSON {@code {tag, attrs, content}} tree, without the
-     * enclosing {@code {event: {node: ...}}} envelope produced by {@link #loadEvents(String)}.
+     * Reconstructs a {@link Stanza} from a bare plain-JSON {@code {tag, attrs, content}} tree, without the
+     * enclosing {@code {event: {stanza: ...}}} envelope produced by {@link #loadEvents(String)}.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed {@link Node}
+     * @return the reconstructed {@link Stanza}
      * @throws IllegalArgumentException when {@code tree} has no tag
      */
-    public static Node buildNodeFromTree(JSONObject tree) {
+    public static Stanza buildNodeFromTree(JSONObject tree) {
         return buildNode(tree);
     }
 
@@ -238,7 +238,7 @@ public final class MigrationFixtures {
     public static LinkedWhatsAppStore temporaryStore(Jid selfPn, Jid selfLid) {
         Objects.requireNonNull(selfPn, "selfPn");
         try {
-            var store = WhatsAppStoreFactory.temporary()
+            var store = LinkedWhatsAppStoreFactory.temporary()
                     .create(LinkedWhatsAppClientType.WEB, Long.parseLong(selfPn.user()));
             store.accountStore().setJid(selfPn);
             if (selfLid != null) {
@@ -270,7 +270,7 @@ public final class MigrationFixtures {
 
     /**
      * Flattens a captured attribute value into the string form the Cobalt
-     * {@link NodeBuilder#attribute(String, String)} setter expects. Captured attributes may arrive as JID
+     * {@link StanzaBuilder#attribute(String, String)} setter expects. Captured attributes may arrive as JID
      * objects with a {@code $1} wrapper encoding {@code user}, {@code server}, {@code domainType}, and
      * {@code device} fields; this helper unwraps it and rebuilds the canonical {@code user[:device]@server}
      * string form.
@@ -305,9 +305,9 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Decodes a captured binary leaf into raw bytes. Binary node content is captured as
+     * Decodes a captured binary leaf into raw bytes. Binary stanza content is captured as
      * {@code {kind: "binary", base64: "..."}}; this helper unwraps the base64 payload for
-     * {@link #applyContent(NodeBuilder, Object)}.
+     * {@link #applyContent(StanzaBuilder, Object)}.
      *
      * @param binary the binary leaf object
      * @return the decoded bytes
@@ -323,21 +323,21 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Builds a {@link Node} by walking a plain-JSON {@code {tag, attrs, content}} tree. Shared core of
+     * Builds a {@link Stanza} by walking a plain-JSON {@code {tag, attrs, content}} tree. Shared core of
      * {@link #buildNodeFromEvent(JSONObject)} and {@link #buildNodeFromTree(JSONObject)}; recurses into
-     * nested objects through {@link #applyContent(NodeBuilder, Object)}.
+     * nested objects through {@link #applyContent(StanzaBuilder, Object)}.
      *
      * @param tree the captured tree
-     * @return the reconstructed {@link Node}
+     * @return the reconstructed {@link Stanza}
      * @throws IllegalArgumentException when {@code tree} has no tag
      */
-    private static Node buildNode(JSONObject tree) {
+    private static Stanza buildNode(JSONObject tree) {
         var tag = tree.getString("tag");
         if (tag == null || tag.isEmpty()) {
-            throw new IllegalArgumentException("node tree missing 'tag': " + tree);
+            throw new IllegalArgumentException("stanza tree missing 'tag': " + tree);
         }
 
-        var builder = new NodeBuilder().description(tag);
+        var builder = new StanzaBuilder().description(tag);
 
         var attrs = tree.getJSONObject("attrs");
         if (attrs != null) {
@@ -356,12 +356,12 @@ public final class MigrationFixtures {
     /**
      * Applies a captured {@code content} value onto the given builder, handling the four content shapes
      * WA Web emits over its capture channel (binary leaf, child array, string, or {@code null}) and
-     * rebuilding the structure the Cobalt {@link NodeBuilder} expects.
+     * rebuilding the structure the Cobalt {@link StanzaBuilder} expects.
      *
      * @param builder the target builder
      * @param content the JSON-shaped content value
      */
-    private static void applyContent(NodeBuilder builder, Object content) {
+    private static void applyContent(StanzaBuilder builder, Object content) {
         if (content == null) return;
 
         if (content instanceof JSONObject leaf) {
@@ -374,7 +374,7 @@ public final class MigrationFixtures {
         }
 
         if (content instanceof JSONArray children) {
-            var built = new ArrayList<Node>(children.size());
+            var built = new ArrayList<Stanza>(children.size());
             byte[] inlineBytes = null;
             for (var entry : children) {
                 if (entry instanceof JSONObject obj) {
@@ -384,7 +384,7 @@ public final class MigrationFixtures {
                     }
                     built.add(buildNode(obj));
                 } else if (entry != null) {
-                    built.add(new NodeBuilder().description("__text").content(String.valueOf(entry)).build());
+                    built.add(new StanzaBuilder().description("__text").content(String.valueOf(entry)).build());
                 }
             }
             if (!built.isEmpty()) {

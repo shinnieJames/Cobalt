@@ -2,13 +2,14 @@ package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Covers the self-send PN/LID round-trip through {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(Jid)}
- * and {@link com.github.auties00.cobalt.store.ContactStore#findPhoneByLid(Jid)}: a message addressed to the local user's
+ * Covers the self-send PN/LID round-trip through {@link LinkedWhatsAppContactStore#findLidByPhone(Jid)}
+ * and {@link LinkedWhatsAppContactStore#findPhoneByLid(Jid)}: a message addressed to the local user's
  * own phone-number JID must resolve to a LID and that LID must map back to the same PN.
  *
  * <p>The expectations come from a captured live oracle

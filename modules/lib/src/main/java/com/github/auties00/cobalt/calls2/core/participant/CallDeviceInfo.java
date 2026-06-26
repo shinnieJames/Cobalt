@@ -18,7 +18,7 @@ import java.util.Set;
  * advertised video-decode capabilities, a per-device video-enabled flag the engine
  * toggles as the device starts and stops its camera, the device's generated SSRC set, and
  * a per-device server-state code used when the device is serialized back into a membership
- * node.
+ * stanza.
  *
  * <p>This record is mutable: the engine flips the {@linkplain #videoEnabled() video-enabled
  * flag}, refreshes the {@linkplain #decoderCapabilities() decode capabilities} when a new
@@ -83,7 +83,7 @@ public final class CallDeviceInfo {
 
     /**
      * Holds the per-device server-state code used when this device is serialized into a
-     * membership node.
+     * membership stanza.
      */
     private int serverState;
 
@@ -218,7 +218,7 @@ public final class CallDeviceInfo {
 
     /**
      * Returns the per-device server-state code used when this device is serialized into a
-     * membership node.
+     * membership stanza.
      *
      * @return the server-state code
      */
@@ -228,7 +228,7 @@ public final class CallDeviceInfo {
 
     /**
      * Sets the per-device server-state code used when this device is serialized into a
-     * membership node.
+     * membership stanza.
      *
      * <p>The membership remove path sets this to {@link CallParticipantState#INVALID}'s
      * code to mark the device removed.

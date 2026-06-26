@@ -28,7 +28,7 @@ import java.util.Optional;
  * handoff. Codes at or below {@code 0xc} participate in the engine's "active" bitmasks;
  * codes above {@code 0xc} are treated as active without further classification.
  *
- * <p>When a participant is serialized back into an outbound membership node, the engine
+ * <p>When a participant is serialized back into an outbound membership stanza, the engine
  * projects this membership state onto a separate server-user-state vocabulary through a
  * lookup table; that projection is owned by the membership serializer and is not modeled
  * here. The projection vocabulary is the twelve-entry table at WASM data offset
@@ -69,7 +69,7 @@ public enum CallParticipantState {
      * A participant that has been invited and is awaiting acceptance.
      *
      * <p>This is the state of a freshly allocated participant filled from an inbound
-     * membership node before it has connected.
+     * membership stanza before it has connected.
      *
      * @implNote This implementation assigns the {@code INVITED} name to a non-confirmed
      * code recovered from the lifecycle rather than from a string table; the placeholder

@@ -5,9 +5,9 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import com.github.auties00.cobalt.sync.ConflictResolution;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
@@ -153,9 +153,9 @@ public interface WebAppStateActionHandler {
      * @implSpec
      * Implementations must return a {@link ConflictResolution} whose
      * {@link ConflictResolution#state()} is one of
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} (remote wins),
-     * {@link ConflictResolutionState#SKIP_REMOTE} (local wins), or
-     * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} (merge); the optional merged mutation
+     * {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} (remote wins),
+     * {@link MutationConflictResolutionState#SKIP_REMOTE} (local wins), or
+     * {@link MutationConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} (merge); the optional merged mutation
      * in the resolution is consulted by the dispatcher when the state indicates a merge.
      *
      * @implNote
@@ -173,9 +173,9 @@ public interface WebAppStateActionHandler {
     @WhatsAppWebExport(moduleName = "WAWebSyncdAction", exports = "ChatMessageRangeSyncdActionBase", adaptation = WhatsAppAdaptation.DIRECT)
     default ConflictResolution resolveConflicts(DecryptedMutation.Trusted localMutation, DecryptedMutation.Trusted remoteMutation) {
         if (remoteMutation.timestamp().compareTo(localMutation.timestamp()) >= 0) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         } else {
-            return ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+            return ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
         }
     }
 

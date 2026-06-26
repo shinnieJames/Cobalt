@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.model.sync.data.SyncdPatchBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdVersion;
 import com.github.auties00.cobalt.model.sync.data.SyncdVersionBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

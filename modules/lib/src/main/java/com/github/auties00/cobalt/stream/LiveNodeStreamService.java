@@ -20,7 +20,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.stream.control.ErrorStreamHandler;
 import com.github.auties00.cobalt.stream.control.FailureStreamHandler;
@@ -54,7 +54,7 @@ import java.util.*;
  * {@code <failure>}, {@code <stream:error>}, {@code <error>},
  * {@code <status>}, {@code <xmlstreamend>}. This class owns one
  * dedicated {@link SocketStreamHandler} per stanza tag, exposes a single
- * {@link #handle(Node)} entry point fed by the noise transport layer,
+ * {@link #handle(Stanza)} entry point fed by the noise transport layer,
  * and fans each stanza out onto a fresh virtual thread so that a slow
  * or blocking handler cannot back up the socket reader, with the single
  * exception of {@code <message>} stanzas, which are serialised per chat
@@ -272,7 +272,7 @@ public final class LiveNodeStreamService implements NodeStreamService {
      *
      * @implNote
      * This implementation looks up the handler for the stanza tag and delegates scheduling to
-     * {@link SocketStreamHandler#handleAsync(Node)}: a {@link SocketStreamHandler.Concurrent} runs the
+     * {@link SocketStreamHandler#handleAsync(Stanza)}: a {@link SocketStreamHandler.Concurrent} runs the
      * stanza on a fresh virtual thread so a slow handler cannot stall the socket reader, while a
      * {@link SocketStreamHandler.Ordered} chains the stanza onto its ordering key so stanzas sharing a
      * key are processed in arrival order. The WA Web counterpart runs handlers on the JS event loop and
@@ -281,7 +281,7 @@ public final class LiveNodeStreamService implements NodeStreamService {
      * nacked because Cobalt does not implement the
      * {@code WAWebCreateNackFromStanza.NackReason.UnrecognizedStanza} path.
      *
-     * @param node the inbound stanza
+     * @param stanza the inbound stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza",
             exports = "handleLoggedInStanza",
@@ -293,10 +293,10 @@ public final class LiveNodeStreamService implements NodeStreamService {
             exports = "handleWorkerCompatibleStanza",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    public void handle(Node node) {
-        var handler = this.handlers.get(node.description());
+    public void handle(Stanza stanza) {
+        var handler = this.handlers.get(stanza.description());
         if (handler != null) {
-            handler.handleAsync(node);
+            handler.handleAsync(stanza);
         }
     }
 

@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.wam.privatestats;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppException;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -50,7 +50,7 @@ class WamPrivateStatsTokenIssuerTest {
         var expectedUnblinded = HexFormat.of().parseHex(vector.unblinded);
         var expectedBlinded = HexFormat.of().parseHex(vector.blinded);
 
-        var capturedIq = new AtomicReference<Node>();
+        var capturedIq = new AtomicReference<Stanza>();
         var client = TestWhatsAppClient.create()
                 .withSendNodeHandler(builder -> {
                     var built = builder.build();
@@ -78,11 +78,11 @@ class WamPrivateStatsTokenIssuerTest {
         var signCredential = iq.getChild("sign_credential").orElseThrow();
         assertEquals("1", signCredential.getAttributeAsString("version", ""));
         var blindedCredential = signCredential.getChild("blinded_credential").orElseThrow();
-        if (blindedCredential instanceof Node.BytesNode bytesNode) {
+        if (blindedCredential instanceof Stanza.BytesStanza bytesNode) {
             assertArrayEquals(expectedBlinded, bytesNode.content(),
                     "outbound blinded_credential bytes must equal the live-bundle's blind(msg, scalar) output");
         } else {
-            throw new AssertionError("blinded_credential is not a BytesNode: " + blindedCredential);
+            throw new AssertionError("blinded_credential is not a BytesStanza: " + blindedCredential);
         }
     }
 
@@ -93,7 +93,7 @@ class WamPrivateStatsTokenIssuerTest {
         var msg = HexFormat.of().parseHex(vector.msg);
         var scalar = HexFormat.of().parseHex(vector.scalar);
         var client = TestWhatsAppClient.create()
-                .withSendNodeHandler(builder -> new NodeBuilder()
+                .withSendNodeHandler(builder -> new StanzaBuilder()
                         .description("iq")
                         .attribute("type", "error")
                         .build());
@@ -109,12 +109,12 @@ class WamPrivateStatsTokenIssuerTest {
         var scalar = HexFormat.of().parseHex(vector.scalar);
         var pk = HexFormat.of().parseHex(vector.pk);
         var client = TestWhatsAppClient.create()
-                .withSendNodeHandler(builder -> new NodeBuilder()
+                .withSendNodeHandler(builder -> new StanzaBuilder()
                         .description("iq")
                         .attribute("type", "result")
-                        .content(new NodeBuilder()
+                        .content(new StanzaBuilder()
                                 .description("sign_credential")
-                                .content(new NodeBuilder()
+                                .content(new StanzaBuilder()
                                         .description("acs_public_key")
                                         .content(pk)
                                         .build())
@@ -133,16 +133,16 @@ class WamPrivateStatsTokenIssuerTest {
         var scalar = HexFormat.of().parseHex(vector.scalar);
         var pk = HexFormat.of().parseHex(vector.pk);
         var client = TestWhatsAppClient.create()
-                .withSendNodeHandler(builder -> new NodeBuilder()
+                .withSendNodeHandler(builder -> new StanzaBuilder()
                         .description("iq")
                         .attribute("type", "result")
-                        .content(new NodeBuilder()
+                        .content(new StanzaBuilder()
                                 .description("sign_credential")
-                                .content(new NodeBuilder()
+                                .content(new StanzaBuilder()
                                         .description("signed_credential")
                                         .content(new byte[16])
                                         .build())
-                                .content(new NodeBuilder()
+                                .content(new StanzaBuilder()
                                         .description("acs_public_key")
                                         .content(pk)
                                         .build())
@@ -153,18 +153,18 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     // A success IQ shaped like the live server's sign_credential reply.
-    private static Node successResponse(byte[] signed, byte[] pk) {
-        return new NodeBuilder()
+    private static Stanza successResponse(byte[] signed, byte[] pk) {
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "result")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("sign_credential")
                         .content(List.of(
-                                new NodeBuilder()
+                                new StanzaBuilder()
                                         .description("signed_credential")
                                         .content(signed)
                                         .build(),
-                                new NodeBuilder()
+                                new StanzaBuilder()
                                         .description("acs_public_key")
                                         .content(pk)
                                         .build()))

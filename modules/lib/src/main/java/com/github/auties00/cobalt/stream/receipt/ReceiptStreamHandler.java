@@ -1,11 +1,11 @@
 package com.github.auties00.cobalt.stream.receipt;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.calls2.signaling.Calls2CallReceiptReceiver;
 import com.github.auties00.cobalt.wam.WamService;
 
@@ -21,7 +21,7 @@ import com.github.auties00.cobalt.wam.WamService;
  * {@code "retry"} or {@code "enc_rekey_retry"}) and regular delivery, read or
  * played acknowledgements, is forwarded to
  * {@link MessageReceiptStreamHandler}, which performs the secondary
- * retry-vs-regular split inside its own {@link #handle(Node)} entry point.
+ * retry-vs-regular split inside its own {@link #handle(Stanza)} entry point.
  *
  * @implNote
  * This implementation fuses three WA Web dispatch sites onto a single Java
@@ -31,7 +31,7 @@ import com.github.auties00.cobalt.wam.WamService;
  * ({@code WAWebCommsHandleLoggedInStanza}). Cobalt does not split per-worker,
  * per-messaging and per-logged-in entry points because it has no worker
  * thread model, so the three branches collapse into the single switch in
- * {@link #handle(Node)}.
+ * {@link #handle(Stanza)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleWorkerCompatibleStanza")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
@@ -83,19 +83,19 @@ public final class ReceiptStreamHandler extends SocketStreamHandler.Concurrent {
      *
      * @implNote
      * This implementation defers the secondary retry-vs-regular split to
-     * {@link MessageReceiptStreamHandler#handle(Node)} so the routing logic
+     * {@link MessageReceiptStreamHandler#handle(Stanza)} so the routing logic
      * stays close to the retry-specific state machine.
      *
-     * @param node {@inheritDoc}
+     * @param stanza {@inheritDoc}
      */
     @Override
-    public void handle(Node node) {
-        if (isCallReceipt(node)) {
-            callReceiptHandler.handle(node);
+    public void handle(Stanza stanza) {
+        if (isCallReceipt(stanza)) {
+            callReceiptHandler.handle(stanza);
             return;
         }
 
-        messageReceiptHandler.handle(node);
+        messageReceiptHandler.handle(stanza);
     }
 
     /**
@@ -128,12 +128,12 @@ public final class ReceiptStreamHandler extends SocketStreamHandler.Concurrent {
      * assumption that the first child alone is sufficient to discriminate
      * the stanza class.
      *
-     * @param node the {@code <receipt>} stanza to classify
+     * @param stanza the {@code <receipt>} stanza to classify
      * @return {@code true} when the first child has tag {@code offer},
      *         {@code accept} or {@code reject}; {@code false} otherwise
      */
-    private boolean isCallReceipt(Node node) {
-        var child = node.getChild().orElse(null);
+    private boolean isCallReceipt(Stanza stanza) {
+        var child = stanza.getChild().orElse(null);
         return child != null && switch (child.description()) {
             case "offer", "accept", "reject" -> true;
             default -> false;

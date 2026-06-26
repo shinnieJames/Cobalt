@@ -11,13 +11,15 @@ import com.github.auties00.cobalt.calls2.core.participant.CallParticipantUserNod
 import com.github.auties00.cobalt.calls2.crypto.CallKeyExchange;
 import com.github.auties00.cobalt.calls2.crypto.CallRekeyEnvelope;
 import com.github.auties00.cobalt.calls2.net.transport.AppDataController;
+import com.github.auties00.cobalt.calls2.net.transport.RelayElection;
+import com.github.auties00.cobalt.calls2.net.transport.RelayLatencyState;
 import com.github.auties00.cobalt.calls2.platform.VoipHostApi;
 import com.github.auties00.cobalt.calls2.signaling.*;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.model.call.*;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,7 +45,7 @@ import java.util.function.Supplier;
  *       (the reused Signal pipeline), once in the offer for a one-to-one call;</li>
  *   <li>builds each signaling action with {@link Calls2CallStanza} and the typed {@link CallMessage}
  *       records and ships it, the offer through {@link Calls2OfferAckSender} for its synchronous relay-
- *       bearing ack and every other leg through {@link VoipHostApi#sendSignaling(Node)} fire-and-forget;</li>
+ *       bearing ack and every other leg through {@link VoipHostApi#sendSignaling(Stanza)} fire-and-forget;</li>
  *   <li>brings up the media plane through {@link Calls2MediaPlane} once the call is answered and the relay
  *       block is known;</li>
  *   <li>advances the fifteen-state internal machine through {@link Calls2CallStateTransition} and fires
@@ -898,7 +900,7 @@ public final class Calls2LifecycleController {
      * active-versus-lonely decision by connected-peer count. The selective-forwarding subscription publish (the {@code SenderSubscriptions} and
      * {@code RxSubscriptions} embedded in STUN binding-requests, SPEC section 14.3) rides the media plane's
      * transport rather than this signaling path, so it is reached through
-     * {@link Calls2MediaPlane#bringUp(String, Node, List, byte[], boolean, boolean, int, CallMembership, Calls2MediaStreams)}
+     * {@link Calls2MediaPlane#bringUp(String, Stanza, List, byte[], boolean, boolean, int, CallMembership, Calls2MediaStreams, Jid, Optional)}
      * alongside the SRTP and SFrame key bring-up.
      *
      * @param self      the local account's device JID, stamped as the call creator
@@ -1009,7 +1011,7 @@ public final class Calls2LifecycleController {
      * transport bring-up, the {@code change_call_state(4)} to {@link Calls2CallState#ACCEPT_SENT}, the
      * {@code set_call_result(10)} accepted result, and the accept send. The native inline audio-device,
      * media, transport, and BWE start is reached here through
-     * {@link Calls2MediaPlane#bringUp(String, Node, List, byte[], boolean, boolean, int, CallMembership, Calls2MediaStreams)}.
+     * {@link Calls2MediaPlane#bringUp(String, Stanza, List, byte[], boolean, boolean, int, CallMembership, Calls2MediaStreams, Jid, Optional)}.
      *
      * @param callId  the identifier of the call being accepted
      * @param video   whether the local side answers with video enabled
@@ -1044,7 +1046,7 @@ public final class Calls2LifecycleController {
 
             var creator = call.creator();
             var to = call.isGroup() ? Jid.of(callId + "@call") : orchestrated.peerDeviceJid().orElse(call.peer());
-            var accept = buildAccept(callId, creator);
+            var accept = buildAccept(callId, creator, relay);
             // The accept is shipped fire-and-forget: unlike the offer's synchronous relay-bearing ack, the
             // <ack class="call" type="accept"> is asynchronous and is consumed by handleIncomingAck, which
             // ends the call on an accept NACK (404 -> CallDoesNotExistForRejoin, 434 -> CallIsFull).
@@ -1592,6 +1594,11 @@ public final class Calls2LifecycleController {
                     : Calls2CallState.RECEIVED_CALL_WITHOUT_OFFER;
             transition(orchestrated, ringingState, CallEventType.CALL_OFFER_RECEIVED);
 
+            // Begin the relay-latency exchange as soon as the offer's relay block is known so the peer's
+            // report has arrived before this side answers and brings up its media plane, letting the election
+            // converge both ends onto a shared relay rather than each picking its locally fastest one.
+            startRelayLatencyExchange(orchestrated, orchestrated.relay().orElse(null));
+
             // The listener-facing call carries the caller's phone number (the server stamps caller_pn on
             // the delivered offer), not the LID the protocol addresses, so it matches the JID applications
             // hold for contacts; the internal Call keeps the LID creator for reply addressing.
@@ -1673,7 +1680,7 @@ public final class Calls2LifecycleController {
     public boolean handleIncomingMessage(CallMessage message, Jid senderJid) {
         Objects.requireNonNull(message, "message cannot be null");
         Objects.requireNonNull(senderJid, "senderJid cannot be null");
-        var callId = message.toNode().getAttributeAsString("call-id", null);
+        var callId = message.toStanza().getAttributeAsString("call-id", null);
         var dedup = callId == null
                 ? Calls2IncomingMessageRouter.DedupState.INITIAL
                 : Optional.ofNullable(calls.get(callId))
@@ -1715,11 +1722,12 @@ public final class Calls2LifecycleController {
             case OfferStanza offer -> handleIncomingOffer(offer, senderJid);
             case PreacceptStanza preaccept -> handlePeerPreaccept(preaccept);
             case AcceptStanza accept -> handlePeerAccept(accept, senderJid);
-            case RejectStanza reject -> handlePeerReject(reject);
+            case RejectStanza reject -> handlePeerReject(reject, senderJid);
             case TerminateStanza terminate -> {
                 return handlePeerTerminate(terminate, senderJid);
             }
             case TransportStanza transport -> handlePeerTransport(transport);
+            case RelayLatencyStanza relayLatency -> handlePeerRelayLatency(relayLatency, senderJid);
             case GroupUpdateStanza groupUpdate -> handleGroupUpdate(groupUpdate);
             case MuteV2Stanza mute -> handlePeerMute(mute, senderJid);
             case VideoStateStanza videoState -> handlePeerVideoState(videoState, senderJid);
@@ -1840,7 +1848,7 @@ public final class Calls2LifecycleController {
         if (orchestrated == null) {
             return;
         }
-        var transactionId = message.toNode().getAttributeAsInt("transaction-id", -1);
+        var transactionId = message.toStanza().getAttributeAsInt("transaction-id", -1);
         if (transactionId < 0) {
             return;
         }
@@ -1887,6 +1895,7 @@ public final class Calls2LifecycleController {
             }
             transition(orchestrated, mediaConnectedTarget(orchestrated), CallEventType.CALL_STATE_CHANGED);
             ensureControls(orchestrated);
+            announceInitialVideoState(orchestrated);
         } finally {
             orchestrated.lock().unlock();
         }
@@ -1921,6 +1930,36 @@ public final class Calls2LifecycleController {
                 .map(membership -> membership.participantProvider().firstConnectedPeer().isPresent())
                 .orElse(false);
         return anyPeerConnected ? Calls2CallState.CALL_ACTIVE : Calls2CallState.CONNECTED_LONELY;
+    }
+
+    /**
+     * Announces the local camera-on state once a video call's media plane connects.
+     *
+     * <p>A call placed or answered with video carries the camera on from the start, yet the peer renders
+     * the local video only after it receives the camera-on {@code <video>} state announcement. This
+     * broadcasts {@link VideoStreamState#ENABLED} through the call's {@link VideoStateController} the first
+     * time the media plane connects, so the peer learns the camera is live and renders the inbound video;
+     * an audio-only call announces nothing, and a reconnect that finds the camera already enabled
+     * re-announces nothing.
+     *
+     * @implNote This implementation closes the from-start video gap: the native engine raises the camera
+     * track and broadcasts the {@code <video>} state together at connect (the {@code video_state} announce
+     * driven alongside {@code call_accept_impl}), whereas the streams-based bring-up here started the video
+     * media without the accompanying state announce, so a peer that received the video RTP never learned
+     * the camera was on. A mid-call camera toggle still flows through
+     * {@link #startLocalVideo(String)}/{@link #setVideoEnabled(String, boolean)}.
+     *
+     * @param orchestrated the call whose media plane connected
+     */
+    private static void announceInitialVideoState(Calls2OrchestratedCall orchestrated) {
+        if (!orchestrated.call().isVideo()) {
+            return;
+        }
+        orchestrated.controls().ifPresent(controls -> {
+            if (controls.video().state() != VideoStreamState.ENABLED) {
+                controls.video().turnCamera(true);
+            }
+        });
     }
 
     /**
@@ -2018,6 +2057,9 @@ public final class Calls2LifecycleController {
 
             var relay = orchestrated.relay().orElse(null);
             var callKey = orchestrated.callKey().orElse(null);
+            // Fallback for a caller whose synchronous offer ack carried no relay block: the accept's relay is
+            // the first one learned, so start the exchange here. A no-op once applyOfferAck already started it.
+            startRelayLatencyExchange(orchestrated, relay);
             if (relay != null && callKey != null) {
                 bringUpMediaPlane(orchestrated, relay, orchestrated.offerAckVoipSettings(), callKey, true,
                         orchestrated.call().isVideo());
@@ -2033,23 +2075,35 @@ public final class Calls2LifecycleController {
     }
 
     /**
-     * Handles an inbound reject: the peer declined an outbound call before answering.
+     * Handles an inbound reject: a callee device declined the outbound call.
      *
-     * <p>Ends the call with the reject's reason and emits the reject-received event. A reject for an
-     * untracked call is ignored.
+     * <p>Ends the call with the reject's reason and emits the reject-received event, unless the reject comes
+     * from a device that is not the active peer. On a multi-device callee every device rings, so once one
+     * device has answered (its JID pinned as the {@linkplain Calls2OrchestratedCall#peerDeviceJid() active
+     * peer} by {@link #handlePeerAccept(AcceptStanza, Jid)}), another of the callee's devices declining its
+     * own ringing leg must not tear down the now-answered call; that reject is dropped. A reject from the
+     * active peer itself, or a reject before any device has answered (no active peer pinned), ends the call.
+     * A reject for an untracked call is ignored.
      *
-     * @implNote This implementation reproduces the {@code Reject(4)} arm: the peer-decline teardown that
-     * ends the call with the reject reason.
+     * @implNote This implementation reproduces the {@code Reject(4)} arm with the native active-device guard:
+     * a per-device reject only ends the call when it concerns the device the call is established with, so a
+     * sibling device dismissing its ringing notification does not end a call another device is already
+     * carrying.
      *
-     * @param reject the decoded inbound reject
+     * @param reject    the decoded inbound reject
+     * @param senderJid the device JID that authored the reject
      */
-    private void handlePeerReject(RejectStanza reject) {
+    private void handlePeerReject(RejectStanza reject, Jid senderJid) {
         var orchestrated = calls.get(reject.callId());
         if (orchestrated == null) {
             return;
         }
         orchestrated.lock().lock();
         try {
+            var activePeer = orchestrated.peerDeviceJid().orElse(null);
+            if (activePeer != null && senderJid != null && !activePeer.equals(senderJid)) {
+                return;
+            }
             tearDown(orchestrated, reject.reason(), CallEventType.CALL_REJECT_RECEIVED);
         } finally {
             orchestrated.lock().unlock();
@@ -2227,10 +2281,120 @@ public final class Calls2LifecycleController {
         }
         orchestrated.lock().lock();
         try {
-            transport.toNode().getChild("relay").ifPresent(orchestrated::relay);
+            transport.toStanza().getChild("relay").ifPresent(orchestrated::relay);
         } finally {
             orchestrated.lock().unlock();
         }
+    }
+
+    /**
+     * Handles an inbound relay-latency report: folds the peer's per-relay round-trip latencies into the
+     * call's relay-election state.
+     *
+     * <p>A {@code <relaylatency>} report carries the peer's measured latency to each relay it probed; recording
+     * it marks the relays the peer can reach, so the next {@linkplain RelayLatencyState#electBestRelayName(RelayElection.Mode)
+     * election} the media-plane bring-up runs can converge both ends onto a relay they share. A report for an
+     * untracked call, or one that arrives before the local end has built its own
+     * {@linkplain Calls2OrchestratedCall#relayLatencyState() relay-latency state} from its relay block, is
+     * dropped.
+     *
+     * <p>Receiving a report also pins the peer device the relay exchange runs with: it replies with the local
+     * end's own per-relay latencies addressed to the exact {@code senderJid} that sent this report, so the
+     * peer's own election folds in the relays the local end reaches and converges onto a shared relay. This
+     * device-to-device reply is required because the proactive offer-ack report is addressed to the callee's
+     * primary device, which is not the device that answers and runs the election; the answering device only
+     * learns the local end's relays through this reply to its own report.
+     *
+     * @implNote This implementation ports {@code set_remote_relay_latencies} (fn5173) of
+     * {@code wa_transport_relay_election.cc} ({@code ff-tScznZ8P}): the peer report overwrites the per-relay
+     * remote-latency table the election reads, keyed by relay name. The election itself runs at bring-up; the
+     * reply mirrors the bidirectional exchange a live capture showed both ends drive (each end reports its
+     * latencies to the specific peer device it is exchanging with).
+     *
+     * @param message   the decoded inbound relay-latency report
+     * @param senderJid the peer device that sent the report, the reply's recipient
+     */
+    private void handlePeerRelayLatency(RelayLatencyStanza message, Jid senderJid) {
+        var orchestrated = calls.get(message.callId());
+        if (orchestrated == null) {
+            return;
+        }
+        orchestrated.lock().lock();
+        try {
+            var state = orchestrated.relayLatencyState().orElse(null);
+            if (state == null) {
+                return;
+            }
+            state.recordPeerLatencies(message.entries());
+            // Reply with the local end's own relay latencies to the exact device that sent this report, so the
+            //  answering device (not the primary the proactive offer-ack report is addressed to) learns the
+            //  relays the local end reaches and re-elects onto the shared relay before it binds.
+            if (host != null && senderJid != null) {
+                var callId = orchestrated.callId();
+                var reply = new RelayLatencyStanza(callId, orchestrated.call().creator(), false, -1,
+                        state.toLatencyEntries());
+                host.sendSignaling(Calls2CallStanza.toCall(reply, senderJid, callId));
+            }
+            // The primary flow needs no mid-call switch: a live capture (cobalt.log call 1F53F887) confirmed the
+            //  peer sends its <relaylatency> reports BEFORE its <accept>, so they are folded in before the
+            //  media plane bring-up runs the election, which then converges both ends at bind time. A report
+            //  that arrives AFTER bring-up (a relay rekey, or a late peer) cannot move the bound relay in this
+            //  pass: the relay address is selected once at bring-up and LiveRelayTransport binds it as a
+            //  one-shot. Handling that robustness case is the native update_best_relays (fn5172) mid-call
+            //  relay-switch; it re-runs the election here and, when it elects a different relay, rebinds the
+            //  transport. Left as a follow-up because it is not on the convergence path the captures exercise.
+        } finally {
+            orchestrated.lock().unlock();
+        }
+    }
+
+    /**
+     * Builds the call's relay-election state from a learned relay block and ships the local end's
+     * {@code <relaylatency>} report to the peer, once per call.
+     *
+     * <p>Parses the relay block into its {@link RelayInfo}, seeds a {@link RelayLatencyState} from the offered
+     * relay {@linkplain RelayInfo#endpoints() endpoints} (each relay's {@code c2r_rtt} measured by the server),
+     * records it on the orchestration handle, and sends a {@code <relaylatency>} carrying the seeded per-relay
+     * latencies to the peer so the two ends can exchange their views and converge their relay choice before the
+     * media plane comes up. The send is idempotent per call: a second invocation (a later relay block on the
+     * same call) is a no-op once the state exists, so the report is sent exactly once. A call with no host
+     * transport, no relay block, or a relay block that does not parse sends nothing.
+     *
+     * @implNote This implementation drives the relay-latency exchange the engine runs from
+     * {@code apply_relay_latencies} (fn5168) of {@code wa_transport_relay_election.cc} ({@code ff-tScznZ8P}):
+     * each end seeds its per-relay table from the offered {@code c2r_rtt} and reports it in a
+     * {@code <relaylatency>}, then folds the peer's report into the table the election reads. The report is
+     * addressed with the same {@link #controlRecipient(Calls2OrchestratedCall) recipient rule} the in-call
+     * control actions use (the MUC call target for a group call, the peer signaling device otherwise).
+     *
+     * @param orchestrated the call whose relay-latency exchange is started
+     * @param relayNode    the call's learned {@code <relay>} block subtree, or {@code null} when none is known
+     */
+    private void startRelayLatencyExchange(Calls2OrchestratedCall orchestrated, Stanza relayNode) {
+        if (host == null || relayNode == null || orchestrated.relayLatencyState().isPresent()) {
+            return;
+        }
+        var relayInfo = RelayInfo.of(relayNode).orElse(null);
+        if (relayInfo == null) {
+            return;
+        }
+        // The local per-relay latencies are seeded from the offer-ack c2r_rtt the server measured (the
+        //  RelayLatencyState constructor). A live capture confirmed this seed converges both ends: WhatsApp
+        //  clients run a live probe and report measured latencies well above c2r_rtt (WA-Web reported
+        //  262/293/331 ms and the native desktop 76/77/77 ms against a 14/23/21 ms c2r_rtt), yet
+        //  find_best_relay (fn5170) elects by the SUM of each relay's per-party latencies, so as long as each
+        //  end reports the same value it elects with (this state reports and elects from the same
+        //  localLatencies), both ends compute an identical per-relay sum and elect the same relay regardless
+        //  of the latency scale. The native live per-relay probe-ping round that would replace the c2r_rtt
+        //  seed with Cobalt's own measured RTT (RelayLatencyState.recordProbeLatency) is an optional accuracy
+        //  refinement, gated on the relay's pre-bind probe-response wire shape (untested without a probe
+        //  capture); it does not affect convergence, only which of several shared relays wins a close call.
+        var state = new RelayLatencyState(relayInfo.endpoints());
+        orchestrated.relayLatencyState(state);
+        var callId = orchestrated.callId();
+        var report = new RelayLatencyStanza(callId, orchestrated.call().creator(), false, -1,
+                state.toLatencyEntries());
+        host.sendSignaling(Calls2CallStanza.toCall(report, controlRecipient(orchestrated), callId));
     }
 
     /**
@@ -2618,7 +2782,7 @@ public final class Calls2LifecycleController {
      * Brings up the media plane for a call and records the resulting session.
      *
      * <p>Delegates to
-     * {@link Calls2MediaPlane#bringUp(String, Node, List, byte[], boolean, boolean, int, CallMembership, Calls2MediaStreams)}
+     * {@link Calls2MediaPlane#bringUp(String, Stanza, List, byte[], boolean, boolean, int, CallMembership, Calls2MediaStreams, Jid, Optional)}
      * with the negotiated {@code <voip_settings>} bundles, the call's current membership size, and the
      * call's recorded application capture sources and playback sinks, and stores the returned session on the
      * orchestration handle so the teardown can close it. The bring-up exception is propagated to the caller,
@@ -2643,30 +2807,35 @@ public final class Calls2LifecycleController {
      * @param video        whether the local side participates with video
      * @throws WhatsAppCallException if the media plane cannot be brought up
      */
-    private void bringUpMediaPlane(Calls2OrchestratedCall orchestrated, Node relay, List<Node> voipSettings,
+    private void bringUpMediaPlane(Calls2OrchestratedCall orchestrated, Stanza relay, List<Stanza> voipSettings,
                                    byte[] callKey, boolean isCaller, boolean video) {
         if (orchestrated.mediaSession().isPresent()) {
             return;
         }
         var membership = orchestrated.membership().orElse(null);
         var participantCount = membership == null ? 0 : membership.size();
+        // Elect the relay both ends reach from the exchanged latencies before the transport binds; an empty
+        // election (no peer report yet, or no relay both ends reported) leaves the bring-up on its local pick.
+        var electedRelayName = orchestrated.relayLatencyState()
+                .flatMap(state -> state.electBestRelayName(RelayElection.Mode.DEFAULT));
         var session = mediaPlane.bringUp(orchestrated.callId(), relay, voipSettings, callKey, isCaller, video,
-                participantCount, membership, orchestrated.mediaStreams(), orchestrated.peerDeviceJid().orElse(null));
+                participantCount, membership, orchestrated.mediaStreams(), orchestrated.peerDeviceJid().orElse(null),
+                electedRelayName);
         orchestrated.mediaSession(session);
         orchestrated.appDataController(session.appDataController().orElse(null));
     }
 
     /**
-     * Returns the {@code <voip_settings>} bundle subtrees carried directly under a call ack node.
+     * Returns the {@code <voip_settings>} bundle subtrees carried directly under a call ack stanza.
      *
      * <p>The server denormalises the engine parameter bundles into the synchronous offer ack as direct
      * {@code <voip_settings>} children alongside the relay, user, and rte blocks; this reads them in wire
      * order for the caller-side media-plane bring-up.
      *
-     * @param ack the server's call ack node
+     * @param ack the server's call ack stanza
      * @return the ack's {@code <voip_settings>} children, in wire order; empty when the ack carries none
      */
-    private static List<Node> voipSettingsOf(Node ack) {
+    private static List<Stanza> voipSettingsOf(Stanza ack) {
         return ack.getChildren(VOIP_SETTINGS_ELEMENT)
                 .stream()
                 .toList();
@@ -2728,7 +2897,7 @@ public final class Calls2LifecycleController {
         var videoCodecs = video ? standardVideoCodecs() : List.<CallCodecDescriptor>of();
         return new OfferStanza(callId, self, identity.callerPn(), null, identity.username(), groupJid, null, null,
                 true, false, null, -1, NET_MEDIUM_OFFER, capabilities, audioCodecs, videoCodecs, List.of(), null,
-                CallEncOptions.standard(), roster.toNode(), null, null, null, null, List.of(), null);
+                CallEncOptions.standard(), roster.toStanza(), null, null, null, null, List.of(), null);
     }
 
     /**
@@ -2800,7 +2969,7 @@ public final class Calls2LifecycleController {
      * @return the placement group-info roster
      */
     private static GroupInfoStanza rosterOf(Collection<Jid> participants) {
-        var users = new ArrayList<Node>(participants.size());
+        var users = new ArrayList<Stanza>(participants.size());
         for (var participant : participants) {
             users.add(CallParticipantUserNode.ofUser(participant).toNode());
         }
@@ -2816,9 +2985,9 @@ public final class Calls2LifecycleController {
      * roster leaves the placement membership unchanged.
      *
      * @param orchestrated the group call whose membership is reconciled
-     * @param ack          the server's offer ack node
+     * @param ack          the server's offer ack stanza
      */
-    private static void reconcileFromAck(Calls2OrchestratedCall orchestrated, Node ack) {
+    private static void reconcileFromAck(Calls2OrchestratedCall orchestrated, Stanza ack) {
         var membership = orchestrated.membership().orElse(null);
         if (membership == null) {
             return;
@@ -2903,19 +3072,19 @@ public final class Calls2LifecycleController {
     }
 
     /**
-     * Wraps a built action node in a {@code <call>} envelope addressed to a recipient device.
+     * Wraps a built action stanza in a {@code <call>} envelope addressed to a recipient device.
      *
-     * <p>This is the envelope shim for an action already built as a {@link Node} (a per-participant rekey),
+     * <p>This is the envelope shim for an action already built as a {@link Stanza} (a per-participant rekey),
      * distinct from {@link Calls2CallStanza#toCall(CallMessage, Jid, String)} which wraps a typed
      * {@link CallMessage}.
      *
-     * @param action the built action node to wrap
+     * @param action the built action stanza to wrap
      * @param to     the recipient device JID
      * @param callId the call identifier, used as the envelope stanza id
      * @return the {@code <call to id>} envelope nesting the action
      */
-    private static Node wrapInCall(Node action, Jid to, String callId) {
-        return new NodeBuilder()
+    private static Stanza wrapInCall(Stanza action, Jid to, String callId) {
+        return new StanzaBuilder()
                 .description(Calls2CallStanza.ELEMENT)
                 .attribute("to", to)
                 .attribute("id", callId)
@@ -2926,19 +3095,24 @@ public final class Calls2LifecycleController {
     /**
      * Builds the {@code <accept>} action for answering a call.
      *
-     * <p>The accept advertises the callee's standard capability (which encodes video support as a bit,
-     * not as a codec descriptor) and the offered audio codecs; the video intent flows to the media-plane
-     * bring-up rather than to the accept element, so this builder takes no video flag.
+     * <p>The accept echoes the server-allocated {@code <relay>} block as its first child (with each
+     * endpoint's client-to-relay round-trip hints stripped) so the server can complete relay allocation,
+     * and advertises the callee's standard capability (which encodes video support as a bit, not as a
+     * codec descriptor) and the offered audio codecs; the video intent flows to the media-plane bring-up
+     * rather than to the accept element, so this builder takes no video flag.
      *
      * @param callId  the call identifier
      * @param creator the call creator's device JID
+     * @param relay   the offered {@code <relay>} block to echo, or {@code null} when none was offered
      * @return the accept action
      */
-    private AcceptStanza buildAccept(String callId, Jid creator) {
+    private AcceptStanza buildAccept(String callId, Jid creator, Stanza relay) {
         var capabilities = List.of(standardCapability());
         var audioCodecs = standardAudioCodecs();
+        var acceptRelay = relay == null ? null
+                : RelayInfo.of(relay).map(RelayInfo::withoutEndpointRoundTripHints).orElse(null);
         return new AcceptStanza(callId, creator, NET_MEDIUM_ACCEPT, capabilities, audioCodecs, List.of(), null,
-                CallEncOptions.standard(), null);
+                CallEncOptions.standard(), null, acceptRelay);
     }
 
     /**
@@ -2964,10 +3138,10 @@ public final class Calls2LifecycleController {
      * @param self   the local device JID, the envelope sender context
      * @param peer   the peer user JID, the envelope recipient
      * @param offer  the offer action to wrap and send
-     * @return the server's ack node
+     * @return the server's ack stanza
      * @throws WhatsAppCallException if the offer could not be sent or no ack arrived
      */
-    private Node sendOffer(String callId, Jid self, Jid peer, OfferStanza offer) {
+    private Stanza sendOffer(String callId, Jid self, Jid peer, OfferStanza offer) {
         var envelope = Calls2CallStanza.toCall(offer, peer, callId);
         LOGGER.log(System.Logger.Level.DEBUG, "Sending offer for call {0} from {1} to {2}", callId, self, peer);
         return offerAckSender.sendOfferAndAwaitAck(envelope);
@@ -2993,9 +3167,9 @@ public final class Calls2LifecycleController {
      * up on the accept.
      *
      * @param orchestrated the outbound call the ack belongs to
-     * @param ack          the server's ack node
+     * @param ack          the server's ack stanza
      */
-    private void applyOfferAck(Calls2OrchestratedCall orchestrated, Node ack) {
+    private void applyOfferAck(Calls2OrchestratedCall orchestrated, Stanza ack) {
         var callId = orchestrated.callId();
         if (ack.hasAttribute("error")) {
             // The engine collapses every offer-ack error to ServerNack (no 404/434 sub-map as the accept
@@ -3011,6 +3185,10 @@ public final class Calls2LifecycleController {
         events.emit(CallEventType.CALL_OFFER_ACK_RECEIVED, new byte[0]);
         ack.getChild("relay").ifPresent(orchestrated::relay);
         orchestrated.offerAckVoipSettings(voipSettingsOf(ack));
+        // The offer-ack relay block names the caller's relay set (placeholder credentials notwithstanding):
+        // begin the relay-latency exchange now so the peer learns this side's per-relay latencies and the
+        // accept-time bring-up can elect a relay both ends reach rather than the locally fastest one.
+        startRelayLatencyExchange(orchestrated, orchestrated.relay().orElse(null));
     }
 
     /**

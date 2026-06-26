@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.calls2.config;
 
 import com.github.auties00.cobalt.calls2.common.VoipParamJsonDeserializer;
 import com.github.auties00.cobalt.calls2.common.VoipParams;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.Optional;
 
@@ -37,7 +37,7 @@ import java.util.Optional;
  */
 public record VoipSettings(boolean uncompressed, VoipParams params) {
     /**
-     * The element description (tag name) a {@code <voip_settings>} node carries.
+     * The element description (tag name) a {@code <voip_settings>} stanza carries.
      */
     private static final String ELEMENT_DESCRIPTION = "voip_settings";
 
@@ -47,35 +47,35 @@ public record VoipSettings(boolean uncompressed, VoipParams params) {
     private static final String UNCOMPRESSED_ATTRIBUTE = "uncompressed";
 
     /**
-     * Parses a {@code <voip_settings>} node into a settings record.
+     * Parses a {@code <voip_settings>} stanza into a settings record.
      *
-     * <p>Reads the {@code uncompressed} flag and, when it is set and the node has a text
+     * <p>Reads the {@code uncompressed} flag and, when it is set and the stanza has a text
      * body, parses that body as JSON into a {@link VoipParams} set with the supplied
-     * deserializer. A node that is not uncompressed, or that carries no body, yields an empty
+     * deserializer. A stanza that is not uncompressed, or that carries no body, yields an empty
      * parameter set while still recording the observed flag.
      *
-     * @param node         the {@code <voip_settings>} node to parse
+     * @param stanza         the {@code <voip_settings>} stanza to parse
      * @param deserializer the deserializer used to parse an uncompressed JSON body
      * @return the parsed settings record
-     * @throws NullPointerException     if {@code node} or {@code deserializer} is {@code null}
-     * @throws IllegalArgumentException if {@code node} is not a {@code <voip_settings>} node,
+     * @throws NullPointerException     if {@code stanza} or {@code deserializer} is {@code null}
+     * @throws IllegalArgumentException if {@code stanza} is not a {@code <voip_settings>} stanza,
      *                                  or its uncompressed JSON body is not valid JSON
      */
-    public static VoipSettings of(Node node, VoipParamJsonDeserializer deserializer) {
-        if (node == null) {
-            throw new NullPointerException("node must not be null");
+    public static VoipSettings of(Stanza stanza, VoipParamJsonDeserializer deserializer) {
+        if (stanza == null) {
+            throw new NullPointerException("stanza must not be null");
         }
         if (deserializer == null) {
             throw new NullPointerException("deserializer must not be null");
         }
-        if (!ELEMENT_DESCRIPTION.equals(node.description())) {
-            throw new IllegalArgumentException("not a <voip_settings> node: " + node.description());
+        if (!ELEMENT_DESCRIPTION.equals(stanza.description())) {
+            throw new IllegalArgumentException("not a <voip_settings> stanza: " + stanza.description());
         }
-        var uncompressed = node.getAttributeAsBool(UNCOMPRESSED_ATTRIBUTE, false);
+        var uncompressed = stanza.getAttributeAsBool(UNCOMPRESSED_ATTRIBUTE, false);
         if (!uncompressed) {
             return new VoipSettings(false, new VoipParams());
         }
-        var params = node.toContentString()
+        var params = stanza.toContentString()
                 .map(deserializer::parse)
                 .orElseGet(VoipParams::new);
         return new VoipSettings(true, params);

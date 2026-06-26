@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -88,15 +88,15 @@ public record CallMediaDescriptor(int enc, int sampleRate) {
     }
 
     /**
-     * Builds the {@code <media enc=... rate=.../>} node for this descriptor.
+     * Builds the {@code <media enc=... rate=.../>} stanza for this descriptor.
      *
-     * <p>An absent {@code enc} or {@code rate} is omitted from the node rather than written as a
+     * <p>An absent {@code enc} or {@code rate} is omitted from the stanza rather than written as a
      * sentinel.
      *
-     * @return the media descriptor node
+     * @return the media descriptor stanza
      */
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toStanza() {
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(ENC_ATTRIBUTE, enc, enc >= 0)
                 .attribute(RATE_ATTRIBUTE, sampleRate, sampleRate >= 0)
@@ -104,21 +104,21 @@ public record CallMediaDescriptor(int enc, int sampleRate) {
     }
 
     /**
-     * Decodes a {@code <media>} node into a {@link CallMediaDescriptor}.
+     * Decodes a {@code <media>} stanza into a {@link CallMediaDescriptor}.
      *
-     * <p>A node that is not a {@code <media>} element yields an empty result so callers iterating a
+     * <p>A stanza that is not a {@code <media>} element yields an empty result so callers iterating a
      * mixed child list can skip it.
      *
-     * @param node the {@code <media>} node
-     * @return the decoded descriptor, or an empty result when the node is not a {@code <media>}
+     * @param stanza the {@code <media>} stanza
+     * @return the decoded descriptor, or an empty result when the stanza is not a {@code <media>}
      *         element
      */
-    public static Optional<CallMediaDescriptor> of(Node node) {
-        if (node == null || !node.hasDescription(ELEMENT)) {
+    public static Optional<CallMediaDescriptor> of(Stanza stanza) {
+        if (stanza == null || !stanza.hasDescription(ELEMENT)) {
             return Optional.empty();
         }
-        var enc = node.getAttributeAsInt(ENC_ATTRIBUTE, -1);
-        var sampleRate = node.getAttributeAsInt(RATE_ATTRIBUTE, -1);
+        var enc = stanza.getAttributeAsInt(ENC_ATTRIBUTE, -1);
+        var sampleRate = stanza.getAttributeAsInt(RATE_ATTRIBUTE, -1);
         return Optional.of(new CallMediaDescriptor(enc, sampleRate));
     }
 }

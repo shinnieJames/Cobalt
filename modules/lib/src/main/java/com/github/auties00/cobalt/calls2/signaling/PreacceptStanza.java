@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -119,31 +119,31 @@ public record PreacceptStanza(String callId, Jid callCreator, List<CallCapabilit
     }
 
     /**
-     * Builds the {@code <preaccept>} action node with its capability, audio, media, and encryption
+     * Builds the {@code <preaccept>} action stanza with its capability, audio, media, and encryption
      * children.
      *
      * <p>Children are emitted in the order capabilities, audio formats, media, encryption options;
      * each audio format is a flat {@code <audio>} element, and absent media and encryption options are
      * omitted.
      *
-     * @return the preaccept action node
+     * @return the preaccept action stanza
      */
     @Override
-    public Node toNode() {
-        var children = new ArrayList<Node>();
+    public Stanza toStanza() {
+        var children = new ArrayList<Stanza>();
         for (var capability : capabilities) {
-            children.add(capability.toNode());
+            children.add(capability.toStanza());
         }
         for (var codec : audioCodecs) {
-            children.add(codec.toNode());
+            children.add(codec.toStanza());
         }
         if (media != null) {
-            children.add(media.toNode());
+            children.add(media.toStanza());
         }
         if (encOptions != null) {
-            children.add(encOptions.toNode());
+            children.add(encOptions.toStanza());
         }
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator);
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator);
         if (!children.isEmpty()) {
             builder.content(children);
         }
@@ -151,29 +151,29 @@ public record PreacceptStanza(String callId, Jid callCreator, List<CallCapabilit
     }
 
     /**
-     * Decodes a {@code <preaccept>} action node into a {@link PreacceptStanza}.
+     * Decodes a {@code <preaccept>} action stanza into a {@link PreacceptStanza}.
      *
      * <p>Capability children, the flat {@code <audio>} format children, the {@code <media>}
      * descriptor, and the {@code <encopt>} options are each decoded when present.
      *
-     * @param node the {@code <preaccept>} node
+     * @param stanza the {@code <preaccept>} stanza
      * @return the decoded preaccept signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static PreacceptStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var capabilities = node.streamChildren(CAPABILITY_ELEMENT)
+    public static PreacceptStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var capabilities = stanza.streamChildren(CAPABILITY_ELEMENT)
                 .flatMap(child -> CallCapability.of(child).stream())
                 .toList();
-        var audioCodecs = node.streamChildren(AUDIO_ELEMENT)
+        var audioCodecs = stanza.streamChildren(AUDIO_ELEMENT)
                 .flatMap(audio -> CallCodecDescriptor.of(audio).stream())
                 .toList();
-        var media = node.getChild(MEDIA_ELEMENT).flatMap(CallMediaDescriptor::of).orElse(null);
-        var encOptions = node.getChild(ENCOPT_ELEMENT).flatMap(CallEncOptions::of).orElse(null);
+        var media = stanza.getChild(MEDIA_ELEMENT).flatMap(CallMediaDescriptor::of).orElse(null);
+        var encOptions = stanza.getChild(ENCOPT_ELEMENT).flatMap(CallEncOptions::of).orElse(null);
         return new PreacceptStanza(callId, callCreator, capabilities, audioCodecs, media, encOptions);
     }
 }

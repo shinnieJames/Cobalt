@@ -15,10 +15,10 @@ import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacyMode;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacySettingBuilder;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -60,7 +60,7 @@ class StatusMessageSenderTest {
         // steady-state branch is taken.
         senderStore.signalStore().markSenderKeyDistributed(STATUS, AUDIENCE_DEVICE);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = statusMessageSender(client, senderStore,
                 StubDeviceService.create().withStatusFanout(
@@ -97,7 +97,7 @@ class StatusMessageSenderTest {
         var senderStore = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
         senderStore.signalStore().markSenderKeyDistributed(STATUS, AUDIENCE_DEVICE);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = statusMessageSender(client, senderStore,
                 StubDeviceService.create().withStatusFanout(
@@ -149,7 +149,7 @@ class StatusMessageSenderTest {
         senderStore.signalStore().markSenderKeyDistributed(STATUS, AUDIENCE_DEVICE);
         seed.accept(senderStore);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var audienceRef = new AtomicReference<Collection<Jid>>();
         var sender = statusMessageSender(client, senderStore,
@@ -164,13 +164,13 @@ class StatusMessageSenderTest {
 
     // The returned ack carries only the t attribute, which AckParser reads as
     // a success result with no error code.
-    private static TestWhatsAppClient clientWithCapture(LinkedWhatsAppStore store, AtomicReference<Node> capturedStanza) {
+    private static TestWhatsAppClient clientWithCapture(LinkedWhatsAppStore store, AtomicReference<Stanza> capturedStanza) {
         return TestWhatsAppClient.create()
                 .withStore(store)
                 .withAbPropsService(TestABPropsService.builder().build())
                 .withSendNodeHandler(nb -> {
                     capturedStanza.set(nb.build());
-                    return new NodeBuilder()
+                    return new StanzaBuilder()
                             .description("ack")
                             .attribute("t", 1700000000L)
                             .build();

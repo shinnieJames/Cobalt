@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.github.auties00.cobalt.graphql.whatsapp.WhatsAppGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -18,14 +19,14 @@ import java.util.Optional;
  * minted over the WhatsApp socket (no facebook.com browser login is required); the relay maps the
  * {@code doc_id} to a server-side compiled document.
  *
- * <p>This hierarchy mirrors the role {@code MexOperation} plays for the MEX transport and
- * {@link com.github.auties00.cobalt.graphql.web.WhatsAppWebGraphQlOperation} plays for the WhatsApp Web GraphQL transport: it
+ * <p>This hierarchy mirrors the role {@code MexStanza} plays for the MEX transport and
+ * {@link WhatsAppGraphQlOperation} plays for the WhatsApp Web GraphQL transport: it
  * collapses each compiled GraphQL document into a sealed operation permitting exactly two variants,
  * {@link Request} and {@link Response}. All three transports share the same persisted-query identity
  * and operation shape; the Facebook GraphQL transport differs in carrier (Meta graph HTTP endpoint), body
- * encoding (a JSON object rather than a url-encoded form or a stanza node), and authentication (an
+ * encoding (a JSON object rather than a url-encoded form or a stanza stanza), and authentication (an
  * explicit Facebook {@code access_token} body field rather than a session cookie or the socket
- * session). The Facebook GraphQL transport is not stanza-based, so it lives outside the {@code node} package
+ * session). The Facebook GraphQL transport is not stanza-based, so it lives outside the {@code stanza} package
  * alongside the WhatsApp Web GraphQL transport rather than with the socket-carried operation families.
  *
  * @apiNote The Facebook GraphQL transport reaches Meta's graph endpoint and serves the WhatsApp Business

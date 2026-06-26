@@ -8,10 +8,11 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.LabelBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelAssociationAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -83,7 +84,7 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
      * {@link MutationApplicationResult#unsupported()}, a missing label id or
      * target JID as malformed, and an unparseable target JID as malformed. The
      * target JID is resolved chat-table-first, then through
-     * {@link com.github.auties00.cobalt.store.ContactStore#findPhoneByLid(Jid)}
+     * {@link LinkedWhatsAppContactStore#findPhoneByLid(Jid)}
      * when it carries the LID server. When {@link LabelAssociationAction#labeled()}
      * is set the resolved JID is added via {@link Label#addAssignment(Jid)};
      * otherwise it is removed via {@link Label#removeAssignment(Jid)}.

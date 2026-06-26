@@ -4,10 +4,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.TimeFormatAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -16,7 +17,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>The sync dispatcher routes incoming {@code time_format} mutations here
  * whenever the user toggles 12/24-hour display on another linked device. The
  * handler writes the boolean preference into
- * {@link com.github.auties00.cobalt.store.SettingsStore#setTwentyFourHourFormat(boolean)}
+ * {@link LinkedWhatsAppSettingsStore#setTwentyFourHourFormat(boolean)}
  * so any UI built on top of Cobalt can render timestamps using the user-chosen
  * format.
  */
@@ -68,7 +69,7 @@ public final class TimeFormatHandler implements WebAppStateActionHandler {
      * {@link MutationApplicationResult#unsupported()}; a value that does not decode
      * to a {@link TimeFormatAction} is reported as malformed; otherwise the boolean
      * is written to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setTwentyFourHourFormat(boolean)}.
+     * {@link LinkedWhatsAppSettingsStore#setTwentyFourHourFormat(boolean)}.
      *
      * @implNote
      * This implementation writes directly to the store in place of WA Web's

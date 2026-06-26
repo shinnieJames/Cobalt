@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -289,7 +289,7 @@ public record RelayInfo(int peerPid,
     }
 
     /**
-     * Builds the {@code <relay>} node for this block.
+     * Builds the {@code <relay>} stanza for this block.
      *
      * <p>Absent integer attributes and the absent string attributes are omitted; {@code joinable} is
      * written only when set. The token list is emitted as {@code <token>} children, the auth-token
@@ -298,10 +298,10 @@ public record RelayInfo(int peerPid,
      * become the {@code <key>} child and the hop-by-hop key is base64-encoded into the {@code <hbh_key>}
      * child.
      *
-     * @return the relay block node
+     * @return the relay block stanza
      */
-    public Node toNode() {
-        var children = new ArrayList<Node>();
+    public Stanza toNode() {
+        var children = new ArrayList<Stanza>();
         for (var participant : participants) {
             children.add(participant.toNode());
         }
@@ -315,18 +315,18 @@ public record RelayInfo(int peerPid,
             children.add(endpoint.toNode());
         }
         if (key != null) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(KEY_ELEMENT)
                     .content(key)
                     .build());
         }
         if (hbhKey != null) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(HBH_KEY_ELEMENT)
                     .content(Base64.getEncoder().encodeToString(hbhKey))
                     .build());
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(ATTRIBUTE_PADDING_ATTRIBUTE, attributePadding, attributePadding != UNSET)
                 .attribute(PEER_PID_ATTRIBUTE, peerPid, peerPid != UNSET)
@@ -339,33 +339,51 @@ public record RelayInfo(int peerPid,
     }
 
     /**
-     * Decodes a {@code <relay>} node into a {@link RelayInfo}.
+     * Returns a copy of this relay block with every endpoint's client-to-relay round-trip hints cleared.
+     *
+     * <p>Maps each endpoint through {@link RelayEndpoint#withoutRoundTripHints()} so a re-encode omits the
+     * {@code c2r_rtt} and {@code max_peer_c2r_rtt} attributes, matching the relay block a callee echoes in
+     * its accept; the relay-level attributes, tokens, auth tokens, key, hop-by-hop key, and participants
+     * are preserved.
+     *
+     * @return a copy of this relay block without the per-endpoint round-trip-time hints
+     */
+    public RelayInfo withoutEndpointRoundTripHints() {
+        var strippedEndpoints = endpoints.stream()
+                .map(RelayEndpoint::withoutRoundTripHints)
+                .toList();
+        return new RelayInfo(peerPid, selfPid, uuid, joinable, warpMiTagLen, attributePadding, authTokens, tokens,
+                strippedEndpoints, participants, key, hbhKey);
+    }
+
+    /**
+     * Decodes a {@code <relay>} stanza into a {@link RelayInfo}.
      *
      * <p>The endpoints are read from the {@code <te>} children when present and otherwise from the
      * {@code <te2>} children, enforcing that the two are not both present. A relay block carrying more
-     * than {@value #MAX_TOKENS} {@code <token>} children is rejected. A node that is not a
+     * than {@value #MAX_TOKENS} {@code <token>} children is rejected. A stanza that is not a
      * {@code <relay>} element yields an empty result. The {@code <key>} child is kept as raw bytes; the
      * {@code <hbh_key>} child is base64-decoded.
      *
-     * @param node the relay block node
-     * @return the decoded relay block, or an empty result when the node is not a {@code <relay>}
+     * @param stanza the relay block stanza
+     * @return the decoded relay block, or an empty result when the stanza is not a {@code <relay>}
      *         element
-     * @throws NullPointerException     if {@code node} is {@code null}
+     * @throws NullPointerException     if {@code stanza} is {@code null}
      * @throws IllegalArgumentException if the relay block carries both {@code <te>} and {@code <te2>}
      *                                  endpoint lists, or carries more than {@value #MAX_TOKENS}
      *                                  {@code <token>} children
      */
-    public static Optional<RelayInfo> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        if (!node.hasDescription(ELEMENT)) {
+    public static Optional<RelayInfo> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        if (!stanza.hasDescription(ELEMENT)) {
             return Optional.empty();
         }
-        var peerPid = node.getAttributeAsInt(PEER_PID_ATTRIBUTE, UNSET);
-        var selfPid = node.getAttributeAsInt(SELF_PID_ATTRIBUTE, UNSET);
-        var uuid = node.getAttributeAsString(UUID_ATTRIBUTE, null);
-        var joinable = TRUE_LITERAL.equals(node.getAttributeAsString(JOINABLE_ATTRIBUTE, null));
-        var warpMiTagLen = node.getAttributeAsInt(WARP_MI_TAG_LEN_ATTRIBUTE, UNSET);
-        var attributePadding = node.getAttributeAsInt(ATTRIBUTE_PADDING_ATTRIBUTE, UNSET);
+        var peerPid = stanza.getAttributeAsInt(PEER_PID_ATTRIBUTE, UNSET);
+        var selfPid = stanza.getAttributeAsInt(SELF_PID_ATTRIBUTE, UNSET);
+        var uuid = stanza.getAttributeAsString(UUID_ATTRIBUTE, null);
+        var joinable = TRUE_LITERAL.equals(stanza.getAttributeAsString(JOINABLE_ATTRIBUTE, null));
+        var warpMiTagLen = stanza.getAttributeAsInt(WARP_MI_TAG_LEN_ATTRIBUTE, UNSET);
+        var attributePadding = stanza.getAttributeAsInt(ATTRIBUTE_PADDING_ATTRIBUTE, UNSET);
 
         var tokens = new ArrayList<RelayToken>();
         var authTokens = new ArrayList<RelayAuthToken>();
@@ -375,7 +393,7 @@ public record RelayInfo(int peerPid,
         byte[] key = null;
         byte[] hbhKey = null;
 
-        for (var child : node.children()) {
+        for (var child : stanza.children()) {
             switch (child.description()) {
                 case TOKEN_ELEMENT -> RelayToken.of(child).ifPresent(tokens::add);
                 case AUTH_TOKEN_ELEMENT -> RelayAuthToken.of(child).ifPresent(authTokens::add);
@@ -405,10 +423,10 @@ public record RelayInfo(int peerPid,
      * Reads the raw {@code <key>} child bytes, preferring binary content and falling back to the ASCII
      * bytes of textual content.
      *
-     * @param child the {@code <key>} node
+     * @param child the {@code <key>} stanza
      * @return the raw key bytes, or {@code null} when the child carried no content
      */
-    private static byte[] readKeyBytes(Node child) {
+    private static byte[] readKeyBytes(Stanza child) {
         var bytes = child.toContentBytes().orElse(null);
         if (bytes != null) {
             return bytes;
@@ -421,11 +439,11 @@ public record RelayInfo(int peerPid,
     /**
      * Decodes the base64 {@code <hbh_key>} child into the hop-by-hop key bytes.
      *
-     * @param child the {@code <hbh_key>} node
+     * @param child the {@code <hbh_key>} stanza
      * @return the decoded hop-by-hop key bytes, or {@code null} when the child carried no content or did
      *         not decode
      */
-    private static byte[] decodeHbhKey(Node child) {
+    private static byte[] decodeHbhKey(Stanza child) {
         var value = child.toContentString().orElse(null);
         if (value == null) {
             return child.toContentBytes().orElse(null);
@@ -477,12 +495,12 @@ public record RelayInfo(int peerPid,
         }
 
         /**
-         * Builds the {@code <token id=...>BYTES</token>} node for this token.
+         * Builds the {@code <token id=...>BYTES</token>} stanza for this token.
          *
-         * @return the token node
+         * @return the token stanza
          */
-        public Node toNode() {
-            return new NodeBuilder()
+        public Stanza toNode() {
+            return new StanzaBuilder()
                     .description(TOKEN_ELEMENT)
                     .attribute(TOKEN_ID_ATTRIBUTE, id)
                     .content(bytes)
@@ -490,24 +508,24 @@ public record RelayInfo(int peerPid,
         }
 
         /**
-         * Decodes a {@code <token>} node into a {@link RelayToken}.
+         * Decodes a {@code <token>} stanza into a {@link RelayToken}.
          *
-         * <p>A node that is not a {@code <token>} element, or one without binary content, yields an empty
+         * <p>A stanza that is not a {@code <token>} element, or one without binary content, yields an empty
          * result so callers iterating a mixed child list can skip it.
          *
-         * @param node the {@code <token>} node
-         * @return the decoded token, or an empty result when the node is not a usable {@code <token>}
+         * @param stanza the {@code <token>} stanza
+         * @return the decoded token, or an empty result when the stanza is not a usable {@code <token>}
          *         element
          */
-        public static Optional<RelayToken> of(Node node) {
-            if (node == null || !node.hasDescription(TOKEN_ELEMENT)) {
+        public static Optional<RelayToken> of(Stanza stanza) {
+            if (stanza == null || !stanza.hasDescription(TOKEN_ELEMENT)) {
                 return Optional.empty();
             }
-            var bytes = node.toContentBytes();
+            var bytes = stanza.toContentBytes();
             if (bytes.isEmpty()) {
                 return Optional.empty();
             }
-            var id = node.getAttributeAsInt(TOKEN_ID_ATTRIBUTE, 0);
+            var id = stanza.getAttributeAsInt(TOKEN_ID_ATTRIBUTE, 0);
             return Optional.of(new RelayToken(id, bytes.get()));
         }
 
@@ -564,12 +582,12 @@ public record RelayInfo(int peerPid,
         }
 
         /**
-         * Builds the {@code <auth_token id=...>BYTES</auth_token>} node for this credential.
+         * Builds the {@code <auth_token id=...>BYTES</auth_token>} stanza for this credential.
          *
-         * @return the auth-token node
+         * @return the auth-token stanza
          */
-        public Node toNode() {
-            return new NodeBuilder()
+        public Stanza toNode() {
+            return new StanzaBuilder()
                     .description(AUTH_TOKEN_ELEMENT)
                     .attribute(TOKEN_ID_ATTRIBUTE, id)
                     .content(bytes)
@@ -577,24 +595,24 @@ public record RelayInfo(int peerPid,
         }
 
         /**
-         * Decodes an {@code <auth_token>} node into a {@link RelayAuthToken}.
+         * Decodes an {@code <auth_token>} stanza into a {@link RelayAuthToken}.
          *
-         * <p>A node that is not an {@code <auth_token>} element, or one without binary content, yields
+         * <p>A stanza that is not an {@code <auth_token>} element, or one without binary content, yields
          * an empty result so callers iterating a mixed child list can skip it.
          *
-         * @param node the {@code <auth_token>} node
-         * @return the decoded credential, or an empty result when the node is not a usable
+         * @param stanza the {@code <auth_token>} stanza
+         * @return the decoded credential, or an empty result when the stanza is not a usable
          *         {@code <auth_token>} element
          */
-        public static Optional<RelayAuthToken> of(Node node) {
-            if (node == null || !node.hasDescription(AUTH_TOKEN_ELEMENT)) {
+        public static Optional<RelayAuthToken> of(Stanza stanza) {
+            if (stanza == null || !stanza.hasDescription(AUTH_TOKEN_ELEMENT)) {
                 return Optional.empty();
             }
-            var bytes = node.toContentBytes();
+            var bytes = stanza.toContentBytes();
             if (bytes.isEmpty()) {
                 return Optional.empty();
             }
-            var id = node.getAttributeAsInt(TOKEN_ID_ATTRIBUTE, 0);
+            var id = stanza.getAttributeAsInt(TOKEN_ID_ATTRIBUTE, 0);
             return Optional.of(new RelayAuthToken(id, bytes.get()));
         }
 
@@ -636,12 +654,12 @@ public record RelayInfo(int peerPid,
         }
 
         /**
-         * Builds the {@code <participant pid=... jid=.../>} node for this participant.
+         * Builds the {@code <participant pid=... jid=.../>} stanza for this participant.
          *
-         * @return the participant node
+         * @return the participant stanza
          */
-        public Node toNode() {
-            return new NodeBuilder()
+        public Stanza toNode() {
+            return new StanzaBuilder()
                     .description(PARTICIPANT_ELEMENT)
                     .attribute(PARTICIPANT_PID_ATTRIBUTE, pid)
                     .attribute(PARTICIPANT_JID_ATTRIBUTE, jid)
@@ -649,24 +667,24 @@ public record RelayInfo(int peerPid,
         }
 
         /**
-         * Decodes a {@code <participant>} node into a {@link RelayParticipant}.
+         * Decodes a {@code <participant>} stanza into a {@link RelayParticipant}.
          *
-         * <p>A node that is not a {@code <participant>} element, or one without a parseable {@code jid},
+         * <p>A stanza that is not a {@code <participant>} element, or one without a parseable {@code jid},
          * yields an empty result so callers iterating a mixed child list can skip it.
          *
-         * @param node the {@code <participant>} node
-         * @return the decoded participant, or an empty result when the node is not a usable
+         * @param stanza the {@code <participant>} stanza
+         * @return the decoded participant, or an empty result when the stanza is not a usable
          *         {@code <participant>} element
          */
-        public static Optional<RelayParticipant> of(Node node) {
-            if (node == null || !node.hasDescription(PARTICIPANT_ELEMENT)) {
+        public static Optional<RelayParticipant> of(Stanza stanza) {
+            if (stanza == null || !stanza.hasDescription(PARTICIPANT_ELEMENT)) {
                 return Optional.empty();
             }
-            var jid = node.getAttributeAsJid(PARTICIPANT_JID_ATTRIBUTE);
+            var jid = stanza.getAttributeAsJid(PARTICIPANT_JID_ATTRIBUTE);
             if (jid.isEmpty()) {
                 return Optional.empty();
             }
-            var pid = node.getAttributeAsInt(PARTICIPANT_PID_ATTRIBUTE, 0);
+            var pid = stanza.getAttributeAsInt(PARTICIPANT_PID_ATTRIBUTE, 0);
             return Optional.of(new RelayParticipant(pid, jid.get()));
         }
     }

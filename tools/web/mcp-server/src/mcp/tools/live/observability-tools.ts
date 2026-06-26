@@ -114,7 +114,7 @@ export function registerLiveObservabilityTools(
 
   server.tool(
     "web_live_stanza_send_node",
-    "Sends a custom stanza node into a session's live runtime.",
+    "Sends a custom stanza stanza into a session's live runtime.",
     {
       sessionId: sessionIdSchema,
       node: z.object({

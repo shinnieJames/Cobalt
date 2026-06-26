@@ -1,10 +1,10 @@
 package com.github.auties00.cobalt.stream.control;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 
 /**
@@ -40,7 +40,7 @@ public final class XmlStreamEndStreamHandler extends SocketStreamHandler.Concurr
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza", exports = "handleLoggedInStanza", adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handle(Node node) {
+    public void handle(Stanza stanza) {
         LOGGER.log(System.Logger.Level.INFO, "Comms.handleStanza received xmlstreamend, return NO_ACK");
     }
 }

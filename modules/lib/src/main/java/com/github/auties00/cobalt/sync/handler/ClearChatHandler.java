@@ -7,9 +7,9 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.sync.ConflictResolution;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ClearChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ClearChatActionBuilder;
@@ -150,9 +150,9 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
      *
      * <p>Resolves the local-vs-remote tie by comparing the message ranges
      * carried inside each {@link ClearChatAction}. Returns
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the remote
+     * {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} when the remote
      * range encloses the local one,
-     * {@link ConflictResolutionState#SKIP_REMOTE} when the local range encloses
+     * {@link MutationConflictResolutionState#SKIP_REMOTE} when the local range encloses
      * the remote one, a timestamp tiebreaker when ranges are equal, and a
      * merged {@link ConflictResolution} carrying the union of both ranges when
      * ranges partially overlap.
@@ -162,7 +162,7 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
      * to apply rather than applying it inline; WA Web's
      * {@code lockForMessageRangeSync} writes the merged state to the
      * chat DB during conflict resolution. A defensive
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} is
+     * {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} is
      * returned when either side lacks a {@link ClearChatAction} or a
      * message range, replacing WA Web's {@code nullthrows} which would
      * throw.
@@ -180,25 +180,25 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
                 .orElse(null);
 
         if (localAction == null || remoteAction == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         var localRange = localAction.messageRange().orElse(null);
         var remoteRange = remoteAction.messageRange().orElse(null);
 
         if (localRange == null || remoteRange == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         return switch (MessageRangeUtils.compareMessageRanges(remoteRange, localRange)) {
             case RANGE_A_ENCLOSES_RANGE_B ->
-                    ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+                    ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
             case RANGE_B_ENCLOSES_RANGE_A ->
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_ARE_EQUAL ->
                     localMutation.timestamp().compareTo(remoteMutation.timestamp()) <= 0
-                            ? ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
-                            : ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                            ? ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
+                            : ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_NOT_ENCLOSING -> {
                 var mergedRange = MessageRangeUtils.mergeMessageRanges(remoteRange, localRange);
                 var mergedAction = new ClearChatActionBuilder()

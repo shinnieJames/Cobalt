@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdSavedAudience;
@@ -59,7 +59,7 @@ public final class BizAdCreationAudienceUtils_EditAudienceFacebookGraphQlRespons
      * Projects the {@code saved_audience_edit} object onto a {@link BusinessAdSavedAudience}.
      *
      * @param node the {@code saved_audience_edit} object, or {@code null}
-     * @return the projected audience, or {@code null} when {@code node} is {@code null}
+     * @return the projected audience, or {@code null} when {@code stanza} is {@code null}
      */
     private static BusinessAdSavedAudience savedAudience(JSONObject node) {
         if (node == null) {

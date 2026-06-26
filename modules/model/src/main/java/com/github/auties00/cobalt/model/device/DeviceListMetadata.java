@@ -38,7 +38,7 @@ import java.util.Optional;
  * observed a device list for the corresponding party. Both account type
  * fields default to {@link ADVEncryptionType#E2EE} when absent.
  *
- * @see DeviceCapabilities
+ * @see com.github.auties00.cobalt.model.device.capabilities.DeviceCapabilities
  * @see ADVEncryptionType
  */
 @ProtobufMessage(name = "DeviceListMetadata")

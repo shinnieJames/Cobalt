@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -163,47 +163,47 @@ public record PeerStateStanza(String callId, Jid callCreator, Jid peerJid, int s
     }
 
     /**
-     * Builds the {@code <peer_state call-id call-creator>} action node with its nested {@code <user>}
+     * Builds the {@code <peer_state call-id call-creator>} action stanza with its nested {@code <user>}
      * child.
      *
      * <p>The common header is stamped first, then a single {@code <user state jid/>} child carries the
      * stringified peer-state code and the target peer JID. The engine-internal {@code t} send-time
      * wall-clock is not written; the receiver treats it as informational.
      *
-     * @return the peer-state action node
+     * @return the peer-state action stanza
      */
     @Override
-    public Node toNode() {
-        var user = new NodeBuilder()
+    public Stanza toStanza() {
+        var user = new StanzaBuilder()
                 .description(USER_ELEMENT)
                 .attribute(STATE_ATTRIBUTE, stateName(state))
                 .attribute(JID_ATTRIBUTE, peerJid)
                 .build();
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .content(user)
                 .build();
     }
 
     /**
-     * Decodes a {@code <peer_state>} action node into a {@link PeerStateStanza}.
+     * Decodes a {@code <peer_state>} action stanza into a {@link PeerStateStanza}.
      *
      * <p>The nested {@code <user>} child supplies the peer JID and the {@code state} string, which is
      * projected back through the twelve-entry table to its numeric code; an unrecognized or absent state
      * string decodes to code {@code 0} ({@code invalid}). The {@code t} timestamp attribute, when present,
      * is ignored.
      *
-     * @param node the {@code <peer_state>} node
+     * @param stanza the {@code <peer_state>} stanza
      * @return the decoded peer-state action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute is
      *                                absent, or if the nested {@code <user>} child or its {@code jid}
      *                                attribute is absent
      */
-    public static PeerStateStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var user = node.getChild(USER_ELEMENT)
+    public static PeerStateStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var user = stanza.getChild(USER_ELEMENT)
                 .orElseThrow(() -> new NoSuchElementException("peer_state is missing its user child"));
         var peerJid = user.getRequiredAttributeAsJid(JID_ATTRIBUTE);
         var state = user.getAttributeAsString(STATE_ATTRIBUTE)

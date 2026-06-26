@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.message.send.stanza;
 
 import com.github.auties00.cobalt.message.MessageFixtures;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -214,7 +214,7 @@ class ChatFanoutLiveOracleTest {
     }
 
     // Single-message topics; the multi-message edit/revoke topic loads its own stream inline.
-    private static Node loadMessageStanza(String topic) {
+    private static Stanza loadMessageStanza(String topic) {
         var events = MessageFixtures.loadEvents(topic);
         var outgoing = events.stream()
                 .filter(e -> "out".equals(e.getString("direction")))
@@ -222,7 +222,7 @@ class ChatFanoutLiveOracleTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no outgoing <message> in topic " + topic));
         var node = MessageFixtures.buildNodeFromEvent(outgoing);
-        assertNotNull(node, "rebuilt node must not be null for topic " + topic);
+        assertNotNull(node, "rebuilt stanza must not be null for topic " + topic);
         return node;
     }
 

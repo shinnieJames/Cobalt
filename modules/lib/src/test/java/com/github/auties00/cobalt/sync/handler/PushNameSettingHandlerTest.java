@@ -5,17 +5,18 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.setting.PushNameSetting;
 import com.github.auties00.cobalt.model.sync.action.setting.PushNameSettingBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Covers {@link PushNameSettingHandler}: on {@link SyncdOperation#SET} a
- * {@code <presence name="..."/>} node is dispatched, {@link com.github.auties00.cobalt.store.AccountStore#setName(String)}
+ * {@code <presence name="..."/>} stanza is dispatched, {@link LinkedWhatsAppAccountStore#setName(String)}
  * is updated, and the {@link LinkedWhatsAppClientListener#onNameChanged} listener fires; a
  * missing or empty {@link PushNameSetting#name()} defaults to the empty string and still
  * returns {@link SyncActionState#SUCCESS}; {@link SyncdOperation#REMOVE} is
@@ -49,18 +50,18 @@ class PushNameSettingHandlerTest {
     private LinkedWhatsAppStore store;
     private TestABPropsService props;
     private LinkedWhatsAppClient client;
-    private List<Node> sentNodes;
+    private List<Stanza> sentStanzas;
     private PushNameSettingHandler handler;
 
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         props = TestABPropsService.builder().build();
-        sentNodes = new ArrayList<>();
+        sentStanzas = new ArrayList<>();
         store.addListener(new LinkedWhatsAppClientListener() {
             @Override
-            public void onNodeSent(LinkedWhatsAppClient whatsapp, Node outgoing) {
-                sentNodes.add(outgoing);
+            public void onNodeSent(LinkedWhatsAppClient whatsapp, Stanza outgoing) {
+                sentStanzas.add(outgoing);
             }
         });
         client = TestWhatsAppClient.create()
@@ -117,8 +118,8 @@ class PushNameSettingHandlerTest {
             assertEquals(SyncActionState.SUCCESS, result.actionState());
             assertEquals("Maria", store.accountStore().name().orElse(null),
                     "WAWebSetPushnameLocallyAction.setPushnameLocally writes the pushname into Conn.pushname; Cobalt collapses this into store.setName");
-            assertEquals(1, sentNodes.size(), "WASendPresenceStatusProtocol.sendPresenceStatusProtocol dispatches one <presence/> stanza");
-            var stanza = sentNodes.getFirst();
+            assertEquals(1, sentStanzas.size(), "WASendPresenceStatusProtocol.sendPresenceStatusProtocol dispatches one <presence/> stanza");
+            var stanza = sentStanzas.getFirst();
             assertEquals("presence", stanza.description());
             assertEquals("Maria", stanza.getAttributeAsString("name").orElseThrow(),
                     "smax(\"presence\", {name: OPTIONAL(CUSTOM_STRING, _)})");
@@ -134,8 +135,8 @@ class PushNameSettingHandlerTest {
             assertEquals(SyncActionState.SUCCESS, result.actionState());
             assertEquals("", store.accountStore().name().orElse(null),
                     "WA Web: `_ || (a++, logCriticalBootstrapStageIfNecessary(PUSHNAME_INVALID), _=\"\")` falls back to empty string");
-            assertEquals(1, sentNodes.size());
-            assertEquals("", sentNodes.getFirst().getAttributeAsString("name").orElseThrow());
+            assertEquals(1, sentStanzas.size());
+            assertEquals("", sentStanzas.getFirst().getAttributeAsString("name").orElseThrow());
         }
     }
 
@@ -200,7 +201,7 @@ class PushNameSettingHandlerTest {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var result = handler.applyMutation(client, pushNameMutation("Maria", SyncdOperation.REMOVE, ts));
             assertEquals(SyncActionState.UNSUPPORTED, result.actionState());
-            assertTrue(sentNodes.isEmpty(), "REMOVE must not send a presence stanza");
+            assertTrue(sentStanzas.isEmpty(), "REMOVE must not send a presence stanza");
         }
     }
 
@@ -212,7 +213,7 @@ class PushNameSettingHandlerTest {
         void newerRemote() {
             var local = pushNameMutation("A", SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = pushNameMutation("B", SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -221,7 +222,7 @@ class PushNameSettingHandlerTest {
         void olderRemoteSkipped() {
             var local = pushNameMutation("A", SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = pushNameMutation("B", SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
     }

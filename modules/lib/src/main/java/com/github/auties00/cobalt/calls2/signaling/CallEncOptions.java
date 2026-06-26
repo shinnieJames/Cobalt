@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Optional;
 
@@ -51,31 +51,31 @@ public record CallEncOptions(int keygen) {
     }
 
     /**
-     * Builds the {@code <encopt keygen="N"/>} node for these options.
+     * Builds the {@code <encopt keygen="N"/>} stanza for these options.
      *
-     * @return the encryption-options node
+     * @return the encryption-options stanza
      */
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toStanza() {
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(KEYGEN_ATTRIBUTE, keygen)
                 .build();
     }
 
     /**
-     * Decodes an {@code <encopt>} node into a {@link CallEncOptions}.
+     * Decodes an {@code <encopt>} stanza into a {@link CallEncOptions}.
      *
-     * <p>A node that is not an {@code <encopt>} element yields an empty result so callers iterating a
+     * <p>A stanza that is not an {@code <encopt>} element yields an empty result so callers iterating a
      * mixed child list can skip it. An {@code <encopt>} with no {@code keygen} attribute decodes to
      * the {@linkplain #DEFAULT_KEYGEN standard} version.
      *
-     * @param node the {@code <encopt>} node
-     * @return the decoded options, or an empty result when the node is not an {@code <encopt>} element
+     * @param stanza the {@code <encopt>} stanza
+     * @return the decoded options, or an empty result when the stanza is not an {@code <encopt>} element
      */
-    public static Optional<CallEncOptions> of(Node node) {
-        if (node == null || !node.hasDescription(ELEMENT)) {
+    public static Optional<CallEncOptions> of(Stanza stanza) {
+        if (stanza == null || !stanza.hasDescription(ELEMENT)) {
             return Optional.empty();
         }
-        return Optional.of(new CallEncOptions(node.getAttributeAsInt(KEYGEN_ATTRIBUTE, DEFAULT_KEYGEN)));
+        return Optional.of(new CallEncOptions(stanza.getAttributeAsInt(KEYGEN_ATTRIBUTE, DEFAULT_KEYGEN)));
     }
 }

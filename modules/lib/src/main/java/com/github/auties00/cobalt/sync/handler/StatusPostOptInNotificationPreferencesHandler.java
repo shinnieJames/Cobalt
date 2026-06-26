@@ -1,10 +1,12 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.StatusPostOptInNotificationPreferencesAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -14,7 +16,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>The sync dispatcher would route incoming
  * {@code "status_post_opt_in_notification_preferences_action"} mutations here if
  * the server ever emits one. The handler persists the boolean opt-in flag on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so notification delivery
+ * {@link LinkedWhatsAppStore} so notification delivery
  * for status posts respects the user's last choice.
  *
  * @implNote
@@ -81,7 +83,7 @@ public final class StatusPostOptInNotificationPreferencesHandler implements WebA
      * {@link MutationApplicationResult#unsupported()}, a value that does not decode
      * to a {@link StatusPostOptInNotificationPreferencesAction} is reported as
      * malformed, and the {@code enabled} field is otherwise written to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setStatusPostOptInNotificationPreferencesEnabled(Boolean)}.
+     * {@link LinkedWhatsAppSettingsStore#setStatusPostOptInNotificationPreferencesEnabled(Boolean)}.
      *
      * @implNote
      * This implementation follows the canonical single-boolean-payload shape used

@@ -5,12 +5,13 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -21,7 +22,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * in chat. When the merchant edits the methods on another SMB device, the
  * server replays the resulting {@link CustomPaymentMethodsAction} here, and the
  * methods become readable through
- * {@link com.github.auties00.cobalt.store.BusinessStore#customPaymentMethods()}.
+ * {@link LinkedWhatsAppBusinessStore#customPaymentMethods()}.
  *
  * @implNote
  * This implementation is gated on the device platform being SMB
@@ -32,7 +33,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * {@link MutationApplicationResult#unsupported()}. The WA Web
  * {@code setCustomPaymentMethods} fire-and-forget frontend event is
  * collapsed into a direct
- * {@link com.github.auties00.cobalt.store.BusinessStore#setCustomPaymentMethods}
+ * {@link LinkedWhatsAppBusinessStore#setCustomPaymentMethods}
  * write because Cobalt has no browser frontend bridge.
  */
 @WhatsAppWebModule(moduleName = "WAWebCustomPaymentMethodsSync")

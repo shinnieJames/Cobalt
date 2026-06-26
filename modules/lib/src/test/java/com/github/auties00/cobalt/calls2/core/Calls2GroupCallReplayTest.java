@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.calls2.core.participant.CallParticipantUserNod
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.model.call.CallState;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -91,12 +92,12 @@ class Calls2GroupCallReplayTest {
             assertTrue(beforeUpdate == Calls2CallState.CONNECTED_LONELY || beforeUpdate == Calls2CallState.CALL_ACTIVE,
                     "a connected group call sits in an in-call leg before the roster reconcile");
 
-            // Replay an inbound group_update carrying the connected roster (re-parsed from its own wire node,
+            // Replay an inbound group_update carrying the connected roster (re-parsed from its own wire stanza,
             // the round trip the inbound receiver does): membership reconciles and, with a peer connected,
             // the call reaches CALL_ACTIVE.
             var update = new GroupUpdateStanza(call.callId(), SELF, null, false, false, connectedRoster(),
                     List.of());
-            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(update.toNode()), GROUP_HOST_LID_DEVICE);
+            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(update.toStanza()), GROUP_HOST_LID_DEVICE);
 
             var context = harness.manager().getByCallId(call.callId()).orElseThrow();
             assertSame(Calls2CallState.CALL_ACTIVE, context.state(),
@@ -116,14 +117,14 @@ class Calls2GroupCallReplayTest {
             // First a connected peer -> CALL_ACTIVE.
             var connected = new GroupUpdateStanza(call.callId(), SELF, null, false, false, connectedRoster(),
                     List.of());
-            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(connected.toNode()), GROUP_HOST_LID_DEVICE);
+            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(connected.toStanza()), GROUP_HOST_LID_DEVICE);
             assertSame(Calls2CallState.CALL_ACTIVE,
                     harness.manager().getByCallId(call.callId()).orElseThrow().state());
 
             // Then an empty roster (the peer left) -> back to CONNECTED_LONELY (the closed-set edge).
             var emptyRoster = GroupInfoStanza.ofUsers(null, 32, List.of());
             var left = new GroupUpdateStanza(call.callId(), SELF, null, false, false, emptyRoster, List.of());
-            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(left.toNode()), GROUP_HOST_LID_DEVICE);
+            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(left.toStanza()), GROUP_HOST_LID_DEVICE);
             assertSame(Calls2CallState.CONNECTED_LONELY,
                     harness.manager().getByCallId(call.callId()).orElseThrow().state(),
                     "with the last peer gone the group call returns to the lonely state");
@@ -134,7 +135,7 @@ class Calls2GroupCallReplayTest {
         void groupUpdateDecodes() {
             var update = new GroupUpdateStanza(GROUP_CALL_ID, GROUP_HOST_LID_DEVICE, null, false, false,
                     connectedRoster(), List.of());
-            var decoded = GroupUpdateStanza.of(update.toNode());
+            var decoded = GroupUpdateStanza.of(update.toStanza());
             assertEquals(GROUP_CALL_ID, decoded.callId());
             assertTrue(decoded.groupInfoValue().isPresent(), "the decoded update must carry a group_info roster");
             var roster = decoded.groupInfoValue().orElseThrow();
@@ -168,7 +169,7 @@ class Calls2GroupCallReplayTest {
             var emptyRoster = GroupInfoStanza.ofUsers(null, 32, List.of());
             var update = new GroupUpdateStanza(GROUP_CALL_ID, GROUP_HOST_LID_DEVICE, null, false, false,
                     emptyRoster, List.of());
-            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(update.toNode()), GROUP_HOST_LID_DEVICE);
+            harness.controller().handleIncomingMessage(GroupUpdateStanza.of(update.toStanza()), GROUP_HOST_LID_DEVICE);
 
             // The seeded peer is removed by the empty roster: a non-empty reconcile diff fires
             // GROUP_INFO_CHANGED, which a membership-less call could never do.
@@ -220,11 +221,11 @@ class Calls2GroupCallReplayTest {
      * {@code <enc>} fanout (a group offer ships no key).
      */
     private static OfferStanza groupOffer() {
-        var relay = new com.github.auties00.cobalt.node.NodeBuilder()
+        var relay = new StanzaBuilder()
                 .description("relay")
                 .attribute("uuid", "0123456789ABCDEF")
                 .attribute("participant_uuid", "ABCDEF01")
-                .content(new com.github.auties00.cobalt.node.NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("hbh_key")
                         .content("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                         .build())
@@ -234,7 +235,7 @@ class Calls2GroupCallReplayTest {
         var media = new com.github.auties00.cobalt.calls2.signaling.CallMediaDescriptor(2, 16000);
         return new OfferStanza(GROUP_CALL_ID, GROUP_HOST_LID_DEVICE, null, null, null, GROUP_JID, null, null,
                 true, false, null, -1, 3, List.of(), audioCodecs, List.of(), List.of(), media,
-                null, connectedRoster().toNode(), null, null, relay, null, List.of(), null);
+                null, connectedRoster().toStanza(), null, null, relay, null, List.of(), null);
     }
 
     /**

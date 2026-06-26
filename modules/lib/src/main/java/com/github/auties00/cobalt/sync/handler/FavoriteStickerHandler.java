@@ -5,10 +5,12 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.StickerAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -23,7 +25,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * }
  * The apply path is gated by the primary device advertising the
  * {@value #FAVORITE_STICKER_FEATURE} feature in
- * {@link com.github.auties00.cobalt.store.SyncStore#primaryFeatures()};
+ * {@link LinkedWhatsAppSyncStore#primaryFeatures()};
  * when it does not, the mutation is reported as
  * {@link MutationApplicationResult#orphan(String, String)}.
  */
@@ -79,9 +81,9 @@ public final class FavoriteStickerHandler implements WebAppStateActionHandler {
      * {@link MutationApplicationResult#orphan(String, String)}. When
      * {@link StickerAction#isFavorite()} is set the sticker is timestamped and
      * added via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#addFavouriteSticker(String, com.github.auties00.cobalt.model.preference.Sticker)};
+     * {@link LinkedWhatsAppSettingsStore#addFavouriteSticker(String, com.github.auties00.cobalt.model.preference.Sticker)};
      * otherwise it is removed via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#removeFavouriteSticker(String)}.
+     * {@link LinkedWhatsAppSettingsStore#removeFavouriteSticker(String)}.
      *
      * @implNote
      * This implementation classifies a missing index slot as
@@ -92,7 +94,7 @@ public final class FavoriteStickerHandler implements WebAppStateActionHandler {
      * protobuf field to {@code false}, a {@code null} flag is treated as a
      * removal rather than a malformed value. An add fast-paths an entry that is
      * already present through
-     * {@link com.github.auties00.cobalt.store.SettingsStore#findFavouriteSticker(String)},
+     * {@link LinkedWhatsAppSettingsStore#findFavouriteSticker(String)},
      * and a removal is unconditional because the store call is idempotent.
      */
     @Override

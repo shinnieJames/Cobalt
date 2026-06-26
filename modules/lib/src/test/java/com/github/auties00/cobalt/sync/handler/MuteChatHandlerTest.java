@@ -4,9 +4,9 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteAction;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteActionBuilder;
@@ -227,7 +227,7 @@ class MuteChatHandlerTest {
             var remote = muteMutation(false, null, PEER, Instant.ofEpochSecond(200L));
 
             var resolution = handler.resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -237,7 +237,7 @@ class MuteChatHandlerTest {
             var remote = muteMutation(false, null, PEER, Instant.ofEpochSecond(200L));
 
             var resolution = handler.resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
     }
 

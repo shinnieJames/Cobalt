@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.device.adv.DeviceADVValidator;
 import com.github.auties00.cobalt.model.device.info.DeviceInfo;
 import com.github.auties00.cobalt.model.device.info.DeviceListBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 import java.util.List;
@@ -61,9 +61,9 @@ public final class DeviceUSyncResponseParser {
      * that the {@code <key-index-list>} signature verification needs.
      *
      * @param advValidatorService the ADV validator backing
-     *                            {@link #parseFullResult(Jid, String, Node, Node, byte[])} and the
+     *                            {@link #parseFullResult(Jid, String, Stanza, Stanza, byte[])} and the
      *                            hosted-devices gating used inside
-     *                            {@link #parseDeviceEntry(Node, Map, SequencedSet)}
+     *                            {@link #parseDeviceEntry(Stanza, Map, SequencedSet)}
      * @throws NullPointerException if {@code advValidatorService} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvForUsyncApi",
@@ -83,17 +83,17 @@ public final class DeviceUSyncResponseParser {
      * surfaced as non-fatal {@link DeviceListResult.Error} entries with a {@code null} JID.
      *
      * @implNote
-     * This implementation walks the tree using {@link Node}'s convenience stream accessors instead of
+     * This implementation walks the tree using {@link Stanza}'s convenience stream accessors instead of
      * WA Web's {@code WADeprecatedWapParser} builder, but produces the same result classification.
      *
-     * @param responseNode the {@code <iq>} response received from the socket
+     * @param responseStanza the {@code <iq>} response received from the socket
      * @return the per-user and per-protocol classification of the response
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "usyncParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public List<DeviceListResult> parse(Node responseNode) {
-        var usyncNode = responseNode.getChild("usync");
+    public List<DeviceListResult> parse(Stanza responseStanza) {
+        var usyncNode = responseStanza.getChild("usync");
         if (usyncNode.isEmpty()) {
             return List.of();
         }
@@ -145,21 +145,21 @@ public final class DeviceUSyncResponseParser {
      * device-stripped phone-number JID and valued by the device-stripped LID.
      *
      * @implNote
-     * This implementation reuses the same {@code <usync><list><user>} walk as {@link #parse(Node)} and
-     * {@link #parseUsernameMap(Node)} so a LID query can be parsed without the device-protocol
+     * This implementation reuses the same {@code <usync><list><user>} walk as {@link #parse(Stanza)} and
+     * {@link #parseUsernameMap(Stanza)} so a LID query can be parsed without the device-protocol
      * machinery; it is consumed by the call-placement LID resolution in
      * {@link com.github.auties00.cobalt.device.DeviceService#queryUserLid(Jid)}.
      *
-     * @param responseNode the {@code <iq>} response received from the socket
+     * @param responseStanza the {@code <iq>} response received from the socket
      * @return the phone-number-to-LID map, or an empty map when no LID entries are present
-     * @throws NullPointerException if {@code responseNode} is {@code null}
+     * @throws NullPointerException if {@code responseStanza} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",
             exports = "lidParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Map<Jid, Jid> parseLidMappings(Node responseNode) {
-        Objects.requireNonNull(responseNode, "responseNode cannot be null");
-        return responseNode.streamChild("usync")
+    public Map<Jid, Jid> parseLidMappings(Stanza responseStanza) {
+        Objects.requireNonNull(responseStanza, "responseStanza cannot be null");
+        return responseStanza.streamChild("usync")
                 .flatMap(usync -> usync.streamChild("list"))
                 .flatMap(list -> list.streamChildren("user"))
                 .flatMap(this::parseLidEntry)
@@ -169,23 +169,23 @@ public final class DeviceUSyncResponseParser {
     /**
      * Extracts a {@code (phoneJid, lid)} pair from a single {@code <user><lid val="..."/></user>} entry.
      *
-     * <p>This is the inner worker for {@link #parseLidMappings(Node)}; it emits nothing when the
+     * <p>This is the inner worker for {@link #parseLidMappings(Stanza)}; it emits nothing when the
      * {@code jid} attribute is missing, the {@code <lid>} child is absent or carries an {@code <error/>},
      * or the {@code val} attribute is missing or not a valid LID JID.
      *
-     * @param userNode the {@code <user>} entry
+     * @param userStanza the {@code <user>} entry
      * @return a stream carrying the parsed entry, or empty when the LID could not be read
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",
             exports = "lidParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Stream<LidEntry> parseLidEntry(Node userNode) {
-        var jid = userNode.getAttributeAsJid("jid");
+    private Stream<LidEntry> parseLidEntry(Stanza userStanza) {
+        var jid = userStanza.getAttributeAsJid("jid");
         if (jid.isEmpty()) {
             return Stream.empty();
         }
 
-        var lidNode = userNode.getChild("lid");
+        var lidNode = userStanza.getChild("lid");
         if (lidNode.isEmpty()) {
             return Stream.empty();
         }
@@ -206,8 +206,8 @@ public final class DeviceUSyncResponseParser {
     /**
      * Collects the per-user username mappings from the response.
      *
-     * <p>This is the inner worker for {@link #parse(Node)}; the resulting map is later passed into
-     * {@link #parseUserDevices(Node, Map)} so a parsed username can be folded into the
+     * <p>This is the inner worker for {@link #parse(Stanza)}; the resulting map is later passed into
+     * {@link #parseUserDevices(Stanza, Map)} so a parsed username can be folded into the
      * {@link DeviceListResult.Full} record without a second walk of the list.
      *
      * @implNote
@@ -221,7 +221,7 @@ public final class DeviceUSyncResponseParser {
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "usernameParser",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private Map<Jid, String> parseUsernameMap(Node usync) {
+    private Map<Jid, String> parseUsernameMap(Stanza usync) {
         return usync.streamChild("list")
                 .flatMap(list -> list.streamChildren("user"))
                 .flatMap(this::parseUsernameEntry)
@@ -231,11 +231,11 @@ public final class DeviceUSyncResponseParser {
     /**
      * Classifies a single {@code <user>} entry into Full, Omitted, or Error.
      *
-     * <p>This is the inner worker for {@link #parse(Node)}. It returns an empty stream when the entry
+     * <p>This is the inner worker for {@link #parse(Stanza)}. It returns an empty stream when the entry
      * has no {@code jid} attribute or no {@code <devices>} child, a single
      * {@link DeviceListResult.Error} when {@code <devices>} carries an {@code <error/>}, and otherwise
-     * delegates to either {@link #parseOmittedResult(Jid, Node, Node)} or
-     * {@link #parseFullResult(Jid, String, Node, Node, byte[])} depending on whether the
+     * delegates to either {@link #parseOmittedResult(Jid, Stanza, Stanza)} or
+     * {@link #parseFullResult(Jid, String, Stanza, Stanza, byte[])} depending on whether the
      * {@code <key-index-list>} payload is present.
      *
      * @implNote
@@ -243,22 +243,22 @@ public final class DeviceUSyncResponseParser {
      * dispatch, including the rule that an absent signed-key-index payload routes to the Omitted path
      * even when a {@code <device-list>} is present.
      *
-     * @param userNode    the {@code <user>} entry node
-     * @param usernameMap the username map produced by {@link #parseUsernameMap(Node)}
+     * @param userStanza    the {@code <user>} entry stanza
+     * @param usernameMap the username map produced by {@link #parseUsernameMap(Stanza)}
      * @return the per-user classification
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "deviceParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Stream<DeviceListResult> parseUserDevices(Node userNode, Map<Jid, String> usernameMap) {
-        var jidAttr = userNode.getAttributeAsJid("jid");
+    private Stream<DeviceListResult> parseUserDevices(Stanza userStanza, Map<Jid, String> usernameMap) {
+        var jidAttr = userStanza.getAttributeAsJid("jid");
         if (jidAttr.isEmpty()) {
             return Stream.empty();
         }
 
         var userJid = jidAttr.get().toUserJid();
 
-        var devicesNode = userNode.getChild("devices");
+        var devicesNode = userStanza.getChild("devices");
         if (devicesNode.isEmpty()) {
             return Stream.empty();
         }
@@ -299,7 +299,7 @@ public final class DeviceUSyncResponseParser {
      *
      * <p>This path is reached when the server skipped resending the device list because the cached
      * {@code device_hash} still matches. The timestamps are read from the {@code ts} and
-     * {@code expected_ts} attributes of the {@code <key-index-list>} node when present, and downstream
+     * {@code expected_ts} attributes of the {@code <key-index-list>} stanza when present, and downstream
      * consumers treat the Omitted record as a no-op for the cache while using those timestamps to
      * refresh the expected-timestamp tracking fields.
      *
@@ -310,26 +310,26 @@ public final class DeviceUSyncResponseParser {
      * {@code WAWebHandleAdvForUsyncApi.handleADVSyncResultSync}.
      *
      * @param userJid          the user JID
-     * @param deviceListNode   the {@code <device-list>} node, or {@code null}
-     * @param keyIndexListNode the {@code <key-index-list>} node, or {@code null}
+     * @param deviceListStanza   the {@code <device-list>} stanza, or {@code null}
+     * @param keyIndexListStanza the {@code <key-index-list>} stanza, or {@code null}
      * @return a stream carrying the Omitted record, or empty if the wire shape was invalid
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvForUsyncApi",
             exports = "handleADVSyncResultSync",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Stream<DeviceListResult> parseOmittedResult(Jid userJid, Node deviceListNode, Node keyIndexListNode) {
-        if (deviceListNode != null && hasCompanionDevices(deviceListNode)) {
+    private Stream<DeviceListResult> parseOmittedResult(Jid userJid, Stanza deviceListStanza, Stanza keyIndexListStanza) {
+        if (deviceListStanza != null && hasCompanionDevices(deviceListStanza)) {
             return Stream.empty();
         }
 
-        if (keyIndexListNode == null) {
+        if (keyIndexListStanza == null) {
             return Stream.of(new DeviceListResult.Omitted(userJid, null, null, true));
         }
 
-        var ts = keyIndexListNode.getAttributeAsLong("ts", null);
+        var ts = keyIndexListStanza.getAttributeAsLong("ts", null);
         var timestamp = ts != null ? Instant.ofEpochSecond(ts) : null;
 
-        var expTs = keyIndexListNode.getAttributeAsLong("expected_ts", null);
+        var expTs = keyIndexListStanza.getAttributeAsLong("expected_ts", null);
         var expectedTs = expTs != null ? Instant.ofEpochSecond(expTs) : null;
 
         return Stream.of(new DeviceListResult.Omitted(userJid, timestamp, expectedTs, true));
@@ -338,18 +338,18 @@ public final class DeviceUSyncResponseParser {
     /**
      * Tests whether a {@code <device-list>} mentions at least one companion device.
      *
-     * <p>This predicate is used by {@link #parseOmittedResult(Jid, Node, Node)} to reject the wire
+     * <p>This predicate is used by {@link #parseOmittedResult(Jid, Stanza, Stanza)} to reject the wire
      * shape that advertises companion devices without a signed key index.
      *
-     * @param deviceListNode the {@code <device-list>} node
+     * @param deviceListStanza the {@code <device-list>} stanza
      * @return {@code true} when any {@code <device>} child carries an {@code id} attribute different
      *         from {@link DeviceConstants#PRIMARY_DEVICE_ID}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvForUsyncApi",
             exports = "handleADVSyncResultSync",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private boolean hasCompanionDevices(Node deviceListNode) {
-        return deviceListNode.streamChildren("device")
+    private boolean hasCompanionDevices(Stanza deviceListStanza) {
+        return deviceListStanza.streamChildren("device")
                 .anyMatch(device -> !device.hasAttribute("id", DeviceConstants.PRIMARY_DEVICE_ID));
     }
 
@@ -373,8 +373,8 @@ public final class DeviceUSyncResponseParser {
      *
      * @param userJid             the user JID
      * @param username            the parsed username, or {@code null}
-     * @param deviceListNode      the {@code <device-list>} node
-     * @param keyIndexListNode    the {@code <key-index-list>} node
+     * @param deviceListStanza      the {@code <device-list>} stanza
+     * @param keyIndexListStanza    the {@code <key-index-list>} stanza
      * @param signedKeyIndexBytes the raw signed-key-index payload to verify
      * @return a stream carrying the Full record, or empty if signature verification failed
      */
@@ -384,15 +384,15 @@ public final class DeviceUSyncResponseParser {
     private Stream<DeviceListResult> parseFullResult(
             Jid userJid,
             String username,
-            Node deviceListNode,
-            Node keyIndexListNode,
+            Stanza deviceListStanza,
+            Stanza keyIndexListStanza,
             byte[] signedKeyIndexBytes
     ) {
-        var expectedTsSeconds = keyIndexListNode.getAttributeAsLong("expected_ts", 0);
+        var expectedTsSeconds = keyIndexListStanza.getAttributeAsLong("expected_ts", 0);
         var expectedTs = expectedTsSeconds != 0  ? Instant.ofEpochSecond(expectedTsSeconds) : null;
 
         var useHostedPath = advValidatorService.isBizHostedDevicesEnabled()
-                && hasHostedDeviceAttribute(deviceListNode);
+                && hasHostedDeviceAttribute(deviceListStanza);
         var validatedInfo = useHostedPath
                 ? advValidatorService.verifySKeyIndexWithAccSigKey(signedKeyIndexBytes)
                 : advValidatorService.decodeSignedKeyIndexBytes(userJid, signedKeyIndexBytes);
@@ -404,11 +404,11 @@ public final class DeviceUSyncResponseParser {
 
         var info = validatedInfo.get();
 
-        var keyIndexMap = keyIndexListNode.streamChildren("device")
+        var keyIndexMap = keyIndexListStanza.streamChildren("device")
                 .flatMap(this::parseKeyIndexEntry)
                 .collect(Collectors.toUnmodifiableMap(KeyIndexEntry::deviceId, KeyIndexEntry::keyIndex));
 
-        var devices = deviceListNode.streamChildren("device")
+        var devices = deviceListStanza.streamChildren("device")
                 .flatMap(deviceNode -> parseDeviceEntry(deviceNode, keyIndexMap, info.validIndexes()))
                 .toList();
 
@@ -430,18 +430,18 @@ public final class DeviceUSyncResponseParser {
      * Tests whether a {@code <device-list>} advertises at least one device with
      * {@code is_hosted="true"}.
      *
-     * <p>This gating predicate is used by {@link #parseFullResult(Jid, String, Node, Node, byte[])} to
+     * <p>This gating predicate is used by {@link #parseFullResult(Jid, String, Stanza, Stanza, byte[])} to
      * choose between the hosted-business signature path and the standard primary-identity path.
      *
-     * @param deviceListNode the {@code <device-list>} node
+     * @param deviceListStanza the {@code <device-list>} stanza
      * @return {@code true} if any {@code <device>} child carries the {@code is_hosted="true"}
      *         attribute
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvKeyIndexResultApi",
             exports = "handleKeyIndexResultSync",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private boolean hasHostedDeviceAttribute(Node deviceListNode) {
-        return deviceListNode.streamChildren("device")
+    private boolean hasHostedDeviceAttribute(Stanza deviceListStanza) {
+        return deviceListStanza.streamChildren("device")
                 .anyMatch(device -> device.hasAttribute("is_hosted", true));
     }
 
@@ -449,23 +449,23 @@ public final class DeviceUSyncResponseParser {
      * Extracts a {@code (deviceId, keyIndex)} pair from a single {@code <key-index-list><device/>}
      * entry.
      *
-     * <p>This is the inner worker for {@link #parseFullResult(Jid, String, Node, Node, byte[])}; the
-     * resulting map is consulted by {@link #parseDeviceEntry(Node, Map, SequencedSet)} to attach the
+     * <p>This is the inner worker for {@link #parseFullResult(Jid, String, Stanza, Stanza, byte[])}; the
+     * resulting map is consulted by {@link #parseDeviceEntry(Stanza, Map, SequencedSet)} to attach the
      * correct key index to each device in the device-list.
      *
      * @implNote
      * This implementation drops entries missing either {@code jid} or {@code key-index}, matching the
      * JS code which silently ignores malformed nodes.
      *
-     * @param deviceNode the {@code <device>} child from the key-index-list
+     * @param deviceStanza the {@code <device>} child from the key-index-list
      * @return a stream carrying the parsed entry, or empty if attributes are missing
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvKeyIndexResultApi",
             exports = "handleKeyIndexResultSync",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Stream<KeyIndexEntry> parseKeyIndexEntry(Node deviceNode) {
-        var jid = deviceNode.getAttributeAsJid("jid");
-        var keyIndex = deviceNode.getAttributeAsInt("key-index");
+    private Stream<KeyIndexEntry> parseKeyIndexEntry(Stanza deviceStanza) {
+        var jid = deviceStanza.getAttributeAsJid("jid");
+        var keyIndex = deviceStanza.getAttributeAsInt("key-index");
         if (jid.isEmpty() || keyIndex.isEmpty()) {
             return Stream.empty();
         }
@@ -475,7 +475,7 @@ public final class DeviceUSyncResponseParser {
     /**
      * Converts a single {@code <device-list><device/>} entry to a typed {@link DeviceInfo}.
      *
-     * <p>This is the inner worker for {@link #parseFullResult(Jid, String, Node, Node, byte[])}; it
+     * <p>This is the inner worker for {@link #parseFullResult(Jid, String, Stanza, Stanza, byte[])}; it
      * produces either a regular E2EE device or a hosted device when the AB prop is on and the entry
      * advertises {@code is_hosted="true"} with id {@link DeviceConstants#HOSTED_DEVICE_ID}.
      *
@@ -486,9 +486,9 @@ public final class DeviceUSyncResponseParser {
      * {@code validIndexes} set disables the check entirely; both rules match WA Web's
      * {@code handleKeyIndexResultSync}.
      *
-     * @param deviceNode   the {@code <device>} node from the device-list
+     * @param deviceStanza   the {@code <device>} stanza from the device-list
      * @param keyIndexMap  the {@code (deviceId, keyIndex)} map produced by
-     *                     {@link #parseKeyIndexEntry(Node)}
+     *                     {@link #parseKeyIndexEntry(Stanza)}
      * @param validIndexes the cryptographically signed set of valid key indexes, or {@code null} when
      *                     unavailable
      * @return a stream carrying the parsed {@link DeviceInfo}, or empty when the device fails
@@ -498,11 +498,11 @@ public final class DeviceUSyncResponseParser {
             exports = "deviceParser",
             adaptation = WhatsAppAdaptation.DIRECT)
     private Stream<DeviceInfo> parseDeviceEntry(
-            Node deviceNode,
+            Stanza deviceStanza,
             Map<Integer, Integer> keyIndexMap,
             SequencedSet<Integer> validIndexes
     ) {
-        var id = deviceNode.getAttributeAsInt("id");
+        var id = deviceStanza.getAttributeAsInt("id");
         if (id.isEmpty()) {
             return Stream.empty();
         }
@@ -519,7 +519,7 @@ public final class DeviceUSyncResponseParser {
 
         var bizHostedDevicesEnabled = advValidatorService.isBizHostedDevicesEnabled();
         var isHosted = bizHostedDevicesEnabled
-                && "true".equals(deviceNode.getAttributeAsString("is_hosted").orElse(null));
+                && "true".equals(deviceStanza.getAttributeAsString("is_hosted").orElse(null));
 
         if (deviceId == DeviceConstants.HOSTED_DEVICE_ID && bizHostedDevicesEnabled) {
             return Stream.of(DeviceInfo.ofHosted(keyIndex));
@@ -531,23 +531,23 @@ public final class DeviceUSyncResponseParser {
     /**
      * Extracts a {@code (userJid, username)} pair from a single {@code <user><username/></user>} entry.
      *
-     * <p>This is the inner worker for {@link #parseUsernameMap(Node)}; it emits nothing for entries
+     * <p>This is the inner worker for {@link #parseUsernameMap(Stanza)}; it emits nothing for entries
      * whose username carries an error child or whose content is empty.
      *
-     * @param userNode the {@code <user>} entry
+     * @param userStanza the {@code <user>} entry
      * @return a stream carrying the parsed entry, or empty when the {@code <username>} child is absent,
      *         errored, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "usernameParser",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private Stream<UsernameEntry> parseUsernameEntry(Node userNode) {
-        var jid = userNode.getAttributeAsJid("jid");
+    private Stream<UsernameEntry> parseUsernameEntry(Stanza userStanza) {
+        var jid = userStanza.getAttributeAsJid("jid");
         if (jid.isEmpty()) {
             return Stream.empty();
         }
 
-        var usernameNode = userNode.getChild("username");
+        var usernameNode = userStanza.getChild("username");
         if (usernameNode.isEmpty()) {
             return Stream.empty();
         }
@@ -569,7 +569,7 @@ public final class DeviceUSyncResponseParser {
     /**
      * Carries a parsed {@code (deviceId, keyIndex)} pair.
      *
-     * <p>This is the value type of the {@link Stream} produced by {@link #parseKeyIndexEntry(Node)}
+     * <p>This is the value type of the {@link Stream} produced by {@link #parseKeyIndexEntry(Stanza)}
      * before being collected into the {@code deviceId} to {@code keyIndex} map.
      *
      * @param deviceId the wire-level device id
@@ -580,7 +580,7 @@ public final class DeviceUSyncResponseParser {
     /**
      * Carries a parsed {@code (userJid, username)} pair.
      *
-     * <p>This is the value type of the {@link Stream} produced by {@link #parseUsernameEntry(Node)}
+     * <p>This is the value type of the {@link Stream} produced by {@link #parseUsernameEntry(Stanza)}
      * before being collected into the username map.
      *
      * @param userJid  the user JID
@@ -591,7 +591,7 @@ public final class DeviceUSyncResponseParser {
     /**
      * Carries a parsed {@code (phoneJid, lid)} pair.
      *
-     * <p>This is the value type of the {@link Stream} produced by {@link #parseLidEntry(Node)} before
+     * <p>This is the value type of the {@link Stream} produced by {@link #parseLidEntry(Stanza)} before
      * being collected into the phone-number-to-LID map.
      *
      * @param phoneJid the queried phone-number user JID

@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.sync.factory;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueSpec;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

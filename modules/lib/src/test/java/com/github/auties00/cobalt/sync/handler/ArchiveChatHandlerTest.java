@@ -5,13 +5,13 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionMessage;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageRangeBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessage;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRangeBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Covers {@link ArchiveChatHandler}, which owns archive/unarchive mutations including their
  * message-range based conflict resolution. The conflict matrix exercises the range-enclosure
  * outcomes (remote-encloses, local-encloses, equal ranges, non-enclosing merge) that drive the
- * {@link ConflictResolutionState} returned by {@code resolveConflicts}.
+ * {@link MutationConflictResolutionState} returned by {@code resolveConflicts}.
  */
 @DisplayName("ArchiveChatHandler")
 class ArchiveChatHandlerTest {
@@ -249,7 +249,7 @@ class ArchiveChatHandlerTest {
             var remote = mutationWithRangeAt(true, 100, List.of(msg("r-only", 60L)), Instant.ofEpochSecond(200L));
 
             var resolution = new ArchiveChatHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -260,7 +260,7 @@ class ArchiveChatHandlerTest {
             var remote = mutationWithRangeAt(false, 50, List.of(), Instant.ofEpochSecond(100L));
 
             var resolution = new ArchiveChatHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
 
         @Test
@@ -270,7 +270,7 @@ class ArchiveChatHandlerTest {
             var remote = mutationWithRangeAt(true, 100, List.of(), Instant.ofEpochSecond(200L));
 
             var resolution = new ArchiveChatHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -280,7 +280,7 @@ class ArchiveChatHandlerTest {
             var remote = mutationWithRangeAt(false, 100, List.of(), Instant.ofEpochSecond(200L));
 
             var resolution = new ArchiveChatHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
 
         @Test
@@ -292,7 +292,7 @@ class ArchiveChatHandlerTest {
             var remote = mutationWithRangeAt(true, 50L, List.of(msg("remote-1", 90L)), Instant.ofEpochSecond(200L));
 
             var resolution = new ArchiveChatHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, resolution.state());
             assertNotNull(resolution.mergedMutation(), "non-enclosing ranges must yield a merged mutation");
             // Newer mutation (remote) wins for archived flag.
             var mergedAction = resolution.mergedMutation().value().flatMap(sav -> sav.action()).filter(a -> a instanceof ArchiveChatAction).map(a -> (ArchiveChatAction) a).orElseThrow();
@@ -315,7 +315,7 @@ class ArchiveChatHandlerTest {
             var remote = mutationWithRangeAt(true, 200, List.of(), Instant.ofEpochSecond(200L));
 
             var resolution = new ArchiveChatHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
     }
 

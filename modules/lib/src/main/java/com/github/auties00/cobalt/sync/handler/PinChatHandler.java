@@ -5,9 +5,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.NewsletterPin;
 import com.github.auties00.cobalt.model.newsletter.NewsletterPinBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValue;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.contact.PinAction;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
@@ -242,7 +244,7 @@ public final class PinChatHandler implements WebAppStateActionHandler {
      * @implNote
      * This implementation tracks newsletter pin state via a dedicated
      * {@code newsletterPinStates} map on
-     * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} keyed by the
+     * {@link LinkedWhatsAppStore} keyed by the
      * newsletter JID, because Cobalt's
      * {@link com.github.auties00.cobalt.model.newsletter.Newsletter} model has
      * no {@code pinnedTimestamp} field.
@@ -330,7 +332,7 @@ public final class PinChatHandler implements WebAppStateActionHandler {
      * This implementation mirrors the WA Web
      * {@code WAWebPinChatSync.getPinMutation}: it builds a {@link PinAction}
      * with the requested {@code pinned} flag, wraps it in a
-     * {@link com.github.auties00.cobalt.model.sync.SyncActionValue}, and
+     * {@link SyncActionValue}, and
      * serialises the mutation index as the JSON array
      * {@code ["pin_v1", chatJid]}. The WA Web LID 1:1 migration is not
      * implemented, so the chat-jid index resolves to the JID's canonical

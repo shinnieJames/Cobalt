@@ -22,8 +22,8 @@ import java.util.Objects;
  * geometry, the layer count, and the long-term-reference toggle all require a codec reopen.
  *
  * <p>Build instances through {@link #forResolution(VideoDecoderCapability, int, int, int)}, which seeds
- * the bitrate triplet from a bits-per-pixel-per-second heuristic and the remaining knobs from the
- * WhatsApp video defaults, then derive variants with the {@code with*} copy methods. The
+ * the bitrate triplet from the recovered WhatsApp initial rate-control constants and the remaining knobs
+ * from the WhatsApp video defaults, then derive variants with the {@code with*} copy methods. The
  * {@link #width()} and {@link #height()} must be even so the 4:2:0 chroma planes have integral sizes,
  * matching the {@link VideoFrame} the encoder consumes.
  *
@@ -145,21 +145,36 @@ public record VideoCodecParams(
     public static final int DEFAULT_IDR_BITRATE_RATIO = 100;
 
     /**
-     * The bits-per-pixel-per-second heuristic constant the resolution seed scales the target bitrate
-     * by.
+     * The initial target bitrate the resolution seed opens the encoder at, in bits per second.
      *
-     * <p>The target bitrate is seeded as {@code width * height * frameRate} times this factor; for
-     * 640x480 at 30 fps it yields roughly 1.1 Mbps, near the recovered base {@code vid_rc} ceiling
-     * ({@code max_target_bitrate = 1020000} at the base {@code max_encode_width = 640};
-     * re/calls2-spec/captures/voip-settings-merged.json). WhatsApp does not derive the per-resolution
-     * bitrate from a static bits-per-pixel constant: the recovered {@code vid_rc_dyn} rule engine maps a
-     * runtime target bitrate onto a resolution cap ({@code cond_range_target_bitrate} to
-     * {@code max_encode_width}, the inverse direction) and the bitrate itself is chosen by the bandwidth
-     * estimator ({@code init_bitrate}, {@code fr_min_init_bitrate_bps = 128000}), so no static
-     * resolution-to-bitrate table is recoverable. This factor is the static seed the rate controller then
-     * drives.
+     * <p>WhatsApp does not derive the initial video bitrate from the picture size: the bandwidth
+     * estimator initializes the target independently of the resolution and then drives it, while the
+     * recovered {@code vid_rc_dyn} rule engine maps a runtime target bitrate onto a resolution cap
+     * ({@code cond_range_target_bitrate} to {@code max_encode_width}, the inverse direction), so no static
+     * resolution-to-bitrate table exists. This is the recovered initial bandwidth-estimate ceiling
+     * ({@code vid_rc.max_init_bwe = 350000}; re/calls2-spec/captures/voip-settings-merged.json), the value
+     * the estimator starts the encoder at before it ramps toward {@link #DEFAULT_MAX_BITRATE}.
      */
-    private static final double BITS_PER_PIXEL_PER_SECOND = 0.1;
+    public static final int DEFAULT_INIT_TARGET_BITRATE = 350_000;
+
+    /**
+     * The floor bitrate the resolution seed configures the rate controller with, in bits per second.
+     *
+     * <p>The recovered minimum initial bitrate ({@code vid_rc.fr_min_init_bitrate_bps = 128000};
+     * re/calls2-spec/captures/voip-settings-merged.json), below which the estimator does not initialize
+     * the encoder target.
+     */
+    public static final int DEFAULT_MIN_BITRATE = 128_000;
+
+    /**
+     * The ceiling bitrate the resolution seed configures the rate controller with, in bits per second.
+     *
+     * <p>The recovered base rate-control ceiling ({@code vid_rc.max_target_bitrate = 1020000};
+     * re/calls2-spec/captures/voip-settings-merged.json), the global cap the estimator ramps the target
+     * toward; the {@code vid_rc_dyn} rules tighten it further at runtime (for instance a 600000 cap in the
+     * first sixty seconds of a non-screen-share call, and a 2000000 cap for screen sharing).
+     */
+    public static final int DEFAULT_MAX_BITRATE = 1_020_000;
 
     /**
      * Validates the geometry, the bitrate ordering, and the layer count.
@@ -262,12 +277,16 @@ public record VideoCodecParams(
 
     /**
      * Builds a parameter set for the given codec and picture geometry, seeding the bitrate triplet from
-     * a bits-per-pixel-per-second heuristic and the remaining knobs from the WhatsApp video defaults.
+     * the recovered WhatsApp initial rate-control constants and the remaining knobs from the WhatsApp
+     * video defaults.
      *
-     * <p>The target bitrate is {@code width * height * frameRate} scaled by the internal
-     * bits-per-pixel-per-second factor; the floor is one quarter of the target and the ceiling is twice
-     * it. The quantizer window ({@link #DEFAULT_MIN_QUANTIZER}, {@link #DEFAULT_MAX_QUANTIZER}), keyframe
-     * interval ({@link #DEFAULT_KEY_FRAME_INTERVAL_SECONDS}), and IDR bitrate ratio
+     * <p>The bitrate triplet is seeded resolution-independently from the captured base {@code vid_rc}
+     * block: the target is {@link #DEFAULT_INIT_TARGET_BITRATE}, the floor is {@link #DEFAULT_MIN_BITRATE},
+     * and the ceiling is {@link #DEFAULT_MAX_BITRATE}. WhatsApp initializes the video bitrate from the
+     * bandwidth estimator rather than the picture size and drives it at runtime, so the geometry sets only
+     * the encoded {@link #width()}, {@link #height()}, and {@link #frameRate()} here, not the bitrate. The
+     * quantizer window ({@link #DEFAULT_MIN_QUANTIZER}, {@link #DEFAULT_MAX_QUANTIZER}), keyframe interval
+     * ({@link #DEFAULT_KEY_FRAME_INTERVAL_SECONDS}), and IDR bitrate ratio
      * ({@link #DEFAULT_IDR_BITRATE_RATIO}) take their defaults, the layer count is a single temporal
      * layer, frame skip is enabled, complexity is the codec-neutral mid level ({@code 0}), and long-term
      * references are disabled. The recovered base {@code vid_rc} config carries
@@ -281,29 +300,24 @@ public record VideoCodecParams(
      * @return the seeded parameter set
      * @throws NullPointerException     if {@code codec} is {@code null}
      * @throws IllegalArgumentException if the geometry or frame rate is invalid
+     * @implNote This implementation seeds the static triplet the rate controller then drives; the faithful
+     * per-frame bitrate is the runtime bandwidth estimator output bounded by the {@code vid_rc_dyn} rule
+     * engine, which this static record does not model. Threading the BWE and the {@code vid_rc_dyn} caps
+     * into a live video rate controller is a separate concern.
      */
     public static VideoCodecParams forResolution(VideoDecoderCapability codec, int width, int height, int frameRate) {
         Objects.requireNonNull(codec, "codec cannot be null");
         if (frameRate <= 0) {
             throw new IllegalArgumentException("frameRate must be positive, got " + frameRate);
         }
-        // TODO: the faithful per-call bitrate triplet comes from the runtime bandwidth estimator and the
-        //  vid_rc rate-control rule engine (recovered base vid_rc.max_target_bitrate=1020000,
-        //  fr_min_init_bitrate_bps=128000; the vid_rc_dyn rules map a runtime target bitrate onto a
-        //  resolution cap, not the reverse), so no static resolution-to-bitrate table is recoverable.
-        //  This bits-per-pixel seed is the static starting point the rate controller then drives; thread
-        //  the BWE/vid_rc-derived target/min/max in when the video rate controller is wired.
-        var target = (int) Math.max(1, (long) width * height * frameRate * BITS_PER_PIXEL_PER_SECOND);
-        var min = Math.max(1, target / 4);
-        var max = target * 2;
         return new VideoCodecParams(
                 codec,
                 width,
                 height,
                 frameRate,
-                target,
-                min,
-                max,
+                DEFAULT_INIT_TARGET_BITRATE,
+                DEFAULT_MIN_BITRATE,
+                DEFAULT_MAX_BITRATE,
                 DEFAULT_MIN_QUANTIZER,
                 DEFAULT_MAX_QUANTIZER,
                 DEFAULT_KEY_FRAME_INTERVAL_SECONDS,

@@ -196,7 +196,7 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Returns the byte count required to serialise a dictionary node.
+     * Returns the byte count required to serialise a dictionary stanza.
      *
      * <p>Sums the open tag, each indented {@code <key>} / value pair plus its trailing newline, and the
      * close tag, recursing into {@link #sizeOf(PlistValue, int)} for each value.
@@ -217,7 +217,7 @@ public final class PlistXmlWriter {
     }
 
     /**
-     * Returns the byte count required to serialise an array node.
+     * Returns the byte count required to serialise an array stanza.
      *
      * <p>Sums the open tag, each indented item plus its trailing newline, and the close tag, recursing into
      * {@link #sizeOf(PlistValue, int)} for each item.

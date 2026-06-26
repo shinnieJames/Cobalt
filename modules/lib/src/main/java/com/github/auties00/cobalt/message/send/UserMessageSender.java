@@ -26,8 +26,8 @@ import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageThreadId;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
@@ -364,23 +364,23 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Builds the complete chat fanout stanza.
      *
-     * <p>Resolves every attribute and child node ({@code type}, {@code edit},
+     * <p>Resolves every attribute and child stanza ({@code type}, {@code edit},
      * {@code mediatype}, {@code decrypt-fail}, {@code native_flow_name},
      * peer-recipient hints, identity, meta, biz, bot, reporting,
      * sender-content-binding, bot-metadata, trusted-contact token, CTWA
-     * attribution) into one composite {@link NodeBuilder}.
+     * attribution) into one composite {@link StanzaBuilder}.
      *
      * @param chatJid     the target chat {@link Jid}
      * @param messageInfo the outgoing {@link ChatMessageInfo}
      * @param payloads    the per-device encrypted payloads
-     * @param devices     the device {@link Jid}s used for identity-node
+     * @param devices     the device {@link Jid}s used for identity-stanza
      *                    resolution
      * @param isResend    {@code true} when this is a phash-mismatch resend
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildStanza(
+    private StanzaBuilder buildStanza(
             Jid chatJid,
             ChatMessageInfo messageInfo,
             List<MessageEncryptedPayload> payloads,
@@ -560,11 +560,11 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
      *
      * @param chatJid     the target chat {@link Jid}
      * @param messageInfo the outgoing {@link ChatMessageInfo}
-     * @return the bot metadata {@link Node}, or {@code null}
+     * @return the bot metadata {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Node resolveBotMetadataNode(Jid chatJid, ChatMessageInfo messageInfo) {
+    private Stanza resolveBotMetadataNode(Jid chatJid, ChatMessageInfo messageInfo) {
         var container = messageInfo.message();
         var content = container.content();
 

@@ -4,7 +4,7 @@ import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 
 /**
@@ -53,15 +53,15 @@ public final class ErrorStreamHandler extends SocketStreamHandler.Concurrent {
      * stays up.
      *
      * @implNote This implementation logs and returns rather than rejecting the stanza: WA Web's deprecated parser
-     * would raise an XMPP parsing failure when the {@code code} attribute is missing, whereas Cobalt's {@link Node}
+     * would raise an XMPP parsing failure when the {@code code} attribute is missing, whereas Cobalt's {@link Stanza}
      * accessor returns {@code null} and the handler logs that case at {@code WARNING}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WABackendHandleError", exports = "handleError", adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handle(Node node) {
-        var code = node.getAttributeAsInt("code", null);
+    public void handle(Stanza stanza) {
+        var code = stanza.getAttributeAsInt("code", null);
         if (code == null) {
-            LOGGER.log(System.Logger.Level.WARNING, "Received error stanza without code: {0}", node);
+            LOGGER.log(System.Logger.Level.WARNING, "Received error stanza without code: {0}", stanza);
             return;
         }
 

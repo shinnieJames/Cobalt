@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.model.media.ExternalBlobReference;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdPatch;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.*;
 
@@ -14,9 +15,9 @@ import java.util.*;
  * <p>Each instance describes a single collection: its {@link SyncPatchType}, the server's
  * reported {@code version} and {@code has_more_patches} flag, the decoded patches (or
  * snapshot blob reference), and any captured collection-level error from a batched parse.
- * Both {@link MutationResponseParser#parseSyncResponse(com.github.auties00.cobalt.node.Node)}
+ * Both {@link MutationResponseParser#parseSyncResponse(Stanza)}
  * (single-collection) and
- * {@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)}
+ * {@link MutationResponseParser#parseBatchedSyncResponse(Stanza)}
  * (multi-collection) return instances. Snapshot responses populate {@link #snapshotReference()}
  * and leave {@link #patches()} empty; patch responses do the inverse. Batched responses may
  * additionally surface an exception via {@link #collectionError()} so the caller can apply the
@@ -69,9 +70,9 @@ public final class MutationSyncResponse {
      * <p>Delegates to
      * {@link #MutationSyncResponse(SyncPatchType, long, boolean, SequencedCollection, ExternalBlobReference, WhatsAppWebAppStateSyncException)}
      * with a {@code null} error, used by
-     * {@link MutationResponseParser#parseSyncResponse(com.github.auties00.cobalt.node.Node)}
+     * {@link MutationResponseParser#parseSyncResponse(Stanza)}
      * and the success path of
-     * {@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)}.
+     * {@link MutationResponseParser#parseBatchedSyncResponse(Stanza)}.
      *
      * @param collectionName the {@link SyncPatchType}; never {@code null}
      * @param version the collection version reported by the server
@@ -93,7 +94,7 @@ public final class MutationSyncResponse {
      * Constructs a sync response, optionally with a captured collection-level error.
      *
      * <p>The failure-capture path of
-     * {@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)}
+     * {@link MutationResponseParser#parseBatchedSyncResponse(Stanza)}
      * uses the {@code collectionError} parameter so a single failed collection in a batch does
      * not poison the surviving ones.
      *
@@ -158,7 +159,7 @@ public final class MutationSyncResponse {
      * Returns whether the server signalled that more patches are available.
      *
      * <p>Maps directly from the {@code has_more_patches} attribute on the {@code <collection>}
-     * node; the caller uses it to decide whether to issue a follow-up pull immediately.
+     * stanza; the caller uses it to decide whether to issue a follow-up pull immediately.
      *
      * @return {@code true} when more patches remain
      */
@@ -199,9 +200,9 @@ public final class MutationSyncResponse {
      * Returns the collection-level error captured during parsing, if any.
      *
      * <p>The batched parser
-     * ({@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)})
+     * ({@link MutationResponseParser#parseBatchedSyncResponse(Stanza)})
      * captures every collection-level error here; the single-collection parser
-     * ({@link MutationResponseParser#parseSyncResponse(com.github.auties00.cobalt.node.Node)})
+     * ({@link MutationResponseParser#parseSyncResponse(Stanza)})
      * throws fatal and retryable errors but surfaces a 409
      * {@link WhatsAppWebAppStateSyncException.Conflict} here alongside the catch-up
      * {@link #patches()}, so the caller can apply them and retry.

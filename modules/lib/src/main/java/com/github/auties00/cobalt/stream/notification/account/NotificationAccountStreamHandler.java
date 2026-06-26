@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -18,9 +19,8 @@ import com.github.auties00.cobalt.model.contact.ContactTextStatusBuilder;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.usync.UsyncContext;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.usync.UsyncContext;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -40,12 +40,12 @@ import java.util.function.Consumer;
  * {@code picture} (profile-picture refresh), {@code disappearing_mode} (global ephemeral-timer change),
  * {@code tos} (TOS notice acknowledgement), {@code notice} (single accepted-notice record), {@code user}
  * (AI-availability flag), and {@code biz_opt_out_list} (business opt-out reconciliation). The protocol
- * ACK is always sent in the {@code finally} block of {@link #handle(Node)} regardless of mutation
+ * ACK is always sent in the {@code finally} block of {@link #handle(Stanza)} regardless of mutation
  * success.</p>
  *
  * @implNote This implementation surfaces every mutation through the typed Cobalt store API and fires
  * listener callbacks, whereas WA Web fans the same parsed data out to its frontend pipeline. Cobalt ACKs
- * unconditionally, matching the WA Web ack-promise return path which constructs the ack node before
+ * unconditionally, matching the WA Web ack-promise return path which constructs the ack stanza before
  * dispatching to the per-type branch.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleAccountSyncNotification")
@@ -69,7 +69,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
     private static final String PDFN_ACCEPTED_STAGE = "5";
 
     /**
-     * Holds the client used for store reads, queries (about, picture, blocklist), node sends, and
+     * Holds the client used for store reads, queries (about, picture, blocklist), stanza sends, and
      * listener notifications.
      */
     private final LinkedWhatsAppClient whatsapp;
@@ -100,38 +100,38 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
     }
 
     /**
-     * Validates the stanza shape, dispatches to {@link #handleNotification(Node)}, logs any thrown
+     * Validates the stanza shape, dispatches to {@link #handleNotification(Stanza)}, logs any thrown
      * exception, and sends the protocol-level ACK unless the branch deferred it.
      *
      * <p>Stanzas whose description is not {@code notification} or whose {@code type} is not
      * {@code account_sync} are dropped without ACK. A valid stanza is ACKed even when handling throws,
-     * except when {@link #handleNotification(Node)} reports that the ACK was deferred (the
+     * except when {@link #handleNotification(Stanza)} reports that the ACK was deferred (the
      * {@code devices} branch during resume-from-restart, where the ACK rides on the queued device sync
      * and is shipped once that sync completes).</p>
      *
      * @implNote This implementation swallows {@link Throwable} from the mutation branch and logs it,
      * whereas WA Web rejects the underlying job promise so the orchestrator can NACK the stanza. Cobalt
-     * ACKs in the {@code finally} block because the WA Web ack node is constructed at the top of the
+     * ACKs in the {@code finally} block because the WA Web ack stanza is constructed at the top of the
      * wrapper before dispatching to the per-type branch; the one exception is the deferred-ack path.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "account_sync")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "account_sync")) {
             return;
         }
 
         var deferAck = false;
         try {
-            deferAck = handleNotification(node);
+            deferAck = handleNotification(stanza);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
-                    "Cannot handle account_sync notification " + node.getAttributeAsString("id", "<missing>"),
+                    "Cannot handle account_sync notification " + stanza.getAttributeAsString("id", "<missing>"),
                     throwable);
         } finally {
             if (!deferAck) {
-                sendNotificationAck(node);
+                sendNotificationAck(stanza);
             }
         }
     }
@@ -144,19 +144,19 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * never triggers more than one branch. When no child matches any known tag, the stanza is logged at
      * {@code DEBUG} and otherwise ignored.</p>
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      * @return {@code true} when the matched branch deferred the protocol ack (the {@code devices}
      *         branch when it queues a device sync during resume-from-restart), {@code false} otherwise
      */
-    private boolean handleNotification(Node node) {
-        for (var child : node.children()) {
+    private boolean handleNotification(Stanza stanza) {
+        for (var child : stanza.children()) {
             switch (child.description()) {
                 case "status" -> {
                     refreshOwnAbout();
                     return false;
                 }
                 case "text_status" -> {
-                    handleTextStatusNotification(node, child);
+                    handleTextStatusNotification(stanza, child);
                     return false;
                 }
                 case "privacy" -> {
@@ -164,7 +164,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
                     return false;
                 }
                 case "devices" -> {
-                    return refreshOwnDevices(node);
+                    return refreshOwnDevices(stanza);
                 }
                 case "blocklist" -> {
                     applyBlocklistUsernames(child);
@@ -176,7 +176,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
                     return false;
                 }
                 case "disappearing_mode" -> {
-                    handleDisappearingModeNotification(node, child);
+                    handleDisappearingModeNotification(stanza, child);
                     return false;
                 }
                 case "tos" -> {
@@ -202,7 +202,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
 
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Ignoring unrecognized account_sync notification {0}",
-                node.getAttributeAsString("id", "<missing>"));
+                stanza.getAttributeAsString("id", "<missing>"));
         return false;
     }
 
@@ -242,7 +242,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * the originating user.
      *
      * <p>When the stanza's {@code action} is {@code "modify"} the change applies to the authenticated
-     * user via {@link #updateOwnTextStatus(Node)}; otherwise it applies to the user named in the
+     * user via {@link #updateOwnTextStatus(Stanza)}; otherwise it applies to the user named in the
      * stanza's {@code from} attribute (falling back to the local account), reading the inline
      * {@code text}, {@code emoji}, {@code ephemeral_duration_sec}, and {@code last_update_time} fields.
      * Either path drives {@link LinkedContactTextStatusListener#onContactTextStatus} for the changed contact.</p>
@@ -251,26 +251,26 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * re-queries the text status from the server) into the same stanza-driven update used for the
      * non-modify case, because Cobalt does not maintain a dedicated text-status server query.
      *
-     * @param node           the {@code <notification>} stanza
-     * @param textStatusNode the {@code <text_status>} child carrying the new values
+     * @param stanza           the {@code <notification>} stanza
+     * @param textStatusStanza the {@code <text_status>} child carrying the new values
      */
-    private void handleTextStatusNotification(Node node, Node textStatusNode) {
-        var action = textStatusNode.getAttributeAsString("action", null);
+    private void handleTextStatusNotification(Stanza stanza, Stanza textStatusStanza) {
+        var action = textStatusStanza.getAttributeAsString("action", null);
         if ("modify".equals(action)) {
-            updateOwnTextStatus(textStatusNode);
+            updateOwnTextStatus(textStatusStanza);
         } else {
-            var from = getUserJid(node, "from");
+            var from = getUserJid(stanza, "from");
             var self = from != null ? from : whatsapp.store().accountStore().jid().map(Jid::toUserJid).orElse(null);
             if (self == null) {
                 return;
             }
 
-            var text = textStatusNode.getAttributeAsString("text", null);
-            var emoji = textStatusNode.getChild("emoji")
+            var text = textStatusStanza.getAttributeAsString("text", null);
+            var emoji = textStatusStanza.getChild("emoji")
                     .flatMap(emojiNode -> emojiNode.getAttributeAsString("content"))
                     .orElse(null);
-            var ephemeralDuration = textStatusNode.getAttributeAsInt("ephemeral_duration_sec", (Integer) null);
-            var lastUpdateTimeStr = textStatusNode.getAttributeAsString("last_update_time", null);
+            var ephemeralDuration = textStatusStanza.getAttributeAsInt("ephemeral_duration_sec", (Integer) null);
+            var lastUpdateTimeStr = textStatusStanza.getAttributeAsString("last_update_time", null);
             var lastUpdateTime = lastUpdateTimeStr != null ? Instant.ofEpochSecond(Long.parseLong(lastUpdateTimeStr)) : null;
             upsertContactTextStatus(
                     self,
@@ -290,23 +290,23 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * {@code last_update_time} attributes the non-modify path reads, but targets the local account only.</p>
      *
      * @implNote This implementation duplicates the stanza-attribute parsing rather than delegating to
-     * {@link #handleTextStatusNotification(Node, Node)} because the {@code from} resolution differs (self
+     * {@link #handleTextStatusNotification(Stanza, Stanza)} because the {@code from} resolution differs (self
      * only) and the parent path also fans out to the from-derived JID.
      *
-     * @param textStatusNode the {@code <text_status>} child node
+     * @param textStatusStanza the {@code <text_status>} child stanza
      */
-    private void updateOwnTextStatus(Node textStatusNode) {
+    private void updateOwnTextStatus(Stanza textStatusStanza) {
         var self = whatsapp.store().accountStore().jid().orElse(null);
         if (self == null) {
             return;
         }
 
-        var text = textStatusNode.getAttributeAsString("text", null);
-        var emoji = textStatusNode.getChild("emoji")
+        var text = textStatusStanza.getAttributeAsString("text", null);
+        var emoji = textStatusStanza.getChild("emoji")
                 .flatMap(emojiNode -> emojiNode.getAttributeAsString("content"))
                 .orElse(null);
-        var ephemeralDuration = textStatusNode.getAttributeAsInt("ephemeral_duration_sec", (Integer) null);
-        var lastUpdateTimeStr = textStatusNode.getAttributeAsString("last_update_time", null);
+        var ephemeralDuration = textStatusStanza.getAttributeAsInt("ephemeral_duration_sec", (Integer) null);
+        var lastUpdateTimeStr = textStatusStanza.getAttributeAsString("last_update_time", null);
         var lastUpdateTime = lastUpdateTimeStr != null ? Instant.ofEpochSecond(Long.parseLong(lastUpdateTimeStr)) : null;
         upsertContactTextStatus(
                 self.toUserJid(),
@@ -331,7 +331,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * {@link DeviceService#syncMyDeviceList()}, matching WA Web's {@code getDevices("notification")}.
      * Otherwise a self sender is fanned out to both the phone-number and LID identities (WA Web's
      * {@code y()} helper) and each record is rebuilt through
-     * {@link DeviceService#refreshOwnDeviceList(Jid, Node)}, which validates the embedded
+     * {@link DeviceService#refreshOwnDeviceList(Jid, Stanza)}, which validates the embedded
      * {@code <key-index-list>} so the record carries the authoritative ADV fingerprint. This drives
      * Signal-session establishment for new companion devices and cleanup for removed ones.</p>
      *
@@ -345,12 +345,12 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * {@link DeviceService#retryPendingSyncs()} once the device fetch completes; a crash before then
      * leaves the notification unacknowledged so the server replays it.
      *
-     * @param node the {@code <notification>} stanza carrying the {@code devices} child and {@code from} attribute
+     * @param stanza the {@code <notification>} stanza carrying the {@code devices} child and {@code from} attribute
      * @return {@code true} when the ack was deferred (queued during resume), {@code false} when the ack
-     *         should be sent immediately by {@link #handle(Node)}
+     *         should be sent immediately by {@link #handle(Stanza)}
      */
-    private boolean refreshOwnDevices(Node node) {
-        var rawFrom = node.getAttributeAsJid("from").orElse(null);
+    private boolean refreshOwnDevices(Stanza stanza) {
+        var rawFrom = stanza.getAttributeAsJid("from").orElse(null);
         if (rawFrom == null) {
             return false;
         }
@@ -358,7 +358,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
 
         var store = whatsapp.store();
         if (!store.connectionStore().isResumeFromRestartComplete()) {
-            var notificationId = node.getAttributeAsString("id", null);
+            var notificationId = stanza.getAttributeAsString("id", null);
             if (notificationId == null) {
                 store.syncStore().addPendingDeviceSync(PendingDeviceSync.of(List.of(from), UsyncContext.NOTIFICATION.wireValue()));
                 return false;
@@ -368,7 +368,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
             return true;
         }
 
-        var devicesChild = node.getChild("devices").orElse(null);
+        var devicesChild = stanza.getChild("devices").orElse(null);
         if (devicesChild == null || devicesChild.getChildren("device").isEmpty()) {
             deviceService.syncMyDeviceList();
             return false;
@@ -426,10 +426,10 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * path only when its username-display gating prop is enabled; the Cobalt store has no equivalent
      * gating prop wired here.
      *
-     * @param blocklistNode the {@code <blocklist>} child carrying {@code <item jid=... username=.../>} entries
+     * @param blocklistStanza the {@code <blocklist>} child carrying {@code <item jid=... username=.../>} entries
      */
-    private void applyBlocklistUsernames(Node blocklistNode) {
-        for (var item : blocklistNode.getChildren("item")) {
+    private void applyBlocklistUsernames(Stanza blocklistStanza) {
+        for (var item : blocklistStanza.getChildren("item")) {
             var username = item.getAttributeAsString("username", null);
             if (username == null) {
                 continue;
@@ -486,10 +486,10 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * equivalent query, so the {@code modify} branch falls through and waits for the next full app-state
      * sync to converge.
      *
-     * @param node             the {@code <notification>} stanza
+     * @param stanza             the {@code <notification>} stanza
      * @param disappearingMode the {@code <disappearing_mode>} child
      */
-    private void handleDisappearingModeNotification(Node node, Node disappearingMode) {
+    private void handleDisappearingModeNotification(Stanza stanza, Stanza disappearingMode) {
         var action = disappearingMode.getAttributeAsString("action", null);
         Integer duration;
         Integer settingTimestamp;
@@ -503,7 +503,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
 
         if ("modify".equals(action)) {
             // TODO: implement a disappearing-mode server query; today the modify branch waits for the next full app-state sync to converge.
-            var selfJid = getUserJid(node, "from");
+            var selfJid = getUserJid(stanza, "from");
             if (selfJid != null) {
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Deferring disappearing_mode modify for {0} to next app-state sync",
@@ -523,11 +523,11 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * <p>Collects the accepted ids, merges them into the stored notice-id set, and writes the union back.
      * The accepted ids gate UI elements such as banner dismissal and settings copy.</p>
      *
-     * @param tosNode the {@code <tos>} child containing one or more {@code <notice/>} entries
+     * @param tosStanza the {@code <tos>} child containing one or more {@code <notice/>} entries
      */
-    private void handleTosNotification(Node tosNode) {
+    private void handleTosNotification(Stanza tosStanza) {
         var notices = new HashSet<String>();
-        for (var notice : tosNode.getChildren("notice")) {
+        for (var notice : tosStanza.getChildren("notice")) {
             var state = notice.getAttributeAsString("state", null);
             var accepted = !"false".equals(state);
             var id = notice.getAttributeAsString("id", null);
@@ -556,13 +556,13 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * {@link #PDFN_ACCEPTED_STAGE}; WA Web also stores the policy version, but Cobalt's store keeps only
      * the accepted-id set.
      *
-     * @param noticeNode the {@code <notice/>} child node
+     * @param noticeStanza the {@code <notice/>} child stanza
      */
-    private void handleNoticeNotification(Node noticeNode) {
-        var noticeId = noticeNode.getAttributeAsString("id", null);
-        var noticeStage = noticeNode.getAttributeAsString("stage", null);
-        var noticeVersion = noticeNode.getAttributeAsString("version", null);
-        var noticeTimestamp = noticeNode.getAttributeAsInt("t", (Integer) null);
+    private void handleNoticeNotification(Stanza noticeStanza) {
+        var noticeId = noticeStanza.getAttributeAsString("id", null);
+        var noticeStage = noticeStanza.getAttributeAsString("stage", null);
+        var noticeVersion = noticeStanza.getAttributeAsString("version", null);
+        var noticeTimestamp = noticeStanza.getAttributeAsInt("t", (Integer) null);
 
         if (noticeId == null || noticeId.isEmpty() || noticeStage == null || noticeVersion == null || noticeTimestamp == null) {
             return;
@@ -588,10 +588,10 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation persists the flag, whereas WA Web only logs the receipt and relies on
      * the next AB-prop sync to surface the value to the UI.
      *
-     * @param userNode the {@code <user/>} child node
+     * @param userStanza the {@code <user/>} child stanza
      */
-    private void handleUserNotification(Node userNode) {
-        var isAiAvailable = "AI available".equals(userNode.getAttributeAsString("state", null));
+    private void handleUserNotification(Stanza userStanza) {
+        var isAiAvailable = "AI available".equals(userStanza.getAttributeAsString("state", null));
         whatsapp.store().businessStore().setAiAvailable(isAiAvailable);
     }
 
@@ -608,11 +608,11 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      * server-side refresh in that case; Cobalt has no equivalent batch endpoint and relies on the next
      * app-state sync to converge.
      *
-     * @param optOutListNode the {@code <biz_opt_out_list>} child carrying {@code dhash}, {@code prev_dhash}, and item children
+     * @param optOutListStanza the {@code <biz_opt_out_list>} child carrying {@code dhash}, {@code prev_dhash}, and item children
      */
-    private void handleBizOptOutListNotification(Node optOutListNode) {
-        var dhash = optOutListNode.getAttributeAsString("dhash", null);
-        var prevDhash = optOutListNode.getAttributeAsString("prev_dhash", null);
+    private void handleBizOptOutListNotification(Stanza optOutListStanza) {
+        var dhash = optOutListStanza.getAttributeAsString("dhash", null);
+        var prevDhash = optOutListStanza.getAttributeAsString("prev_dhash", null);
         var storedHash = whatsapp.store().businessStore().businessOptOutListHash().orElse(null);
 
         if (!Objects.equals(storedHash, prevDhash)) {
@@ -621,7 +621,7 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
         }
 
         if (dhash != null) {
-            for (var item : optOutListNode.children()) {
+            for (var item : optOutListStanza.children()) {
                 var action = item.getAttributeAsString("action", null);
                 var bizJid = item.getAttributeAsJid("biz_jid", null);
                 if (action == null || bizJid == null) {
@@ -646,12 +646,12 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      *
      * <p>Used by the per-child branches that need to address a user record rather than a device record.</p>
      *
-     * @param node the node to read from
+     * @param stanza the stanza to read from
      * @param key  the attribute name
      * @return the parsed user JID, or {@code null} if the attribute is absent or unparsable
      */
-    private Jid getUserJid(Node node, String key) {
-        return node.getAttributeAsJid(key)
+    private Jid getUserJid(Stanza stanza, String key) {
+        return stanza.getAttributeAsJid(key)
                 .map(Jid::toUserJid)
                 .orElse(null);
     }
@@ -727,11 +727,11 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
      *
      * <p>The ack is fire-and-forget; a closed socket surfaces as a
      * {@link com.github.auties00.cobalt.exception.WhatsAppSessionException.Closed} which the surrounding
-     * {@link #handle(Node)} {@code finally} block already isolates from the mutation path.</p>
+     * {@link #handle(Stanza)} {@code finally} block already isolates from the mutation path.</p>
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("account_sync").send();
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("account_sync").send();
     }
 }

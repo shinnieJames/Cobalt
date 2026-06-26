@@ -6,8 +6,8 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfoBuilder;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import org.junit.jupiter.api.DisplayName;
@@ -37,14 +37,14 @@ class NewsletterMessageSenderTest {
     @Test
     @DisplayName("send: ExtendedTextMessage -> <message type=\"text\"> with <plaintext> child")
     void textMessage() {
-        var capturedStanza = new AtomicReference<Node>();
+        var capturedStanza = new AtomicReference<Stanza>();
         var props = TestABPropsService.builder().build();
         var client = TestWhatsAppClient.create()
                 .withStore(MessageFixtures.temporaryStore(SELF, null))
                 .withAbPropsService(props)
                 .withSendNodeHandler(node -> {
                     capturedStanza.set(node.build());
-                    return new NodeBuilder()
+                    return new StanzaBuilder()
                             .description("ack")
                             .attribute("t", 1700000000L)
                             .attribute("server_id", "42")

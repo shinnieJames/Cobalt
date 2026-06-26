@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.props;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.model.props.ABProp;
 
 import java.time.Instant;
@@ -74,7 +74,7 @@ public final class TestABPropsService implements ABPropsService {
     }
 
     @Override
-    public boolean process(Node response) {
+    public boolean process(Stanza response) {
         return true;
     }
 

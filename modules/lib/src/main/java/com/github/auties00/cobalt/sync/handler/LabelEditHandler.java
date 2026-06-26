@@ -7,10 +7,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.LabelBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelEditAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -77,7 +78,7 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
      * {@link MutationApplicationResult#unsupported()} and a missing label id or
      * action payload as malformed. A {@link LabelEditAction#deleted()} action
      * removes the label via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#removeLabel(String)};
+     * {@link LinkedWhatsAppSettingsStore#removeLabel(String)};
      * otherwise the row is upserted, merging into an existing {@link Label} in
      * place when one is found or building a new one via {@link LabelBuilder}.
      *

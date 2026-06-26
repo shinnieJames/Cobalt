@@ -100,7 +100,7 @@ Once regenerated, the WAM and AB-props **definitions** (the catalog files themse
 
 Codegen only proves the catalog *shapes* are right. Whether Cobalt *uses* them correctly is part of normal per-module validation for the consumer.
 
-SMAX (`cobalt.node.smax`), MEX (`cobalt.node.mex`), legacy IQ (`cobalt.node.iq`), and USync (`cobalt.node.usync`) are NOT auto-generatable — they are handwritten and go through normal Phase 3 validation.
+SMAX (`cobalt.stanza.smax`), MEX (`cobalt.stanza.mex`), legacy IQ (`cobalt.stanza.iq`), and USync (`cobalt.stanza.usync`) are NOT auto-generatable — they are handwritten and go through normal Phase 3 validation.
 
 ## Output Layout
 
@@ -406,10 +406,10 @@ If you decide SKIPPED, write a one-line reason and stop. Do NOT validate exports
 This is the default outcome for every module that isn't SKIPPED. Examples of
 catalog families that go through normal per-module validation here:
 
-- `WASmax*` — handwritten Java under `cobalt.node.smax/`.
-- `WAWebMex*` — handwritten Java under `cobalt.node.mex/`.
-- `WADeprecatedSendIq` and consumers — handwritten Java under `cobalt.node.iq/`.
-- `WAWebUsync*` — handwritten Java under `cobalt.node.usync/`.
+- `WASmax*` — handwritten Java under `cobalt.stanza.smax/`.
+- `WAWebMex*` — handwritten Java under `cobalt.stanza.mex/`.
+- `WADeprecatedSendIq` and consumers — handwritten Java under `cobalt.stanza.iq/`.
+- `WAWebUsync*` — handwritten Java under `cobalt.stanza.usync/`.
 
 For every export, produce one of these statuses:
 - MATCH (DIRECT) — Cobalt's logic is byte-equivalent to WA Web's.
@@ -449,7 +449,7 @@ For PURE modules, static parity alone is sufficient. Skip steps 1-5.
 - `WAWebHistory*` — history sync orchestration; validate.
 - `WAWebLid*`, `*LidMigration*`, `*LidPnMapping*` — LID/PN protocol logic.
 - `WAWebE2EProto*` — handwritten proto serialization; validate.
-- `WAWebUsync*` — handwritten in Cobalt under `node/usync/`. Validate the
+- `WAWebUsync*` — handwritten in Cobalt under `stanza/usync/`. Validate the
   per-module Java parity directly. (USync is NOT auto-generated despite being
   a typed-stanza family — its 11 protocols are stable enough to hand-write.)
 

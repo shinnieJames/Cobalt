@@ -13,17 +13,16 @@ import com.github.auties00.cobalt.message.send.stanza.MetaStanza;
 import com.github.auties00.cobalt.message.send.stanza.ReportingStanza;
 import com.github.auties00.cobalt.message.send.stanza.TcTokenStanza;
 import com.github.auties00.cobalt.message.send.bot.BotProtobufTransform;
-import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -70,7 +69,7 @@ class UserMessageSenderTest {
         TestSignalSession.establishSession(senderStore, PEER_DEVICE_PRIMARY, recipientPrimary);
         TestSignalSession.establishSession(senderStore, PEER_DEVICE_COMPANION, recipientCompanion);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = userMessageSender(client, senderStore,
                 StubDeviceService.create()
@@ -110,7 +109,7 @@ class UserMessageSenderTest {
         TestSignalSession.establishSession(senderStore, PEER_DEVICE_PRIMARY, recipientPrimary);
         TestSignalSession.establishSession(senderStore, PEER_DEVICE_COMPANION, recipientCompanion);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = userMessageSender(client, senderStore,
                 StubDeviceService.create()
@@ -136,7 +135,7 @@ class UserMessageSenderTest {
         var recipientPrimary = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
         TestSignalSession.establishSession(senderStore, PEER_DEVICE_PRIMARY, recipientPrimary);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = userMessageSender(client, senderStore,
                 StubDeviceService.create().withUserFanout(chat -> List.of(PEER_DEVICE_PRIMARY)));
@@ -174,13 +173,13 @@ class UserMessageSenderTest {
 
     // The returned ack carries only the t attribute, which AckParser reads as
     // a success result.
-    private static TestWhatsAppClient clientWithCapture(LinkedWhatsAppStore store, AtomicReference<Node> capturedStanza) {
+    private static TestWhatsAppClient clientWithCapture(LinkedWhatsAppStore store, AtomicReference<Stanza> capturedStanza) {
         return TestWhatsAppClient.create()
                 .withStore(store)
                 .withAbPropsService(TestABPropsService.builder().build())
                 .withSendNodeHandler(nb -> {
                     capturedStanza.set(nb.build());
-                    return new NodeBuilder()
+                    return new StanzaBuilder()
                             .description("ack")
                             .attribute("t", 1700000000L)
                             .build();

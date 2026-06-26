@@ -4,10 +4,12 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.action.setting.DetectedOutcomesStatusAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -22,7 +24,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * @implNote
  * This implementation persists the bit through
- * {@link com.github.auties00.cobalt.store.BusinessStore#setDetectedOutcomesEnabled(boolean)}
+ * {@link LinkedWhatsAppBusinessStore#setDetectedOutcomesEnabled(boolean)}
  * instead of WA Web's
  * {@code frontendSendAndReceive("ctwaDetectedOutcomeOnboardingStatusUpdate")}
  * RPC, since Cobalt has no JS frontend to notify. The malformed-on-null
@@ -75,7 +77,7 @@ public final class DetectedOutcomesStatusHandler implements WebAppStateActionHan
      * @implNote
      * This implementation lets exceptions propagate to the orchestrator
      * rather than catching them inline as
-     * {@link com.github.auties00.cobalt.model.sync.SyncActionState#FAILED}
+     * {@link SyncActionState#FAILED}
      * the way WA Web's per-mutation closure does, matching Cobalt's
      * pluggable error model. The malformed and unsupported batch tallies
      * that WA Web emits via {@code WALogger.WARN} after the loop are

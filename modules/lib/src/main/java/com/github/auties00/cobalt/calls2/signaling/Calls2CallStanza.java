@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -23,11 +23,11 @@ import java.util.function.Function;
  * </call>
  * }
  * This factory is the two-way bridge between a typed {@link CallMessage} and that wire shape. On the
- * send side {@link #toCall(CallMessage, Jid, String)} wraps a message's action node in the envelope with
- * the recipient and the dispatcher-assigned stanza id; on the receive side {@link #parse(Node)} maps an
+ * send side {@link #toCall(CallMessage, Jid, String)} wraps a message's action stanza in the envelope with
+ * the recipient and the dispatcher-assigned stanza id; on the receive side {@link #parse(Stanza)} maps an
  * already-unwrapped {@code <call>} child element to the typed record that owns its wire tag.
  *
- * <p>The {@link #offer(Jid, Jid, String, boolean, byte[], byte[], java.util.List, byte[], Jid, java.util.Collection, Jid, Node)
+ * <p>The {@link #offer(Jid, Jid, String, boolean, byte[], byte[], java.util.List, byte[], Jid, java.util.Collection, Jid, Stanza)
  * offer} factory is the one send-side action this class builds directly rather than through a typed
  * {@link CallMessage}: the outbound offer is the leaner thin shape the caller emits (codec
  * advertisement, per-device call-key fanout, and device identity only), which the server enriches before
@@ -36,7 +36,7 @@ import java.util.function.Function;
  *
  * <p>Inbound dispatch keys on the single child element tag, which is the rule the engine follows: the
  * {@code <call>} envelope carries no action discriminator of its own, so the action is identified purely
- * by the name of its one child. {@link #parse(Node)} therefore reads {@link Node#description()} and
+ * by the name of its one child. {@link #parse(Stanza)} therefore reads {@link Stanza#description()} and
  * looks the tag up in a fixed table of per-tag decoders rather than branching on
  * {@link Calls2SignalingType}, because a few action elements ({@link RingingStanza},
  * {@link RaiseHandStanza}) name a {@code <call>} child yet carry no taxonomy ordinal and so cannot be
@@ -54,16 +54,16 @@ import java.util.function.Function;
  *
  * @implNote This implementation replaces the native {@code call_signaling_xml} envelope writer and the
  * {@code call_xmpp_stanza} element factory of the wa-voip WASM module {@code ff-tScznZ8P}
- * ({@code protocol/xmpp/call_signaling_xml.cc}). The native XML-node-to-voip-node converter pair
- * ({@code xmlNodeToVoipNode} fn12158 / {@code voipNodeToXmlNode}) collapses to direct {@link Node} read
- * and build because Cobalt's {@code node/binary} package is byte-identical to the WASM WAP codec, so a
- * {@link Node} already is the parsed tree. The send-side envelope mirrors the {@code <call to id>} the
+ * ({@code protocol/xmpp/call_signaling_xml.cc}). The native XML-stanza-to-voip-stanza converter pair
+ * ({@code xmlNodeToVoipNode} fn12158 / {@code voipNodeToXmlNode}) collapses to direct {@link Stanza} read
+ * and build because Cobalt's {@code stanza/binary} package is byte-identical to the WASM WAP codec, so a
+ * {@link Stanza} already is the parsed tree. The send-side envelope mirrors the {@code <call to id>} the
  * dispatcher emits around each serialized action; the receive-side tag dispatch mirrors
  * {@code handle_incoming_xmpp_msg} (fn11539), which switches on the single child element tag and logs
  * and drops an unsupported tag ({@code "handle_incoming_xmpp_msg: msg tag %s not supported"},
  * strings.json {@code 0x0ee90}); Cobalt returns an empty {@link Optional} for that case rather than
  * throwing. This factory does not validate the universal {@code call-id}/{@code call-creator} header,
- * which {@link CallSignalingRouter} checks before {@link #parse(Node)} is reached; each record's
+ * which {@link CallSignalingRouter} checks before {@link #parse(Stanza)} is reached; each record's
  * {@code of} decoder enforces the attributes it requires.
  */
 public final class Calls2CallStanza {
@@ -250,13 +250,13 @@ public final class Calls2CallStanza {
      * {@link CallMessage} record.
      *
      * <p>The table is keyed on the wire child tag exactly as each record renders it through
-     * {@link CallMessage#toNode()}, so {@link #parse(Node)} is the inverse of {@link CallMessage#toNode()}
+     * {@link CallMessage#toStanza()}, so {@link #parse(Stanza)} is the inverse of {@link CallMessage#toStanza()}
      * for every permitted subtype. The records whose {@code of} decoder returns an {@link Optional} are
-     * adapted to the same {@code Function<Node, CallMessage>} shape by mapping their empty result to a
+     * adapted to the same {@code Function<Stanza, CallMessage>} shape by mapping their empty result to a
      * {@code null} the lookup treats as an undecodable element. The {@code extension} tag decodes as an
      * add-extension message, the canonical owner of the shared tag.
      */
-    private static final Map<String, Function<Node, CallMessage>> DECODERS = buildDecoders();
+    private static final Map<String, Function<Stanza, CallMessage>> DECODERS = buildDecoders();
 
     /**
      * Prevents instantiation of this stateless factory.
@@ -275,11 +275,11 @@ public final class Calls2CallStanza {
      * type the corresponding record stamps, so the table cannot drift from the records' own emission.
      * The two records whose decoder returns an {@link Optional} ({@link GroupInfoStanza},
      * {@link DestinationStanza}) are adapted by unwrapping the optional to a nullable reference, which
-     * the lookup in {@link #parse(Node)} treats as an undecodable element.
+     * the lookup in {@link #parse(Stanza)} treats as an undecodable element.
      *
      * @return the immutable tag-to-decoder table
      */
-    private static Map<String, Function<Node, CallMessage>> buildDecoders() {
+    private static Map<String, Function<Stanza, CallMessage>> buildDecoders() {
         return Map.ofEntries(
                 Map.entry(OfferStanza.ELEMENT, OfferStanza::of),
                 Map.entry(AcceptStanza.ELEMENT, AcceptStanza::of),
@@ -332,28 +332,28 @@ public final class Calls2CallStanza {
     }
 
     /**
-     * Wraps a call message's action node in the {@code <call>} envelope addressed to a recipient.
+     * Wraps a call message's action stanza in the {@code <call>} envelope addressed to a recipient.
      *
      * <p>The envelope carries the recipient and the dispatcher-assigned stanza id and nests the
-     * message's {@link CallMessage#toNode() action node} as its single child. The action node already
+     * message's {@link CallMessage#toStanza() action stanza} as its single child. The action stanza already
      * carries the universal {@code call-id}/{@code call-creator} header and the action's own attributes
      * and tree, so this method adds only the envelope addressing.
      *
      * @param message the call message to wrap
      * @param to      the recipient of the {@code <call>} stanza
      * @param id      the dispatcher-assigned stanza identifier
-     * @return the {@code <call to id>} envelope nesting the action node
+     * @return the {@code <call to id>} envelope nesting the action stanza
      * @throws NullPointerException if {@code message}, {@code to}, or {@code id} is {@code null}
      */
-    public static Node toCall(CallMessage message, Jid to, String id) {
+    public static Stanza toCall(CallMessage message, Jid to, String id) {
         Objects.requireNonNull(message, "message cannot be null");
         Objects.requireNonNull(to, "to cannot be null");
         Objects.requireNonNull(id, "id cannot be null");
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(TO_ATTRIBUTE, to)
                 .attribute(ID_ATTRIBUTE, id)
-                .content(message.toNode())
+                .content(message.toStanza())
                 .build();
     }
 
@@ -395,8 +395,8 @@ public final class Calls2CallStanza {
      *
      * @apiNote Callers precompute every byte buffer this factory takes; it performs no Signal
      * encryption, no ADV signing, and no privacy or capability bitfield assembly. The returned
-     * {@link NodeBuilder} is left unbuilt so the caller can pass it to
-     * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient#sendNode(NodeBuilder)} when
+     * {@link StanzaBuilder} is left unbuilt so the caller can pass it to
+     * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient#sendNode(StanzaBuilder)} when
      * the offer ACK that carries the relay tokens must be captured.
      *
      * @param target              the peer user LID placed on {@code <call to>}; never {@code null}
@@ -422,18 +422,18 @@ public final class Calls2CallStanza {
      *                              {@code destinationPayloads}, or {@code deviceIdentity} is
      *                              {@code null}
      */
-    public static NodeBuilder offer(Jid target,
-                                    Jid creator,
-                                    String callId,
-                                    boolean video,
-                                    byte[] privacy,
-                                    byte[] capability,
-                                    List<MessageEncryptedPayload> destinationPayloads,
-                                    byte[] deviceIdentity,
-                                    Jid groupJid,
-                                    Collection<Jid> groupParticipants,
-                                    Jid callerPn,
-                                    Node groupInfo) {
+    public static StanzaBuilder offer(Jid target,
+                                      Jid creator,
+                                      String callId,
+                                      boolean video,
+                                      byte[] privacy,
+                                      byte[] capability,
+                                      List<MessageEncryptedPayload> destinationPayloads,
+                                      byte[] deviceIdentity,
+                                      Jid groupJid,
+                                      Collection<Jid> groupParticipants,
+                                      Jid callerPn,
+                                      Stanza groupInfo) {
         Objects.requireNonNull(target, "target cannot be null");
         Objects.requireNonNull(creator, "creator cannot be null");
         Objects.requireNonNull(callId, "callId cannot be null");
@@ -442,36 +442,36 @@ public final class Calls2CallStanza {
 
         var capabilityBytes = capability != null ? capability : DEFAULT_CAPABILITY_BYTES;
 
-        var offerChildren = new ArrayList<Node>(11);
+        var offerChildren = new ArrayList<Stanza>(11);
         if (groupInfo != null) {
             offerChildren.add(groupInfo);
         }
         // A one-to-one offer carries the peer's trusted-contact token in <privacy>; a group offer carries
         // no such per-peer token and omits the element entirely, so a null privacy skips it.
         if (privacy != null) {
-            offerChildren.add(new NodeBuilder()
+            offerChildren.add(new StanzaBuilder()
                     .description(PRIVACY_ELEMENT)
                     .content(privacy)
                     .build());
         }
-        offerChildren.add(new NodeBuilder()
+        offerChildren.add(new StanzaBuilder()
                 .description(AUDIO_ELEMENT)
                 .attribute(ENC_ATTRIBUTE, AUDIO_CODEC_OPUS)
                 .attribute(RATE_ATTRIBUTE, OFFERED_AUDIO_RATE_LOW)
                 .build());
-        offerChildren.add(new NodeBuilder()
+        offerChildren.add(new StanzaBuilder()
                 .description(AUDIO_ELEMENT)
                 .attribute(ENC_ATTRIBUTE, AUDIO_CODEC_OPUS)
                 .attribute(RATE_ATTRIBUTE, OFFERED_AUDIO_RATE_HIGH)
                 .build());
-        offerChildren.add(new NodeBuilder()
+        offerChildren.add(new StanzaBuilder()
                 .description(NET_ELEMENT)
                 .attribute(MEDIUM_ATTRIBUTE, OFFER_NET_MEDIUM)
                 .build());
         // A one-to-one offer carries offer-level <capability> and <encopt>; a group offer carries neither
         // at offer level (capability rides inside each <group_info> device), so the group offer omits both.
         if (groupJid == null) {
-            offerChildren.add(new NodeBuilder()
+            offerChildren.add(new StanzaBuilder()
                     .description(CAPABILITY_ELEMENT)
                     .attribute(VERSION_ATTRIBUTE, CAPABILITY_VERSION)
                     .content(capabilityBytes)
@@ -483,12 +483,12 @@ public final class Calls2CallStanza {
             offerChildren.add(buildDestination(destinationPayloads));
         }
         if (video) {
-            offerChildren.add(new NodeBuilder()
+            offerChildren.add(new StanzaBuilder()
                     .description(VIDEO_ELEMENT)
                     .build());
         }
         if (groupJid == null) {
-            offerChildren.add(new NodeBuilder()
+            offerChildren.add(new StanzaBuilder()
                     .description(ENCOPT_ELEMENT)
                     .attribute(KEYGEN_ATTRIBUTE, ENCOPT_KEYGEN)
                     .build());
@@ -496,13 +496,13 @@ public final class Calls2CallStanza {
         // A one-to-one offer carries <device-identity> for the server to authenticate the caller; a
         // captured group offer carries no device-identity at all, so the group offer omits it.
         if (groupJid == null) {
-            offerChildren.add(new NodeBuilder()
+            offerChildren.add(new StanzaBuilder()
                     .description(DEVICE_IDENTITY_ELEMENT)
                     .content(deviceIdentity)
                     .build());
         }
 
-        var offerBuilder = new NodeBuilder()
+        var offerBuilder = new StanzaBuilder()
                 .description(OfferStanza.ELEMENT)
                 .attribute(CALL_ID_ATTRIBUTE, callId)
                 .attribute(CALL_CREATOR_ATTRIBUTE, creator);
@@ -513,7 +513,7 @@ public final class Calls2CallStanza {
         }
         offerBuilder.content(offerChildren);
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(TO_ATTRIBUTE, target)
                 .content(offerBuilder.build());
@@ -537,19 +537,19 @@ public final class Calls2CallStanza {
      * @param callerPn            the caller's phone-number JID for a group offer, or {@code null}
      * @return the {@code <call>} stanza builder ready for dispatch
      * @throws NullPointerException if any required reference argument is {@code null}
-     * @see #offer(Jid, Jid, String, boolean, byte[], byte[], List, byte[], Jid, Collection, Jid, Node)
+     * @see #offer(Jid, Jid, String, boolean, byte[], byte[], List, byte[], Jid, Collection, Jid, Stanza)
      */
-    public static NodeBuilder offer(Jid target,
-                                    Jid creator,
-                                    String callId,
-                                    boolean video,
-                                    byte[] privacy,
-                                    byte[] capability,
-                                    List<MessageEncryptedPayload> destinationPayloads,
-                                    byte[] deviceIdentity,
-                                    Jid groupJid,
-                                    Collection<Jid> groupParticipants,
-                                    Jid callerPn) {
+    public static StanzaBuilder offer(Jid target,
+                                      Jid creator,
+                                      String callId,
+                                      boolean video,
+                                      byte[] privacy,
+                                      byte[] capability,
+                                      List<MessageEncryptedPayload> destinationPayloads,
+                                      byte[] deviceIdentity,
+                                      Jid groupJid,
+                                      Collection<Jid> groupParticipants,
+                                      Jid callerPn) {
         return offer(target, creator, callId, video, privacy, capability, destinationPayloads,
                 deviceIdentity, groupJid, groupParticipants, callerPn, null);
     }
@@ -571,18 +571,18 @@ public final class Calls2CallStanza {
      * @param groupParticipants   unused; retained for source-mapping parity
      * @return the {@code <call>} stanza builder ready for dispatch
      * @throws NullPointerException if any required reference argument is {@code null}
-     * @see #offer(Jid, Jid, String, boolean, byte[], byte[], List, byte[], Jid, Collection, Jid, Node)
+     * @see #offer(Jid, Jid, String, boolean, byte[], byte[], List, byte[], Jid, Collection, Jid, Stanza)
      */
-    public static NodeBuilder offer(Jid target,
-                                    Jid creator,
-                                    String callId,
-                                    boolean video,
-                                    byte[] privacy,
-                                    byte[] capability,
-                                    List<MessageEncryptedPayload> destinationPayloads,
-                                    byte[] deviceIdentity,
-                                    Jid groupJid,
-                                    Collection<Jid> groupParticipants) {
+    public static StanzaBuilder offer(Jid target,
+                                      Jid creator,
+                                      String callId,
+                                      boolean video,
+                                      byte[] privacy,
+                                      byte[] capability,
+                                      List<MessageEncryptedPayload> destinationPayloads,
+                                      byte[] deviceIdentity,
+                                      Jid groupJid,
+                                      Collection<Jid> groupParticipants) {
         return offer(target, creator, callId, video, privacy, capability, destinationPayloads,
                 deviceIdentity, groupJid, groupParticipants, null, null);
     }
@@ -598,19 +598,19 @@ public final class Calls2CallStanza {
      * with a {@code null} {@link MessageEncryptedPayload#recipientJid() recipient} are skipped.
      *
      * @param payloads the per-device call-key fanout, or per-device bare-destination markers
-     * @return the {@code <destination>} node; never {@code null}
+     * @return the {@code <destination>} stanza; never {@code null}
      */
-    private static Node buildDestination(List<MessageEncryptedPayload> payloads) {
-        var toNodes = new ArrayList<Node>(payloads.size());
+    private static Stanza buildDestination(List<MessageEncryptedPayload> payloads) {
+        var toNodes = new ArrayList<Stanza>(payloads.size());
         for (var payload : payloads) {
             if (payload.recipientJid() == null) {
                 continue;
             }
-            var toBuilder = new NodeBuilder()
+            var toBuilder = new StanzaBuilder()
                     .description(TO_ELEMENT)
                     .attribute(JID_ATTRIBUTE, payload.recipientJid());
             if (payload.ciphertext() != null) {
-                toBuilder.content(new NodeBuilder()
+                toBuilder.content(new StanzaBuilder()
                         .description(ENC_ELEMENT)
                         .attribute(ENC_VERSION_ATTRIBUTE, ENC_CIPHERTEXT_VERSION)
                         .attribute(ENC_TYPE_ATTRIBUTE, payload.type().protocolValue())
@@ -620,7 +620,7 @@ public final class Calls2CallStanza {
             }
             toNodes.add(toBuilder.build());
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description(DESTINATION_ELEMENT)
                 .content(toNodes)
                 .build();
@@ -629,14 +629,14 @@ public final class Calls2CallStanza {
     /**
      * Returns whether a {@code <call>} child element tag names an action this factory can decode.
      *
-     * <p>This reports membership in the same per-tag decoder table {@link #parse(Node)} dispatches on, so
+     * <p>This reports membership in the same per-tag decoder table {@link #parse(Stanza)} dispatches on, so
      * it is the authoritative set of routable {@code <call>} child tags including the few actions that
      * name a child element yet carry no {@link Calls2SignalingType} taxonomy ordinal
      * ({@link RingingStanza}, {@link RaiseHandStanza}). {@link CallSignalingRouter} consults it to route a
      * tag that {@link Calls2SignalingType#ofWireTag(String)} does not resolve, so the router and the
      * parser agree on which inbound elements are deliverable. A tag in this set is not guaranteed to
-     * decode for a specific node: a decoder whose body is structurally optional still yields an empty
-     * {@link #parse(Node)} result when that body is absent, and a decoder finding a required attribute
+     * decode for a specific stanza: a decoder whose body is structurally optional still yields an empty
+     * {@link #parse(Stanza)} result when that body is absent, and a decoder finding a required attribute
      * missing throws; this method reports only that a decoder exists for the tag.
      *
      * @param tag the {@code <call>} child element tag, or {@code null}
@@ -649,9 +649,9 @@ public final class Calls2CallStanza {
     /**
      * Parses an unwrapped {@code <call>} child element into its typed {@link CallMessage}.
      *
-     * <p>The supplied node is the action element itself, the single child of a {@code <call>} envelope,
+     * <p>The supplied stanza is the action element itself, the single child of a {@code <call>} envelope,
      * not the envelope: {@link Calls2CallReceiver} reads the envelope, takes its child, and passes that
-     * child here. Dispatch keys on the child element tag through {@link Node#description()}; a tag the
+     * child here. Dispatch keys on the child element tag through {@link Stanza#description()}; a tag the
      * decoder table does not know, and an element a known decoder cannot decode because a structurally
      * optional body is absent, both yield an empty result so the caller drops the stanza. A decoder that
      * finds a required attribute missing throws, matching each record's {@code of} contract; callers
@@ -663,7 +663,7 @@ public final class Calls2CallStanza {
      *         undecodable
      * @throws NullPointerException if {@code payload} is {@code null}
      */
-    public static Optional<CallMessage> parse(Node payload) {
+    public static Optional<CallMessage> parse(Stanza payload) {
         Objects.requireNonNull(payload, "payload cannot be null");
         var decoder = DECODERS.get(payload.description());
         if (decoder == null) {

@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.calls2.signaling;
 import com.github.auties00.cobalt.model.call.CallLink;
 import com.github.auties00.cobalt.model.call.CallLinkBuilder;
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -13,7 +13,7 @@ import java.util.Optional;
  * Represents the acknowledgement of a {@link LinkCreateStanza}: the relay's reply minting a call link.
  *
  * <p>A link-create ack is delivered inside the host stanza layer's shared {@code <ack>} envelope, whose
- * body echoes a {@code <link_create>} node carrying the minted {@link #token() token} and the
+ * body echoes a {@code <link_create>} stanza carrying the minted {@link #token() token} and the
  * {@link #media() media kind} the link was created with, plus the pre-allocated {@link #callId() call id}
  * when the link was minted against an in-flight call. It is a parse-only result model, not a transmittable
  * action, so it implements no {@link CallMessage} contract; the decoded result is exposed both as its
@@ -24,7 +24,7 @@ import java.util.Optional;
  *
  * @implNote This implementation models the {@code <link_create>} ack body parsed by
  * {@code deserialize_link_create_ack} in the wa-voip WASM module {@code ff-tScznZ8P}
- * ({@code protocol/xmpp/stanzas/call_link.cc}, message type {@code 28}). The acknowledged node reuses the
+ * ({@code protocol/xmpp/stanzas/call_link.cc}, message type {@code 28}). The acknowledged stanza reuses the
  * {@code link_create} element ({@code 0x747e7}) with the {@code media} attribute ({@code 0xbfe7a}); the
  * resulting {@link CallLink} value is composed with {@link CallLinkBuilder}.
  *
@@ -65,20 +65,20 @@ public record LinkCreateAck(String token, CallLinkMedia media, Optional<String> 
     }
 
     /**
-     * Decodes a {@code <link_create>} ack node into a {@link LinkCreateAck}.
+     * Decodes a {@code <link_create>} ack stanza into a {@link LinkCreateAck}.
      *
-     * @param node the echoed {@code <link_create>} node from the {@code <ack>} body
+     * @param stanza the echoed {@code <link_create>} stanza from the {@code <ack>} body
      * @return the decoded link-create ack
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code token} attribute is absent or the
      *                                {@code media} attribute is absent or unrecognized
      */
-    public static LinkCreateAck of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var token = node.getRequiredAttributeAsString("token");
-        var media = CallLinkMedia.ofWire(node.getAttributeAsString("media").orElse(null))
+    public static LinkCreateAck of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var token = stanza.getRequiredAttributeAsString("token");
+        var media = CallLinkMedia.ofWire(stanza.getAttributeAsString("media").orElse(null))
                 .orElseThrow(() -> new NoSuchElementException("link_create ack is missing a recognized media attribute"));
-        var callId = node.getAttributeAsString("call-id");
+        var callId = stanza.getAttributeAsString("call-id");
         return new LinkCreateAck(token, media, callId);
     }
 }

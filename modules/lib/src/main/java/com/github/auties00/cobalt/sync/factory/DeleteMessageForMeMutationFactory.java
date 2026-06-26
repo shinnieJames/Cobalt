@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKey;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeAction;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;

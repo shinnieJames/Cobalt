@@ -5,15 +5,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.device.WamoUserIdentifierAction;
 import com.github.auties00.cobalt.model.sync.action.device.WamoUserIdentifierActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Covers {@link WamoUserIdentifierHandler}, the forward-looking adapter for the
  * {@code generated_wui} action: the wire-constant trio, the happy {@code SET} branch that persists
- * the resolved identifier on {@link com.github.auties00.cobalt.store.SettingsStore#setNewsletterSubscriptionUserIdentifier(String)},
+ * the resolved identifier on {@link LinkedWhatsAppSettingsStore#setNewsletterSubscriptionUserIdentifier(String)},
  * the malformed branches (missing action, empty string, blank string), the
  * {@link SyncdOperation#REMOVE} unsupported branch, and the default conflict-resolution tiebreaker.
  * WA Web ships no concrete handler, so the test surface enforces the Cobalt-inferred shape. A
@@ -178,7 +179,7 @@ class WamoUserIdentifierHandlerTest {
             var local = build(action, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(action, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
 
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -189,7 +190,7 @@ class WamoUserIdentifierHandlerTest {
             var local = build(action, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(action, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
 
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
     }

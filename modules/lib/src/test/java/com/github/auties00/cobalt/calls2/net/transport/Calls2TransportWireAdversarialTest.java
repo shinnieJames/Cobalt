@@ -475,10 +475,14 @@ class Calls2TransportWireAdversarialTest {
     @Nested
     @DisplayName("HBH-SRTP protect/unprotect via libsrtp (SPEC 14.4) - skipped when native lib absent")
     class HbhSrtpRoundTrip {
-        // A non-directional hop-by-hop SRTP master: 16-byte AES-128 key + 14-byte salt = 30 bytes.
+        // A non-directional hop-by-hop media SRTP master: 16-byte AES-128 key + 14-byte salt = 30 bytes.
         private final byte[] master = HEX.parseHex(
                 "000102030405060708090a0b0c0d0e0f"   // 16-byte key
                         + "101112131415161718191a1b1c1d"); // 14-byte salt
+        // A distinct non-directional hop-by-hop SRTCP master keying the RTCP transforms: 16-byte key + 14-byte salt.
+        private final byte[] srtcpMaster = HEX.parseHex(
+                "202122232425262728292a2b2c2d2e2f"   // 16-byte key
+                        + "303132333435363738393a3b3c3d"); // 14-byte salt
 
         @Test
         @DisplayName("an RTP packet protected then unprotected on the symmetric relay master round-trips")
@@ -531,8 +535,8 @@ class Calls2TransportWireAdversarialTest {
         // when the combined cobalt-native library or libsrtp is not present on the build host.
         private LiveHbhSrtpRelay[] openRelays() {
             try {
-                var a = new LiveHbhSrtpRelay(master.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
-                var b = new LiveHbhSrtpRelay(master.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
+                var a = new LiveHbhSrtpRelay(master.clone(), srtcpMaster.clone(), srtcpMaster.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
+                var b = new LiveHbhSrtpRelay(master.clone(), srtcpMaster.clone(), srtcpMaster.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
                 return new LiveHbhSrtpRelay[]{a, b};
             } catch (Throwable t) {
                 Assumptions.abort("native libsrtp unavailable on this host: " + t);

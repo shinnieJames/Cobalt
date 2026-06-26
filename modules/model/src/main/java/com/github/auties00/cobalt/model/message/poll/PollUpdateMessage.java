@@ -8,6 +8,7 @@ import java.time.Instant;
 import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -44,6 +45,17 @@ public final class PollUpdateMessage implements Message {
      */
     @ProtobufProperty(index = 4, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant senderTimestampMs;
+
+    /**
+     * The raw option labels selected by the voter, used only as send-time input.
+     *
+     * <p>This field is deliberately not a {@link ProtobufProperty}: it never
+     * travels on the wire. When a poll vote built from raw options is dispatched
+     * through the send pipeline, the addon-preparation step resolves the
+     * referenced {@link PollCreationMessage} and encrypts these labels into
+     * {@link #vote}. It is {@code null} on an already-encrypted or received vote.
+     */
+    List<String> selectedOptions;
 
 
     /**
@@ -131,5 +143,28 @@ public final class PollUpdateMessage implements Message {
      */
     public void setSenderTimestampMs(Instant senderTimestampMs) {
         this.senderTimestampMs = senderTimestampMs;
+    }
+
+    /**
+     * Returns the raw option labels selected by the voter for send-time encryption.
+     *
+     * @return an unmodifiable list of selected option labels; never {@code null},
+     *         and empty once the vote has been encrypted or on a received vote
+     */
+    public List<String> selectedOptions() {
+        return selectedOptions == null ? List.of() : selectedOptions;
+    }
+
+    /**
+     * Sets the raw option labels selected by the voter.
+     *
+     * <p>Supplying these defers vote encryption to the send pipeline, which
+     * resolves the {@link PollCreationMessage} and populates {@link #vote}; the
+     * labels themselves are never serialized.
+     *
+     * @param selectedOptions the selected option labels, or {@code null} to clear
+     */
+    public void setSelectedOptions(List<String> selectedOptions) {
+        this.selectedOptions = selectedOptions;
     }
 }

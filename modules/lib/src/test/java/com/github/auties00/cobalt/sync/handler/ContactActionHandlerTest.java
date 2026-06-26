@@ -5,9 +5,9 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactActionBuilder;
@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.ContactActionMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -325,7 +325,7 @@ class ContactActionHandlerTest {
         void newerRemoteApplies() {
             var local = build(CONTACT_PN, action("A"), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(CONTACT_PN, action("B"), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -333,7 +333,7 @@ class ContactActionHandlerTest {
         @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(build(CONTACT_PN, action("A"), SyncdOperation.SET, ts),
                                              build(CONTACT_PN, action("B"), SyncdOperation.SET, ts)).state());
         }
@@ -343,7 +343,7 @@ class ContactActionHandlerTest {
         void olderRemoteSkipped() {
             var local = build(CONTACT_PN, action("A"), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(CONTACT_PN, action("B"), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
 

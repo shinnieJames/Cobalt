@@ -4,111 +4,163 @@ import com.github.auties00.cobalt.client.WhatsAppClientBuilder;
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
 import com.github.auties00.cobalt.client.WhatsAppClientProxyAuthenticator;
 import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
-import com.github.auties00.cobalt.store.CloudWhatsAppStore;
-import com.github.auties00.cobalt.store.CloudWhatsAppStoreBuilder;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStore;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 
+import java.io.IOException;
 import java.net.Authenticator;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;
 import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A fluent builder that constructs {@link CloudWhatsAppClient} instances.
  *
- * <p>The builder is staged, mirroring the {@code LinkedWhatsAppClientBuilder} flow: the entry stage
- * loads a connection, either from the Cloud credentials
- * ({@link #loadConnection(String, String)}) or from a pre-built {@link CloudWhatsAppStore}
- * ({@link #loadConnection(CloudWhatsAppStore)}); the returned stage then exposes only the
- * configuration that applies to it. {@link Options} collects the optional Graph configuration
- * (WhatsApp Business Account id, business portfolio id, API version, app secret), the transport
- * configuration (proxy, HTTP client, error handler), and the webhook receiver, which is itself a
- * sub-stage ({@link Options#webhook(String, int)} returning {@link Webhook}) so the receiver is
- * either configured as one explicit decision or not at all.
+ * <p>The builder is staged, mirroring the {@code LinkedWhatsAppClientBuilder} flow. The root stage
+ * resolves the backing store through the {@link CloudWhatsAppStoreFactory} it was constructed with
+ * (persistent by default, or the one passed to {@link CloudWhatsAppClient#builder(CloudWhatsAppStoreFactory)}):
+ * {@link #loadConnection(String, String)}
+ * reopens the session persisted for a phone number id or creates a fresh one from the supplied
+ * credentials, while {@link #loadConnection(String)} and {@link #loadLatestConnection()} resume an
+ * existing one without provisioning. Each returns an {@link Options} stage that writes the optional Graph
+ * configuration (WhatsApp Business Account id, business portfolio id, API version, app secret, app id), the
+ * transport configuration (proxy, HTTP client), and the webhook receiver directly into the resolved store.
+ * The webhook receiver is its own sub-stage ({@link Options#webhook(String, int)} returning
+ * {@link Webhook}) so it is either configured as one explicit decision or not at all.
  *
  * @see CloudWhatsAppClient
+ * @see CloudWhatsAppStoreFactory
  * @see WhatsAppClientBuilder#cloudApi()
  */
-public sealed class CloudWhatsAppClientBuilder permits CloudWhatsAppClientBuilder.Transport {
+public sealed class CloudWhatsAppClientBuilder permits CloudWhatsAppClientBuilder.Options {
     /**
-     * Package-private constructor; obtain instances via {@link CloudWhatsAppClient#builder()}.
+     * The factory that resolves the backing store.
+     */
+    private final CloudWhatsAppStoreFactory storeFactory;
+
+    /**
+     * Package-private constructor backed by the {@link CloudWhatsAppStoreFactory#persistent() persistent}
+     * store factory; obtain instances via {@link CloudWhatsAppClient#builder()}.
      */
     CloudWhatsAppClientBuilder() {
-
+        this(CloudWhatsAppStoreFactory.persistent());
     }
 
     /**
-     * Loads a connection from the Cloud credentials.
+     * Package-private constructor backed by the given store factory; obtain instances via
+     * {@link CloudWhatsAppClient#builder(CloudWhatsAppStoreFactory)}.
+     *
+     * @param storeFactory the factory that resolves the backing store
+     * @throws NullPointerException if {@code storeFactory} is {@code null}
+     */
+    CloudWhatsAppClientBuilder(CloudWhatsAppStoreFactory storeFactory) {
+        this.storeFactory = Objects.requireNonNull(storeFactory, "storeFactory must not be null");
+    }
+
+    /**
+     * Loads the connection for the Cloud credentials through the store factory, creating a fresh one if
+     * none is persisted yet.
+     *
+     * <p>When a session is already persisted for {@code phoneNumberId} it is reopened (preserving the
+     * stored configuration and per-chat read markers) and its access token is refreshed to
+     * {@code accessToken} to absorb a rotated token; otherwise a fresh session is created and recorded.
+     * The store is resolved through the factory the builder was constructed with, which is persistent
+     * unless {@link CloudWhatsAppClient#builder(CloudWhatsAppStoreFactory)} supplied
+     * {@link CloudWhatsAppStoreFactory#temporary()} for a RAM-only session.
      *
      * @param accessToken   the system-user access token
      * @param phoneNumberId the operating phone number id
-     * @return the next builder stage
+     * @return the next builder stage backed by the resolved store
      * @throws NullPointerException if {@code accessToken} or {@code phoneNumberId} is {@code null}
+     * @throws IOException          if the store cannot be read or created
      */
-    public Options loadConnection(String accessToken, String phoneNumberId) {
+    public Options loadConnection(String accessToken, String phoneNumberId) throws IOException {
         Objects.requireNonNull(accessToken, "accessToken must not be null");
         Objects.requireNonNull(phoneNumberId, "phoneNumberId must not be null");
-        return new Options(accessToken, phoneNumberId);
+        var existing = storeFactory.load(phoneNumberId);
+        if (existing.isPresent()) {
+            return new Options(existing.get().setAccessToken(accessToken));
+        }
+        return new Options(storeFactory.create(accessToken, phoneNumberId));
     }
 
     /**
-     * Loads a connection from a pre-built store, bypassing the credential collection flow.
+     * Loads the connection whose phone number id matches {@code phoneNumberId}.
      *
-     * @param store the store carrying the credentials and webhook configuration
-     * @return the next builder stage
-     * @throws NullPointerException if {@code store} is {@code null}
+     * @param phoneNumberId the phone number id of the connection to load
+     * @return the next builder stage if a matching store was found, empty otherwise
+     * @throws NullPointerException if {@code phoneNumberId} is {@code null}
+     * @throws IOException          if the store cannot be read
      */
-    public Custom loadConnection(CloudWhatsAppStore store) {
-        Objects.requireNonNull(store, "store must not be null");
-        return new Custom(store);
+    public Optional<Options> loadConnection(String phoneNumberId) throws IOException {
+        Objects.requireNonNull(phoneNumberId, "phoneNumberId must not be null");
+        return storeFactory.load(phoneNumberId).map(Options::new);
     }
 
     /**
-     * A builder stage that collects the transport configuration shared by every connection flavour:
-     * the proxy, the HTTP client, and the error handler.
+     * Loads the most recently created or loaded connection.
      *
-     * @param <T> the concrete stage type returned by each setter, for fluent chaining
+     * @return the next builder stage if a previous connection exists, empty otherwise
+     * @throws IOException if the store cannot be read
      */
-    public static abstract sealed class Transport<T extends Transport<T>> extends CloudWhatsAppClientBuilder permits Options, Custom {
+    public Optional<Options> loadLatestConnection() throws IOException {
+        return storeFactory.loadLatest().map(Options::new);
+    }
+
+    /**
+     * The factory-backed builder stage.
+     *
+     * <p>Collects the transport configuration (proxy, HTTP client) and writes the optional Graph
+     * configuration and the webhook receiver directly into the store resolved by the previous stage,
+     * then produces the client with {@link #build()}.
+     */
+    public static sealed class Options extends CloudWhatsAppClientBuilder permits Webhook {
+        /**
+         * The default webhook URL path.
+         */
+        static final String DEFAULT_WEBHOOK_PATH = "/webhook";
+
+        /**
+         * The store resolved by the previous stage, into which configuration writes are applied.
+         */
+        final CloudWhatsAppStore store;
+
         /**
          * The proxy routing outbound Graph traffic, or {@code null} for a direct connection.
          */
-        WhatsAppClientProxy proxy;
+        private WhatsAppClientProxy proxy;
 
         /**
          * The HTTP client used by the transport, or {@code null} to build a default-configured one.
          */
-        HttpClient httpClient;
+        private HttpClient httpClient;
 
         /**
-         * Package-private constructor used by the concrete stages.
-         */
-        Transport() {
-
-        }
-
-        /**
-         * Returns {@code this}, narrowed to the concrete stage type.
+         * Constructs the stage around the resolved store.
          *
-         * @return this stage
+         * @param store the store to configure
          */
-        abstract T self();
+        Options(CloudWhatsAppStore store) {
+            this.store = store;
+        }
 
         /**
          * Sets the proxy that routes outbound Graph traffic.
          *
          * <p>The Cloud transport rides {@code java.net.http}, which supports only HTTP {@code CONNECT}
-         * proxies; supplying a SOCKS proxy fails at build time. The proxy applies to the
-         * default-built HTTP client; when an explicit {@link #httpClient(HttpClient)} is supplied,
-         * its own proxy configuration wins.
+         * proxies; supplying a SOCKS proxy fails at build time. The proxy applies to the default-built
+         * HTTP client; when an explicit {@link #httpClient(HttpClient)} is supplied, its own proxy
+         * configuration wins.
          *
          * @param proxy the proxy, or {@code null} for a direct connection
          * @return this builder, for chaining
          */
-        public T proxy(WhatsAppClientProxy proxy) {
+        public Options proxy(WhatsAppClientProxy proxy) {
             this.proxy = proxy;
-            return self();
+            return this;
         }
 
         /**
@@ -117,19 +169,101 @@ public sealed class CloudWhatsAppClientBuilder permits CloudWhatsAppClientBuilde
          * @param httpClient the HTTP client, or {@code null} to build a default-configured one
          * @return this builder, for chaining
          */
-        public T httpClient(HttpClient httpClient) {
+        public Options httpClient(HttpClient httpClient) {
             this.httpClient = httpClient;
-            return self();
+            return this;
         }
 
         /**
-         * Builds the configured Cloud client around the given store.
+         * Sets the WhatsApp Business Account id used by template and phone-number management edges.
          *
-         * @param store the store backing the client
+         * @param whatsappBusinessAccountId the WhatsApp Business Account id, or {@code null} to leave it
+         *                                  unset
+         * @return this builder, for chaining
+         */
+        public Options whatsappBusinessAccountId(String whatsappBusinessAccountId) {
+            store.setWhatsappBusinessAccountId(whatsappBusinessAccountId);
+            return this;
+        }
+
+        /**
+         * Sets the business portfolio id used by partner onboarding edges.
+         *
+         * @param businessId the business portfolio id, or {@code null} to leave it unset
+         * @return this builder, for chaining
+         */
+        public Options businessId(String businessId) {
+            store.setBusinessId(businessId);
+            return this;
+        }
+
+        /**
+         * Sets the graph API version targeted by every request.
+         *
+         * @param apiVersion the API version, or {@code null} to keep the default
+         *                   ({@link CloudApiVersion#DEFAULT})
+         * @return this builder, for chaining
+         */
+        public Options apiVersion(CloudApiVersion apiVersion) {
+            if (apiVersion != null) {
+                store.setApiVersion(apiVersion.version());
+            }
+            return this;
+        }
+
+        /**
+         * Sets the app secret used for {@code appsecret_proof} and webhook signature verification.
+         *
+         * @param appSecret the app secret, or {@code null} to disable proofs and signature checks
+         * @return this builder, for chaining
+         */
+        public Options appSecret(String appSecret) {
+            store.setAppSecret(appSecret);
+            return this;
+        }
+
+        /**
+         * Sets the Meta app id used by the Resumable Upload API.
+         *
+         * <p>The Resumable Upload API creates an upload session under the {@code /{APP_ID}/uploads} edge,
+         * so it is required only for resumable media uploads and is otherwise optional.
+         *
+         * @param appId the Meta app id, or {@code null} to leave it unset
+         * @return this builder, for chaining
+         */
+        public Options appId(String appId) {
+            store.setAppId(appId);
+            return this;
+        }
+
+        /**
+         * Configures the built-in webhook receiver and moves to the webhook sub-stage.
+         *
+         * <p>The verify token is echoed during the subscription handshake and the port is where the
+         * receiver binds; the path defaults to {@code /webhook} until {@link Webhook#path(String)}
+         * overrides it. Skipping this step leaves the client send-only.
+         *
+         * @param verifyToken the webhook verify token
+         * @param port        the TCP port to bind
+         * @return the webhook sub-stage
+         * @throws NullPointerException if {@code verifyToken} is {@code null}
+         */
+        public Webhook webhook(String verifyToken, int port) {
+            Objects.requireNonNull(verifyToken, "verifyToken must not be null");
+            store.setWebhookVerifyToken(verifyToken);
+            store.setWebhookPort(port);
+            store.setWebhookPath(DEFAULT_WEBHOOK_PATH);
+            return new Webhook(store);
+        }
+
+        /**
+         * Persists the configured store and builds the Cloud client.
+         *
          * @return the configured client
          * @throws IllegalArgumentException if a SOCKS proxy was supplied
          */
-        final CloudWhatsAppClient build(CloudWhatsAppStore store) {
+        public CloudWhatsAppClient build() {
+            store.save();
             var resolvedHttpClient = httpClient != null ? httpClient : buildHttpClient();
             return new LiveCloudWhatsAppClient(store, resolvedHttpClient);
         }
@@ -162,243 +296,19 @@ public sealed class CloudWhatsAppClientBuilder permits CloudWhatsAppClientBuilde
     }
 
     /**
-     * The credential-backed builder stage.
-     *
-     * <p>Collects the optional Graph configuration and the webhook receiver around the credentials
-     * supplied to {@link CloudWhatsAppClientBuilder#loadConnection(String, String)}, then produces
-     * the client with {@link #build()}.
-     */
-    public static sealed class Options extends Transport<Options> permits Webhook {
-        /**
-         * The system-user access token.
-         */
-        final String accessToken;
-
-        /**
-         * The operating phone number id.
-         */
-        final String phoneNumberId;
-
-        /**
-         * The WhatsApp Business Account id, or {@code null} when management edges are unused.
-         */
-        String whatsappBusinessAccountId;
-
-        /**
-         * The business portfolio id, or {@code null} when onboarding edges are unused.
-         */
-        String businessId;
-
-        /**
-         * The graph API version.
-         */
-        CloudApiVersion apiVersion = CloudApiVersion.DEFAULT;
-
-        /**
-         * The app secret, or {@code null} when proofs and signature checks are disabled.
-         */
-        String appSecret;
-
-        /**
-         * The Meta app id used by the Resumable Upload API, or {@code null} when resumable uploads
-         * are unused.
-         */
-        String appId;
-
-        /**
-         * Constructs the stage around the required credentials.
-         *
-         * @param accessToken   the system-user access token
-         * @param phoneNumberId the operating phone number id
-         */
-        Options(String accessToken, String phoneNumberId) {
-            this.accessToken = accessToken;
-            this.phoneNumberId = phoneNumberId;
-        }
-
-        /**
-         * Copy constructor used by the {@link Webhook} sub-stage.
-         *
-         * @param source the stage whose configuration is inherited
-         */
-        Options(Options source) {
-            this.accessToken = source.accessToken;
-            this.phoneNumberId = source.phoneNumberId;
-            this.whatsappBusinessAccountId = source.whatsappBusinessAccountId;
-            this.businessId = source.businessId;
-            this.apiVersion = source.apiVersion;
-            this.appSecret = source.appSecret;
-            this.appId = source.appId;
-            this.proxy = source.proxy;
-            this.httpClient = source.httpClient;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        Options self() {
-            return this;
-        }
-
-        /**
-         * Sets the WhatsApp Business Account id used by template and phone-number management edges.
-         *
-         * @param whatsappBusinessAccountId the WABA id, or {@code null} to leave it unset
-         * @return this builder, for chaining
-         */
-        public Options whatsappBusinessAccountId(String whatsappBusinessAccountId) {
-            this.whatsappBusinessAccountId = whatsappBusinessAccountId;
-            return this;
-        }
-
-        /**
-         * Sets the business portfolio id used by partner onboarding edges.
-         *
-         * @param businessId the business id, or {@code null} to leave it unset
-         * @return this builder, for chaining
-         */
-        public Options businessId(String businessId) {
-            this.businessId = businessId;
-            return this;
-        }
-
-        /**
-         * Sets the graph API version targeted by every request.
-         *
-         * @param apiVersion the API version, or {@code null} to keep the default
-         *                   ({@link CloudApiVersion#DEFAULT})
-         * @return this builder, for chaining
-         */
-        public Options apiVersion(CloudApiVersion apiVersion) {
-            if (apiVersion != null) {
-                this.apiVersion = apiVersion;
-            }
-            return this;
-        }
-
-        /**
-         * Sets the app secret used for {@code appsecret_proof} and webhook signature verification.
-         *
-         * @param appSecret the app secret, or {@code null} to disable proofs and signature checks
-         * @return this builder, for chaining
-         */
-        public Options appSecret(String appSecret) {
-            this.appSecret = appSecret;
-            return this;
-        }
-
-        /**
-         * Sets the Meta app id used by the Resumable Upload API.
-         *
-         * <p>The Resumable Upload API creates an upload session under the {@code /{APP_ID}/uploads}
-         * edge, so it is required only for resumable media uploads and is otherwise optional.
-         *
-         * @param appId the Meta app id, or {@code null} to leave it unset
-         * @return this builder, for chaining
-         */
-        public Options appId(String appId) {
-            this.appId = appId;
-            return this;
-        }
-
-        /**
-         * Configures the built-in webhook receiver and moves to the webhook sub-stage.
-         *
-         * <p>The verify token is echoed during the subscription handshake and the port is where the
-         * receiver binds. Skipping this step leaves the client send-only.
-         *
-         * @param verifyToken the webhook verify token
-         * @param port        the TCP port to bind
-         * @return the webhook sub-stage
-         * @throws NullPointerException if {@code verifyToken} is {@code null}
-         */
-        public Webhook webhook(String verifyToken, int port) {
-            Objects.requireNonNull(verifyToken, "verifyToken must not be null");
-            return new Webhook(this, verifyToken, port);
-        }
-
-        /**
-         * Builds the configured Cloud client.
-         *
-         * @return the configured client
-         * @throws IllegalArgumentException if a SOCKS proxy was supplied
-         */
-        public CloudWhatsAppClient build() {
-            return build(buildStore(null, null, 0, null));
-        }
-
-        /**
-         * Builds the backing store from the collected configuration.
-         *
-         * @param webhookVerifyToken the webhook verify token, or {@code null} when the receiver is
-         *                           disabled
-         * @param webhookBindAddress the webhook bind address, or {@code null} to bind the wildcard
-         *                           address
-         * @param webhookPort        the webhook port, or {@code 0} when the receiver is disabled
-         * @param webhookPath        the webhook URL path, or {@code null} for the default
-         * @return the backing store
-         */
-        final CloudWhatsAppStore buildStore(String webhookVerifyToken, String webhookBindAddress, int webhookPort, String webhookPath) {
-            return new CloudWhatsAppStoreBuilder()
-                    .accessToken(accessToken)
-                    .phoneNumberId(phoneNumberId)
-                    .whatsappBusinessAccountId(whatsappBusinessAccountId)
-                    .businessId(businessId)
-                    .apiVersion(apiVersion.version())
-                    .appSecret(appSecret)
-                    .webhookVerifyToken(webhookVerifyToken)
-                    .webhookBindAddress(webhookBindAddress)
-                    .webhookPort(webhookPort == 0 ? null : webhookPort)
-                    .webhookPath(webhookPath)
-                    .appId(appId)
-                    .build();
-        }
-    }
-
-    /**
      * The webhook-receiver builder sub-stage.
      *
-     * <p>Reached through {@link Options#webhook(String, int)}; refines the receiver with an optional
-     * bind address and URL path, then produces the client with {@link #build()}.
+     * <p>Reached through {@link Options#webhook(String, int)}; refines the receiver with an optional bind
+     * address and URL path, then produces the client with the inherited {@link Options#build()}.
      */
     public static final class Webhook extends Options {
         /**
-         * The default webhook URL path.
-         */
-        private static final String DEFAULT_WEBHOOK_PATH = "/webhook";
-
-        /**
-         * The webhook verify token.
-         */
-        private final String verifyToken;
-
-        /**
-         * The webhook port.
-         */
-        private final int port;
-
-        /**
-         * The webhook bind address, or {@code null} to bind the wildcard address.
-         */
-        private String bindAddress;
-
-        /**
-         * The webhook URL path.
-         */
-        private String path = DEFAULT_WEBHOOK_PATH;
-
-        /**
-         * Constructs the sub-stage around the receiver essentials.
+         * Constructs the sub-stage around the shared store.
          *
-         * @param source      the stage whose configuration is inherited
-         * @param verifyToken the webhook verify token
-         * @param port        the TCP port to bind
+         * @param store the store resolved by the previous stage
          */
-        Webhook(Options source, String verifyToken, int port) {
-            super(source);
-            this.verifyToken = verifyToken;
-            this.port = port;
+        Webhook(CloudWhatsAppStore store) {
+            super(store);
         }
 
         /**
@@ -408,7 +318,7 @@ public sealed class CloudWhatsAppClientBuilder permits CloudWhatsAppClientBuilde
          * @return this builder, for chaining
          */
         public Webhook bindAddress(String bindAddress) {
-            this.bindAddress = bindAddress;
+            store.setWebhookBindAddress(bindAddress);
             return this;
         }
 
@@ -420,58 +330,9 @@ public sealed class CloudWhatsAppClientBuilder permits CloudWhatsAppClientBuilde
          */
         public Webhook path(String path) {
             if (path != null) {
-                this.path = path;
+                store.setWebhookPath(path);
             }
             return this;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public CloudWhatsAppClient build() {
-            return build(buildStore(verifyToken, bindAddress, port, path));
-        }
-    }
-
-    /**
-     * The pre-built-store builder stage.
-     *
-     * <p>Reached through {@link CloudWhatsAppClientBuilder#loadConnection(CloudWhatsAppStore)}; the
-     * Graph and webhook configuration is read from the store, so only the transport configuration
-     * remains to collect before {@link #build()}.
-     */
-    public static final class Custom extends Transport<Custom> {
-        /**
-         * The pre-built store backing the future client.
-         */
-        private final CloudWhatsAppStore store;
-
-        /**
-         * Constructs the stage around the pre-built store.
-         *
-         * @param store the store backing the future client
-         */
-        Custom(CloudWhatsAppStore store) {
-            this.store = store;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        Custom self() {
-            return this;
-        }
-
-        /**
-         * Builds the configured Cloud client.
-         *
-         * @return the configured client
-         * @throws IllegalArgumentException if a SOCKS proxy was supplied
-         */
-        public CloudWhatsAppClient build() {
-            return build(store);
         }
     }
 }

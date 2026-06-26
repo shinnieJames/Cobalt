@@ -4,12 +4,14 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.AvatarUpdatedAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -17,7 +19,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * <p>When another device creates, updates, or deletes the user's Meta-AI
  * avatar, the resulting state is mirrored into
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore#hasAvatar()}, and the
+ * {@link LinkedWhatsAppStore#hasAvatar()}, and the
  * recent-avatar-sticker cache is cleared on every mutation.
  *
  * @implNote
@@ -75,7 +77,7 @@ public final class AvatarUpdatedHandler implements WebAppStateActionHandler {
      * mutation value and either marks the user as having an avatar
      * ({@code CREATED} / {@code UPDATED}) or as not having one ({@code DELETED}),
      * then drops the recent-avatar-sticker cache via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#removeAllRecentAvatarStickers()}.
+     * {@link LinkedWhatsAppSettingsStore#removeAllRecentAvatarStickers()}.
      *
      * @implNote
      * This implementation gates on the

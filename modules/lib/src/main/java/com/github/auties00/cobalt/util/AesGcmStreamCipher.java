@@ -35,24 +35,6 @@ import java.util.Objects;
  *
  * <p>Instances are not thread-safe; one cipher is intended to be owned by a single reader or writer thread, the
  * same ownership model as the datagram streams that drive it.
- *
- * @implNote This implementation never imports the AES block schedule itself: the hash subkey {@code H = E(0)},
- *           the tag mask {@code E(J0)}, and every counter-mode keystream block are produced by one reused
- *           {@code AES/ECB/NoPadding} {@link Cipher}, so the only cryptography written here is the GHASH field
- *           arithmetic and the counter-mode glue. The GHASH multiply is a constant-time carryless multiply
- *           (BearSSL's {@code ctmul64}): a Karatsuba split into 64-by-64 carryless products, each computed by
- *           the group-masked integer multiply of {@link #carrylessMultiply(long, long)} that suppresses
- *           cross-group carries, with three further products over bit-reversed operands recovering the high
- *           words before the SP 800-38D reduction. It has no data-dependent branch and no table lookup, so it
- *           leaks no timing about the key-derived hash subkey wherever the platform's 64-bit multiply is
- *           constant time (every mainstream server and desktop CPU); it is far faster than a bitwise
- *           shift-and-reduce yet side-channel-resistant, unlike a table-driven GHASH. Block words and the tag
- *           are marshalled through
- *           {@link DataUtils}'s {@link ByteOrder#BIG_ENDIAN} {@code VarHandle} accessors rather than per-byte
- *           shifts. The counter is incremented with GCM's 32-bit {@code inc32} semantics (only the trailing
- *           four bytes advance), which agrees with the JDK's own full-width counter-mode for any message
- *           shorter than 2^32 blocks (64 GiB), far above the 16 MiB {@code int24} datagram ceiling, so the two
- *           never diverge in practice.
  */
 public final class AesGcmStreamCipher {
     /**

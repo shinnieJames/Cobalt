@@ -8,12 +8,12 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.BroadcastListParticipant;
 import com.github.auties00.cobalt.model.business.BroadcastListParticipantBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.model.sync.action.business.BroadcastListParticipantAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastAssociationAction;
-import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +42,7 @@ import java.util.List;
  * JIDs are LID/HostedLID they are stored as {@code lidJid}
  * directly; phone-number recipients populate {@code pnJid} and
  * resolve {@code lidJid} via
- * {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(Jid)},
+ * {@link LinkedWhatsAppContactStore#findLidByPhone(Jid)},
  * falling back to the phone-number JID itself when no LID is
  * known.
  */
@@ -95,9 +95,9 @@ public final class BusinessBroadcastAssociationHandler implements WebAppStateAct
      * mutable {@link ArrayList} before mutating because the model
      * exposes an unmodifiable {@link List}; the parent list is then
      * upserted via
-     * {@link com.github.auties00.cobalt.store.BusinessStore#putBusinessBroadcastList(com.github.auties00.cobalt.model.business.BusinessBroadcastList)}.
+     * {@link LinkedWhatsAppBusinessStore#putBusinessBroadcastList(com.github.auties00.cobalt.model.business.BusinessBroadcastList)}.
      * Phone-number recipients resolve their LID via
-     * {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(Jid)},
+     * {@link LinkedWhatsAppContactStore#findLidByPhone(Jid)},
      * falling back to the phone-number JID itself when no LID is known. An empty
      * participant array is normalized to {@code null} so the stored list shape
      * matches the wire shape.

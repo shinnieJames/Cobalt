@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdMutationResult;
@@ -43,7 +44,7 @@ public final class BizAdCertifyFacebookGraphQlResponse implements FacebookGraphQ
      * {@code ads_integrity_self_certification_certify} field onto a {@link BusinessAdMutationResult}.
      *
      * @param data the unwrapped GraphQL {@code data} object returned by
-     *             {@link com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient#send(FacebookGraphQlOperation.Request)}
+     *             {@link FacebookGraphQlClient#send(FacebookGraphQlOperation.Request)}
      * @return the parsed response, or empty when {@code data} is {@code null}
      */
     public static Optional<BizAdCertifyFacebookGraphQlResponse> of(JSONObject data) {

@@ -259,6 +259,60 @@ public final class EncMessageFactory {
     }
 
     /**
+     * Decrypts a poll vote produced by {@link #encryptPollVote(List, ChatMessageInfo, Jid)}.
+     *
+     * <p>Re-derives the per-vote key from the poll-creation message's
+     * {@code messageSecret}, the poll key id, and the resolved original sender,
+     * then decrypts {@code vote} and decodes the inner {@code PollVoteMessage}.
+     * The returned list holds the SHA-256 hashes of the options the voter
+     * selected; callers map those hashes back to option labels by hashing the
+     * poll-creation message's option names.
+     *
+     * @param vote         the encrypted vote received from the voter
+     * @param pollCreation the poll-creation message the vote refers to
+     * @param voterJid     the JID of the user that cast the vote
+     * @return the SHA-256 hashes of the selected options
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if {@code pollCreation} carries no
+     *                                  {@code messageSecret}, its key lacks an id
+     *                                  or parent JID, or {@code vote} carries no
+     *                                  payload or IV
+     * @throws RuntimeException         if the underlying cipher rejects the
+     *                                  authentication tag (for example on a
+     *                                  sender JID-form mismatch)
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPollsVoteDecryption", exports = "decryptVote",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static List<byte[]> decryptPollVote(PollEncValue vote, ChatMessageInfo pollCreation, Jid voterJid) {
+        Objects.requireNonNull(vote, "vote cannot be null");
+        Objects.requireNonNull(pollCreation, "pollCreation cannot be null");
+        Objects.requireNonNull(voterJid, "voterJid cannot be null");
+
+        var pollSecret = pollCreation.messageSecret()
+                .orElseThrow(() -> new IllegalArgumentException("Poll creation has no messageSecret"));
+
+        var pollKey = pollCreation.key();
+        var pollKeyId = pollKey.id()
+                .orElseThrow(() -> new IllegalArgumentException("Poll creation key has no id"));
+        var pollKeyJid = pollKey.parentJid()
+                .orElseThrow(() -> new IllegalArgumentException("Poll creation key has no parentJid"));
+
+        var originalSender = resolveOriginalSender(pollKey, pollKeyJid, voterJid);
+
+        var ciphertext = vote.encPayload()
+                .orElseThrow(() -> new IllegalArgumentException("Poll vote has no encrypted payload"));
+        var iv = vote.encIv()
+                .orElseThrow(() -> new IllegalArgumentException("Poll vote has no encryption IV"));
+
+        var plaintext = MessageAddonEncryption.decrypt(
+                new MessageEncryptedAddon(ciphertext, iv), pollSecret, pollKeyId,
+                originalSender, voterJid.toUserJid(),
+                MessageAddonType.POLL_VOTE);
+
+        return PollVoteMessageSpec.decode(plaintext).selectedOptions();
+    }
+
+    /**
      * Resolves the original-sender JID that the addon HKDF info parameter is
      * bound to.
      *

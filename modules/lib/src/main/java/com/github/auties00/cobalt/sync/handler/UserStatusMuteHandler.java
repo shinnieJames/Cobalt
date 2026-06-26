@@ -9,9 +9,11 @@ import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadataEditBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteAction;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteActionBuilder;
@@ -28,7 +30,7 @@ import java.util.List;
  * writes the new value to the matching
  * {@link com.github.auties00.cobalt.model.contact.Contact#setStatusMuted(boolean)} record or to
  * {@link GroupMetadata#statusMuted()} on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore}. Mutations referencing an unknown contact
+ * {@link LinkedWhatsAppStore}. Mutations referencing an unknown contact
  * or group are reported as {@link MutationApplicationResult#orphan(String, String)} so a later
  * contact or group-metadata sync can retry them.
  */
@@ -79,7 +81,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
      * {@link MutationApplicationResult#unsupported()}. The second index slot must parse as a valid
      * {@link Jid} and the decoded value must be a {@link UserStatusMuteAction}, otherwise the
      * mutation is reported as malformed. Group JIDs route through
-     * {@link com.github.auties00.cobalt.store.ChatStore#applyGroupMetadataEdit(Jid, com.github.auties00.cobalt.model.chat.group.GroupMetadataEdit)};
+     * {@link LinkedWhatsAppChatStore#applyGroupMetadataEdit(Jid, com.github.auties00.cobalt.model.chat.group.GroupMetadataEdit)};
      * user JIDs route through {@link com.github.auties00.cobalt.model.contact.Contact#setStatusMuted(boolean)}
      * on the resolved contact. An unknown group or contact surfaces as
      * {@link MutationApplicationResult#orphan(String, String)} with the model type

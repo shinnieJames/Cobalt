@@ -5,10 +5,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayAllCalls;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -17,7 +18,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>The sync dispatcher routes incoming {@code setting_relayAllCalls} mutations here whenever the
  * user toggles "Always relay calls" on another linked device (typical trigger: Privacy Settings,
  * Advanced, Protect IP Address in Calls). The handler writes the boolean preference onto
- * {@link com.github.auties00.cobalt.store.SettingsStore#setRelayAllCalls(boolean)} so Cobalt's VoIP
+ * {@link LinkedWhatsAppSettingsStore#setRelayAllCalls(boolean)} so Cobalt's VoIP
  * layer routes subsequent calls through the WA relay instead of letting the peer learn the local IP
  * address.
  */
@@ -68,7 +69,7 @@ public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler 
      * {@link PrivacySettingRelayAllCalls}; any other operation is
      * {@link MutationApplicationResult#unsupported()} and any other value is
      * {@link MutationApplicationResult#malformed()}. The boolean is written into
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setRelayAllCalls(boolean)}.
+     * {@link LinkedWhatsAppSettingsStore#setRelayAllCalls(boolean)}.
      *
      * @implNote
      * This implementation replaces WA Web's {@code setRelayAllCallsToUserPrefs} backend shell hop

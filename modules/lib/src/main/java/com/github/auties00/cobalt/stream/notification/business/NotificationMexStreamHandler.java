@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.business;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -20,8 +21,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMetadataBuilder;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.time.Instant;
 import java.util.LinkedHashSet;
@@ -96,20 +96,20 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
     }
 
     /**
-     * Validates the stanza shape and delegates to {@link #handleNotification(Node)}.
+     * Validates the stanza shape and delegates to {@link #handleNotification(Stanza)}.
      *
      * <p>Stanzas whose description is not {@code notification} or whose {@code type} is not {@code mex} are silently
      * dropped.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "mex")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "mex")) {
             return;
         }
 
-        handleNotification(node);
+        handleNotification(stanza);
     }
 
     /**
@@ -122,16 +122,16 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
      * with {@link NackReason#PARSING_ERROR}. The transport ack is always sent so the server never closes the stream on
      * an outstanding notification.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handleNotification(Node node) {
-        var updateNode = node.getChild("update").orElse(null);
+    private void handleNotification(Stanza stanza) {
+        var updateNode = stanza.getChild("update").orElse(null);
         if (updateNode == null) {
             return;
         }
 
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
+        var stanzaId = stanza.getAttributeAsString("id", null);
+        var stanzaFrom = stanza.getAttributeAsJid("from", null);
         var operationName = updateNode.getAttributeAsString("op_name", "");
         var payload = parsePayload(updateNode);
 
@@ -248,11 +248,11 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
      * <p>Returns an empty {@link JSONObject} on blank content or parse failure so that the downstream fatal-error
      * validation always operates on a non-{@code null} object.
      *
-     * @param updateNode the {@code <update>} child of the notification
+     * @param updateStanza the {@code <update>} child of the notification
      * @return the parsed JSON object, never {@code null}
      */
-    private JSONObject parsePayload(Node updateNode) {
-        var content = updateNode.toContentString().orElse(null);
+    private JSONObject parsePayload(Stanza updateStanza) {
+        var content = updateStanza.toContentString().orElse(null);
         if (content == null || content.isBlank()) {
             return new JSONObject();
         }
@@ -487,7 +487,7 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
      *
      * @implNote
      * This implementation does not call the typed
-     * {@link com.github.auties00.cobalt.node.mex.json.user.LidChangeNotificationMexResponse} parser because the
+     * {@link com.github.auties00.cobalt.stanza.mex.json.user.LidChangeNotificationMexResponse} parser because the
      * notification body is inline JSON rather than the IQ-wrapped envelope that parser expects; the {@code old} and
      * {@code new} keys under {@code xwa2_notify_lid_change} are read directly.
      *
@@ -846,7 +846,7 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
         if (stanzaId == null || stanzaFrom == null) {
             return;
         }
-        var synthetic = new NodeBuilder()
+        var synthetic = new StanzaBuilder()
                 .description("notification")
                 .attribute("id", stanzaId)
                 .attribute("from", stanzaFrom)
@@ -870,7 +870,7 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
         if (stanzaId == null || stanzaFrom == null) {
             return;
         }
-        var synthetic = new NodeBuilder()
+        var synthetic = new StanzaBuilder()
                 .description("notification")
                 .attribute("id", stanzaId)
                 .attribute("from", stanzaFrom)
@@ -881,7 +881,7 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
     /**
      * Signals that {@link #dispatch(String, String, Jid, JSONObject)} encountered an op name no Cobalt handler knows.
      *
-     * <p>Caught inside {@link #handleNotification(Node)} and turned into an {@code <ack error=...>} nack: a
+     * <p>Caught inside {@link #handleNotification(Stanza)} and turned into an {@code <ack error=...>} nack: a
      * known-but-unsupported op nacks with {@link NackReason#PARSING_ERROR}, any other unknown op with
      * {@link NackReason#UNRECOGNIZED_STANZA}.
      */
@@ -904,7 +904,7 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
         /**
          * Returns the op name that triggered this exception.
          *
-         * <p>Read by {@link NotificationMexStreamHandler#handleNotification(Node)} to choose between the
+         * <p>Read by {@link NotificationMexStreamHandler#handleNotification(Stanza)} to choose between the
          * {@link NotificationMexStreamHandler#KNOWN_UNSUPPORTED_OPS} warning path and the unknown-op error path.
          *
          * @return the op name

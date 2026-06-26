@@ -1,11 +1,12 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.RecentEmojiWeight;
 import com.github.auties00.cobalt.model.sync.action.media.RecentEmojiWeightsAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -14,7 +15,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * <p>Persists a list of {@link RecentEmojiWeight} entries
  * ({@code (emoji, weight)} pairs) on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so the emoji
+ * {@link LinkedWhatsAppStore} so the emoji
  * suggestion ranker reflects the same usage counts on every device. Only
  * {@link SyncdOperation#SET} is accepted; any other operation is reported as
  * {@link MutationApplicationResult#unsupported()} and a wrong-typed value as

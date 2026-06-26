@@ -7,12 +7,14 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.time.Instant;
 
@@ -95,7 +97,7 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
      * {@link MuteAction#muteEndTimestamp()} alongside
      * {@link MuteAction#muted()} {@code == true} is rejected as
      * {@link MutationApplicationResult#malformed()}, the resolved chat must
-     * exist in {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore}
+     * exist in {@link LinkedWhatsAppStore}
      * (otherwise {@link MutationApplicationResult#orphan(String, String)} with
      * {@code modelType="Chat"}), and the timestamp is clamped so an already
      * elapsed future expiry collapses to {@code 0} before being applied via
@@ -103,7 +105,7 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
      * {@link ABProp#ENABLE_MENTION_EVERYONE_RECEIVER_WEB} enabled, the
      * mention-everyone expiration is computed with the same past/future/zero
      * clamping and persisted via
-     * {@link com.github.auties00.cobalt.store.ChatStore#setMentionEveryoneMuteExpiration(Jid, ChatMute)}.
+     * {@link LinkedWhatsAppChatStore#setMentionEveryoneMuteExpiration(Jid, ChatMute)}.
      *
      * @implNote
      * This implementation drops the frontend mute-collection fire-and-forget

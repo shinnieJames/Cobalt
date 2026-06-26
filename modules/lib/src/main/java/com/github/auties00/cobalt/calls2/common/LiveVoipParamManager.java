@@ -1,29 +1,40 @@
 package com.github.auties00.cobalt.calls2.common;
 
+import com.github.auties00.cobalt.model.jid.Jid;
+
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Owns the voip-param sets for one call: the stored raw sets keyed by settings type, the
- * selected active set, the participant-count override, and the dynamic rate-control engine.
+ * Owns the voip-param sets for one call: the stored raw sets keyed by device JID and settings
+ * type, the selected active set, the participant-count override, and the dynamic rate-control engine.
  *
  * <p>This manager drives the voip-param lifecycle the specification describes. A parsed
- * {@link VoipParams} set is stored under a {@link VoipSettingsType} key with
- * {@link #store(VoipSettingsType, VoipParams)}; the in-use set is chosen from the stored
- * sets with {@link #selectActive(VoipSettingsType)}, which copies the stored baseline so the
- * stored set is never mutated by later overrides; the active set is retuned for the current
+ * {@link VoipParams} set is stored under a {@code (device JID, settings type)} key with
+ * {@link #store(Jid, VoipSettingsType, VoipParams)}; the in-use set is chosen for a given
+ * device with {@link #selectActive(Jid, VoipSettingsType)}, which copies the stored baseline so
+ * the stored set is never mutated by later overrides; the active set is retuned for the current
  * call size with {@link #overrideForParticipantCount(int, List)}; and each rate-control
  * round its dynamic overrides are written onto the active set through
  * {@link #applyDynamicRules(List)} under the round guard of the manager's
  * {@link DynVoipParamUpdater}.
  *
+ * <p>The server keys each {@code <voip_settings>} bundle by the device it applies to: the offer
+ * acknowledgement delivers one {@code jid}-tagged bundle per callee device (the caller selects the
+ * answering device's bundle), while the delivered offer carries a single un-tagged bundle (the
+ * callee's own config, stored under a {@code null} device key). Selection therefore takes a device
+ * JID: it resolves that device's stored bundle, falling back to the un-tagged ({@code null}) own
+ * bundle when the device has none. Within the chosen device, an absent requested settings type
+ * falls back to the mandatory {@link VoipSettingsType#NONE} default; selecting when even that is
+ * absent leaves the manager with no active set.
+ *
  * <p>Selecting an active set always starts from a fresh copy of the stored baseline, so
  * participant-count and dynamic overrides accumulate only onto the current selection and are
- * discarded when a different settings type is selected. If a requested settings type has no
- * stored set, selection falls back to the mandatory {@link VoipSettingsType#NONE} default
- * set; selecting when even the default is absent leaves the manager with no active set.
+ * discarded when a different device or settings type is selected.
  *
  * <p>The manager is guarded by a single {@link ReentrantLock} so the rate-control tick, the
  * participant-count retune, and any reconfiguration that restores stored sets observe a
@@ -32,8 +43,10 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * @implNote This implementation reproduces the {@code wa_call_voip_params_manager_*} surface
  * of {@code voip_param_internal.cc} from the wa-voip WASM module {@code ff-tScznZ8P}:
- * {@code store_raw_voip_params} (store per settings type),
- * {@code wa_call_voip_params_manager_select_active_raw_voip_params} (select),
+ * {@code store_raw_voip_params} (store keyed by the bundle's {@code device_jid}, the field the
+ * native struct clones at offset {@code 0x954}),
+ * {@code wa_call_voip_params_manager_select_active_raw_voip_params} (select by matching that
+ * {@code device_jid}),
  * {@code override_voip_params_based_on_participant_count} (count retune), and the dynamic
  * rule pass driven by {@code wa_dyn_voip_param_updater_update_with_dyn_rules}. The native
  * code deep-copies the {@code 254KB} struct on store and select; Cobalt copies the sparse
@@ -43,9 +56,15 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public final class LiveVoipParamManager {
     /**
-     * The stored raw parameter sets, keyed by settings type.
+     * The stored raw parameter sets, keyed by device JID then by settings type.
+     *
+     * <p>The outer key is the device JID a {@code <voip_settings>} bundle was tagged with, or
+     * {@code null} for the un-tagged own bundle the delivered offer carries; the inner
+     * {@link EnumMap} holds that device's bundle per {@link VoipSettingsType}. Iteration follows
+     * insertion (wire) order, so the first entry is the first delivered bundle, the first peer device
+     * a group selection falls back to.
      */
-    private final Map<VoipSettingsType, VoipParams> stored;
+    private final Map<Jid, EnumMap<VoipSettingsType, VoipParams>> stored;
 
     /**
      * The dynamic rate-control updater whose round guard spans one rate-control tick.
@@ -74,23 +93,27 @@ public final class LiveVoipParamManager {
      * callers populate it by storing parsed sets and then selecting one active.
      */
     public LiveVoipParamManager() {
-        this.stored = new java.util.EnumMap<>(VoipSettingsType.class);
+        this.stored = new LinkedHashMap<>();
         this.dynamicUpdater = new DynVoipParamUpdater();
         this.lock = new ReentrantLock();
     }
 
     /**
-     * Stores a parsed parameter set under the given settings type.
+     * Stores a parsed parameter set under the given device JID and settings type.
      *
-     * <p>A previously stored set under the same type is replaced. Storing does not change
-     * the active selection; a subsequent {@link #selectActive(VoipSettingsType)} is needed to
-     * promote the stored set.
+     * <p>A previously stored set under the same {@code (deviceJid, type)} pair is replaced.
+     * Distinct device JIDs do not overwrite each other, so the per-device offer-acknowledgement
+     * bundles coexist rather than collapsing. A {@code null} device JID stores the un-tagged own
+     * bundle the delivered offer carries. Storing does not change the active selection; a
+     * subsequent {@link #selectActive(Jid, VoipSettingsType)} is needed to promote a stored set.
      *
-     * @param type   the settings type to store under
-     * @param params the parsed parameter set to store
+     * @param deviceJid the device JID the bundle is tagged with, or {@code null} for the un-tagged
+     *                  own bundle
+     * @param type      the settings type to store under
+     * @param params    the parsed parameter set to store
      * @throws NullPointerException if {@code type} or {@code params} is {@code null}
      */
-    public void store(VoipSettingsType type, VoipParams params) {
+    public void store(Jid deviceJid, VoipSettingsType type, VoipParams params) {
         if (type == null) {
             throw new NullPointerException("type must not be null");
         }
@@ -99,37 +122,64 @@ public final class LiveVoipParamManager {
         }
         lock.lock();
         try {
-            stored.put(type, params);
+            stored.computeIfAbsent(deviceJid, key -> new EnumMap<>(VoipSettingsType.class))
+                    .put(type, params);
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * Selects the stored set of the given settings type as the active set.
+     * Selects the stored set for the given device and settings type as the active set.
      *
-     * <p>The active set is initialised from a fresh copy of the stored baseline, so prior
-     * participant-count or dynamic overrides do not carry across selections, and the
-     * dynamic-rule round guard is reset. If the requested type has no stored set, the
-     * mandatory {@link VoipSettingsType#NONE} default is selected instead; if even the
-     * default is absent, no active set is selected and {@link #activeType()} becomes empty.
+     * <p>The device's stored bundle is resolved first: when the requested device JID has no stored
+     * bundle (or is {@code null}), selection falls back to the un-tagged ({@code null}) own bundle, and
+     * when neither is present to the first stored bundle in wire order (the group-call case: that first entry
+     * is the first peer participant device, and a codec-homogeneous group resolves the same codec from any of
+     * its peer bundles). Within the chosen device,
+     * when the requested settings type is absent the mandatory {@link VoipSettingsType#NONE} default is
+     * selected instead. The active set is initialised from a fresh copy of that baseline, so prior
+     * participant-count or dynamic overrides do not carry across selections, and the dynamic-rule round
+     * guard is reset. If no bundle yields a set of the requested type or the default, no active set is
+     * selected and {@link #activeType()} becomes empty.
      *
-     * @param type the settings type to promote
-     * @return the settings type actually selected, or {@link Optional#empty()} if neither the
-     *         requested type nor the default has a stored set
+     * @param deviceJid the device JID whose bundle to promote, or {@code null} to promote the
+     *                  un-tagged own bundle directly
+     * @param type      the settings type to promote
+     * @return the settings type actually selected, or {@link Optional#empty()} if no matching set
+     *         is stored
      * @throws NullPointerException if {@code type} is {@code null}
      */
-    public Optional<VoipSettingsType> selectActive(VoipSettingsType type) {
+    public Optional<VoipSettingsType> selectActive(Jid deviceJid, VoipSettingsType type) {
         if (type == null) {
             throw new NullPointerException("type must not be null");
         }
         lock.lock();
         try {
+            var deviceSets = stored.get(deviceJid);
+            if (deviceSets == null) {
+                deviceSets = stored.get(null);
+            }
+            if (deviceSets == null && !stored.isEmpty()) {
+                // No bundle for the requested device and no un-tagged own bundle: this is the group-call case,
+                // where the offer acknowledgement delivers one bundle per peer participant device. Select the
+                // first peer device's bundle in wire order (the stored map preserves insertion order), the
+                // deterministic counterpart of the engine's first-connected-peer selection
+                // (call_get_peer_participant_const). Every stored bundle is a peer-device bundle and a group's
+                // forwarded single stream is codec-homogeneous, so this resolves the one codec the local side
+                // encodes for all peers.
+                deviceSets = stored.values().iterator().next();
+            }
+            if (deviceSets == null) {
+                activeType = null;
+                active = null;
+                return Optional.empty();
+            }
             var chosenType = type;
-            var baseline = stored.get(chosenType);
+            var baseline = deviceSets.get(chosenType);
             if (baseline == null) {
                 chosenType = VoipSettingsType.NONE;
-                baseline = stored.get(chosenType);
+                baseline = deviceSets.get(chosenType);
             }
             if (baseline == null) {
                 activeType = null;
@@ -242,10 +292,10 @@ public final class LiveVoipParamManager {
     }
 
     /**
-     * Returns whether a parameter set is stored under the given settings type.
+     * Returns whether any stored device bundle holds a parameter set of the given settings type.
      *
      * @param type the settings type to test
-     * @return {@code true} if a set is stored under the type, {@code false} otherwise
+     * @return {@code true} if some device bundle holds a set of the type, {@code false} otherwise
      * @throws NullPointerException if {@code type} is {@code null}
      */
     public boolean hasStored(VoipSettingsType type) {
@@ -254,7 +304,12 @@ public final class LiveVoipParamManager {
         }
         lock.lock();
         try {
-            return stored.containsKey(type);
+            for (var deviceSets : stored.values()) {
+                if (deviceSets.containsKey(type)) {
+                    return true;
+                }
+            }
+            return false;
         } finally {
             lock.unlock();
         }

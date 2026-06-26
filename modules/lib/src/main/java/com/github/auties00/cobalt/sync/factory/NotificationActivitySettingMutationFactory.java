@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.sync.factory;
 
 import com.alibaba.fastjson2.JSON;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;

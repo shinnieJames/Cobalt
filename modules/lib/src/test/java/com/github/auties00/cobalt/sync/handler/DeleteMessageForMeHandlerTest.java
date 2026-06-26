@@ -7,9 +7,9 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeAction;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeActionBuilder;
@@ -241,7 +241,7 @@ class DeleteMessageForMeHandlerTest {
             var remote = mutationWithDeleteMedia(false, Instant.ofEpochSecond(200L));
 
             var resolution = new DeleteMessageForMeHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
 
         @Test
@@ -251,19 +251,19 @@ class DeleteMessageForMeHandlerTest {
             var a = new DeleteMessageForMeHandler().resolveConflicts(
                     mutationWithDeleteMedia(true, Instant.ofEpochSecond(100L)),
                     mutationWithDeleteMedia(true, Instant.ofEpochSecond(200L)));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, a.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, a.state());
 
             // both false
             var b = new DeleteMessageForMeHandler().resolveConflicts(
                     mutationWithDeleteMedia(false, Instant.ofEpochSecond(100L)),
                     mutationWithDeleteMedia(false, Instant.ofEpochSecond(200L)));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, b.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, b.state());
 
             // remote true, local false
             var c = new DeleteMessageForMeHandler().resolveConflicts(
                     mutationWithDeleteMedia(false, Instant.ofEpochSecond(100L)),
                     mutationWithDeleteMedia(true, Instant.ofEpochSecond(200L)));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, c.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, c.state());
         }
 
         private static DecryptedMutation.Trusted mutationWithDeleteMedia(boolean deleteMedia, Instant ts) {

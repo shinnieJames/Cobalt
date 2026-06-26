@@ -13,13 +13,16 @@ import com.github.auties00.cobalt.listener.cloud.*;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfileBuilder;
 import com.github.auties00.cobalt.model.cloud.*;
-import com.github.auties00.cobalt.model.cloud.template.*;
-import com.github.auties00.cobalt.model.cloud.template.library.*;
 import com.github.auties00.cobalt.model.cloud.analytics.*;
+import com.github.auties00.cobalt.model.cloud.commerce.*;
 import com.github.auties00.cobalt.model.cloud.flow.*;
 import com.github.auties00.cobalt.model.cloud.phone.*;
-import com.github.auties00.cobalt.model.cloud.signup.*;
-import com.github.auties00.cobalt.model.cloud.commerce.*;
+import com.github.auties00.cobalt.model.cloud.signup.CloudAppCredentials;
+import com.github.auties00.cobalt.model.cloud.signup.CloudOAuthToken;
+import com.github.auties00.cobalt.model.cloud.signup.CloudSignupCodeExchange;
+import com.github.auties00.cobalt.model.cloud.signup.CloudTokenInspection;
+import com.github.auties00.cobalt.model.cloud.template.*;
+import com.github.auties00.cobalt.model.cloud.template.library.CloudTemplateLibraryAdoption;
 import com.github.auties00.cobalt.model.cloud.waba.*;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
@@ -28,7 +31,7 @@ import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.store.CloudWhatsAppStore;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStore;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -73,7 +76,7 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     private static final CloudApiVersion TEMPLATE_HEADER_MEDIA_MIN = CloudApiVersion.V21_0;
 
     /**
-     * The phone-number node fields requested when projecting a {@link CloudPhoneNumber}.
+     * The phone-number stanza fields requested when projecting a {@link CloudPhoneNumber}.
      */
     private static final String PHONE_NUMBER_FIELDS = "id,display_phone_number,verified_name,quality_rating,"
             + "code_verification_status,status,name_status,new_name_status,messaging_limit_tier,throughput,"
@@ -90,7 +93,7 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     private final CloudApiClient api;
 
     /**
-     * The WhatsApp Business Account node fields requested when projecting a {@link CloudWaba}.
+     * The WhatsApp Business Account stanza fields requested when projecting a {@link CloudWaba}.
      */
     private static final String WABA_FIELDS = "id,name,currency,timezone_id,message_template_namespace,"
             + "country,business_verification_status,account_review_status,status,ownership_type";
@@ -120,6 +123,16 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
      * The latch released on disconnect, used by {@link #waitForDisconnection()}.
      */
     private volatile CountDownLatch disconnectLatch;
+
+    /**
+     * The JVM shutdown hook installed on the first {@link #connect()}, or {@code null} when no
+     * connection has been opened or the hook has been deregistered by a terminal disconnect.
+     *
+     * <p>Mirrors the Linked client's hook so that a process exit gracefully stops the
+     * {@link CloudWebhookServer} (and fires the disconnect listeners) rather than abandoning the
+     * open HTTP listener.
+     */
+    private volatile Thread shutdownHook;
 
     /**
      * Constructs a new live Cloud client.
@@ -159,6 +172,12 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
             server.start();
             this.webhookServer = server;
         }
+        if (shutdownHook == null) {
+            this.shutdownHook = Thread.ofPlatform()
+                    .name("CobaltCloudShutdownHandler")
+                    .unstarted(() -> disconnect(WhatsAppClientDisconnectReason.DISCONNECTED, false));
+            Runtime.getRuntime().addShutdownHook(shutdownHook);
+        }
         forEach(LoggedInListener.class, listener -> listener.onLoggedIn(this));
         return this;
     }
@@ -168,15 +187,24 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
      */
     @Override
     public void disconnect() {
-        disconnect(WhatsAppClientDisconnectReason.DISCONNECTED);
+        disconnect(WhatsAppClientDisconnectReason.DISCONNECTED, true);
     }
 
     /**
      * Tears the client down, notifying the disconnect listeners with the given reason.
      *
-     * @param reason the reason surfaced to the disconnect listeners
+     * @implNote
+     * This implementation stops the {@link CloudWebhookServer}, fires the disconnect listeners, and
+     * releases the {@link #waitForDisconnection()} latch. On a non-reconnect disconnect it also
+     * deregisters the JVM shutdown hook, unless {@code canRemoveShutdownHook} is {@code false}
+     * because the call originates from the hook itself (where
+     * {@link Runtime#removeShutdownHook(Thread)} would throw while shutdown is in progress).
+     *
+     * @param reason                the reason surfaced to the disconnect listeners
+     * @param canRemoveShutdownHook whether the shutdown hook may be deregistered, set to
+     *                              {@code false} when invoked from the hook during JVM shutdown
      */
-    private void disconnect(WhatsAppClientDisconnectReason reason) {
+    private void disconnect(WhatsAppClientDisconnectReason reason, boolean canRemoveShutdownHook) {
         if (!connected.compareAndSet(true, false)) {
             return;
         }
@@ -184,6 +212,10 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
         if (server != null) {
             server.stop();
             webhookServer = null;
+        }
+        if (reason != WhatsAppClientDisconnectReason.RECONNECTING && shutdownHook != null && canRemoveShutdownHook) {
+            Runtime.getRuntime().removeShutdownHook(shutdownHook);
+            shutdownHook = null;
         }
         forEach(DisconnectedListener.class, listener -> listener.onDisconnected(this, reason));
         var latch = disconnectLatch;
@@ -197,7 +229,7 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
      */
     @Override
     public CloudWhatsAppClient reconnect() {
-        disconnect(WhatsAppClientDisconnectReason.RECONNECTING);
+        disconnect(WhatsAppClientDisconnectReason.RECONNECTING, true);
         connect();
         return this;
     }
@@ -1746,10 +1778,10 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
      */
     @Override
     public Optional<CloudConversationalAutomation> queryConversationalAutomation() {
-        // The conversational_automation node-field wrapper is confirmed against a live response: the GET
+        // The conversational_automation stanza-field wrapper is confirmed against a live response: the GET
         // returns {"conversational_automation":{"prompts":[...],"commands":[{"command_name":...,
         // "command_description":...}],"enable_welcome_message":...,"id":...},"id":...}, and just {"id":...}
-        // when the node is unset.
+        // when the stanza is unset.
         var response = api.get(store.phoneNumberId(), Map.of("fields", "conversational_automation"));
         var node = response.getJSONObject("conversational_automation");
         if (node == null) {
@@ -1821,9 +1853,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a payment-configuration node into a {@link CloudPaymentConfiguration}.
+     * Parses a payment-configuration stanza into a {@link CloudPaymentConfiguration}.
      *
-     * @param node the payment-configuration node
+     * @param node the payment-configuration stanza
      * @return the parsed payment configuration
      */
     private static CloudPaymentConfiguration parsePaymentConfiguration(JSONObject node) {
@@ -2828,10 +2860,10 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a WhatsApp Business Account node into a {@link CloudWaba}.
+     * Parses a WhatsApp Business Account stanza into a {@link CloudWaba}.
      *
-     * @param node the account node
-     * @return the parsed account, with absent optional fields when the node omitted them
+     * @param node the account stanza
+     * @return the parsed account, with absent optional fields when the stanza omitted them
      */
     private static CloudWaba parseWaba(JSONObject node) {
         return new CloudWaba(
@@ -3000,10 +3032,10 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses the {@code analytics} node of a messaging-analytics response.
+     * Parses the {@code analytics} stanza of a messaging-analytics response.
      *
-     * @param node the {@code analytics} node, or {@code null} when absent
-     * @return the parsed messaging analytics, empty when {@code node} is {@code null}
+     * @param node the {@code analytics} stanza, or {@code null} when absent
+     * @return the parsed messaging analytics, empty when {@code stanza} is {@code null}
      */
     private static CloudMessagingAnalytics parseMessagingAnalytics(JSONObject node) {
         if (node == null) {
@@ -3028,11 +3060,11 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses the {@code conversation_analytics} node of a conversation-analytics response, flattening the
+     * Parses the {@code conversation_analytics} stanza of a conversation-analytics response, flattening the
      * {@code data[].data_points[]} envelope.
      *
-     * @param node the {@code conversation_analytics} node, or {@code null} when absent
-     * @return the parsed conversation analytics, empty when {@code node} is {@code null}
+     * @param node the {@code conversation_analytics} stanza, or {@code null} when absent
+     * @return the parsed conversation analytics, empty when {@code stanza} is {@code null}
      */
     private static CloudConversationAnalytics parseConversationAnalytics(JSONObject node) {
         var points = new ArrayList<CloudConversationAnalytics.DataPoint>();
@@ -3062,11 +3094,11 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses the {@code pricing_analytics} node of a pricing-analytics response, flattening the
+     * Parses the {@code pricing_analytics} stanza of a pricing-analytics response, flattening the
      * {@code data[].data_points[]} envelope.
      *
-     * @param node the {@code pricing_analytics} node, or {@code null} when absent
-     * @return the parsed pricing analytics, empty when {@code node} is {@code null}
+     * @param node the {@code pricing_analytics} stanza, or {@code null} when absent
+     * @return the parsed pricing analytics, empty when {@code stanza} is {@code null}
      */
     private static CloudPricingAnalytics parsePricingAnalytics(JSONObject node) {
         var points = new ArrayList<CloudPricingAnalytics.DataPoint>();
@@ -3102,7 +3134,7 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     /**
      * Parses a single {@code data_points[]} entry of a template-analytics response.
      *
-     * @param point the data-point node
+     * @param point the data-point stanza
      * @return the parsed template analytics
      */
     private static CloudTemplateAnalytics parseTemplateAnalytics(JSONObject point) {
@@ -3343,9 +3375,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a phone-number node into a {@link CloudPhoneNumber}.
+     * Parses a phone-number stanza into a {@link CloudPhoneNumber}.
      *
-     * @param node the phone-number node
+     * @param node the phone-number stanza
      * @return the parsed phone number
      */
     private CloudPhoneNumber parsePhoneNumber(JSONObject node) {
@@ -3375,7 +3407,7 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
      * Maps a wire token through an enum factory, preserving absence as {@code null} so the model
      * exposes the field as an empty optional rather than the enum's {@code UNKNOWN} sentinel.
      *
-     * @param token   the wire token, or {@code null} when the node omitted it
+     * @param token   the wire token, or {@code null} when the stanza omitted it
      * @param factory the enum {@code of(String)} factory
      * @param <E>     the enum type
      * @return the resolved enum constant, or {@code null} when {@code token} is {@code null}
@@ -3385,9 +3417,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a template node into a {@link CloudMessageTemplate}.
+     * Parses a template stanza into a {@link CloudMessageTemplate}.
      *
-     * @param node the template node
+     * @param node the template stanza
      * @return the parsed template
      */
     private static CloudMessageTemplate parseTemplate(JSONObject node) {
@@ -3556,9 +3588,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a flow node into a {@link CloudFlow}.
+     * Parses a flow stanza into a {@link CloudFlow}.
      *
-     * @param node the flow node
+     * @param node the flow stanza
      * @return the parsed flow
      */
     private static CloudFlow parseFlow(JSONObject node) {
@@ -3575,9 +3607,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a rich flow node into a {@link CloudFlowDetails}.
+     * Parses a rich flow stanza into a {@link CloudFlowDetails}.
      *
-     * @param node the flow node
+     * @param node the flow stanza
      * @return the parsed flow detail view
      */
     private static CloudFlowDetails parseFlowDetails(JSONObject node) {
@@ -3661,9 +3693,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a flow validation-error node into a {@link CloudFlowValidationError}.
+     * Parses a flow validation-error stanza into a {@link CloudFlowValidationError}.
      *
-     * @param node the validation-error node
+     * @param node the validation-error stanza
      * @return the parsed validation error
      */
     private static CloudFlowValidationError parseFlowValidationError(JSONObject node) {
@@ -3682,9 +3714,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a flow-asset node into a {@link CloudFlowAsset}.
+     * Parses a flow-asset stanza into a {@link CloudFlowAsset}.
      *
-     * @param node the asset node
+     * @param node the asset stanza
      * @return the parsed asset
      */
     private static CloudFlowAsset parseFlowAsset(JSONObject node) {
@@ -3695,9 +3727,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a QR short-link node into a {@link CloudQrCode}.
+     * Parses a QR short-link stanza into a {@link CloudQrCode}.
      *
-     * @param node the QR node
+     * @param node the QR stanza
      * @return the parsed QR short-link
      */
     private static CloudQrCode parseQrCode(JSONObject node) {
@@ -3709,9 +3741,9 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
     }
 
     /**
-     * Parses a business-profile node into a {@link BusinessProfile}.
+     * Parses a business-profile stanza into a {@link BusinessProfile}.
      *
-     * @param node the business-profile node
+     * @param node the business-profile stanza
      * @return the parsed business profile
      */
     private BusinessProfile parseBusinessProfile(JSONObject node) {

@@ -4,8 +4,8 @@ import com.github.auties00.cobalt.calls2.signaling.CallEncOptions;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -155,7 +155,7 @@ public record CallRekeyEnvelope(Jid recipientDevice, MessageEncryptionType type,
     }
 
     /**
-     * Builds the {@code <enc_rekey>} action node addressed to this recipient device.
+     * Builds the {@code <enc_rekey>} action stanza addressed to this recipient device.
      *
      * <p>The common header is stamped first, then the rotation {@code transaction-id} when present, then
      * the {@code <encopt keygen="2"/>} sibling, the single {@code <enc>} envelope, and finally the
@@ -167,15 +167,15 @@ public record CallRekeyEnvelope(Jid recipientDevice, MessageEncryptionType type,
      * @param callId        the call identifier
      * @param callCreator   the call creator's device JID (this sender's own device JID)
      * @param transactionId the rotation transaction id, or {@code -1} to omit it
-     * @return the rekey action node
+     * @return the rekey action stanza
      * @throws NullPointerException if {@code callId} or {@code callCreator} is {@code null}
      */
-    public Node toNode(String callId, Jid callCreator, int transactionId) {
+    public Stanza toNode(String callId, Jid callCreator, int transactionId) {
         Objects.requireNonNull(callId, "callId cannot be null");
         Objects.requireNonNull(callCreator, "callCreator cannot be null");
-        var children = new ArrayList<Node>(3);
-        children.add(CallEncOptions.standard().toNode());
-        children.add(new NodeBuilder()
+        var children = new ArrayList<Stanza>(3);
+        children.add(CallEncOptions.standard().toStanza());
+        children.add(new StanzaBuilder()
                 .description(ENC_ELEMENT)
                 .attribute(VERSION_ATTRIBUTE, MessageEncryption.CIPHERTEXT_VERSION)
                 .attribute(TYPE_ATTRIBUTE, type.protocolValue())
@@ -183,12 +183,12 @@ public record CallRekeyEnvelope(Jid recipientDevice, MessageEncryptionType type,
                 .content(ciphertext)
                 .build());
         if (type.isPreKeyMessage() && deviceIdentity != null) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(DEVICE_IDENTITY_ELEMENT)
                     .content(deviceIdentity)
                     .build());
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(CallKeyCryptography.CALL_ID_ATTRIBUTE, callId)
                 .attribute(CallKeyCryptography.CALL_CREATOR_ATTRIBUTE, callCreator)

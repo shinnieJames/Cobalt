@@ -1,7 +1,6 @@
 package com.github.auties00.cobalt.calls2;
 
 import com.github.auties00.cobalt.ack.AckResult;
-import com.github.auties00.cobalt.ack.CallAck;
 import com.github.auties00.cobalt.calls2.core.CallEventType;
 import com.github.auties00.cobalt.calls2.core.Calls2CallContextRegistry;
 import com.github.auties00.cobalt.calls2.core.Calls2CallEventSink;
@@ -32,8 +31,8 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -202,16 +201,16 @@ class Calls2PublicCallApiTest {
             this.service = new LiveCalls2Service(client, null, new StubMessageService(client), controller);
         }
 
-        private static Node ackWithRelay() {
-            var relay = new NodeBuilder()
+        private static Stanza ackWithRelay() {
+            var relay = new StanzaBuilder()
                     .description("relay")
                     .attribute("uuid", "0123456789ABCDEF")
-                    .content(new NodeBuilder()
+                    .content(new StanzaBuilder()
                             .description("hbh_key")
                             .content("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                             .build())
                     .build();
-            return new NodeBuilder()
+            return new StanzaBuilder()
                     .description("ack")
                     .attribute("class", "call")
                     .content(relay)
@@ -231,17 +230,18 @@ class Calls2PublicCallApiTest {
         }
 
         @Override
-        public Session bringUp(String callId, Node relay, List<Node> voipSettings, byte[] callKey, boolean isCaller,
+        public Session bringUp(String callId, Stanza relay, List<Stanza> voipSettings, byte[] callKey, boolean isCaller,
                                boolean video, int participantCount,
                                com.github.auties00.cobalt.calls2.core.participant.CallMembership membership,
                                Calls2MediaStreams streams,
-                               com.github.auties00.cobalt.model.jid.Jid peerDeviceJid) {
+                               com.github.auties00.cobalt.model.jid.Jid peerDeviceJid,
+                               Optional<String> electedRelayName) {
             bringUps.add(new BringUp(callId, isCaller, video, List.copyOf(voipSettings), participantCount, streams));
             return () -> {
             };
         }
 
-        record BringUp(String callId, boolean isCaller, boolean video, List<Node> voipSettings, int participantCount,
+        record BringUp(String callId, boolean isCaller, boolean video, List<Stanza> voipSettings, int participantCount,
                        Calls2MediaStreams streams) {
         }
     }
@@ -346,7 +346,7 @@ class Calls2PublicCallApiTest {
 
     private static final class RecordingVoipHostApi implements VoipHostApi {
         @Override
-        public void sendSignaling(Node node) {
+        public void sendSignaling(Stanza stanza) {
         }
 
         @Override
@@ -428,7 +428,7 @@ class Calls2PublicCallApiTest {
         }
 
         @Override
-        public MessageInfo process(Node node) {
+        public MessageInfo process(Stanza stanza) {
             throw new UnsupportedOperationException("not stubbed");
         }
 

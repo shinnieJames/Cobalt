@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.model.signal.KeyId;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdPatch;
 import com.github.auties00.cobalt.model.sync.data.SyncdSnapshot;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;

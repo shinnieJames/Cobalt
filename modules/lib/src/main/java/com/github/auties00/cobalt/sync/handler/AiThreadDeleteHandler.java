@@ -5,12 +5,13 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.device.DeviceCapabilities;
+import com.github.auties00.cobalt.model.device.capabilities.DeviceCapabilities;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
@@ -21,7 +22,7 @@ import java.util.logging.Logger;
  * one such thread is deleted on another device, the server replays the delete
  * here, and the matching entry is removed; the surviving thread titles are
  * read back through
- * {@link com.github.auties00.cobalt.store.BusinessStore#findAiThreadTitle(String)}.
+ * {@link LinkedWhatsAppBusinessStore#findAiThreadTitle(String)}.
  *
  * @implNote
  * This implementation collapses WA Web's {@code ThreadsMetadata} IDB
@@ -105,7 +106,7 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
      * <p>Validates the JSON index {@code ["ai_thread_delete", chatJid, threadId]},
      * confirms the chat JID is a bot, gates on AI-thread support, and removes
      * the entry keyed by {@code "<chatJid>|<threadId>"} via
-     * {@link com.github.auties00.cobalt.store.BusinessStore#removeAiThreadTitle(String)}.
+     * {@link LinkedWhatsAppBusinessStore#removeAiThreadTitle(String)}.
      * Returns {@link SyncActionState#UNSUPPORTED} for non-{@link SyncdOperation#SET}
      * operations or when AI-thread support is off, {@link SyncActionState#ORPHAN}
      * when no matching thread is in the store, and {@link SyncActionState#FAILED}

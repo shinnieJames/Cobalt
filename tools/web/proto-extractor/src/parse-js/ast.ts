@@ -10,7 +10,7 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/** A loosely-typed acorn AST node. */
+/** A loosely-typed acorn AST stanza. */
 export type AstNode = any;
 
 /** Drops the {@code "Spec"} suffix exported by the WA JS bundle, leaving the canonical proto name. */
@@ -34,8 +34,8 @@ export const renameIdentifier = (name: string): string => unspecName(name);
 /**
  * Recursively flattens every expression reachable from a top-level statement.
  *
- * @param node - the AST node to walk.
- * @returns a flat array containing the node and every nested expression.
+ * @param node - the AST stanza to walk.
+ * @returns a flat array containing the stanza and every nested expression.
  *
  * @remarks
  * Used by the module finder to scan a module body for the

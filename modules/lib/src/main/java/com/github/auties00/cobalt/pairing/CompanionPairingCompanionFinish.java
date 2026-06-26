@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.pairing;
 
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
+
 /**
  * Carries the output of the {@code companionFinish} algorithm.
  *
@@ -19,7 +21,7 @@ package com.github.auties00.cobalt.pairing;
  * {@code companionIdentityPublic || primaryIdentityPublic ||
  * advSecretMaterialSalt}; the {@code advSecret} is the HKDF-SHA256
  * output produced with {@code info="adv_secret"} and is persisted via
- * {@link com.github.auties00.cobalt.store.SignalStore#setAdvSecretKey}.
+ * {@link LinkedWhatsAppSignalStore#setAdvSecretKey}.
  *
  * @param linkCodePairingWrappedKeyBundle the salt {@code ||} IV
  *                                        {@code ||} GCM ciphertext

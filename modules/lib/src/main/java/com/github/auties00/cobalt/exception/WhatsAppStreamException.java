@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.exception;
 
 import com.github.auties00.cobalt.client.linked.WhatsAppLinkedClientErrorResult;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.Objects;
 
@@ -10,21 +10,21 @@ import java.util.Objects;
  * carried over the WebSocket connection.
  *
  * <p>WhatsApp speaks an XMPP-flavored protocol where every message is a
- * node (a stanza with a tag, attributes, and child content). Stream
+ * stanza (a stanza with a tag, attributes, and child content). Stream
  * exceptions cover the layer that frames, encodes, and correlates those
- * nodes. Two concrete failure modes exist: a node that arrives in an
+ * nodes. Two concrete failure modes exist: a stanza that arrives in an
  * unparseable shape ({@link MalformedNode}) and a request whose response
  * never arrives ({@link NodeTimeout}).
  *
  * @apiNote
- * Raised by the node pipeline; {@link #toErrorResult()} reports
+ * Raised by the stanza pipeline; {@link #toErrorResult()} reports
  * {@link WhatsAppLinkedClientErrorResult#RECONNECT} for every subtype, so a
  * configured {@code WhatsAppClientErrorHandler} cannot meaningfully discard
  * the event and instead reconnects to clear the in-flight protocol state.
  *
  * @implNote
  * This implementation classifies every stream fault as
- * {@link WhatsAppLinkedClientErrorResult#RECONNECT} because the node pipeline is a
+ * {@link WhatsAppLinkedClientErrorResult#RECONNECT} because the stanza pipeline is a
  * shared resource: a single corrupted frame poisons the in-flight protocol
  * state and the connection has to be re-established before traffic can
  * resume.
@@ -91,7 +91,7 @@ public sealed class WhatsAppStreamException extends WhatsAppException
      *
      * <p>The decoder raises this when a stanza is truncated, has a missing
      * required attribute, has the wrong content shape for its tag, or
-     * otherwise cannot be parsed into a {@link Node}.
+     * otherwise cannot be parsed into a {@link Stanza}.
      *
      * @apiNote
      * Raised locally on a decode failure; a configured
@@ -105,25 +105,25 @@ public sealed class WhatsAppStreamException extends WhatsAppException
      */
     public static final class MalformedNode extends WhatsAppStreamException {
         /**
-         * Constructs a new malformed node exception with no detail message.
+         * Constructs a new malformed stanza exception with no detail message.
          */
         public MalformedNode() {
             super();
         }
 
         /**
-         * Constructs a new malformed node exception with the specified message.
+         * Constructs a new malformed stanza exception with the specified message.
          *
-         * @param message the detail message describing why the node is malformed
+         * @param message the detail message describing why the stanza is malformed
          */
         public MalformedNode(String message) {
             super(message);
         }
 
         /**
-         * Constructs a new malformed node exception with the specified message and cause.
+         * Constructs a new malformed stanza exception with the specified message and cause.
          *
-         * @param message the detail message describing why the node is malformed
+         * @param message the detail message describing why the stanza is malformed
          * @param cause   the underlying cause
          */
         public MalformedNode(String message, Throwable cause) {
@@ -144,48 +144,48 @@ public sealed class WhatsAppStreamException extends WhatsAppException
      * Raised on a request timeout; {@link #node()} returns the original
      * request stanza so the caller can log or retry the operation.
      *
-     * @see Node
+     * @see Stanza
      */
     public static final class NodeTimeout extends WhatsAppStreamException {
         /**
          * The request stanza that did not receive a response.
          */
-        private final Node node;
+        private final Stanza stanza;
 
         /**
-         * Constructs a new node timeout exception with the node that timed out.
+         * Constructs a new stanza timeout exception with the stanza that timed out.
          *
-         * @param node the stanza that did not receive a response in time
-         * @throws NullPointerException if {@code node} is {@code null}
+         * @param stanza the stanza that did not receive a response in time
+         * @throws NullPointerException if {@code stanza} is {@code null}
          */
-        public NodeTimeout(Node node) {
-            super("Node timeout: " + Objects.requireNonNull(node, "node cannot be null"));
-            this.node = node;
+        public NodeTimeout(Stanza stanza) {
+            super("Stanza timeout: " + Objects.requireNonNull(stanza, "stanza cannot be null"));
+            this.stanza = stanza;
         }
 
         /**
-         * Constructs a new node timeout exception with a custom message and the timed-out node.
+         * Constructs a new stanza timeout exception with a custom message and the timed-out stanza.
          *
          * @param message the detail message describing the timeout condition
-         * @param node    the stanza that did not receive a response in time
-         * @throws NullPointerException if {@code node} is {@code null}
+         * @param stanza    the stanza that did not receive a response in time
+         * @throws NullPointerException if {@code stanza} is {@code null}
          */
-        public NodeTimeout(String message, Node node) {
+        public NodeTimeout(String message, Stanza stanza) {
             super(message);
-            this.node = Objects.requireNonNull(node, "node cannot be null");
+            this.stanza = Objects.requireNonNull(stanza, "stanza cannot be null");
         }
 
         /**
-         * Constructs a new node timeout exception with a message, cause, and the timed-out node.
+         * Constructs a new stanza timeout exception with a message, cause, and the timed-out stanza.
          *
          * @param message the detail message describing the timeout condition
-         * @param node    the stanza that did not receive a response in time
+         * @param stanza    the stanza that did not receive a response in time
          * @param cause   the underlying cause of the timeout
-         * @throws NullPointerException if {@code node} is {@code null}
+         * @throws NullPointerException if {@code stanza} is {@code null}
          */
-        public NodeTimeout(String message, Node node, Throwable cause) {
+        public NodeTimeout(String message, Stanza stanza, Throwable cause) {
             super(message, cause);
-            this.node = Objects.requireNonNull(node, "node cannot be null");
+            this.stanza = Objects.requireNonNull(stanza, "stanza cannot be null");
         }
 
         /**
@@ -194,8 +194,8 @@ public sealed class WhatsAppStreamException extends WhatsAppException
          *
          * @return the timed-out request stanza, never {@code null}
          */
-        public Node node() {
-            return node;
+        public Stanza node() {
+            return stanza;
         }
     }
 }

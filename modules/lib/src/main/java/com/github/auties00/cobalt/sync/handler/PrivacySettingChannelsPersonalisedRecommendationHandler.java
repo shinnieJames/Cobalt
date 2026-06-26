@@ -1,10 +1,11 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingChannelsPersonalisedRecommendationAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -13,7 +14,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * personalised channel recommendations across linked devices.
  *
  * <p>Persists a single {@code isUserOptedOut} flag on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so the Channels
+ * {@link LinkedWhatsAppStore} so the Channels
  * personalised recommendation surface honours the opt-out uniformly across
  * devices. Only {@link SyncdOperation#SET} is accepted; any other operation is
  * reported as {@link MutationApplicationResult#unsupported()} and a

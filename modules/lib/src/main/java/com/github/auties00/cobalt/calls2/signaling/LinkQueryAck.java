@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.model.call.CallLinkBuilder;
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
 import com.github.auties00.cobalt.model.call.CallLinkWaitingRoom;
 import com.github.auties00.cobalt.model.call.CallLinkWaitingRoomBuilder;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -14,7 +14,7 @@ import java.util.Objects;
  * Represents the acknowledgement of a {@link LinkQueryStanza}: the relay's resolved call-link metadata.
  *
  * <p>A link-query ack is delivered inside the host stanza layer's shared {@code <ack>} envelope, whose
- * body echoes a {@code <link_query>} node carrying the full link metadata: the {@link #link() token and
+ * body echoes a {@code <link_query>} stanza carrying the full link metadata: the {@link #link() token and
  * media}, the creator's device and phone-number JIDs, the creator display username, whether the link is
  * bound to a scheduled event, and the nested waiting-room state. It is a parse-only result model, not a
  * transmittable action, so it implements no {@link CallMessage} contract; the decoded metadata is exposed
@@ -68,31 +68,31 @@ public record LinkQueryAck(CallLink link) {
     }
 
     /**
-     * Decodes a {@code <link_query>} ack node into a {@link LinkQueryAck}.
+     * Decodes a {@code <link_query>} ack stanza into a {@link LinkQueryAck}.
      *
      * <p>The presence of a nested {@code <event>} child sets the resolved link's scheduled flag; a nested
      * {@code <waiting_room>} child is decoded into a {@link CallLinkWaitingRoom} and attached. Absent
      * optional attributes leave their corresponding {@link CallLink} fields unset.
      *
-     * @param node the echoed {@code <link_query>} node from the {@code <ack>} body
+     * @param stanza the echoed {@code <link_query>} stanza from the {@code <ack>} body
      * @return the decoded link-query ack
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code token} attribute is absent or the
      *                                {@code media} attribute is absent or unrecognized
      */
-    public static LinkQueryAck of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var token = node.getRequiredAttributeAsString("token");
-        var media = CallLinkMedia.ofWire(node.getAttributeAsString("media").orElse(null))
+    public static LinkQueryAck of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var token = stanza.getRequiredAttributeAsString("token");
+        var media = CallLinkMedia.ofWire(stanza.getAttributeAsString("media").orElse(null))
                 .orElseThrow(() -> new NoSuchElementException("link_query ack is missing a recognized media attribute"));
         var builder = new CallLinkBuilder()
                 .token(token)
                 .media(media)
-                .creator(node.getAttributeAsJid("link_creator").orElse(null))
-                .creatorPn(node.getAttributeAsJid("link_creator_pn").orElse(null))
-                .creatorUsername(node.getAttributeAsString("link_creator_username").orElse(null))
-                .scheduled(node.getChild(EVENT_ELEMENT).isPresent());
-        node.getChild(WAITING_ROOM_ELEMENT)
+                .creator(stanza.getAttributeAsJid("link_creator").orElse(null))
+                .creatorPn(stanza.getAttributeAsJid("link_creator_pn").orElse(null))
+                .creatorUsername(stanza.getAttributeAsString("link_creator_username").orElse(null))
+                .scheduled(stanza.getChild(EVENT_ELEMENT).isPresent());
+        stanza.getChild(WAITING_ROOM_ELEMENT)
                 .map(LinkQueryAck::decodeWaitingRoom)
                 .ifPresent(builder::waitingRoom);
         return new LinkQueryAck(builder.build());
@@ -101,12 +101,12 @@ public record LinkQueryAck(CallLink link) {
     /**
      * Decodes the nested {@code <waiting_room>} descriptor into a {@link CallLinkWaitingRoom}.
      *
-     * @param node the {@code <waiting_room>} descriptor node
+     * @param stanza the {@code <waiting_room>} descriptor stanza
      * @return the decoded waiting-room state
      */
-    private static CallLinkWaitingRoom decodeWaitingRoom(Node node) {
-        var admin = "1".equals(node.getAttributeAsString(IS_ADMIN_ATTRIBUTE).orElse("0"));
-        var enabled = "1".equals(node.getAttributeAsString(ENABLED_ATTRIBUTE).orElse("0"));
+    private static CallLinkWaitingRoom decodeWaitingRoom(Stanza stanza) {
+        var admin = "1".equals(stanza.getAttributeAsString(IS_ADMIN_ATTRIBUTE).orElse("0"));
+        var enabled = "1".equals(stanza.getAttributeAsString(ENABLED_ATTRIBUTE).orElse("0"));
         return new CallLinkWaitingRoomBuilder()
                 .admin(admin)
                 .enabled(enabled)

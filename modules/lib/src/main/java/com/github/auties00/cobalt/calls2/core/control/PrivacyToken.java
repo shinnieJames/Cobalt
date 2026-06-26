@@ -9,7 +9,7 @@ import java.util.Objects;
  *
  * <p>A privacy token is a fixed-size binary blob a caller attaches to a participant so the call plane can
  * present a privacy-preserving identity for a phone-number-private contact without exposing the raw phone
- * number. The engine never reads inside the blob: it carries it from the inbound offer or membership node
+ * number. The engine never reads inside the blob: it carries it from the inbound offer or membership stanza
  * to the outbound action that re-addresses the participant, byte for byte. This record models that opaque
  * payload as an immutable wrapper around the raw bytes, so the control layer can hold and forward a token
  * without ascribing any structure to it.
@@ -48,7 +48,7 @@ public record PrivacyToken(byte[] value) {
      * Returns a copy of the raw token bytes.
      *
      * <p>The returned array is a fresh copy, so mutating it does not affect this token; this is the
-     * canonical accessor a sender uses to stamp the opaque blob back onto an outbound node.
+     * canonical accessor a sender uses to stamp the opaque blob back onto an outbound stanza.
      *
      * @return a copy of the token bytes; never {@code null}
      */

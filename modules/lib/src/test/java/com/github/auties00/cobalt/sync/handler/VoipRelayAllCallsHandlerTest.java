@@ -5,10 +5,14 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.*;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayAllCalls;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayAllCallsBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.VoipRelayAllCallsMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Covers {@link VoipRelayAllCallsHandler}: the wire-constant trio, the happy {@code SET} branch
- * that persists the boolean to {@link com.github.auties00.cobalt.store.SettingsStore#setRelayAllCalls(boolean)},
+ * that persists the boolean to {@link LinkedWhatsAppSettingsStore#setRelayAllCalls(boolean)},
  * the malformed action branch, the {@link SyncdOperation#REMOVE} unsupported branch, the outgoing
  * builder shape from {@link VoipRelayAllCallsMutationFactory}, and the default conflict-resolution
  * tiebreaker. Each test runs against a fresh temporary store carrying only the local identity, so
@@ -168,7 +172,7 @@ class VoipRelayAllCallsHandlerTest {
         void newerRemoteApplies() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new VoipRelayAllCallsHandler().resolveConflicts(local, remote).state());
         }
 
@@ -177,7 +181,7 @@ class VoipRelayAllCallsHandlerTest {
         void olderRemoteSkipped() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     new VoipRelayAllCallsHandler().resolveConflicts(local, remote).state());
         }
     }

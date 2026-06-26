@@ -6,8 +6,8 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * End-to-end coverage of the persistent store's libmdbx-backed message layer, driven through the
- * public {@link WhatsAppStoreFactory#persistent(Path)} surface so it exercises the full
+ * public {@link LinkedWhatsAppStoreFactory#persistent(Path)} surface so it exercises the full
  * PersistentStore -&gt; PersistentMessageStore -&gt; libmdbx path against a real env. The native
  * library is loaded for real; there is no availability gating, so a broken native bundle fails the
  * build. Each test closes the env through {@link LinkedWhatsAppStore#delete()} so the temp directory can
@@ -35,7 +35,7 @@ class PersistentMessageStoreTest {
     private static final Jid SELF = Jid.of("19999999999@s.whatsapp.net");
 
     private static LinkedWhatsAppStore store(Path dir) throws Exception {
-        return WhatsAppStoreFactory.persistent(dir).create(LinkedWhatsAppClientType.WEB, UUID.randomUUID());
+        return LinkedWhatsAppStoreFactory.persistent(dir).create(LinkedWhatsAppClientType.WEB, UUID.randomUUID());
     }
 
     private static ChatMessageInfo message(String id, Jid parentJid, String body) {

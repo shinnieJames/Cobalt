@@ -6,7 +6,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 
 /**
@@ -74,27 +74,27 @@ public final class Calls2CallReceiptReceiver extends SocketStreamHandler.Concurr
      * missing, or when the {@code id} attribute is missing. The acknowledgement is also dropped without
      * logging when the local JID is not yet available, which occurs before the connection is ready.
      *
-     * @param node the inbound {@code <receipt>} stanza expected to carry an {@code <offer>},
+     * @param stanza the inbound {@code <receipt>} stanza expected to carry an {@code <offer>},
      *             {@code <accept>}, or {@code <reject>} child
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCallReceipt", exports = "handleCallReceipt",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    public void handle(Node node) {
-        if (!node.hasChild("offer", "accept", "reject")) {
-            LOGGER.log(System.Logger.Level.WARNING, "Parsing Error: Unrecognized call stanza: {0}", node);
+    public void handle(Stanza stanza) {
+        if (!stanza.hasChild("offer", "accept", "reject")) {
+            LOGGER.log(System.Logger.Level.WARNING, "Parsing Error: Unrecognized call stanza: {0}", stanza);
             return;
         }
 
-        var from = node.getAttributeAsJid("from", null);
+        var from = stanza.getAttributeAsJid("from", null);
         if (from == null) {
-            LOGGER.log(System.Logger.Level.WARNING, "Parsing Error: missing from attribute in call receipt: {0}", node);
+            LOGGER.log(System.Logger.Level.WARNING, "Parsing Error: missing from attribute in call receipt: {0}", stanza);
             return;
         }
 
-        var stanzaId = node.getAttributeAsString("id", null);
+        var stanzaId = stanza.getAttributeAsString("id", null);
         if (stanzaId == null) {
-            LOGGER.log(System.Logger.Level.WARNING, "Parsing Error: missing id attribute in call receipt: {0}", node);
+            LOGGER.log(System.Logger.Level.WARNING, "Parsing Error: missing id attribute in call receipt: {0}", stanza);
             return;
         }
 
@@ -103,7 +103,7 @@ public final class Calls2CallReceiptReceiver extends SocketStreamHandler.Concurr
             return;
         }
 
-        ackSender.ack(AckClass.RECEIPT, node)
+        ackSender.ack(AckClass.RECEIPT, stanza)
                 .from(meDevicePn.toUserJid())
                 .send();
     }

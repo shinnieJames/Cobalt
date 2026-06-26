@@ -50,7 +50,7 @@ public final class BizAdManagementRootFacebookGraphQlRequest implements Facebook
     public static final String OPERATION_NAME = "WAWebBizAdManagementRootQuery";
 
     /**
-     * The {@code page_id_1} GraphQL variable: the Facebook page id whose {@code page} node is read and
+     * The {@code page_id_1} GraphQL variable: the Facebook page id whose {@code page} stanza is read and
      * which scopes the boosted-ads connection, or {@code null} to omit it.
      */
     private final String pageId1;
@@ -90,7 +90,7 @@ public final class BizAdManagementRootFacebookGraphQlRequest implements Facebook
      *
      * <p>Each value that is {@code null} omits its variable from the serialized object.
      *
-     * @param pageId1     the Facebook page id read as the {@code page} node, or {@code null} to omit
+     * @param pageId1     the Facebook page id read as the {@code page} stanza, or {@code null} to omit
      *                    the variable
      * @param pageId2     the secondary Facebook page id scoping the boosted-ads connection, or
      *                    {@code null} to omit the variable

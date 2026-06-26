@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.registration.push.apns.plist.value;
 
 /**
- * Models one node of an Apple property list as a sealed value tree.
+ * Models one stanza of an Apple property list as a sealed value tree.
  *
  * <p>An instance represents a single decoded plist value used by the APNS connect handshake. The
  * permitted implementations mirror the eight concrete types defined by Apple's

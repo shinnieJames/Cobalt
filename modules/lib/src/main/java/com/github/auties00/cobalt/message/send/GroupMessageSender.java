@@ -31,8 +31,8 @@ import com.github.auties00.cobalt.model.message.security.EncCommentMessage;
 import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
@@ -268,39 +268,39 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
         }
 
         var decryptFail = resolveDecryptFail(container);
-        Node participantsNode;
+        Stanza participantsStanza;
         if (!isBotFeedback && !skDistPayloads.isEmpty()) {
-            participantsNode = ParticipantsStanza.buildSenderKeyDistribution(
+            participantsStanza = ParticipantsStanza.buildSenderKeyDistribution(
                     skDistPayloads, contentBindings, decryptFail);
         } else if (contentBindings != null) {
-            participantsNode = ParticipantsStanza.buildContentBindingOnly(
+            participantsStanza = ParticipantsStanza.buildContentBindingOnly(
                     skExistingDevices, contentBindings);
         } else {
-            participantsNode = null;
+            participantsStanza = null;
         }
 
         var isOpenBotGroup = chatMetadata != null && chatMetadata.isOpenBotGroup()
                 && abPropsService.getBool(ABProp.WEB_AI_GROUP_OPEN_SUPPORT)
                 && abPropsService.getBool(ABProp.AI_GROUP_PARTICIPATION_ENABLED);
-        Node openBotNode = null;
+        Stanza openBotStanza = null;
         if (isOpenBotGroup) {
             deviceService.ensureSessions(List.of(Jid.metaAiBotAccount()));
             store.chatStore().createOrMergeReceiptRecords(
                     messageInfo.key().id().orElseThrow(), List.of(Jid.metaAiBotAccount()));
-            openBotNode = botStanza.buildForGroup(messageInfo, true);
+            openBotStanza = botStanza.buildForGroup(messageInfo, true);
         }
 
         var needsIdentity = ParticipantsStanza.requiresIdentityNode(skDistPayloads);
-        if (!needsIdentity && openBotNode != null) {
-            needsIdentity = openBotNode.streamChild("to")
+        if (!needsIdentity && openBotStanza != null) {
+            needsIdentity = openBotStanza.streamChild("to")
                     .flatMap(to -> to.streamChild("enc"))
                     .anyMatch(enc -> "pkmsg".equals(enc.getAttributeAsString("type", null)));
         }
         var identityNode = needsIdentity ? buildIdentityNode() : null;
 
         var mediaType = resolveMediaType(container);
-        var botNode = openBotNode != null
-                ? openBotNode
+        var botNode = openBotStanza != null
+                ? openBotStanza
                 : botStanza.build(messageInfo, groupJid);
         var stanzaPhash = isBotFeedback ? null : phash;
         var stanza = GroupSkmsgFanoutStanza.build(
@@ -313,7 +313,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 decryptFail,
                 resolveEditAttribute(container),
                 addressingMode,
-                participantsNode,
+                participantsStanza,
                 identityNode,
                 metaStanza.buildChat(groupJid, container, null),
                 bizStanza.buildGroup(container),
@@ -437,33 +437,33 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
                 var phash = deviceService.computeGroupPhash(allSkDevices, requireSelfJid(), false, false);
 
-                Node participantsNode = null;
+                Stanza participantsStanza = null;
                 if (!skDistPayloads.isEmpty()) {
-                    participantsNode = ParticipantsStanza.buildSenderKeyDistribution(
+                    participantsStanza = ParticipantsStanza.buildSenderKeyDistribution(
                             skDistPayloads, null, "hide");
                 }
 
                 var needsIdentity = ParticipantsStanza.requiresIdentityNode(skDistPayloads);
                 var identityNode = needsIdentity ? buildIdentityNode() : null;
 
-                var metaNode = new NodeBuilder()
+                var metaNode = new StanzaBuilder()
                         .description("meta")
                         .attribute("appdata", "default")
                         .build();
-                var encNode = new NodeBuilder()
+                var encNode = new StanzaBuilder()
                         .description("enc")
                         .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                         .attribute("type", MessageEncryptionType.SKMSG.protocolValue())
                         .attribute("decrypt-fail", "hide")
                         .build();
-                var stanza = new NodeBuilder()
+                var stanza = new StanzaBuilder()
                         .description("message")
                         .attribute("id", msgId)
                         .attribute("to", groupJid)
                         .attribute("phash", phash)
                         .attribute("type", "text")
                         .attribute("device_fanout", "false")
-                        .content(metaNode, encNode, participantsNode, identityNode);
+                        .content(metaNode, encNode, participantsStanza, identityNode);
 
                 flushStore();
                 var ackNode = client.sendNode(stanza);
@@ -671,7 +671,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
         var identityNode = ParticipantsStanza.requiresIdentityNode(payloads)
                 ? buildIdentityNode() : null;
 
-        var emptySkmsgNode = new NodeBuilder()
+        var emptySkmsgNode = new StanzaBuilder()
                 .description("enc")
                 .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                 .attribute("type", MessageEncryptionType.SKMSG.protocolValue())

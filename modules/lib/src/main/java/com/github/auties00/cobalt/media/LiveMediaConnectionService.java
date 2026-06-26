@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.model.media.ExternalBlobReference;
 import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.props.ABProp;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.util.MediaMetricUtils;
@@ -38,7 +38,7 @@ import java.util.function.Supplier;
  * <p>Holds the parsed {@code media_conn} credentials (authentication
  * token, the list of candidate CDN hosts with their accepted media types
  * and download buckets, the time-to-live values, and the retry budgets) in
- * a volatile snapshot that {@link #update(Node)} atomically replaces on
+ * a volatile snapshot that {@link #update(Stanza)} atomically replaces on
  * every refresh. Uploads and downloads run two-pass streaming AES-CBC plus
  * HMAC pipelines that never land ciphertext on disk, rotate across
  * candidate hosts on retryable failures, and block on a first-refresh
@@ -49,7 +49,7 @@ import java.util.function.Supplier;
  * ({@code WAMediaConnParser}, {@code WAWebQueryMediaConnsJob},
  * {@code WAWebMediaHosts}, {@code WAWebMmsClient} and its helpers) into a
  * single service. The volatile snapshot fields are published without
- * locking; a concurrent {@link #update(Node)} becomes visible to every
+ * locking; a concurrent {@link #update(Stanza)} becomes visible to every
  * reader on its next field read.
  */
 @WhatsAppWebModule(moduleName = "WAMediaConnParser")
@@ -83,7 +83,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
     private final ABPropsService abPropsService;
 
     /**
-     * Signals when the first {@link #update(Node)} has landed.
+     * Signals when the first {@link #update(Stanza)} has landed.
      *
      * <p>{@link #upload(MediaProvider, MediaPayload)},
      * {@link #download(MediaProvider)}, and the history-sync delete path
@@ -103,7 +103,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * error.
      *
      * @implNote
-     * This field is {@code volatile} so a concurrent {@link #update(Node)}
+     * This field is {@code volatile} so a concurrent {@link #update(Stanza)}
      * publishes the new token to every reader without locking.
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -194,7 +194,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * into every component that needs CDN access (transcoder text pipeline,
      * sync exchange, stream-control success handler) plus the client
      * itself. The connection is unusable for uploads or downloads until the
-     * first {@link #update(Node)} lands, at which point any waiting calls
+     * first {@link #update(Stanza)} lands, at which point any waiting calls
      * unblock.
      *
      * @param abPropsService the AB-props service threaded into the download
@@ -227,7 +227,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * is set to the current epoch second so {@link #isExpired()} and
      * {@link #needsRefresh()} have a stable origin.
      *
-     * @param response the {@code media_conn} IQ response node
+     * @param response the {@code media_conn} IQ response stanza
      * @throws NoSuchElementException   if {@code response} is missing the
      *                                  {@code media_conn} child or one of
      *                                  the mandatory attributes
@@ -239,7 +239,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
     @WhatsAppWebExport(moduleName = "WAWebQueryMediaConnsJob",
             exports = {"mapParsedMediaConn", "queryMediaConn"},
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void update(Node response) {
+    public void update(Stanza response) {
         var mediaConn = response.getRequiredChild("media_conn");
 
         var parsedAuth = mediaConn.getRequiredAttributeAsString("auth");
@@ -275,7 +275,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
     }
 
     /**
-     * Blocks the calling thread until the first {@link #update(Node)} has
+     * Blocks the calling thread until the first {@link #update(Stanza)} has
      * landed.
      *
      * <p>Called by {@link #upload(MediaProvider, MediaPayload)},
@@ -291,7 +291,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
 
     /**
      * Throws {@link IllegalStateException} when the first
-     * {@link #update(Node)} has not yet landed.
+     * {@link #update(Stanza)} has not yet landed.
      *
      * @throws IllegalStateException if no snapshot has been published
      */
@@ -303,7 +303,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
     }
 
     /**
-     * Parses a single {@code host} child node into a {@link MediaHost}
+     * Parses a single {@code host} child stanza into a {@link MediaHost}
      * record.
      *
      * <p>Classifies the host as {@link MediaHost.Fallback} when its
@@ -313,27 +313,27 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * {@code fallback_ip4}, and {@code fallback_ip6} attributes describing a
      * nested fallback endpoint.
      *
-     * @param hostNode the host child node
+     * @param hostStanza the host child stanza
      * @return the parsed media host
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WAWebQueryMediaConnsJob", exports = "mapParsedMediaConn",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static MediaHost parseHost(Node hostNode) {
-        var hostname = hostNode.getRequiredAttributeAsString("hostname");
-        var hostClass = hostNode.getAttributeAsString("class");
+    private static MediaHost parseHost(Stanza hostStanza) {
+        var hostname = hostStanza.getRequiredAttributeAsString("hostname");
+        var hostClass = hostStanza.getAttributeAsString("class");
 
         var ips = new ArrayList<String>();
-        hostNode.getAttributeAsString("ip4").ifPresent(ips::add);
-        hostNode.getAttributeAsString("ip6").ifPresent(ips::add);
+        hostStanza.getAttributeAsString("ip4").ifPresent(ips::add);
+        hostStanza.getAttributeAsString("ip6").ifPresent(ips::add);
 
-        var downloadTypes = parseMediaTypes(hostNode, "download");
-        var uploadTypes = parseMediaTypes(hostNode, "upload");
+        var downloadTypes = parseMediaTypes(hostStanza, "download");
+        var uploadTypes = parseMediaTypes(hostStanza, "upload");
 
-        var downloadBuckets = hostNode.getChild("download_buckets")
+        var downloadBuckets = hostStanza.getChild("download_buckets")
                 .map(bucketsNode -> bucketsNode.streamChildren()
-                        .map(Node::description)
+                        .map(Stanza::description)
                         .map(tag -> {
                             try {
                                 return Integer.parseInt(tag);
@@ -345,7 +345,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
                         .toList())
                 .orElse(List.of());
 
-        var isFallback = hostNode.getAttributeAsString("type")
+        var isFallback = hostStanza.getAttributeAsString("type")
                 .map("fallback"::equals)
                 .orElse(false);
 
@@ -359,11 +359,11 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
                     uploadTypes
             );
         } else {
-            var fallbackHostname = hostNode.getAttributeAsString("fallback_hostname");
-            var fallbackClass = hostNode.getAttributeAsString("fallback_class");
+            var fallbackHostname = hostStanza.getAttributeAsString("fallback_hostname");
+            var fallbackClass = hostStanza.getAttributeAsString("fallback_class");
             var fallbackIps = new ArrayList<String>();
-            hostNode.getAttributeAsString("fallback_ip4").ifPresent(fallbackIps::add);
-            hostNode.getAttributeAsString("fallback_ip6").ifPresent(fallbackIps::add);
+            hostStanza.getAttributeAsString("fallback_ip4").ifPresent(fallbackIps::add);
+            hostStanza.getAttributeAsString("fallback_ip6").ifPresent(fallbackIps::add);
 
             return new MediaHost.Primary(
                     hostname,
@@ -381,16 +381,16 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
 
     /**
      * Parses the media-type whitelist declared under a host's
-     * {@code download} or {@code upload} child node.
+     * {@code download} or {@code upload} child stanza.
      *
      * <p>Each child tag is mapped to a {@link MediaPath} constant. When the
-     * child node is absent the whitelist defaults to every known server
+     * child stanza is absent the whitelist defaults to every known server
      * media type, then a small set of types that never appear in CDN
      * routing ({@code kyc-id}, the novi placeholders, {@code thumbnail-gif},
      * and {@code xma-image}) is filtered out.
      *
-     * @param hostNode    the host node
-     * @param description the child node description, either
+     * @param hostStanza    the host stanza
+     * @param description the child stanza description, either
      *                    {@code "download"} or {@code "upload"}
      * @return the set of supported media paths
      */
@@ -402,12 +402,12 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAServerMediaType", exports = "SERVER_MEDIA",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private static Set<MediaPath> parseMediaTypes(Node hostNode, String description) {
-        return hostNode.getChild(description)
+    private static Set<MediaPath> parseMediaTypes(Stanza hostStanza, String description) {
+        return hostStanza.getChild(description)
                 .map(typesNode -> {
                     var result = new LinkedHashSet<MediaPath>();
                     typesNode.streamChildren()
-                            .map(Node::description)
+                            .map(Stanza::description)
                             .forEach(tag -> MediaPath.ofId(tag).ifPresent(result::add));
 
                     result.remove(MediaPath.KYC_ID);
@@ -432,7 +432,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * Clamps an optional integer to the given inclusive range, returning a
      * default when the input is {@code null} or out of range.
      *
-     * <p>Helper for {@link #update(Node)} that decodes the server's
+     * <p>Helper for {@link #update(Stanza)} that decodes the server's
      * {@code max_manual_retry} and {@code max_auto_download_retry}
      * attributes, both of which are bounded to {@code [0, 4]} with a default
      * of {@code 3}.
@@ -1627,7 +1627,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * upload and download request.
      *
      * @return the authentication token
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -1641,7 +1641,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * Returns the routes time-to-live in seconds.
      *
      * @return the TTL in seconds
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -1657,7 +1657,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * Returns the authentication token time-to-live in seconds.
      *
      * @return the auth TTL in seconds
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -1673,7 +1673,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * Returns the maximum number of deterministic download buckets.
      *
      * @return the maximum bucket count
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -1688,7 +1688,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * retries.
      *
      * @return the maximum manual retry count
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -1703,7 +1703,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * retries.
      *
      * @return the maximum auto-download retry count
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -1718,7 +1718,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * were parsed.
      *
      * @return the creation timestamp in epoch seconds
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryMediaConnsJob", exports = "queryMediaConn",
@@ -1733,7 +1733,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * downloads.
      *
      * @return an unmodifiable collection of hosts
-     * @throws IllegalStateException if the first {@link #update(Node)}
+     * @throws IllegalStateException if the first {@link #update(Stanza)}
      *         has not yet landed
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
@@ -1751,7 +1751,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * <p>Returns {@code true} when the service has never been updated, or
      * when the current clock is at or past {@code timestamp + authTtl}.
      * Callers that observe {@code true} must request a fresh
-     * {@code media_conn} via {@link #update(Node)} before issuing new CDN
+     * {@code media_conn} via {@link #update(Stanza)} before issuing new CDN
      * requests.
      *
      * @return {@code true} if no credentials are published or the auth
@@ -1796,7 +1796,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      *
      * @implNote
      * Prints either the placeholder {@code LiveMediaConnectionService[uninitialized]}
-     * when no {@link #update(Node)} has landed, or every field of the
+     * when no {@link #update(Stanza)} has landed, or every field of the
      * current credentials. Do not log the result in production builds:
      * the {@code auth} token is included.
      */

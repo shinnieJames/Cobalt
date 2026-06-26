@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 
 import java.util.Objects;
@@ -34,7 +34,7 @@ import java.util.function.BiConsumer;
  * bare-terminate handling fed by {@code handle_incoming_signaling_xmpp_msg} (fn10724) and
  * {@code handle_terminate} (fn11492) in the wa-voip WASM module {@code ff-tScznZ8P}. A bare terminate
  * is the {@code <terminate>} element itself rather than a {@code <call>} child, so it is decoded
- * directly through {@link TerminateStanza#of(Node)}; the reason literal maps onto the internal
+ * directly through {@link TerminateStanza#of(Stanza)}; the reason literal maps onto the internal
  * {@code call_term_reason} enum through {@code call_terminate_reason_from_string} (fn10925) and onto
  * {@link com.github.auties00.cobalt.model.call.CallEndReason} inside the record. The native handler
  * acquires the global and per-call locks before dispatch; the ordered base's per-call chain provides
@@ -92,12 +92,12 @@ public final class Calls2TerminateReceiver extends SocketStreamHandler.Ordered {
      * chain as any enveloped signal for that call; a stanza with no {@code call-id} falls back to a
      * single shared key so it is still processed in arrival order.
      *
-     * @param node the inbound bare {@code <terminate>} stanza
+     * @param stanza the inbound bare {@code <terminate>} stanza
      * @return the ordering key, never {@code null}
      */
     @Override
-    protected String orderingKey(Node node) {
-        return node.getAttributeAsString(CALL_ID_ATTRIBUTE, UNKEYED_ORDERING_KEY);
+    protected String orderingKey(Stanza stanza) {
+        return stanza.getAttributeAsString(CALL_ID_ATTRIBUTE, UNKEYED_ORDERING_KEY);
     }
 
     /**
@@ -109,22 +109,22 @@ public final class Calls2TerminateReceiver extends SocketStreamHandler.Ordered {
      * forwarding, because both attributes are required to address the ended call. A stanza with no
      * {@code from} forwards a {@code null} sender, which the engine treats as a non-companion device.
      *
-     * @param node the inbound bare {@code <terminate>} stanza
+     * @param stanza the inbound bare {@code <terminate>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasAttribute(CALL_ID_ATTRIBUTE)) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring bare <terminate> without call-id: {0}", node);
+    public void handle(Stanza stanza) {
+        if (!stanza.hasAttribute(CALL_ID_ATTRIBUTE)) {
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring bare <terminate> without call-id: {0}", stanza);
             return;
         }
         TerminateStanza terminate;
         try {
-            terminate = TerminateStanza.of(node);
+            terminate = TerminateStanza.of(stanza);
         } catch (RuntimeException _) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring malformed bare <terminate>: {0}", node);
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring malformed bare <terminate>: {0}", stanza);
             return;
         }
-        var from = node.getAttributeAsJid(FROM_ATTRIBUTE, null);
+        var from = stanza.getAttributeAsJid(FROM_ATTRIBUTE, null);
         sink.accept(terminate, from);
     }
 }

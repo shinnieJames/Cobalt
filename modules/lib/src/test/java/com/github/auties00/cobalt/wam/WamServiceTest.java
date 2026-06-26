@@ -5,8 +5,8 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.wam.binary.WamEventDecoder;
@@ -390,7 +390,7 @@ class WamServiceTest {
 
         // Asserting the skip via a queued REALTIME event would race the
         // immediate-flush virtual thread, so this drives a small REGULAR commit
-        // and verifies the sweep completes without sending any node.
+        // and verifies the sweep completes without sending any stanza.
         @Test
         @DisplayName("REALTIME channel is skipped by the mid-cycle sweep")
         void realtimeIsSkipped() {
@@ -1067,7 +1067,7 @@ class WamServiceTest {
 
         final TestableWamService service;
 
-        final Deque<Node> responsesQueue;
+        final Deque<Stanza> responsesQueue;
 
         final AtomicInteger sendNodeCalls;
 
@@ -1076,7 +1076,7 @@ class WamServiceTest {
         RealisticHarness(
                 TestWhatsAppClient client,
                 TestableWamService service,
-                Deque<Node> responsesQueue,
+                Deque<Stanza> responsesQueue,
                 AtomicInteger sendNodeCalls) {
             this.client = client;
             this.service = service;
@@ -1091,7 +1091,7 @@ class WamServiceTest {
     // tests that need the disconnected branch must call withIsConnected(false).
     private static RealisticHarness newRealisticHarness(Jid selfPn) {
         var props = TestABPropsService.builder().build();
-        var responses = new ArrayDeque<Node>();
+        var responses = new ArrayDeque<Stanza>();
         var calls = new AtomicInteger();
         var harnessRef = new RealisticHarness[1];
         var store = DeviceFixtures.temporaryStore(selfPn, null);
@@ -1115,8 +1115,8 @@ class WamServiceTest {
         return harnessRef[0];
     }
 
-    private static Node successResponse() {
-        return new NodeBuilder()
+    private static Stanza successResponse() {
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "result")
                 .build();
@@ -1124,12 +1124,12 @@ class WamServiceTest {
 
     // The error code lands in an <error code="..."/> child; the flush path
     // retries for code >= 500 and permanently drops everything else.
-    private static Node errorResponse(int code) {
-        var error = new NodeBuilder()
+    private static Stanza errorResponse(int code) {
+        var error = new StanzaBuilder()
                 .description("error")
                 .attribute("code", String.valueOf(code))
                 .build();
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "error")
                 .content(error)

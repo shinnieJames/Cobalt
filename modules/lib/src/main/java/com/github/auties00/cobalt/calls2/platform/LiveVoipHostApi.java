@@ -4,7 +4,8 @@ import com.github.auties00.cobalt.calls2.core.CallEventType;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -180,18 +181,18 @@ public final class LiveVoipHostApi implements VoipHostApi {
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation dispatches the node through
-     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Node)}, matching the native import's
+     * @implNote This implementation dispatches the stanza through
+     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Stanza)}, matching the native import's
      * {@code void} return: the server acknowledgement for a call stanza arrives on the inbound signaling
      * path, not as a reply correlated here. A {@link WhatsAppSessionException.Closed} from a
      * already-closed socket is caught and logged rather than propagated, because a closed socket means
      * the call is already tearing down and the engine treats this layer as fire-and-forget.
      */
     @Override
-    public void sendSignaling(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
+    public void sendSignaling(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
         try {
-            whatsapp.sendNodeWithNoResponse(node);
+            whatsapp.sendNodeWithNoResponse(stanza);
         } catch (WhatsAppSessionException.Closed exception) {
             logger.log(System.Logger.Level.DEBUG, "Dropping call signaling on a closed socket", exception);
         }
@@ -286,7 +287,7 @@ public final class LiveVoipHostApi implements VoipHostApi {
      * {@inheritDoc}
      *
      * @implNote This implementation maps to a {@code ContactStore} lookup through
-     * {@link com.github.auties00.cobalt.store.ContactStore#findContactByJid}: a present contact is
+     * {@link LinkedWhatsAppContactStore#findContactByJid}: a present contact is
      * known, an absent one is not, so an unloaded address book reports not known and the engine defaults
      * to the conservative unknown-caller handling.
      */

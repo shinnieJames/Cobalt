@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -312,16 +312,16 @@ public record RelayEndpoint(String element,
     }
 
     /**
-     * Builds the {@code <te>} or {@code <te2>} node for this endpoint.
+     * Builds the {@code <te>} or {@code <te2>} stanza for this endpoint.
      *
      * <p>Absent reference attributes are omitted rather than written as their sentinel; the
      * {@code xrtt_ms} attribute is always written because the engine carries an explicit default of
      * {@value #DEFAULT_XRTT_MS}. The packed address bytes become the element content when present.
      *
-     * @return the relay endpoint node
+     * @return the relay endpoint stanza
      */
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toNode() {
+        return new StanzaBuilder()
                 .description(element)
                 .attribute(RELAY_ID_ATTRIBUTE, relayId)
                 .attribute(TOKEN_ID_ATTRIBUTE, tokenId, tokenId != UNSET_ID)
@@ -338,35 +338,49 @@ public record RelayEndpoint(String element,
     }
 
     /**
-     * Decodes a {@code <te>} or {@code <te2>} node into a {@link RelayEndpoint}.
+     * Returns a copy of this endpoint with the client-to-relay round-trip hints cleared.
      *
-     * <p>A node whose tag is neither {@link #ELEMENT_TE} nor {@link #ELEMENT_TE2} yields an empty
+     * <p>The {@code c2r_rtt} and {@code max_peer_c2r_rtt} attributes are reset to {@link #UNSET_ID} so a
+     * re-encode omits them, matching the {@code <te>}/{@code <te2>} shape a callee echoes in its accept;
+     * every other attribute and the packed address are preserved.
+     *
+     * @return a copy of this endpoint without the round-trip-time hints
+     */
+    public RelayEndpoint withoutRoundTripHints() {
+        return new RelayEndpoint(element, relayId, tokenId, xtokenId, authTokenId, xrttMs, protocol,
+                UNSET_ID, UNSET_ID, relayName, domainName, addressBytes);
+    }
+
+    /**
+     * Decodes a {@code <te>} or {@code <te2>} stanza into a {@link RelayEndpoint}.
+     *
+     * <p>A stanza whose tag is neither {@link #ELEMENT_TE} nor {@link #ELEMENT_TE2} yields an empty
      * result so callers iterating a mixed child list can skip it. Absent attributes take the engine
      * defaults: the token references and round-trip times default to {@link #UNSET_ID}, the encrypted
      * round-trip time defaults to {@value #DEFAULT_XRTT_MS}, and the protocol defaults to {@code 0}.
      *
-     * @param node the relay endpoint node
-     * @return the decoded endpoint, or an empty result when the node is not a {@code <te>} or
+     * @param stanza the relay endpoint stanza
+     * @return the decoded endpoint, or an empty result when the stanza is not a {@code <te>} or
      *         {@code <te2>} element
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @throws NullPointerException if {@code stanza} is {@code null}
      */
-    public static Optional<RelayEndpoint> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        if (!node.hasDescription(ELEMENT_TE) && !node.hasDescription(ELEMENT_TE2)) {
+    public static Optional<RelayEndpoint> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        if (!stanza.hasDescription(ELEMENT_TE) && !stanza.hasDescription(ELEMENT_TE2)) {
             return Optional.empty();
         }
-        var relayId = node.getAttributeAsString(RELAY_ID_ATTRIBUTE, "");
-        var tokenId = node.getAttributeAsInt(TOKEN_ID_ATTRIBUTE, UNSET_ID);
-        var xtokenId = node.getAttributeAsInt(XTOKEN_ID_ATTRIBUTE, UNSET_ID);
-        var authTokenId = node.getAttributeAsInt(AUTH_TOKEN_ID_ATTRIBUTE, UNSET_ID);
-        var xrttMs = node.getAttributeAsInt(XRTT_MS_ATTRIBUTE, DEFAULT_XRTT_MS);
-        var protocol = node.getAttributeAsInt(PROTOCOL_ATTRIBUTE, 0);
-        var c2rRtt = node.getAttributeAsInt(C2R_RTT_ATTRIBUTE, UNSET_ID);
-        var maxPeerC2rRtt = node.getAttributeAsInt(MAX_PEER_C2R_RTT_ATTRIBUTE, UNSET_ID);
-        var relayName = node.getAttributeAsString(RELAY_NAME_ATTRIBUTE, null);
-        var domainName = node.getAttributeAsString(DOMAIN_NAME_ATTRIBUTE, null);
-        var addressBytes = node.toContentBytes().orElse(null);
-        return Optional.of(new RelayEndpoint(node.description(), relayId, tokenId, xtokenId, authTokenId,
+        var relayId = stanza.getAttributeAsString(RELAY_ID_ATTRIBUTE, "");
+        var tokenId = stanza.getAttributeAsInt(TOKEN_ID_ATTRIBUTE, UNSET_ID);
+        var xtokenId = stanza.getAttributeAsInt(XTOKEN_ID_ATTRIBUTE, UNSET_ID);
+        var authTokenId = stanza.getAttributeAsInt(AUTH_TOKEN_ID_ATTRIBUTE, UNSET_ID);
+        var xrttMs = stanza.getAttributeAsInt(XRTT_MS_ATTRIBUTE, DEFAULT_XRTT_MS);
+        var protocol = stanza.getAttributeAsInt(PROTOCOL_ATTRIBUTE, 0);
+        var c2rRtt = stanza.getAttributeAsInt(C2R_RTT_ATTRIBUTE, UNSET_ID);
+        var maxPeerC2rRtt = stanza.getAttributeAsInt(MAX_PEER_C2R_RTT_ATTRIBUTE, UNSET_ID);
+        var relayName = stanza.getAttributeAsString(RELAY_NAME_ATTRIBUTE, null);
+        var domainName = stanza.getAttributeAsString(DOMAIN_NAME_ATTRIBUTE, null);
+        var addressBytes = stanza.toContentBytes().orElse(null);
+        return Optional.of(new RelayEndpoint(stanza.description(), relayId, tokenId, xtokenId, authTokenId,
                 xrttMs, protocol, c2rRtt, maxPeerC2rRtt, relayName, domainName, addressBytes));
     }
 

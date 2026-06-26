@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.message.receive;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException.Receive.InvalidDeviceSentMessage.DsmErrorType;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
+import com.github.auties00.cobalt.message.addon.EncMessageFactory;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryption;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryptionHandler;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveBotInfo;
@@ -24,13 +25,22 @@ import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.message.MessageThreadId;
 import com.github.auties00.cobalt.model.message.system.DeviceSentMessage;
+import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
+import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.HighlyStructuredMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 
@@ -47,7 +57,7 @@ import java.util.Objects;
  * {@link DeviceSentMessage} envelope for self-sent messages, and assembles the final
  * {@link ChatMessageInfo}.
  *
- * <p>Selected by {@link MessageReceivingService#process(Node)} for every stanza whose
+ * <p>Selected by {@link MessageReceivingService#process(Stanza)} for every stanza whose
  * {@code from} JID is not a newsletter; this covers 1:1, group, broadcast, status, and
  * peer-protocol messages.
  *
@@ -116,7 +126,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptApi", exports = "decryptE2EPayload",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    ChatMessageInfo receive(Node node, Jid fromJid) {
+    ChatMessageInfo receive(Stanza node, Jid fromJid) {
         var selfJid = store.accountStore().jid().orElse(null);
         var selfLidJid = store.accountStore().lid().orElse(null);
         var stanza = MessageReceiveStanzaParser.parse(node, selfJid, selfLidJid);
@@ -174,7 +184,92 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
                     DsmErrorType.MISSING_DSM);
         }
 
+        maybeDecryptPollVote(effectiveContainer, stanza);
+
         return buildChatMessageInfo(stanza, chatJid, effectiveContainer);
+    }
+
+    /**
+     * Auto-decrypts an inbound poll vote in place, populating its
+     * {@link PollUpdateMessage#selectedOptions() selectedOptions} with the
+     * resolved option labels.
+     *
+     * <p>Mirrors the send-side vote encryption performed during message
+     * preparation: when {@code container} carries a {@link PollUpdateMessage}
+     * whose encrypted {@code vote} is present, the referenced
+     * {@link PollCreationMessage} is resolved from the local store, the vote is
+     * decrypted to its selected option hashes, and those hashes are matched back
+     * to the poll's option labels. The decryption is best-effort: a missing
+     * poll-creation message (not cached locally) or a cipher rejection (for
+     * example a sender JID-form mismatch, which this client does not yet retry
+     * across LID and PN forms) leaves the vote untouched rather than failing the
+     * receive.
+     *
+     * @param container the decoded inbound message container
+     * @param stanza    the parsed receive stanza, supplying the voter JID
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPollsVoteDecryption", exports = "decryptVote",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeDecryptPollVote(MessageContainer container, MessageReceiveStanza stanza) {
+        if (!(container.content() instanceof PollUpdateMessage poll) || poll.vote().isEmpty()) {
+            return;
+        }
+        var pollKey = poll.pollCreationMessageKey().orElse(null);
+        if (pollKey == null) {
+            return;
+        }
+        if (!(store.chatStore().findMessageByKey(pollKey).orElse(null) instanceof ChatMessageInfo pollCreation)
+                || !(pollCreation.message().content() instanceof PollCreationMessage creation)) {
+            return;
+        }
+        var voterJid = stanza.senderJid().toUserJid();
+        try {
+            var selectedHashes = EncMessageFactory.decryptPollVote(poll.vote().get(), pollCreation, voterJid);
+            poll.setSelectedOptions(matchSelectedOptions(creation, selectedHashes));
+        } catch (RuntimeException exception) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Could not auto-decrypt poll vote {0}: {1}", stanza.id(), exception.getMessage());
+        }
+    }
+
+    /**
+     * Maps decrypted option hashes back to the matching poll option labels.
+     *
+     * <p>Each option name is hashed with SHA-256, the same digest the vote
+     * encoder applies, and the hashes are compared against the decrypted
+     * selection. Hashes with no matching option are dropped.
+     *
+     * @param creation       the poll-creation message carrying the option labels
+     * @param selectedHashes the SHA-256 hashes of the voter's selected options
+     * @return the matched option labels, in selection order
+     */
+    private static List<String> matchSelectedOptions(PollCreationMessage creation, List<byte[]> selectedHashes) {
+        if (selectedHashes.isEmpty()) {
+            return List.of();
+        }
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 not available", exception);
+        }
+        var labelsByHash = new HashMap<String, String>(creation.options().size());
+        for (var option : creation.options()) {
+            var name = option.optionName().orElse(null);
+            if (name == null) {
+                continue;
+            }
+            digest.reset();
+            labelsByHash.put(HexFormat.of().formatHex(digest.digest(name.getBytes(StandardCharsets.UTF_8))), name);
+        }
+        var labels = new ArrayList<String>(selectedHashes.size());
+        for (var hash : selectedHashes) {
+            var label = labelsByHash.get(HexFormat.of().formatHex(hash));
+            if (label != null) {
+                labels.add(label);
+            }
+        }
+        return labels;
     }
 
     /**
@@ -263,7 +358,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     /**
      * Returns whether the stanza is a status update older than 24 hours.
      *
-     * <p>{@link #receive(Node, Jid)} uses this to silently drop decryption errors on
+     * <p>{@link #receive(Stanza, Jid)} uses this to silently drop decryption errors on
      * expired status content rather than triggering a retry receipt for a story the
      * user can no longer view.
      *
@@ -538,7 +633,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * @implNote
      * This implementation skips WhatsApp Web's {@code WAWebMsmsgMsgSecretCache} layer
      * and reads the target message straight from the store via
-     * {@link com.github.auties00.cobalt.store.ChatStore#findMessageById(com.github.auties00.cobalt.model.jid.JidProvider, String)},
+     * {@link LinkedWhatsAppChatStore#findMessageById(com.github.auties00.cobalt.model.jid.JidProvider, String)},
      * keyed by {@code (targetChatJid, targetId)}. The result is accepted only when the
      * resolved {@link ChatMessageInfo#messageSecret()} is non-empty; an absent secret
      * raises {@link WhatsAppMessageException.Receive.InvalidMessage} rather than WA
@@ -905,7 +1000,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      * decoded (and possibly DSM-unwrapped) container.
      *
      * <p>The result is the {@link ChatMessageInfo} returned by
-     * {@link #receive(Node, Jid)} and persisted by the orchestrator.
+     * {@link #receive(Stanza, Jid)} and persisted by the orchestrator.
      *
      * @implNote
      * This implementation always stamps the resulting status as

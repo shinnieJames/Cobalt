@@ -166,7 +166,7 @@ public final class BusinessHoursEntry {
      *
      * <p>This is determined by both the opening and closing times being midnight
      * ({@link LocalTime#MIDNIGHT}), which is the default when those attributes are absent
-     * from the protocol node. This typically occurs when the mode is
+     * from the protocol stanza. This typically occurs when the mode is
      * {@link BusinessHoursMode#OPEN_24H} or {@link BusinessHoursMode#APPOINTMENT_ONLY},
      * where explicit time boundaries are not applicable.
      *

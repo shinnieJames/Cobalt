@@ -5,10 +5,12 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.RemoveRecentStickerAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.time.Instant;
 
@@ -19,7 +21,7 @@ import java.time.Instant;
  * <p>The sync dispatcher routes incoming {@code removeRecentSticker} mutations
  * here whenever the paired phone curates its recent-stickers list. The handler
  * deletes the matching entry from the local
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} recent-stickers map so
+ * {@link LinkedWhatsAppStore} recent-stickers map so
  * the sticker picker on this device stops surfacing the retired sticker.
  */
 @WhatsAppWebModule(moduleName = "WAWebStickersRemoveRecentSyncAction")
@@ -35,7 +37,7 @@ public final class RemoveRecentStickerHandler implements WebAppStateActionHandle
      * @implNote
      * This implementation reads the literal {@code "recent_sticker"} directly
      * from
-     * {@link com.github.auties00.cobalt.store.SyncStore#primaryFeatures()}
+     * {@link LinkedWhatsAppSyncStore#primaryFeatures()}
      * rather than going through {@code WAWebPrimaryFeatures.primaryFeatureEnabled};
      * the predicate is identical because that helper is just a containment
      * check against the same set.

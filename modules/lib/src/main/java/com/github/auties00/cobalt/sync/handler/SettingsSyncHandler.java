@@ -7,12 +7,14 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -334,7 +336,7 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
      *
      * @implNote
      * This implementation reads the paired-device platform from
-     * {@link com.github.auties00.cobalt.store.AccountStore#device()} rather than
+     * {@link LinkedWhatsAppAccountStore#device()} rather than
      * from a runtime environment probe; Cobalt has no per-client environment
      * object equivalent to WA Web's {@code WAWebEnvironment.isWindows} check.
      *
@@ -415,7 +417,7 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     /**
      * Writes the resolved setting value into the local store.
      *
-     * <p>Only keys with a backing {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore}
+     * <p>Only keys with a backing {@link LinkedWhatsAppStore}
      * field produce an observable side-effect; every other key resolves to a
      * successful no-op so the WA-side action state stays consistent. Per-chat
      * overrides (any scope other than {@link #APP_SCOPE}) are likewise a no-op.

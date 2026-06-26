@@ -15,6 +15,7 @@ import com.github.auties00.cobalt.model.cloud.phone.CloudPhoneNumberPlatformType
 import com.github.auties00.cobalt.model.cloud.phone.CloudPhoneNumberQualityRating;
 import com.github.auties00.cobalt.model.cloud.phone.CloudRegistrationBackupBuilder;
 import com.github.auties00.cobalt.model.cloud.phone.CloudThroughputLevel;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -39,8 +40,8 @@ class CloudPhoneNumberManagementTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http, CloudApiVersion version) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http, CloudApiVersion version) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .whatsappBusinessAccountId(WABA_ID)
                 .apiVersion(version)
@@ -48,7 +49,7 @@ class CloudPhoneNumberManagementTest {
                 .build();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
         return client(http, CloudApiVersion.V21_0);
     }
 
@@ -61,7 +62,7 @@ class CloudPhoneNumberManagementTest {
     class Registration {
         @Test
         @DisplayName("register posts messaging_product and pin and returns success")
-        void register() {
+        void register() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             var result = client(http).registerPhoneNumber("123456");
@@ -76,7 +77,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("register with a backup attaches the backup data and password")
-        void registerWithBackup() {
+        void registerWithBackup() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).registerPhoneNumber("123456", new CloudRegistrationBackupBuilder()
@@ -90,7 +91,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("register with backup data but no password omits the password key")
-        void registerBackupNoPassword() {
+        void registerBackupNoPassword() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).registerPhoneNumber("123456", new CloudRegistrationBackupBuilder()
@@ -103,7 +104,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("register with a null backup rejects the call")
-        void registerNullBackup() {
+        void registerNullBackup() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             var client = client(http);
@@ -116,7 +117,7 @@ class CloudPhoneNumberManagementTest {
     class Creation {
         @Test
         @DisplayName("addPhoneNumber posts cc, phone_number, verified_name and returns the new id")
-        void add() {
+        void add() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"1906385232743451\"}");
             var id = client(http).addPhoneNumber(new CloudPhoneNumberAddBuilder()
@@ -134,7 +135,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("addPhoneNumber rejects a null request")
-        void addNullArgs() {
+        void addNullArgs() throws Exception {
             var http = http();
             var client = client(http);
             assertThrows(NullPointerException.class, () -> client.addPhoneNumber(null));
@@ -142,9 +143,9 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("addPhoneNumber without a configured WABA id throws IllegalStateException")
-        void addNoWaba() {
+        void addNoWaba() throws Exception {
             var http = http();
-            var client = CloudWhatsAppClient.builder()
+            var client = CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                     .loadConnection("token", PHONE_ID)
                     .apiVersion(CloudApiVersion.V21_0)
                     .httpClient(http)
@@ -163,7 +164,7 @@ class CloudPhoneNumberManagementTest {
     class Query {
         @Test
         @DisplayName("queryPhoneNumber maps the full enriched field set")
-        void full() {
+        void full() throws Exception {
             var http = http();
             http.respondWith("""
                     {"id":"123456789","display_phone_number":"+1 555-012-3456","verified_name":"Jasper's Market",
@@ -186,7 +187,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("queryPhoneNumber leaves extras empty and falls back to the configured id")
-        void minimal() {
+        void minimal() throws Exception {
             var http = http();
             http.respondWith("{}");
             var number = client(http).queryPhoneNumber();
@@ -205,7 +206,7 @@ class CloudPhoneNumberManagementTest {
     class LocalStorage {
         @Test
         @DisplayName("queryLocalStorageSettings maps the storage_configuration object")
-        void get() {
+        void get() throws Exception {
             var http = http();
             http.respondWith("{\"storage_configuration\":{\"status\":\"IN_COUNTRY_STORAGE_ENABLED\","
                     + "\"data_localization_region\":\"DE\"}}");
@@ -217,7 +218,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("queryLocalStorageSettings maps the no-storage retention window")
-        void getNoStorage() {
+        void getNoStorage() throws Exception {
             var http = http();
             http.respondWith("{\"storage_configuration\":{\"status\":\"NO_STORAGE_ENABLED\","
                     + "\"retention_minutes\":1440}}");
@@ -229,7 +230,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("queryLocalStorageSettings returns an absent configuration when missing")
-        void getEmpty() {
+        void getEmpty() throws Exception {
             var http = http();
             http.respondWith("{}");
             var settings = client(http).queryLocalStorageSettings();
@@ -240,7 +241,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("updateLocalStorageSettings posts the storage_configuration with the region")
-        void set() {
+        void set() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).updateLocalStorageSettings(
@@ -254,7 +255,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("updateLocalStorageSettings no-storage sends the retention window and omits the region")
-        void setNoStorage() {
+        void setNoStorage() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).updateLocalStorageSettings(
@@ -267,7 +268,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("updateLocalStorageSettings rejects a null configuration")
-        void setNull() {
+        void setNull() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             var client = client(http);
@@ -276,7 +277,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("queryLocalStorageSettings on a v19 client throws CloudUnsupportedVersionException")
-        void guardGet() {
+        void guardGet() throws Exception {
             var http = http();
             var client = client(http, CloudApiVersion.V19_0);
             var exception = assertThrows(WhatsAppCloudException.CloudUnsupportedVersionException.class,
@@ -289,7 +290,7 @@ class CloudPhoneNumberManagementTest {
 
         @Test
         @DisplayName("updateLocalStorageSettings on a v19 client throws before sending")
-        void guardSet() {
+        void guardSet() throws Exception {
             var http = http();
             var client = client(http, CloudApiVersion.V19_0);
             var exception = assertThrows(WhatsAppCloudException.CloudUnsupportedVersionException.class,

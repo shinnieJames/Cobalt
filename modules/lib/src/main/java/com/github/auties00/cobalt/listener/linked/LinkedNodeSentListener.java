@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.listener.linked;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 /**
  * A functional interface for the {@link LinkedWhatsAppClientListener#onNodeSent onNodeSent} event.
@@ -17,11 +17,11 @@ import com.github.auties00.cobalt.node.Node;
 @FunctionalInterface
 public non-sealed interface LinkedNodeSentListener extends LinkedListener {
     /**
-     * Notifies the listener that a node has been sent to the WhatsApp
+     * Notifies the listener that a stanza has been sent to the WhatsApp
      * server.
      *
      * @param whatsapp the client emitting the event
-     * @param outgoing the node that was sent
+     * @param outgoing the stanza that was sent
      */
-    void onNodeSent(LinkedWhatsAppClient whatsapp, Node outgoing);
+    void onNodeSent(LinkedWhatsAppClient whatsapp, Stanza outgoing);
 }

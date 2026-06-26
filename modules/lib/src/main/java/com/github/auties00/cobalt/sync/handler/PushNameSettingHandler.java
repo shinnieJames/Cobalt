@@ -7,11 +7,13 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.PushNameSetting;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateCriticalDataProcessingEventBuilder;
 import com.github.auties00.cobalt.wam.type.BootstrapAppStateDataStageCode;
@@ -25,7 +27,7 @@ import com.github.auties00.cobalt.wam.WamService;
  * user's outgoing presences and to message envelopes shown to peers. Each
  * {@link SyncdOperation#SET} mutation broadcasts a fresh
  * {@code <presence name="..."/>} stanza, persists the new name to
- * {@link com.github.auties00.cobalt.store.AccountStore#setName(String)},
+ * {@link LinkedWhatsAppAccountStore#setName(String)},
  * mirrors it onto the self-contact's {@code chosenName}, and fires
  * {@link LinkedWhatsAppClientListener#onNameChanged(LinkedWhatsAppClient, String, String)}
  * on every registered listener via virtual threads. The mutation index is the
@@ -102,7 +104,7 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
      * defaulting to the empty string and triggering a
      * {@link BootstrapAppStateDataStageCode#PUSHNAME_INVALID} WAM stage
      * emission; a {@code <presence name="..."/>} stanza is dispatched via
-     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(com.github.auties00.cobalt.node.Node)}
+     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Stanza)}
      * with no {@code type} attribute; the new name is persisted via
      * {@code LinkedWhatsAppStore.setName}; the self-contact's
      * {@link com.github.auties00.cobalt.model.contact.Contact#setChosenName(String)}
@@ -137,7 +139,7 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
             name = resolvedName;
         }
 
-        client.sendNodeWithNoResponse(new NodeBuilder()
+        client.sendNodeWithNoResponse(new StanzaBuilder()
                 .description("presence")
                 .attribute("name", name)
                 .build());

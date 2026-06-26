@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -237,12 +237,12 @@ public final class StubDeviceService implements DeviceService {
     }
 
     @Override
-    public void handleDeviceNotification(Node node, String action, Jid userJid) {
+    public void handleDeviceNotification(Stanza stanza, String action, Jid userJid) {
         throw unsupported("handleDeviceNotification");
     }
 
     @Override
-    public void refreshOwnDeviceList(Jid wid, Node devicesNode) {
+    public void refreshOwnDeviceList(Jid wid, Stanza devicesStanza) {
         throw unsupported("refreshOwnDeviceList");
     }
 
@@ -325,7 +325,7 @@ public final class StubDeviceService implements DeviceService {
     }
 
     @Override
-    public Optional<ADVSignedDeviceIdentity> extractAndValidateLocalSignedDeviceIdentity(Node deviceIdentityNode) {
+    public Optional<ADVSignedDeviceIdentity> extractAndValidateLocalSignedDeviceIdentity(Stanza deviceIdentityStanza) {
         throw unsupported("extractAndValidateLocalSignedDeviceIdentity");
     }
 

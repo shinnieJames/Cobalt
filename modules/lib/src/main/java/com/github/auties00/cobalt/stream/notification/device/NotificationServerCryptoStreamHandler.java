@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -12,7 +13,6 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.media.MediaRetryNotificationSpec;
 import com.github.auties00.cobalt.model.message.MessageInfo;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.WaOldCodeEventBuilder;
@@ -63,7 +63,7 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
     /**
      * Holds the notification {@code type} values routed to this handler.
      *
-     * <p>Consulted by {@link #handle(Node)} as the first-line filter; any stanza whose type is
+     * <p>Consulted by {@link #handle(Stanza)} as the first-line filter; any stanza whose type is
      * outside this set returns without side-effects.
      */
     private static final Set<String> SUPPORTED_TYPES = Set.of(
@@ -131,21 +131,21 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * caught and warning-logged, and the ACK is sent in the {@code finally} block so a valid stanza
      * is always acknowledged even when its branch throws.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        var type = node.getAttributeAsString("type", null);
+    public void handle(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", null);
         if (!SUPPORTED_TYPES.contains(type)) {
             return;
         }
 
         try {
             switch (type) {
-                case "encrypt" -> handleEncrypt(node);
-                case "mediaretry" -> handleMediaRetry(node);
-                case "server" -> handleServer(node);
-                case "registration" -> handleRegistration(node);
+                case "encrypt" -> handleEncrypt(stanza);
+                case "mediaretry" -> handleMediaRetry(stanza);
+                case "server" -> handleServer(stanza);
+                case "registration" -> handleRegistration(stanza);
                 default -> {
                 }
             }
@@ -153,10 +153,10 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
             LOGGER.log(System.Logger.Level.WARNING,
                     "Cannot handle server-crypto notification {0}/{1}: {2}",
                     type,
-                    node.getAttributeAsString("id", "<missing>"),
+                    stanza.getAttributeAsString("id", "<missing>"),
                     throwable.getMessage());
         } finally {
-            sendNotificationAck(node, type);
+            sendNotificationAck(stanza, type);
         }
     }
 
@@ -181,20 +181,20 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * Cobalt has no equivalent of WA Web's digest-key verification; the double-ratchet session-state
      * envelope Cobalt persists already includes the digest.
      *
-     * @param node the {@code <notification type="encrypt"/>} stanza
+     * @param stanza the {@code <notification type="encrypt"/>} stanza
      */
-    private void handleEncrypt(Node node) {
-        var firstChild = node.getChild().orElse(null);
+    private void handleEncrypt(Stanza stanza) {
+        var firstChild = stanza.getChild().orElse(null);
         if (firstChild == null) {
             return;
         }
 
         switch (firstChild.description()) {
-            case "count" -> handlePreKeyLow(node, firstChild.getAttributeAsLong("value", 0L));
+            case "count" -> handlePreKeyLow(stanza, firstChild.getAttributeAsLong("value", 0L));
             case "digest" -> LOGGER.log(System.Logger.Level.DEBUG,
                     "Ignoring unsupported digest-key notification {0}",
-                    node.getAttributeAsString("id", "<missing>"));
-            case "identity" -> handleIdentityChange(node);
+                    stanza.getAttributeAsString("id", "<missing>"));
+            case "identity" -> handleIdentityChange(stanza);
             default -> LOGGER.log(System.Logger.Level.DEBUG,
                     "Ignoring unsupported encrypt notification child {0}",
                     firstChild.description());
@@ -211,11 +211,11 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * @implNote This implementation uses the stanza id as the deduplication key; a second
      * pre-key-low stanza with the same id arriving concurrently exits without re-uploading.
      *
-     * @param node      the {@code <notification type="encrypt"/>} stanza
+     * @param stanza      the {@code <notification type="encrypt"/>} stanza
      * @param keysCount the server-reported remaining pre-key count
      */
-    private void handlePreKeyLow(Node node, long keysCount) {
-        var stanzaId = node.getAttributeAsString("id", null);
+    private void handlePreKeyLow(Stanza stanza, long keysCount) {
+        var stanzaId = stanza.getAttributeAsString("id", null);
         if (stanzaId == null || !preKeyUploadGuard.add(stanzaId)) {
             return;
         }
@@ -240,10 +240,10 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * {@link LinkedDeviceIdentityChangedListener#onDeviceIdentityChanged} so the embedder can drive the
      * equivalent UI.
      *
-     * @param node the {@code <notification type="encrypt"/>} stanza with an {@code <identity/>} child
+     * @param stanza the {@code <notification type="encrypt"/>} stanza with an {@code <identity/>} child
      */
-    private void handleIdentityChange(Node node) {
-        var deviceJid = node.getAttributeAsJid("from").orElse(null);
+    private void handleIdentityChange(Stanza stanza) {
+        var deviceJid = stanza.getAttributeAsJid("from").orElse(null);
         if (deviceJid == null || deviceJid.device() != 0) {
             return;
         }
@@ -258,14 +258,14 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
             return;
         }
 
-        var lid = node.getAttributeAsJid("lid")
+        var lid = stanza.getAttributeAsJid("lid")
                 .map(Jid::toUserJid)
                 .orElse(null);
         if (lid != null) {
             whatsapp.store().contactStore().registerLidMapping(userJid, lid);
         }
 
-        var displayName = node.getAttributeAsString("display_name", null);
+        var displayName = stanza.getAttributeAsString("display_name", null);
         var contact = whatsapp.store().contactStore().findContactByJid(userJid)
                 .orElseGet(() -> whatsapp.store().contactStore().addNewContact(userJid));
         if (displayName != null && !displayName.isBlank()) {
@@ -303,26 +303,26 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * authenticated data. Failures (missing media key, decryption error, decode error) are silently
      * swallowed because the notification cannot be retried by the client.
      *
-     * @param node the {@code <notification type="mediaretry"/>} stanza
+     * @param stanza the {@code <notification type="mediaretry"/>} stanza
      */
-    private void handleMediaRetry(Node node) {
-        if (node.hasChild("error")) {
+    private void handleMediaRetry(Stanza stanza) {
+        if (stanza.hasChild("error")) {
             return;
         }
 
-        var encryptNode = node.getChild("encrypt").orElse(null);
+        var encryptNode = stanza.getChild("encrypt").orElse(null);
         if (encryptNode == null) {
             return;
         }
 
-        var message = findMessageById(node.getAttributeAsString("id", null));
+        var message = findMessageById(stanza.getAttributeAsString("id", null));
         if (message == null || !(message.message().content() instanceof MediaProvider mediaProvider)) {
             return;
         }
 
         var mediaKey = mediaProvider.mediaKey().orElse(null);
-        var encP = encryptNode.getChild("enc_p").flatMap(Node::toContentBytes).orElse(null);
-        var encIv = encryptNode.getChild("enc_iv").flatMap(Node::toContentBytes).orElse(null);
+        var encP = encryptNode.getChild("enc_p").flatMap(Stanza::toContentBytes).orElse(null);
+        var encIv = encryptNode.getChild("enc_iv").flatMap(Stanza::toContentBytes).orElse(null);
         if (mediaKey == null || encP == null || encIv == null) {
             return;
         }
@@ -357,10 +357,10 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * @implNote This implementation does not run the crashlog upload because Cobalt does not
      * maintain a per-device crash log.
      *
-     * @param node the {@code <notification type="server"/>} stanza
+     * @param stanza the {@code <notification type="server"/>} stanza
      */
-    private void handleServer(Node node) {
-        var firstChild = node.getChild().map(Node::description).orElse(null);
+    private void handleServer(Stanza stanza) {
+        var firstChild = stanza.getChild().map(Stanza::description).orElse(null);
         switch (firstChild) {
             case "log" -> LOGGER.log(System.Logger.Level.WARNING,
                     "Ignoring server log-request notification");
@@ -383,14 +383,14 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * the {@link LinkedRegistrationCodeListener#onRegistrationCode} callback requires a {@code long}, whereas
      * WA Web passes the raw string through.
      *
-     * @param node the {@code <notification type="registration"/>} stanza
+     * @param stanza the {@code <notification type="registration"/>} stanza
      */
-    private void handleRegistration(Node node) {
-        var registration = node.getChild("wa_old_registration").orElse(null);
+    private void handleRegistration(Stanza stanza) {
+        var registration = stanza.getChild("wa_old_registration").orElse(null);
         if (registration == null) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Ignoring unsupported registration notification {0}",
-                    node.getAttributeAsString("id", "<missing>"));
+                    stanza.getAttributeAsString("id", "<missing>"));
             return;
         }
 
@@ -423,7 +423,7 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * Fans the callback out to every registered listener of the given type on
      * its own virtual thread.
      *
-     * <p>Used by {@link #handleIdentityChange(Node)} and {@link #handleRegistration(Node)}.
+     * <p>Used by {@link #handleIdentityChange(Stanza)} and {@link #handleRegistration(Stanza)}.
      *
      * @param type     the per-event listener interface to dispatch against
      * @param consumer the callback to invoke against each matching listener
@@ -441,7 +441,7 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
     /**
      * Searches chats, status messages, and newsletters for the message matching the given stanza id.
      *
-     * <p>Used only by {@link #handleMediaRetry(Node)} to locate the original media message whose
+     * <p>Used only by {@link #handleMediaRetry(Stanza)} to locate the original media message whose
      * direct path needs replacing. Returns {@code null} for a {@code null} id and when no message
      * matches in any of the three collections.
      *
@@ -483,18 +483,18 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * reflects it. The {@code mediaretry} ack additionally reflects the {@code participant}
      * attribute when present.
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      * @param type the notification type from the {@code type} attribute
      */
-    private void sendNotificationAck(Node node, String type) {
-        var builder = ackSender.ack(AckClass.NOTIFICATION, node);
+    private void sendNotificationAck(Stanza stanza, String type) {
+        var builder = ackSender.ack(AckClass.NOTIFICATION, stanza);
         if ("encrypt".equals(type)) {
             builder.type(null);
         } else {
             builder.type(type);
         }
         if ("mediaretry".equals(type)) {
-            var participant = node.getAttributeAsJid("participant").orElse(null);
+            var participant = stanza.getAttributeAsJid("participant").orElse(null);
             if (participant != null) {
                 builder.participant(participant);
             }

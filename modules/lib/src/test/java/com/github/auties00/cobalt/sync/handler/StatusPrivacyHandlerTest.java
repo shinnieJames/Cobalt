@@ -6,18 +6,16 @@ import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.media.StatusPrivacyAction;
 import com.github.auties00.cobalt.model.sync.action.media.StatusPrivacyActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import com.github.auties00.cobalt.sync.factory.StatusPrivacyMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -276,7 +274,7 @@ class StatusPrivacyHandlerTest {
         void newerRemote() {
             var local = statusMutation(StatusPrivacyAction.StatusDistributionMode.CONTACTS, List.of(), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = statusMutation(StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST, List.of(PEER_A), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new StatusPrivacyHandler().resolveConflicts(local, remote).state());
         }
 
@@ -285,7 +283,7 @@ class StatusPrivacyHandlerTest {
         void olderRemote() {
             var local = statusMutation(StatusPrivacyAction.StatusDistributionMode.CONTACTS, List.of(), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = statusMutation(StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST, List.of(PEER_A), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     new StatusPrivacyHandler().resolveConflicts(local, remote).state());
         }
     }

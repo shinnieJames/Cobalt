@@ -5,15 +5,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.media.NewsletterSavedInterestsAction;
 import com.github.auties00.cobalt.model.sync.action.media.NewsletterSavedInterestsActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Covers {@link NewsletterSavedInterestsHandler} for the protobuf-only
  * {@code "newsletter_saved_interests"} action: the handler accepts only {@link SyncdOperation#SET}
  * with a non-empty interests token, persists it via
- * {@link com.github.auties00.cobalt.store.SettingsStore#setNewsletterSavedInterests}, and rejects a wrong-typed value or an empty
+ * {@link LinkedWhatsAppSettingsStore#setNewsletterSavedInterests}, and rejects a wrong-typed value or an empty
  * token as {@link SyncActionState#MALFORMED}.
  *
  * <p>No public outgoing-mutation factory exists for this action, so each test drives the handler
@@ -170,7 +171,7 @@ class NewsletterSavedInterestsHandlerTest {
             var local = build(action, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(action, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
 
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -182,7 +183,7 @@ class NewsletterSavedInterestsHandlerTest {
             var local = build(action, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(action, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
 
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
     }

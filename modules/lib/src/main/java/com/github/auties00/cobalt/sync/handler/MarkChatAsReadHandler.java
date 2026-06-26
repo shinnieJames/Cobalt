@@ -6,10 +6,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import com.github.auties00.cobalt.sync.ConflictResolution;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadAction;
 import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadActionBuilder;
@@ -143,14 +144,14 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
      *
      * <p>Both sides are decoded as {@link MarkChatAsReadAction} and the
      * four-way enclosure decision is delegated to
-     * {@link MessageRangeUtils#compareMessageRanges(com.github.auties00.cobalt.model.sync.SyncActionMessageRange, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
+     * {@link MessageRangeUtils#compareMessageRanges(SyncActionMessageRange, SyncActionMessageRange)}.
      * When neither range encloses the other a merged action is built with the
      * {@link MarkChatAsReadAction#read()} flag drawn from the more-recent
      * mutation and returned via
      * {@link ConflictResolution#merged(DecryptedMutation.Trusted)} for the
      * caller to apply. A {@code null} action or
      * {@link MarkChatAsReadAction#messageRange()} on either side defaults to
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL}.
+     * {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL}.
      *
      * @implNote
      * This implementation separates resolution from application; WA Web
@@ -171,25 +172,25 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
                 .orElse(null);
 
         if (localAction == null || remoteAction == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         var localRange = localAction.messageRange().orElse(null);
         var remoteRange = remoteAction.messageRange().orElse(null);
 
         if (localRange == null || remoteRange == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         return switch (MessageRangeUtils.compareMessageRanges(remoteRange, localRange)) {
             case RANGE_A_ENCLOSES_RANGE_B ->
-                    ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+                    ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
             case RANGE_B_ENCLOSES_RANGE_A ->
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_ARE_EQUAL ->
                     localMutation.timestamp().compareTo(remoteMutation.timestamp()) <= 0
-                            ? ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
-                            : ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                            ? ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
+                            : ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_NOT_ENCLOSING -> {
                 var localWins = localMutation.timestamp().compareTo(remoteMutation.timestamp()) > 0;
                 var read = localWins ? localAction.read() : remoteAction.read();

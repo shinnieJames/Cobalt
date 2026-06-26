@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,7 @@ import java.util.OptionalInt;
  *
  * <p>The reason is the wire literal vocabulary shared with reject, classified into a
  * {@link CallEndReason} with the original literal retained. The {@code <call_summary>} block's
- * internal nesting is held as a raw {@link Node} subtree because its participant and duration layout
+ * internal nesting is held as a raw {@link Stanza} subtree because its participant and duration layout
  * is not fully recovered; callers that need its contents walk the subtree directly.
  *
  * <p>On the wire the element is {@snippet lang="xml" :
@@ -65,7 +65,7 @@ import java.util.OptionalInt;
  * @see CallEndReason
  */
 public record TerminateStanza(String callId, Jid callCreator, CallEndReason reason, String reasonWire, int count,
-                              boolean firstWave, int transactionId, String hint, Node callSummary,
+                              boolean firstWave, int transactionId, String hint, Stanza callSummary,
                               List<Jid> destination) implements CallMessage {
     /**
      * The wire element tag for a terminate signal.
@@ -198,9 +198,9 @@ public record TerminateStanza(String callId, Jid callCreator, CallEndReason reas
     /**
      * Returns the raw {@code <call_summary>} subtree, if present.
      *
-     * @return an {@link Optional} holding the call-summary node, or empty when absent
+     * @return an {@link Optional} holding the call-summary stanza, or empty when absent
      */
-    public Optional<Node> callSummaryNode() {
+    public Optional<Stanza> callSummaryNode() {
         return Optional.ofNullable(callSummary);
     }
 
@@ -215,35 +215,35 @@ public record TerminateStanza(String callId, Jid callCreator, CallEndReason reas
     }
 
     /**
-     * Builds the {@code <terminate>} action node with its reason, optional attributes, optional
+     * Builds the {@code <terminate>} action stanza with its reason, optional attributes, optional
      * {@code <call_summary>}, and optional {@code <destination>} fanout.
      *
      * <p>The reason is written on {@code reason}; absent optional attributes are omitted;
      * the {@code <destination>} block is emitted only when at least one fanout target is present.
      *
-     * @return the terminate action node
+     * @return the terminate action stanza
      */
     @Override
-    public Node toNode() {
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(REASON_ATTRIBUTE, reasonWire)
                 .attribute(COUNT_ATTRIBUTE, count, count >= 0)
                 .attribute(FIRST_WAVE_ATTRIBUTE, FLAG_TRUE, firstWave)
                 .attribute(TRANSACTION_ID_ATTRIBUTE, transactionId, transactionId >= 0)
                 .attribute(HINT_ATTRIBUTE, hint);
-        var children = new ArrayList<Node>(2);
+        var children = new ArrayList<Stanza>(2);
         if (callSummary != null) {
             children.add(callSummary);
         }
         if (!destination.isEmpty()) {
-            var toNodes = new ArrayList<Node>(destination.size());
+            var toNodes = new ArrayList<Stanza>(destination.size());
             for (var device : destination) {
-                toNodes.add(new NodeBuilder()
+                toNodes.add(new StanzaBuilder()
                         .description(TO_ELEMENT)
                         .attribute(JID_ATTRIBUTE, device)
                         .build());
             }
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(DESTINATION_ELEMENT)
                     .content(toNodes)
                     .build());
@@ -255,7 +255,7 @@ public record TerminateStanza(String callId, Jid callCreator, CallEndReason reas
     }
 
     /**
-     * Decodes a {@code <terminate>} action node into a {@link TerminateStanza}.
+     * Decodes a {@code <terminate>} action stanza into a {@link TerminateStanza}.
      *
      * <p>The reason is read from {@code reason}, falling back to the alternate
      * {@code terminate_reason} spelling, retained verbatim, and classified into a
@@ -263,25 +263,25 @@ public record TerminateStanza(String callId, Jid callCreator, CallEndReason reas
      * {@code <call_summary>} subtree is retained as-is, and the {@code <destination>} block's
      * {@code <to>} children supply the fanout device JIDs.
      *
-     * @param node the {@code <terminate>} node
+     * @param stanza the {@code <terminate>} stanza
      * @return the decoded terminate signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static TerminateStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var reasonWire = node.getAttributeAsString(REASON_ATTRIBUTE,
-                node.getAttributeAsString(TERMINATE_REASON_ATTRIBUTE, ""));
+    public static TerminateStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var reasonWire = stanza.getAttributeAsString(REASON_ATTRIBUTE,
+                stanza.getAttributeAsString(TERMINATE_REASON_ATTRIBUTE, ""));
         var reason = CallEndReason.fromWireValue(reasonWire);
-        var count = node.getAttributeAsInt(COUNT_ATTRIBUTE, -1);
-        var firstWave = FLAG_TRUE.equals(node.getAttributeAsString(FIRST_WAVE_ATTRIBUTE, FLAG_FALSE));
-        var transactionId = node.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, -1);
-        var hint = node.getAttributeAsString(HINT_ATTRIBUTE, null);
-        var callSummary = node.getChild(CALL_SUMMARY_ELEMENT).orElse(null);
-        var destination = node.getChild(DESTINATION_ELEMENT)
+        var count = stanza.getAttributeAsInt(COUNT_ATTRIBUTE, -1);
+        var firstWave = FLAG_TRUE.equals(stanza.getAttributeAsString(FIRST_WAVE_ATTRIBUTE, FLAG_FALSE));
+        var transactionId = stanza.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, -1);
+        var hint = stanza.getAttributeAsString(HINT_ATTRIBUTE, null);
+        var callSummary = stanza.getChild(CALL_SUMMARY_ELEMENT).orElse(null);
+        var destination = stanza.getChild(DESTINATION_ELEMENT)
                 .stream()
                 .flatMap(d -> d.streamChildren(TO_ELEMENT))
                 .flatMap(to -> to.streamAttributeAsJid(JID_ATTRIBUTE))

@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.call.CallLog;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.action.call.CallLogAction;
 import com.github.auties00.cobalt.model.sync.action.call.CallLogActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;

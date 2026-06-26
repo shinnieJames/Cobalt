@@ -1,10 +1,12 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.NewsletterSavedInterestsAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -13,7 +15,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * <p>This handler persists an opaque, server-defined token blob describing the
  * user's subscribed newsletter interest categories on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so the personalised
+ * {@link LinkedWhatsAppStore} so the personalised
  * channel directory can render the same selection across linked devices. Only
  * {@link SyncdOperation#SET} is accepted; any other operation is reported as
  * {@link MutationApplicationResult#unsupported()} and a missing or empty
@@ -78,7 +80,7 @@ public final class NewsletterSavedInterestsHandler implements WebAppStateActionH
      * update; an empty value is rejected as
      * {@link MutationApplicationResult#malformed()}. On success the resolved
      * token is written via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setNewsletterSavedInterests(String)}.
+     * {@link LinkedWhatsAppSettingsStore#setNewsletterSavedInterests(String)}.
      *
      * @implNote
      * This implementation rejects a {@code REMOVE} operation because the

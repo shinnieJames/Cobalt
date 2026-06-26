@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.calls2.core;
 import com.github.auties00.cobalt.calls2.signaling.CallMessage;
 import com.github.auties00.cobalt.calls2.signaling.Calls2SignalingType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -47,7 +47,7 @@ import java.util.function.Function;
  * {@code 0=process, 1=drop-unknown, 2=ignore, 3=offer-rering, 4=ignore-while-rejected, 5=accept-handle}
  * to {@code wa_call_handle_incoming_signaling_xmpp_msg} (fn10724) which then invokes the per-type handler.
  * This port reads the universal {@code call-id} and {@code call-creator} header and the optional
- * {@code transaction-id} attribute off the decoded message's rendered {@link Node} rather than off a flat
+ * {@code transaction-id} attribute off the decoded message's rendered {@link Stanza} rather than off a flat
  * C struct, because every {@link CallMessage} stamps the universal header through its serializer; the
  * six {@link RoutingClass} values are the native routing-class return codes one-to-one.
  */
@@ -241,7 +241,7 @@ public final class Calls2IncomingMessageRouter<C> {
         Objects.requireNonNull(dedup, "dedup cannot be null");
         Objects.requireNonNull(locator, "locator cannot be null");
 
-        var node = message.toNode();
+        var node = message.toStanza();
         var callId = node.getAttributeAsString(CALL_ID_ATTRIBUTE, null);
         var callCreator = node.getAttributeAsJid(CALL_CREATOR_ATTRIBUTE, null);
         if (callId == null || callId.isEmpty() || callCreator == null || !isLidAddressed(senderLid, callCreator)) {
@@ -283,17 +283,17 @@ public final class Calls2IncomingMessageRouter<C> {
     }
 
     /**
-     * Reads the transaction id from a decoded message's rendered node, or the no-transaction sentinel.
+     * Reads the transaction id from a decoded message's rendered stanza, or the no-transaction sentinel.
      *
      * <p>A message that carries a {@code transaction-id} attribute (the rekey, relay-latency, terminate,
      * and flow-control legs) returns its parsed value; a message with no such attribute returns
      * {@link #NO_TRANSACTION_ID}, which the router treats as never stale.
      *
-     * @param node the decoded message's rendered node
+     * @param stanza the decoded message's rendered stanza
      * @return the parsed transaction id, or {@link #NO_TRANSACTION_ID} when absent
      */
-    private static int transactionId(Node node) {
-        return node.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, NO_TRANSACTION_ID);
+    private static int transactionId(Stanza stanza) {
+        return stanza.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, NO_TRANSACTION_ID);
     }
 
     /**

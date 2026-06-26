@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 
 /**
@@ -123,16 +123,16 @@ public final class FailureStreamHandler extends SocketStreamHandler.Concurrent {
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebHandleFailure", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handle(Node node) {
-        var reason = node.getAttributeAsInt("reason", (Integer) null);
-        var location = node.getAttributeAsString("location", null);
-        var code = node.getAttributeAsInt("code", (Integer) null);
-        var expire = node.getAttributeAsInt("expire", (Integer) null);
-        var message = node.getAttributeAsString("message", null);
-        var url = node.getAttributeAsString("url", null);
-        var logoutMessageHeader = node.getAttributeAsString("logout_message_header", null);
-        var logoutMessageSubtext = node.getAttributeAsString("logout_message_subtext", null);
-        var logoutMessageLocale = node.getAttributeAsString("logout_message_locale", null);
+    public void handle(Stanza stanza) {
+        var reason = stanza.getAttributeAsInt("reason", (Integer) null);
+        var location = stanza.getAttributeAsString("location", null);
+        var code = stanza.getAttributeAsInt("code", (Integer) null);
+        var expire = stanza.getAttributeAsInt("expire", (Integer) null);
+        var message = stanza.getAttributeAsString("message", null);
+        var url = stanza.getAttributeAsString("url", null);
+        var logoutMessageHeader = stanza.getAttributeAsString("logout_message_header", null);
+        var logoutMessageSubtext = stanza.getAttributeAsString("logout_message_subtext", null);
+        var logoutMessageLocale = stanza.getAttributeAsString("logout_message_locale", null);
 
         LOGGER.log(System.Logger.Level.WARNING,
                 "Received failure stanza: reason={0}, location={1}, code={2}, expire={3}, message={4}, url={5}",

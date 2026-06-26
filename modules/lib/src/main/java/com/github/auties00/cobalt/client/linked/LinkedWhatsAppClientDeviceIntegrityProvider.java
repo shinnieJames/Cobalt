@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.client.linked;
 
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 /**
  * Produces a platform-specific device-attestation payload that the mobile

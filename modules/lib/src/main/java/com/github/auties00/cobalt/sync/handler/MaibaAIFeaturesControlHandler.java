@@ -1,10 +1,11 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -17,7 +18,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * {@link MaibaAIFeaturesControlAction.MaibaAIFeatureStatus#ENABLED_HAS_LEARNING}
  * or {@link MaibaAIFeaturesControlAction.MaibaAIFeatureStatus#DISABLED}) which
  * is persisted via
- * {@link com.github.auties00.cobalt.store.BusinessStore#setAiBusinessAgentStatus(MaibaAIFeaturesControlAction.MaibaAIFeatureStatus)}
+ * {@link LinkedWhatsAppBusinessStore#setAiBusinessAgentStatus(MaibaAIFeaturesControlAction.MaibaAIFeatureStatus)}
  * so SMB-AI features can read the current opt-in state without re-decoding the
  * protobuf.
  *
@@ -75,7 +76,7 @@ public final class MaibaAIFeaturesControlHandler implements WebAppStateActionHan
      * {@link MaibaAIFeaturesControlAction#aiFeatureStatus()} is reported as
      * {@link MutationApplicationResult#malformed()}; otherwise the status is
      * persisted via
-     * {@link com.github.auties00.cobalt.store.BusinessStore#setAiBusinessAgentStatus(MaibaAIFeaturesControlAction.MaibaAIFeatureStatus)}.
+     * {@link LinkedWhatsAppBusinessStore#setAiBusinessAgentStatus(MaibaAIFeaturesControlAction.MaibaAIFeatureStatus)}.
      *
      * @implNote
      * This implementation treats an empty status as malformed so the

@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.control;
 
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedChatsListener;
@@ -23,9 +25,8 @@ import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.props.ABProp;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.iq.media.IqQueryMediaConnsRequest;
-import com.github.auties00.cobalt.node.iq.media.IqQueryMediaConnsResponse;
+import com.github.auties00.cobalt.stanza.iq.media.IqQueryMediaConnsRequest;
+import com.github.auties00.cobalt.stanza.iq.media.IqQueryMediaConnsResponse;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
@@ -156,15 +157,15 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
     /**
      * {@inheritDoc}
      *
-     * <p>Drives {@link #bootstrap(Node)} the first time the {@code <success>} stanza is observed on the current
+     * <p>Drives {@link #bootstrap(Stanza)} the first time the {@code <success>} stanza is observed on the current
      * connection; any later {@code <success>} stanzas are no-ops until {@link #reset()} runs on socket teardown.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebHandleSuccess", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handle(Node node) {
+    public void handle(Stanza stanza) {
         if (started.compareAndSet(false, true)) {
-            bootstrap(node);
+            bootstrap(stanza);
         }
     }
 
@@ -190,7 +191,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * resumes app-state syncing, transitions the socket out of passive mode, fans out
      * {@link LoggedInListener#onLoggedIn(LinkedWhatsAppClient)} and persists the store.
      *
-     * <p>Reachable only via {@link #handle(Node)} the first time a {@code <success>} stanza is observed on the current
+     * <p>Reachable only via {@link #handle(Stanza)} the first time a {@code <success>} stanza is observed on the current
      * connection.
      *
      * @implNote This implementation runs the clock-skew normalisation, AB-prop sync, WAM initialisation, device-service
@@ -206,11 +207,11 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * and must not block the listener fan-out; the final store save is best-effort because the bootstrap must not fail
      * on a serializer hiccup.
      *
-     * @param node the parsed {@code <success>} stanza
+     * @param stanza the parsed {@code <success>} stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleSuccess", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void bootstrap(Node node) {
+    private void bootstrap(Stanza stanza) {
         var store = whatsapp.store();
 
         var replayChats = store.syncStore().syncedChats();
@@ -221,7 +222,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
         store.accountStore().setOnline(true);
         store.accountStore().setRegistered(true);
 
-        var serverTimestampSeconds = node.getAttributeAsLong("t", 0L);
+        var serverTimestampSeconds = stanza.getAttributeAsLong("t", 0L);
         if (serverTimestampSeconds > 0) {
             var localSeconds = Instant.now().getEpochSecond();
             var skewSeconds = serverTimestampSeconds - localSeconds;
@@ -234,9 +235,9 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
             store.syncStore().setClockSkewSeconds(skewSeconds);
         }
 
-        node.getAttributeAsJid("lid").ifPresent(store.accountStore()::setLid);
+        stanza.getAttributeAsJid("lid").ifPresent(store.accountStore()::setLid);
 
-        var displayName = node.getAttributeAsString("display_name", null);
+        var displayName = stanza.getAttributeAsString("display_name", null);
         if (displayName != null && !displayName.isBlank()) {
             var oldName = store.accountStore().name().orElse(null);
             store.accountStore().setName(displayName);
@@ -267,7 +268,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
 
         inactiveGroupLidMigrationService.start();
 
-        var groupAbpropsRefreshId = node.getAttributeAsLong("group_abprops", 0L);
+        var groupAbpropsRefreshId = stanza.getAttributeAsLong("group_abprops", 0L);
         if (groupAbpropsRefreshId != 0L && serverTimestampSeconds > 0
                 && groupAbpropsRefreshId != store.syncStore().groupAbPropsRefreshId()) {
             store.syncStore().setGroupAbPropsEmergencyPushTimestamp(Instant.ofEpochSecond(serverTimestampSeconds));
@@ -579,7 +580,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * Fetches a fresh media connection, publishes it to the shared {@link MediaConnectionService}, and arms the next
      * refresh tick.
      *
-     * <p>Invoked from {@link #bootstrap(Node)} so the very first upload or download path sees a populated connection.
+     * <p>Invoked from {@link #bootstrap(Stanza)} so the very first upload or download path sees a populated connection.
      * The next refresh is re-armed at the end of every pass on the cadence advertised by the server, so a long quiet
      * period followed by a sudden download burst does not stall waiting for a fresh {@code media_conn} round trip. The
      * scheduled task is cancelled by {@link #reset()} on socket teardown.
@@ -614,19 +615,19 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
     }
 
     /**
-     * Sends a fresh {@code media_conn} IQ and returns the response node.
+     * Sends a fresh {@code media_conn} IQ and returns the response stanza.
      *
-     * <p>The reply is fed into {@link MediaConnectionService#update(Node)} by {@link #refreshMediaConnection()}. Throws
+     * <p>The reply is fed into {@link MediaConnectionService#update(Stanza)} by {@link #refreshMediaConnection()}. Throws
      * when the server returns a malformed or error response so the caller can apply the retry-delay backoff.
      *
-     * @return the IQ response node
+     * @return the IQ response stanza
      * @throws WhatsAppServerRuntimeException if the server rejects the query or returns an unrecognised response
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryMediaConnsJob",
             exports = "queryMediaConn", adaptation = WhatsAppAdaptation.DIRECT)
-    private Node queryMediaConnection() {
+    private Stanza queryMediaConnection() {
         var request = new IqQueryMediaConnsRequest();
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = whatsapp.sendNode(requestBuilder);
         return switch (IqQueryMediaConnsResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryMediaConnsResponse.Success _ -> response;
@@ -645,7 +646,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
 
     /**
      * Fetches the account privacy settings during the post-success bootstrap so that
-     * {@link com.github.auties00.cobalt.store.SettingsStore#privacySettings()} is populated before the
+     * {@link LinkedWhatsAppSettingsStore#privacySettings()} is populated before the
      * {@code onLoggedIn} listeners fire.
      *
      * <p>Issues the {@code <iq xmlns="privacy" type="get">} query through

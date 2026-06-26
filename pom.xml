@@ -120,7 +120,7 @@
                     mvn -DskipTests -pl modules/lib -am install
                     mvn -Pjavadoc-check -pl modules/lib compile javadoc:javadoc-no-fork -DskipTests
 
-                narrow to a package   add -Dsubpackages=com.github.auties00.cobalt.node
+                narrow to a package   add -Dsubpackages=com.github.auties00.cobalt.stanza
                 exclude packages      add -DexcludePackageNames=com.github.auties00.cobalt.call.*
         -->
         <profile>

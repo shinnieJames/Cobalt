@@ -240,7 +240,7 @@ public sealed interface Calls2Service permits LiveCalls2Service {
      * target.
      *
      * @implSpec
-     * Implementations must build the update with the call signaling node builders and ship it through the
+     * Implementations must build the update with the call signaling stanza builders and ship it through the
      * client transport; {@code participants} must be non-empty.
      *
      * @param callId       the group call identifier

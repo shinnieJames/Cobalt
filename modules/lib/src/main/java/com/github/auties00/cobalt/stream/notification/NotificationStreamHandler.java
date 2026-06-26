@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.stream.notification.business.NotificationBusin
 import com.github.auties00.cobalt.stream.notification.device.NotificationDeviceDispatcher;
 import com.github.auties00.cobalt.stream.notification.group.NotificationGroupStreamHandler;
 import com.github.auties00.cobalt.stream.NodeStreamService;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.wam.WamService;
 
 /**
@@ -96,7 +96,7 @@ public final class NotificationStreamHandler extends SocketStreamHandler.Concurr
      * <p>The socket-stream wiring invokes this constructor once at client
      * construction time; downstream code never instantiates the handler
      * directly. Each sub-dispatcher is created up front so that routing in
-     * {@link #handle(Node)} reduces to a single switch-and-delegate, and so
+     * {@link #handle(Stanza)} reduces to a single switch-and-delegate, and so
      * that all per-family dependency wiring lives in one place.
      *
      * @param whatsapp                     the {@link LinkedWhatsAppClient} shared
@@ -169,23 +169,23 @@ public final class NotificationStreamHandler extends SocketStreamHandler.Concurr
             exports = "handleLoggedInStanza",
             adaptation = WhatsAppAdaptation.ADAPTED
     )
-    public void handle(Node node) {
-        var type = node.getAttributeAsString("type", null);
+    public void handle(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", null);
         if (type == null) {
             return;
         }
 
         switch (type) {
             case "account_sync", "contacts", "disappearing_mode", "picture", "privacy_token", "status" ->
-                    accountHandler.handle(node);
+                    accountHandler.handle(stanza);
             case "business", "digital_commerce_subscription", "fb:update", "mex", "pay" ->
-                    businessHandler.handle(node);
+                    businessHandler.handle(stanza);
             case "companion_reg_refresh", "devices", "encrypt", "hosted", "link_code_companion_reg",
                     "mediaretry", "newsletter", "psa", "registration", "server", "server_sync",
                     "w:growth", "waffle" ->
-                    deviceHandler.handle(node);
+                    deviceHandler.handle(stanza);
             case "w:gp2" ->
-                    groupHandler.handle(node);
+                    groupHandler.handle(stanza);
             default -> {
             }
         }

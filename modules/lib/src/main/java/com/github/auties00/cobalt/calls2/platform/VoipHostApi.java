@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.calls2.platform;
 
 import com.github.auties00.cobalt.calls2.core.CallEventType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.lang.foreign.MemorySegment;
 import java.net.InetAddress;
@@ -56,18 +56,18 @@ public interface VoipHostApi {
     /**
      * Sends a single call-signaling stanza on the host's signaling transport.
      *
-     * <p>The engine produces one fully built {@link Node} per signaling action (an offer, an accept, a
+     * <p>The engine produces one fully built {@link Stanza} per signaling action (an offer, an accept, a
      * transport update, a terminate, and so on) and hands it to this downcall for synchronous egress.
-     * The host serializes the node onto its binary-XMPP socket and returns once the node has been
+     * The host serializes the stanza onto its binary-XMPP socket and returns once the stanza has been
      * accepted for sending; the engine treats the call as fire-and-forget at this layer, because the
      * matching server acknowledgement arrives back through the inbound signaling path rather than as a
-     * return value here. A node whose transport cannot accept it (a disconnected socket) is dropped at
+     * return value here. A stanza whose transport cannot accept it (a disconnected socket) is dropped at
      * the host with the failure surfaced through the host's own logging rather than thrown back into the
      * engine, mirroring the native import's {@code void} return.
      *
-     * @param node the signaling stanza to send, already built by the engine signaling layer
+     * @param stanza the signaling stanza to send, already built by the engine signaling layer
      */
-    void sendSignaling(Node node);
+    void sendSignaling(Stanza stanza);
 
     /**
      * Sends one outbound media datagram to the given destination as an unreliable best-effort packet.

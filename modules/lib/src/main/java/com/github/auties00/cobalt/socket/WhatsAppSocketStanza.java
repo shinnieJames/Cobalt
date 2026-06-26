@@ -1,23 +1,23 @@
 package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Function;
 
 /**
- * Pairs an outbound {@link Node} with the inbound response that
+ * Pairs an outbound {@link Stanza} with the inbound response that
  * completes it, exposing a blocking send-then-await primitive over the
  * otherwise fully asynchronous reader pipeline.
  *
  * <p>Every request-response stanza Cobalt sends on the WhatsApp socket uses
  * this pairing: the sender thread parks on {@link #waitForResponse()} after
  * dispatching the request, and the inbound dispatcher pumps each arriving
- * {@link Node} through {@link #complete(Node)} until the filter accepts one.
+ * {@link Stanza} through {@link #complete(Stanza)} until the filter accepts one.
  * The filter is what distinguishes a stanza-pair from a fire-and-forget
- * broadcast: a {@code null} filter accepts the first node offered, an
+ * broadcast: a {@code null} filter accepts the first stanza offered, an
  * explicit predicate keeps unrelated traffic from waking up the waiter
  * early. The two-arg {@link #waitForResponse(Duration)} overload exists so
  * callers that issue long-running operations (history sync chunk fetches,
@@ -38,50 +38,50 @@ public final class WhatsAppSocketStanza {
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
 
     /**
-     * The outbound {@link Node} this stanza tracks, retained so
+     * The outbound {@link Stanza} this stanza tracks, retained so
      * {@link WhatsAppStreamException.NodeTimeout} can report which
      * request expired.
      */
-    private final Node body;
+    private final Stanza body;
 
     /**
-     * Predicate consulted to decide whether an arriving {@link Node}
-     * satisfies this stanza, or {@code null} to accept any node.
+     * Predicate consulted to decide whether an arriving {@link Stanza}
+     * satisfies this stanza, or {@code null} to accept any stanza.
      */
-    private final Function<Node, Boolean> filter;
+    private final Function<Stanza, Boolean> filter;
 
     /**
-     * The accepted response, set by {@link #complete(Node)} and read
+     * The accepted response, set by {@link #complete(Stanza)} and read
      * by the waiter under {@code this} monitor.
      */
-    private volatile Node response;
+    private volatile Stanza response;
 
     /**
-     * Creates a stanza tracker for the given outbound {@link Node}.
+     * Creates a stanza tracker for the given outbound {@link Stanza}.
      *
      * <p>One tracker is constructed per outbound request that expects a
      * reply. The constructor does not send the request; the caller is
      * responsible for dispatching {@code body} and only then parking on
      * {@link #waitForResponse()}.
      *
-     * @param body   the outbound node, retained for timeout reporting
+     * @param body   the outbound stanza, retained for timeout reporting
      * @param filter predicate that returns {@code true} when an
-     *               inbound node is the matching response, or
-     *               {@code null} to accept the first node offered
+     *               inbound stanza is the matching response, or
+     *               {@code null} to accept the first stanza offered
      */
-    public WhatsAppSocketStanza(Node body, Function<Node, Boolean> filter) {
+    public WhatsAppSocketStanza(Stanza body, Function<Stanza, Boolean> filter) {
         this.body = body;
         this.filter = filter;
     }
 
     /**
-     * Offers an inbound {@link Node} as the candidate response for
+     * Offers an inbound {@link Stanza} as the candidate response for
      * this stanza and wakes any waiter if the filter accepts it.
      *
-     * <p>The inbound dispatcher calls this for every node that might match.
+     * <p>The inbound dispatcher calls this for every stanza that might match.
      * A {@code null} response unconditionally completes the stanza (used by
      * the disconnect path to release waiters). The return value lets the
-     * dispatcher know whether to keep dispatching the same node to the next
+     * dispatcher know whether to keep dispatching the same stanza to the next
      * candidate stanza or to stop because it has been consumed.
      *
      * @implNote
@@ -94,7 +94,7 @@ public final class WhatsAppSocketStanza {
      * @return {@code true} if the response was accepted and a waiter
      *         (if any) was notified
      */
-    public boolean complete(Node response) {
+    public boolean complete(Stanza response) {
         var acceptable = response == null
                 || filter == null
                 || filter.apply(response);
@@ -120,7 +120,7 @@ public final class WhatsAppSocketStanza {
      * @throws WhatsAppStreamException.NodeTimeout if no acceptable
      *         response arrives within the default timeout
      */
-    public Node waitForResponse() {
+    public Stanza waitForResponse() {
         return waitForResponse(TIMEOUT);
     }
 
@@ -147,7 +147,7 @@ public final class WhatsAppSocketStanza {
      *         response arrives within {@code timeout} or the wait is
      *         interrupted
      */
-    public Node waitForResponse(Duration timeout) {
+    public Stanza waitForResponse(Duration timeout) {
         synchronized (this) {
             var end = Instant.now().plus(timeout);
             while (response == null) {

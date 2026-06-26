@@ -4,17 +4,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.TimeFormatAction;
 import com.github.auties00.cobalt.model.sync.action.device.TimeFormatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.media.FavoritesActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.ConflictResolution;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.factory.TimeFormatMutationFactory;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Verifies {@link TimeFormatHandler} and the outgoing
  * {@link TimeFormatMutationFactory}: applying an incoming time-format
  * mutation and asserting the boolean preference written into
- * {@link com.github.auties00.cobalt.store.SettingsStore#setTwentyFourHourFormat(boolean)}.
+ * {@link LinkedWhatsAppSettingsStore#setTwentyFourHourFormat(boolean)}.
  * Each test recreates the store so the {@code twentyFourHourFormat} field
  * starts at its default value.
  */
@@ -209,7 +208,7 @@ class TimeFormatHandlerTest {
 
             var resolution = new TimeFormatHandler().resolveConflicts(local, remote);
 
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -221,7 +220,7 @@ class TimeFormatHandlerTest {
 
             var resolution = new TimeFormatHandler().resolveConflicts(local, remote);
 
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
     }
 

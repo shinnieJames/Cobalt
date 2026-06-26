@@ -1,7 +1,7 @@
 /**
- * Normalized node in a flattened Relay response selection tree.
+ * Normalized stanza in a flattened Relay response selection tree.
  *
- * Mirrors the relevant Relay normalization-AST node kinds:
+ * Mirrors the relevant Relay normalization-AST stanza kinds:
  * - "scalar"         : a ScalarField (leaf value).
  * - "linked"         : a LinkedField (nested object/connection); `type` is the concrete GraphQL
  *                      type when Relay records one, `plural` marks list edges.

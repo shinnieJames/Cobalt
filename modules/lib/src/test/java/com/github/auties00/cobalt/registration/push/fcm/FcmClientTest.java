@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerification
 import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.registration.MobileClientRegistration;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -42,7 +42,7 @@ class FcmClientTest {
             try (var pushClient = FcmClient.newSession()) {
                 pushClient.authenticate(device);
 
-                var store = WhatsAppStoreFactory.temporary()
+                var store = LinkedWhatsAppStoreFactory.temporary()
                         .create(LinkedWhatsAppClientType.MOBILE, phoneNumber);
                 store.accountStore().setDevice(device);
 

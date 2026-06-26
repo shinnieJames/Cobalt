@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.calls2.signaling;
 import com.github.auties00.cobalt.model.call.CallLinkCreate;
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.time.Instant;
 import java.util.NoSuchElementException;
@@ -157,25 +157,25 @@ public record LinkCreateStanza(CallLinkMedia media,
 
     /**
      * Builds the {@code <link_create media call-creator call-id link_creator_username
-     * waiting_room_enabled><event start_time/></link_create>} action node.
+     * waiting_room_enabled><event start_time/></link_create>} action stanza.
      *
      * <p>Each optional attribute is omitted when its backing component is absent; the
      * {@code waiting_room_enabled} marker is written only when {@link #waitingRoomEnabled()} is
      * {@code true}, and the {@code <event>} child is nested only when {@link #eventStartTime()} is
      * present, carrying the start time as seconds since the epoch.
      *
-     * @return the link-create action node
+     * @return the link-create action stanza
      */
     @Override
-    public Node toNode() {
-        var builder = new NodeBuilder()
+    public Stanza toStanza() {
+        var builder = new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(MEDIA_ATTRIBUTE, media.wireValue())
                 .attribute(CALL_CREATOR_ATTRIBUTE, callCreator.orElse(null), callCreator.isPresent())
                 .attribute(CALL_ID_ATTRIBUTE, callId.orElse(null), callId.isPresent())
                 .attribute(CREATOR_USERNAME_ATTRIBUTE, creatorUsername.orElse(null), creatorUsername.isPresent())
                 .attribute(WAITING_ROOM_ENABLED_ATTRIBUTE, "1", waitingRoomEnabled);
-        eventStartTime.ifPresent(start -> builder.content(new NodeBuilder()
+        eventStartTime.ifPresent(start -> builder.content(new StanzaBuilder()
                 .description(EVENT_ELEMENT)
                 .attribute(START_TIME_ATTRIBUTE, start.getEpochSecond())
                 .build()));
@@ -183,26 +183,26 @@ public record LinkCreateStanza(CallLinkMedia media,
     }
 
     /**
-     * Decodes a {@code <link_create>} action node into a {@link LinkCreateStanza}.
+     * Decodes a {@code <link_create>} action stanza into a {@link LinkCreateStanza}.
      *
      * <p>An unrecognized or absent {@code media} attribute is rejected, since the media kind is a
      * required component; an absent {@code waiting_room_enabled} attribute classifies to {@code false},
      * and a missing {@code <event>} child yields an empty {@link #eventStartTime()}.
      *
-     * @param node the {@code <link_create>} node
+     * @param stanza the {@code <link_create>} stanza
      * @return the decoded link-create signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code media} attribute is absent or unrecognized
      */
-    public static LinkCreateStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var media = CallLinkMedia.ofWire(node.getAttributeAsString(MEDIA_ATTRIBUTE).orElse(null))
+    public static LinkCreateStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var media = CallLinkMedia.ofWire(stanza.getAttributeAsString(MEDIA_ATTRIBUTE).orElse(null))
                 .orElseThrow(() -> new NoSuchElementException("link_create is missing a recognized media attribute"));
-        var callCreator = node.getAttributeAsJid(CALL_CREATOR_ATTRIBUTE);
-        var callId = node.getAttributeAsString(CALL_ID_ATTRIBUTE);
-        var creatorUsername = node.getAttributeAsString(CREATOR_USERNAME_ATTRIBUTE);
-        var waitingRoomEnabled = "1".equals(node.getAttributeAsString(WAITING_ROOM_ENABLED_ATTRIBUTE).orElse("0"));
-        var eventStartTime = node.getChild(EVENT_ELEMENT)
+        var callCreator = stanza.getAttributeAsJid(CALL_CREATOR_ATTRIBUTE);
+        var callId = stanza.getAttributeAsString(CALL_ID_ATTRIBUTE);
+        var creatorUsername = stanza.getAttributeAsString(CREATOR_USERNAME_ATTRIBUTE);
+        var waitingRoomEnabled = "1".equals(stanza.getAttributeAsString(WAITING_ROOM_ENABLED_ATTRIBUTE).orElse("0"));
+        var eventStartTime = stanza.getChild(EVENT_ELEMENT)
                 .flatMap(event -> event.getAttributeAsLong(START_TIME_ATTRIBUTE)
                         .stream()
                         .mapToObj(Instant::ofEpochSecond)

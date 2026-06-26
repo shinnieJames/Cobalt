@@ -9,11 +9,10 @@ import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyDataBuilder;
-import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyIdBuilder;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -31,7 +30,7 @@ import java.util.Optional;
 /**
  * Test helper that loads sync-package fixtures captured from a live WhatsApp Web session and exposes
  * them to the JUnit suites in this package. All artefacts are rooted at {@link #FIXTURE_ROOT}:
- * JSONL stanza captures (reconstructed into Cobalt {@link Node} instances), {@code .expected.json}
+ * JSONL stanza captures (reconstructed into Cobalt {@link Stanza} instances), {@code .expected.json}
  * oracle outputs, {@code .synckey.bin} binary sync-key material, and per-syncType history-sync
  * triplets under {@code history/<slug>/}. The captured trees carry WA Web's internal JID wrappers
  * ({@code {"$1": {...}}}) and a binary leaf shape ({@code {"kind": "binary", "base64": "..."}}), so
@@ -131,7 +130,7 @@ public final class SyncFixtures {
     }
 
     /**
-     * Reconstructs a Cobalt {@link Node} from the {@code node}
+     * Reconstructs a Cobalt {@link Stanza} from the {@code stanza}
      * subtree of a captured event.
      *
      * <p>Walks the recursive plain-JSON shape emitted by the stanza
@@ -141,29 +140,29 @@ public final class SyncFixtures {
      *
      * @param event the event object from
      *              {@link #loadEvents(String)}
-     * @return the reconstructed {@link Node}
-     * @throws IllegalArgumentException if the {@code node} subtree is
+     * @return the reconstructed {@link Stanza}
+     * @throws IllegalArgumentException if the {@code stanza} subtree is
      *                                  missing or malformed
      */
-    public static Node buildNodeFromEvent(JSONObject event) {
+    public static Stanza buildNodeFromEvent(JSONObject event) {
         Objects.requireNonNull(event, "event");
-        var nodeTree = event.getJSONObject("node");
+        var nodeTree = event.getJSONObject("stanza");
         if (nodeTree == null) {
-            throw new IllegalArgumentException("event missing 'node' subtree");
+            throw new IllegalArgumentException("event missing 'stanza' subtree");
         }
         return buildNode(nodeTree);
     }
 
     /**
-     * Recursively reconstructs a {@link Node} from a captured
-     * plain-JSON tree, skipping the {@code event["node"]} unwrap step.
+     * Recursively reconstructs a {@link Stanza} from a captured
+     * plain-JSON tree, skipping the {@code event["stanza"]} unwrap step.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
+     * @return the reconstructed stanza
      * @throws IllegalArgumentException if {@code tree} has no
      *                                  {@code tag} field
      */
-    public static Node buildNodeFromTree(JSONObject tree) {
+    public static Stanza buildNodeFromTree(JSONObject tree) {
         return buildNode(tree);
     }
 
@@ -499,12 +498,12 @@ public final class SyncFixtures {
 
     /**
      * Flattens a captured attribute value into the string form the
-     * Cobalt {@link NodeBuilder#attribute(String, String)} setter
+     * Cobalt {@link StanzaBuilder#attribute(String, String)} setter
      * expects.
      *
      * <p>The stanza logger captures WA Web's internal Jid wrappers as
      * {@code {"$1": {"type": <int>, "user": <string|null>, "server": <string>}}};
-     * Cobalt's {@link Node} carries those same JIDs as bare strings of
+     * Cobalt's {@link Stanza} carries those same JIDs as bare strings of
      * the form {@code user@server} (or just {@code @server} when
      * {@code user} is {@code null}). Any other shape is delegated to
      * {@link String#valueOf(Object)}.
@@ -540,20 +539,20 @@ public final class SyncFixtures {
     }
 
     /**
-     * Builds a {@link Node} from a plain-JSON tree, recursively.
+     * Builds a {@link Stanza} from a plain-JSON tree, recursively.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
+     * @return the reconstructed stanza
      * @throws IllegalArgumentException if {@code tree} has no
      *                                  {@code tag} field
      */
-    private static Node buildNode(JSONObject tree) {
+    private static Stanza buildNode(JSONObject tree) {
         var tag = tree.getString("tag");
         if (tag == null || tag.isEmpty()) {
-            throw new IllegalArgumentException("node tree missing 'tag': " + tree);
+            throw new IllegalArgumentException("stanza tree missing 'tag': " + tree);
         }
 
-        var builder = new NodeBuilder().description(tag);
+        var builder = new StanzaBuilder().description(tag);
 
         var attrs = tree.getJSONObject("attrs");
         if (attrs != null) {
@@ -576,11 +575,11 @@ public final class SyncFixtures {
      * {@code content} field: a binary leaf object, a child array (with
      * optional inline binary sibling), a raw string, or {@code null}.
      *
-     * @param builder the target {@link NodeBuilder}
+     * @param builder the target {@link StanzaBuilder}
      * @param content the JSON-shaped content value, possibly
      *                {@code null}
      */
-    private static void applyContent(NodeBuilder builder, Object content) {
+    private static void applyContent(StanzaBuilder builder, Object content) {
         if (content == null) return;
 
         if (content instanceof JSONObject leaf) {
@@ -593,7 +592,7 @@ public final class SyncFixtures {
         }
 
         if (content instanceof JSONArray children) {
-            var built = new ArrayList<Node>(children.size());
+            var built = new ArrayList<Stanza>(children.size());
             byte[] inlineBytes = null;
             for (var entry : children) {
                 if (entry instanceof JSONObject obj) {
@@ -603,7 +602,7 @@ public final class SyncFixtures {
                     }
                     built.add(buildNode(obj));
                 } else if (entry != null) {
-                    built.add(new NodeBuilder().description("__text").content(String.valueOf(entry)).build());
+                    built.add(new StanzaBuilder().description("__text").content(String.valueOf(entry)).build());
                 }
             }
             if (!built.isEmpty()) {

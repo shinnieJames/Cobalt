@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.model.media.ExternalBlobReferenceSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdPatch;
 import com.github.auties00.cobalt.model.sync.data.SyncdPatchSpec;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -23,14 +23,14 @@ import java.util.logging.Logger;
  * {@link MutationSyncResponse} records.
  *
  * <p>Two parse modes share the bulk of the body. The single-collection mode
- * ({@link #parseSyncResponse(Node)}) raises on a fatal or retryable collection-level error so a
+ * ({@link #parseSyncResponse(Stanza)}) raises on a fatal or retryable collection-level error so a
  * failed push can roll back, but returns a 409 conflict on the response (with its catch-up patches)
- * so the push can apply them and retry; the batched mode ({@link #parseBatchedSyncResponse(Node)})
+ * so the push can apply them and retry; the batched mode ({@link #parseBatchedSyncResponse(Stanza)})
  * captures every collection-level error on its response record so the caller can process the
  * surviving collections. Both
- * share the same IQ-level error router ({@link #handleIqLevelError(int, String, Node)}) and
+ * share the same IQ-level error router ({@link #handleIqLevelError(int, String, Stanza)}) and
  * the same protobuf decoders for {@code <patch>} and {@code <snapshot>} children. The parser
- * is driven directly with the raw {@code <iq>} {@link Node} delivered by the WhatsApp socket;
+ * is driven directly with the raw {@code <iq>} {@link Stanza} delivered by the WhatsApp socket;
  * no embedder integration is required.
  *
  * @implNote
@@ -57,8 +57,8 @@ public final class MutationResponseParser {
      * a 409 conflict instead returns normally with the error surfaced on
      * {@link MutationSyncResponse#collectionError()} and the catch-up patches populated, so the
      * caller can apply them and retry rather than discard them. IQ-level errors are routed first
-     * via {@link #handleIqLevelError(int, String, Node)}.
-     * Use {@link #parseBatchedSyncResponse(Node)} for pull responses that legitimately carry
+     * via {@link #handleIqLevelError(int, String, Stanza)}.
+     * Use {@link #parseBatchedSyncResponse(Stanza)} for pull responses that legitimately carry
      * multiple collections.
      *
      * @implNote
@@ -66,7 +66,7 @@ public final class MutationResponseParser {
      * unknown-name path raises the same {@link WhatsAppWebAppStateSyncException.UnexpectedError}
      * regardless of whether the response would otherwise have been an error.
      *
-     * @param responseNode the raw IQ response node from the server
+     * @param responseStanza the raw IQ response stanza from the server
      * @return the parsed {@link MutationSyncResponse}; a 409 conflict carries its
      *         {@link WhatsAppWebAppStateSyncException.Conflict} on
      *         {@link MutationSyncResponse#collectionError()} alongside the catch-up patches
@@ -74,10 +74,10 @@ public final class MutationResponseParser {
      * @throws WhatsAppWebAppStateSyncException.RetryableServerError when the server returns a retryable error
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdResponseParser", exports = "syncResponseParser", adaptation = WhatsAppAdaptation.ADAPTED)
-    public MutationSyncResponse parseSyncResponse(Node responseNode) {
-        var iqType = responseNode.getAttributeAsString("type");
+    public MutationSyncResponse parseSyncResponse(Stanza responseStanza) {
+        var iqType = responseStanza.getAttributeAsString("type");
         if (iqType.isPresent() && iqType.get().equals("error")) {
-            var iqErrorNode = responseNode.getChild("error").orElse(null);
+            var iqErrorNode = responseStanza.getChild("error").orElse(null);
             var errorCode = iqErrorNode != null
                     ? iqErrorNode.getAttributeAsString("code").map(Integer::parseInt).orElse(0)
                     : 0;
@@ -87,15 +87,15 @@ public final class MutationResponseParser {
             handleIqLevelError(errorCode, errorText, iqErrorNode);
         }
 
-        var syncNode = responseNode.getChild("sync")
+        var syncNode = responseStanza.getChild("sync")
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
-                        "Response missing 'sync' node",
+                        "Response missing 'sync' stanza",
                         null
                 ));
 
         var collectionNode = syncNode.getChild("collection")
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
-                        "Response missing 'collection' node",
+                        "Response missing 'collection' stanza",
                         null
                 ));
 
@@ -137,7 +137,7 @@ public final class MutationResponseParser {
      *
      * <p>Used on the pull response path where one IQ may carry several {@code <collection>}
      * children, one per dirty collection. Per-collection errors are captured on the response
-     * object via {@link #parseCollectionNode(Node)} so the caller can apply the successful
+     * object via {@link #parseCollectionNode(Stanza)} so the caller can apply the successful
      * collections and retry only the failed ones; IQ-level errors still throw.
      *
      * @implNote
@@ -145,16 +145,16 @@ public final class MutationResponseParser {
      * resulting list preserves that order so callers can correlate it positionally with their
      * push input.
      *
-     * @param responseNode the raw IQ response node from the server
+     * @param responseStanza the raw IQ response stanza from the server
      * @return the per-collection {@link MutationSyncResponse} list
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError when an IQ-level fatal error fires
      * @throws WhatsAppWebAppStateSyncException.RetryableServerError when an IQ-level retryable error fires
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdResponseParser", exports = "syncResponseParser", adaptation = WhatsAppAdaptation.DIRECT)
-    public List<MutationSyncResponse> parseBatchedSyncResponse(Node responseNode) {
-        var iqType = responseNode.getAttributeAsString("type");
+    public List<MutationSyncResponse> parseBatchedSyncResponse(Stanza responseStanza) {
+        var iqType = responseStanza.getAttributeAsString("type");
         if (iqType.isPresent() && iqType.get().equals("error")) {
-            var iqErrorNode = responseNode.getChild("error").orElse(null);
+            var iqErrorNode = responseStanza.getChild("error").orElse(null);
             var errorCode = iqErrorNode != null
                     ? iqErrorNode.getAttributeAsString("code").map(Integer::parseInt).orElse(0)
                     : 0;
@@ -164,9 +164,9 @@ public final class MutationResponseParser {
             handleIqLevelError(errorCode, errorText, iqErrorNode);
         }
 
-        var syncNode = responseNode.getChild("sync")
+        var syncNode = responseStanza.getChild("sync")
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
-                        "Response missing 'sync' node",
+                        "Response missing 'sync' stanza",
                         null
                 ));
 
@@ -182,25 +182,25 @@ public final class MutationResponseParser {
      * Parses a single {@code <collection>} child into a {@link MutationSyncResponse}, capturing
      * any collection-level error on the response rather than throwing.
      *
-     * <p>Used by {@link #parseBatchedSyncResponse(Node)} so the failure of one collection in a
+     * <p>Used by {@link #parseBatchedSyncResponse(Stanza)} so the failure of one collection in a
      * batch does not poison the rest. A collection in error state yields a response carrying the
      * exception via {@link MutationSyncResponse#collectionError()}; an otherwise valid collection
      * yields its decoded patches or snapshot reference.
      *
      * @implNote
-     * This implementation reuses {@link #buildCollectionError(Node)} so the collection-level
+     * This implementation reuses {@link #buildCollectionError(Stanza)} so the collection-level
      * routing (409 to {@link WhatsAppWebAppStateSyncException.Conflict}, 400/404 to
      * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, anything else to
      * {@link WhatsAppWebAppStateSyncException.RetryableServerError}) stays consistent between the
      * throwing and capturing call paths.
      *
-     * @param collectionNode the collection node to parse
+     * @param collectionStanza the collection stanza to parse
      * @return the parsed {@link MutationSyncResponse}; collection-level errors are surfaced via
      *         {@link MutationSyncResponse#collectionError()}
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdResponseParser", exports = "syncResponseParser", adaptation = WhatsAppAdaptation.DIRECT)
-    private MutationSyncResponse parseCollectionNode(Node collectionNode) {
-        var collectionName = collectionNode.getAttributeAsString("name")
+    private MutationSyncResponse parseCollectionNode(Stanza collectionStanza) {
+        var collectionName = collectionStanza.getAttributeAsString("name")
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
                         "Collection missing 'name' attribute",
                         null
@@ -211,20 +211,20 @@ public final class MutationResponseParser {
                         null
                 ));
 
-        var version = collectionNode.getAttributeAsLong("version")
+        var version = collectionStanza.getAttributeAsLong("version")
                 .orElse(0L);
-        var hasMore = collectionNode.hasAttribute("has_more_patches");
+        var hasMore = collectionStanza.hasAttribute("has_more_patches");
 
-        var snapshotNode = collectionNode.getChild("snapshot");
-        var patchesNode = collectionNode.getChild("patches");
+        var snapshotNode = collectionStanza.getChild("snapshot");
+        var patchesNode = collectionStanza.getChild("patches");
 
         var snapshotRef = snapshotNode.map(this::parseSnapshotReference).orElse(null);
         var patches = patchesNode.map(this::parsePatches).orElse(List.of());
 
-        var type = collectionNode.getAttributeAsString("type");
+        var type = collectionStanza.getAttributeAsString("type");
         WhatsAppWebAppStateSyncException collectionError = null;
         if (type.isPresent() && type.get().equals("error")) {
-            collectionError = buildCollectionError(collectionNode);
+            collectionError = buildCollectionError(collectionStanza);
         }
         return new MutationSyncResponse(patchType, version, hasMore, patches, snapshotRef, collectionError);
     }
@@ -238,18 +238,18 @@ public final class MutationResponseParser {
      * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, and any other code (including a
      * missing code attribute) to {@link WhatsAppWebAppStateSyncException.RetryableServerError}.
      *
-     * @param collectionNode the collection node carrying the error
+     * @param collectionStanza the collection stanza carrying the error
      * @return the exception that should be reported for this collection
      */
-    private WhatsAppWebAppStateSyncException buildCollectionError(Node collectionNode) {
-        var errorNode = collectionNode.getChild("error");
+    private WhatsAppWebAppStateSyncException buildCollectionError(Stanza collectionStanza) {
+        var errorNode = collectionStanza.getChild("error");
         var errorCode = errorNode
                 .flatMap(e -> e.getAttributeAsString("code"))
                 .orElse("unknown");
 
         return switch (errorCode) {
             case "409" -> new WhatsAppWebAppStateSyncException.Conflict(
-                    collectionNode.hasAttribute("has_more_patches")
+                    collectionStanza.hasAttribute("has_more_patches")
             );
             case "400", "404" -> new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "Server returned fatal error code: " + errorCode, null
@@ -270,17 +270,17 @@ public final class MutationResponseParser {
      *
      * @param errorCode the IQ error code
      * @param errorText the IQ error text
-     * @param errorNode the {@code <error>} node, possibly {@code null}
+     * @param errorStanza the {@code <error>} stanza, possibly {@code null}
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError for fatal IQ codes
      * @throws WhatsAppWebAppStateSyncException.RetryableServerError for any other IQ code
      */
-    private void handleIqLevelError(int errorCode, String errorText, Node errorNode) {
+    private void handleIqLevelError(int errorCode, String errorText, Stanza errorStanza) {
         switch (errorCode) {
             case 400, 404, 405, 406 -> throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "IQ-level fatal error " + errorCode + ": " + errorText, null);
             default -> {
-                var serverBackoffMs = errorNode != null
-                        ? errorNode.getAttributeAsLong("backoff", null)
+                var serverBackoffMs = errorStanza != null
+                        ? errorStanza.getAttributeAsLong("backoff", null)
                         : null;
                 throw new WhatsAppWebAppStateSyncException.RetryableServerError(
                         String.valueOf(errorCode), serverBackoffMs);
@@ -289,7 +289,7 @@ public final class MutationResponseParser {
     }
 
     /**
-     * Decodes the {@code <snapshot>} node content into an {@link ExternalBlobReference} the
+     * Decodes the {@code <snapshot>} stanza content into an {@link ExternalBlobReference} the
      * caller can later download from MMS.
      *
      * <p>Snapshots are too large to ship inline; the server returns an external blob reference
@@ -304,16 +304,16 @@ public final class MutationResponseParser {
      * {@link WhatsAppWebAppStateSyncException.UnexpectedError}, in line with Cobalt's pluggable
      * error model.
      *
-     * @param snapshotNode the {@code <snapshot>} node
+     * @param snapshotStanza the {@code <snapshot>} stanza
      * @return the parsed {@link ExternalBlobReference}
-     * @throws WhatsAppWebAppStateSyncException.UnexpectedError when the node has no content or the protobuf fails to deserialize
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError when the stanza has no content or the protobuf fails to deserialize
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdDecode", exports = "decodeExternalBlobReference", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSyncdValidateServerSyncProtobuf", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ExternalBlobReference parseSnapshotReference(Node snapshotNode) {
-        var snapshotBytes = snapshotNode.toContentBytes()
+    private ExternalBlobReference parseSnapshotReference(Stanza snapshotStanza) {
+        var snapshotBytes = snapshotStanza.toContentBytes()
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
-                        "Snapshot node has no content",
+                        "Snapshot stanza has no content",
                         null
                 ));
 
@@ -326,7 +326,7 @@ public final class MutationResponseParser {
     }
 
     /**
-     * Decodes every {@code <patch>} child of the supplied {@code <patches>} node into a
+     * Decodes every {@code <patch>} child of the supplied {@code <patches>} stanza into a
      * {@link SyncdPatch}, logging each patch's debug data at {@link Level#FINE FINE}.
      *
      * <p>Used by both parse modes. Returns an empty collection when the {@code <patches>} parent
@@ -340,21 +340,21 @@ public final class MutationResponseParser {
      * {@link #logClientDebugData(SyncdPatch)} call surfaces the same diagnostic data WA Web's
      * {@code _applyPatch} prints.
      *
-     * @param patchesNode the parent {@code <patches>} node
+     * @param patchesStanza the parent {@code <patches>} stanza
      * @return the parsed patches in document order
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError when a patch has no content or fails to deserialize
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdDecode", exports = "decodeSyncdPatch", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSyncdValidateServerSyncProtobuf", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private SequencedCollection<SyncdPatch> parsePatches(Node patchesNode) {
+    private SequencedCollection<SyncdPatch> parsePatches(Stanza patchesStanza) {
         var patches = new ArrayList<SyncdPatch>();
 
-        var patchNodes = patchesNode.getChildren("patch");
+        var patchNodes = patchesStanza.getChildren("patch");
 
         for (var patchNode : patchNodes) {
             var patchBytes = patchNode.toContentBytes()
                     .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
-                            "Patch node has no content",
+                            "Patch stanza has no content",
                             null
                     ));
 

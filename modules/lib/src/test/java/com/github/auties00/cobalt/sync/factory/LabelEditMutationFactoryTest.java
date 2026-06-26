@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.sync.factory;
 
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelEditAction;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import org.junit.jupiter.api.BeforeEach;

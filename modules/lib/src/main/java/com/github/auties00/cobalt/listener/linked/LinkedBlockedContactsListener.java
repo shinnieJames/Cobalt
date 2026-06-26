@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 
 import java.util.Collection;
 
@@ -29,7 +30,7 @@ public non-sealed interface LinkedBlockedContactsListener extends LinkedListener
      * individual entries changed. Use to redraw the Blocked Contacts
      * settings surface against the new authoritative set. The
      * collection is the same view returned by
-     * {@link com.github.auties00.cobalt.store.ContactStore#blockedContacts()} after the refresh.
+     * {@link LinkedWhatsAppContactStore#blockedContacts()} after the refresh.
      *
      * @param whatsapp        the client emitting the event
      * @param blockedContacts the new authoritative set of blocked

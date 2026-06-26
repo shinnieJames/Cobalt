@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -7,12 +8,10 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.control.OfflineNotificationsReporter;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -81,29 +80,29 @@ public final class NotificationSyncStreamHandler extends SocketStreamHandler.Con
      * the collection list is processed inside a {@code try} block, any failure is caught and
      * warning-logged, and the ACK is sent in the {@code finally} block.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "server_sync")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "server_sync")) {
             return;
         }
 
-        if (!node.hasChild("collection")) {
+        if (!stanza.hasChild("collection")) {
             LOGGER.log(System.Logger.Level.ERROR,
                     "Server sync notification does not contain any collections");
-            sendNotificationAck(node);
+            sendNotificationAck(stanza);
             return;
         }
 
         try {
-            processNotification(node);
+            processNotification(stanza);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle server_sync notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
+                    stanza.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
         } finally {
-            sendNotificationAck(node);
+            sendNotificationAck(stanza);
         }
     }
 
@@ -123,10 +122,10 @@ public final class NotificationSyncStreamHandler extends SocketStreamHandler.Con
      * @implNote This implementation caps the unknown-name warning at three names per stanza,
      * mirroring WA Web's guard which limits log spam during a server-side collection rollout.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void processNotification(Node node) {
-        var from = node.getAttributeAsString("from", null);
+    private void processNotification(Stanza stanza) {
+        var from = stanza.getAttributeAsString("from", null);
         if (from != null && !from.equals(JidServer.user().toString())) {
             LOGGER.log(System.Logger.Level.ERROR,
                     "handleServerSyncNotification: \"from\" is not domain jid \"s.whatsapp.net\"");
@@ -134,7 +133,7 @@ public final class NotificationSyncStreamHandler extends SocketStreamHandler.Con
 
         var changedCollections = new LinkedHashMap<SyncPatchType, Integer>();
         var unknownNames = new ArrayList<String>();
-        for (var collectionNode : node.getChildren("collection")) {
+        for (var collectionNode : stanza.getChildren("collection")) {
             var collectionName = collectionNode.getAttributeAsString("name", null);
             var collectionVersion = collectionNode.getAttributeAsInt("version", 0);
             var collectionType = SyncPatchType.of(collectionName).orElse(null);
@@ -153,7 +152,7 @@ public final class NotificationSyncStreamHandler extends SocketStreamHandler.Con
 
         var collectionsToSync = new ArrayList<>(changedCollections.keySet());
 
-        var offline = node.hasAttribute("offline");
+        var offline = stanza.hasAttribute("offline");
         if (offline) {
             for (var collection : collectionsToSync) {
                 offlineNotificationsReporter.increment(collection);
@@ -200,9 +199,9 @@ public final class NotificationSyncStreamHandler extends SocketStreamHandler.Con
      *
      * <p>The destination is hard-coded to the server-domain JID.
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).to(JidServer.user().toJid()).type("server_sync").send();
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).to(JidServer.user().toJid()).type("server_sync").send();
     }
 }

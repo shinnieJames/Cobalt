@@ -7,17 +7,17 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyDataBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyIdBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.KeyExpirationAction;
 import com.github.auties00.cobalt.model.sync.action.device.KeyExpirationActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.media.FavoritesActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.SentinelMutationFactory;
 import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -237,7 +237,7 @@ class SentinelHandlerTest {
 
             var resolution = new SentinelHandler().resolveConflicts(local, remote);
 
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -248,7 +248,7 @@ class SentinelHandlerTest {
 
             var resolution = new SentinelHandler().resolveConflicts(local, remote);
 
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
     }
 

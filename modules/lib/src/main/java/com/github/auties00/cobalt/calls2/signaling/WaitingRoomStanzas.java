@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.List;
 import java.util.Optional;
@@ -62,7 +62,7 @@ final class WaitingRoomStanzas {
     }
 
     /**
-     * Builds a waiting-room action node carrying the common shape.
+     * Builds a waiting-room action stanza carrying the common shape.
      *
      * <p>Stamps the universal call header, then writes the optional {@code enabled}, {@code link-token},
      * and {@code is_admin} attributes only when present, and nests every supplied {@link WaitingRoomUser}
@@ -76,16 +76,16 @@ final class WaitingRoomStanzas {
      * @param linkToken   the targeted call-link token, absent to omit
      * @param admin       the admin flag, absent to omit
      * @param users       the user entries to nest; never {@code null}
-     * @return the waiting-room action node
+     * @return the waiting-room action stanza
      */
-    static Node build(String element,
-                      String callId,
-                      Jid callCreator,
-                      Optional<Boolean> enabled,
-                      Optional<String> linkToken,
-                      Optional<Boolean> admin,
-                      List<WaitingRoomUser> users) {
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(element), callId, callCreator)
+    static Stanza build(String element,
+                        String callId,
+                        Jid callCreator,
+                        Optional<Boolean> enabled,
+                        Optional<String> linkToken,
+                        Optional<Boolean> admin,
+                        List<WaitingRoomUser> users) {
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(element), callId, callCreator)
                 .attribute(ENABLED_ATTRIBUTE, enabled.map(value -> value ? FLAG_TRUE : FLAG_FALSE).orElse(null), enabled.isPresent())
                 .attribute(LINK_TOKEN_ATTRIBUTE, linkToken.orElse(null), linkToken.isPresent())
                 .attribute(IS_ADMIN_ATTRIBUTE, admin.map(value -> value ? FLAG_TRUE : FLAG_FALSE).orElse(null), admin.isPresent());
@@ -96,53 +96,53 @@ final class WaitingRoomStanzas {
     }
 
     /**
-     * Decodes the {@code enabled} gate flag from a waiting-room action node.
+     * Decodes the {@code enabled} gate flag from a waiting-room action stanza.
      *
      * <p>The flag is read from the {@code '1'}/{@code '0'} voip boolean literal: a present {@code "1"}
      * maps to {@code true} and any other present value to {@code false}, while an absent attribute stays
-     * empty so a re-emitted node omits the gate exactly as it arrived.
+     * empty so a re-emitted stanza omits the gate exactly as it arrived.
      *
-     * @param node the waiting-room action node
+     * @param stanza the waiting-room action stanza
      * @return the gate flag, or empty when the attribute is absent
      */
-    static Optional<Boolean> enabled(Node node) {
-        return node.getAttributeAsString(ENABLED_ATTRIBUTE)
+    static Optional<Boolean> enabled(Stanza stanza) {
+        return stanza.getAttributeAsString(ENABLED_ATTRIBUTE)
                 .map(FLAG_TRUE::equals);
     }
 
     /**
-     * Decodes the {@code is_admin} flag from a waiting-room action node.
+     * Decodes the {@code is_admin} flag from a waiting-room action stanza.
      *
      * <p>The flag is read from the {@code '1'}/{@code '0'} voip boolean literal: a present {@code "1"}
      * maps to {@code true} and any other present value to {@code false}, while an absent attribute stays
      * empty.
      *
-     * @param node the waiting-room action node
+     * @param stanza the waiting-room action stanza
      * @return the admin flag, or empty when the attribute is absent
      */
-    static Optional<Boolean> admin(Node node) {
-        return node.getAttributeAsString(IS_ADMIN_ATTRIBUTE)
+    static Optional<Boolean> admin(Stanza stanza) {
+        return stanza.getAttributeAsString(IS_ADMIN_ATTRIBUTE)
                 .map(FLAG_TRUE::equals);
     }
 
     /**
-     * Decodes the {@code link-token} from a waiting-room action node.
+     * Decodes the {@code link-token} from a waiting-room action stanza.
      *
-     * @param node the waiting-room action node
+     * @param stanza the waiting-room action stanza
      * @return the targeted call-link token, or empty when the attribute is absent
      */
-    static Optional<String> linkToken(Node node) {
-        return node.getAttributeAsString(LINK_TOKEN_ATTRIBUTE);
+    static Optional<String> linkToken(Stanza stanza) {
+        return stanza.getAttributeAsString(LINK_TOKEN_ATTRIBUTE);
     }
 
     /**
-     * Decodes the nested {@code <user>} list from a waiting-room action node.
+     * Decodes the nested {@code <user>} list from a waiting-room action stanza.
      *
-     * @param node the waiting-room action node
-     * @return the decoded user entries; never {@code null}, empty when the node nests none
+     * @param stanza the waiting-room action stanza
+     * @return the decoded user entries; never {@code null}, empty when the stanza nests none
      */
-    static List<WaitingRoomUser> users(Node node) {
-        return node.streamChildren(WaitingRoomUser.ELEMENT)
+    static List<WaitingRoomUser> users(Stanza stanza) {
+        return stanza.streamChildren(WaitingRoomUser.ELEMENT)
                 .map(WaitingRoomUser::of)
                 .toList();
     }

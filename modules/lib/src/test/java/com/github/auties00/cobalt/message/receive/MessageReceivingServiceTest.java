@@ -8,9 +8,9 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * Covers {@link MessageReceivingService} dispatch: inbound {@code <message>} nodes route to the
  * newsletter receiver when the {@code from} JID is on the {@code @newsletter} server and to the
- * chat receiver otherwise. Synthetic inbound stanzas are built via {@link NodeBuilder}; the
+ * chat receiver otherwise. Synthetic inbound stanzas are built via {@link StanzaBuilder}; the
  * chat-dispatch tests install a full sender-recipient libsignal pair via
  * {@link TestSignalSession#establishSession} so the decryption path runs end-to-end.
  */
@@ -105,7 +105,7 @@ class MessageReceivingServiceTest {
     }
 
     @Test
-    @DisplayName("process: null node throws NullPointerException")
+    @DisplayName("process: null stanza throws NullPointerException")
     void nullNodeThrows() {
         var store = MessageFixtures.temporaryStore(RECIPIENT_BARE, null);
         var service = new LiveMessageReceivingService(store, decryption(store));
@@ -129,7 +129,7 @@ class MessageReceivingServiceTest {
         var store = MessageFixtures.temporaryStore(RECIPIENT_BARE, null);
         var service = new LiveMessageReceivingService(store, decryption(store));
 
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0NL0001")
                 .attribute("from", NEWSLETTER)
@@ -150,15 +150,15 @@ class MessageReceivingServiceTest {
                 new SignalCryptoLocks());
     }
 
-    private static Node buildInbound(String id, Jid fromJid, String encType, byte[] ciphertext) {
-        return new NodeBuilder()
+    private static Stanza buildInbound(String id, Jid fromJid, String encType, byte[] ciphertext) {
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", id)
                 .attribute("from", fromJid)
                 // pins a deterministic stanza age so the receiver's expired-status branch never fires
                 .attribute("t", 1700000000L)
                 .attribute("type", "text")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("enc")
                         .attribute("v", "2")
                         .attribute("type", encType)

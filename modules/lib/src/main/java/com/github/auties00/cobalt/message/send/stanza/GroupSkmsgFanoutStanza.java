@@ -6,8 +6,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Objects;
 
@@ -41,9 +41,9 @@ public final class GroupSkmsgFanoutStanza {
      * The bot-feedback path drops both {@code phash} and the {@code <enc type="skmsg">} sibling, because delivery then
      * happens only via the {@code <bot>} child.
      *
-     * @implNote This implementation defers to the caller to supply {@code skDistributionNode}, {@code identityNode},
-     * {@code metaNode}, {@code bizNode}, {@code botNode}, {@code reportingNode}, and {@code senderContentBinding}; null
-     * children are elided by {@link NodeBuilder#content(Node...)}.
+     * @implNote This implementation defers to the caller to supply {@code skDistributionStanza}, {@code identityStanza},
+     * {@code metaStanza}, {@code bizStanza}, {@code botStanza}, {@code reportingStanza}, and {@code senderContentBinding}; null
+     * children are elided by {@link StanzaBuilder#content(Stanza...)}.
      *
      * @param messageId            the stanza id
      * @param groupJid             the group {@link Jid}
@@ -56,21 +56,21 @@ public final class GroupSkmsgFanoutStanza {
      * @param decryptFail          the {@code decrypt-fail} attribute on the {@code <enc>}, or {@code null}
      * @param editAttribute        the {@code edit} attribute on the outer {@code <message>}, or {@code null}
      * @param addressingMode       {@code "pn"} or {@code "lid"}
-     * @param skDistributionNode   the {@code <participants>} carrying SK distribution payloads for new members, or
+     * @param skDistributionStanza   the {@code <participants>} carrying SK distribution payloads for new members, or
      *                             {@code null}
-     * @param identityNode         the {@code <device-identity>} child, or {@code null}
-     * @param metaNode             the {@code <meta>} child, or {@code null}
-     * @param bizNode              the {@code <biz>} child, or {@code null}
-     * @param botNode              the {@code <bot>} child, or {@code null}
-     * @param reportingNode        the {@code <reporting>} child, or {@code null}
+     * @param identityStanza         the {@code <device-identity>} child, or {@code null}
+     * @param metaStanza             the {@code <meta>} child, or {@code null}
+     * @param bizStanza              the {@code <biz>} child, or {@code null}
+     * @param botStanza              the {@code <bot>} child, or {@code null}
+     * @param reportingStanza        the {@code <reporting>} child, or {@code null}
      * @param senderContentBinding the {@code <sender_content_binding>} child, or {@code null}
-     * @return the {@link NodeBuilder} for the outer {@code <message>}
+     * @return the {@link StanzaBuilder} for the outer {@code <message>}
      * @throws NullPointerException if {@code messageId}, {@code groupJid}, {@code type}, or {@code addressingMode} is
      *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static NodeBuilder build(
+    public static StanzaBuilder build(
             String messageId,
             Jid groupJid,
             String type,
@@ -80,13 +80,13 @@ public final class GroupSkmsgFanoutStanza {
             String decryptFail,
             String editAttribute,
             String addressingMode,
-            Node skDistributionNode,
-            Node identityNode,
-            Node metaNode,
-            Node bizNode,
-            Node botNode,
-            Node reportingNode,
-            Node senderContentBinding
+            Stanza skDistributionStanza,
+            Stanza identityStanza,
+            Stanza metaStanza,
+            Stanza bizStanza,
+            Stanza botStanza,
+            Stanza reportingStanza,
+            Stanza senderContentBinding
     ) {
         Objects.requireNonNull(messageId, "messageId");
         Objects.requireNonNull(groupJid, "groupJid");
@@ -94,7 +94,7 @@ public final class GroupSkmsgFanoutStanza {
         Objects.requireNonNull(addressingMode, "addressingMode");
 
         var skmsgEncNode = skmsgCiphertext != null
-                ? new NodeBuilder()
+                ? new StanzaBuilder()
                         .description("enc")
                         .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                         .attribute("type", MessageEncryptionType.SKMSG.protocolValue())
@@ -104,7 +104,7 @@ public final class GroupSkmsgFanoutStanza {
                         .build()
                 : null;
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", messageId)
                 .attribute("to", groupJid)
@@ -113,14 +113,14 @@ public final class GroupSkmsgFanoutStanza {
                 .attribute("edit", editAttribute)
                 .attribute("addressing_mode", addressingMode)
                 .content(
-                        skDistributionNode,
+                        skDistributionStanza,
                         skmsgEncNode,
-                        identityNode,
-                        bizNode,
-                        metaNode,
-                        botNode,
+                        identityStanza,
+                        bizStanza,
+                        metaStanza,
+                        botStanza,
                         senderContentBinding,
-                        reportingNode
+                        reportingStanza
                 )
                 ;
     }

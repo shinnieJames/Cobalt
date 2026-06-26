@@ -7,10 +7,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatAssignmentBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -20,7 +21,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * single chat is assigned to (or unassigned from) a named agent. When the
  * assignment changes on another device, the server replays it here and the
  * result becomes observable through
- * {@link com.github.auties00.cobalt.store.BusinessStore#findChatAssignment(Jid)}.
+ * {@link LinkedWhatsAppBusinessStore#findChatAssignment(Jid)}.
  *
  * @implNote
  * This implementation collapses WA Web's per-batch

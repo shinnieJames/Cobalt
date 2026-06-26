@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.media;
 
 import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.media.MediaProvider;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.io.InputStream;
 import java.util.SequencedCollection;
@@ -19,7 +19,7 @@ public final class TestMediaConnectionService implements MediaConnectionService 
     }
 
     @Override
-    public void update(Node response) {
+    public void update(Stanza response) {
         throw unsupported("update");
     }
 

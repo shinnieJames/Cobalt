@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfoBuilder;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 
@@ -81,22 +81,22 @@ public final class NewsletterStatusStreamHandler extends SocketStreamHandler.Con
      * returns happen before {@link MessageContainerSpec#decode(byte[])} runs.
      */
     @Override
-    public void handle(Node node) {
-        var from = node.getAttributeAsJid("from", null);
+    public void handle(Stanza stanza) {
+        var from = stanza.getAttributeAsJid("from", null);
         if (from == null || !from.hasNewsletterServer()) {
             return;
         }
 
-        var id = node.getAttributeAsString("id", null);
+        var id = stanza.getAttributeAsString("id", null);
         if (id == null) {
             return;
         }
 
-        if (node.hasChild("reaction")) {
+        if (stanza.hasChild("reaction")) {
             return;
         }
 
-        var edit = node.getAttributeAsString("edit", null);
+        var edit = stanza.getAttributeAsString("edit", null);
         if ("8".equals(edit)) {
             // TODO: project admin revoke (edit="8") into a synthetic protocol
             //       message the way WAWebNewsletterStatusUtils.mapStatusRevokeToMsgData
@@ -106,8 +106,8 @@ public final class NewsletterStatusStreamHandler extends SocketStreamHandler.Con
             return;
         }
 
-        var plaintext = node.getChild("plaintext")
-                .flatMap(Node::toContentBytes)
+        var plaintext = stanza.getChild("plaintext")
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
         if (plaintext == null || plaintext.length == 0) {
             LOGGER.log(System.Logger.Level.DEBUG,
@@ -120,9 +120,9 @@ public final class NewsletterStatusStreamHandler extends SocketStreamHandler.Con
             return;
         }
 
-        var serverId = node.getAttributeAsInt("server_id", 0);
-        var timestamp = resolveTimestamp(node);
-        var isSender = "true".equals(node.getAttributeAsString("is_sender", null));
+        var serverId = stanza.getAttributeAsInt("server_id", 0);
+        var timestamp = resolveTimestamp(stanza);
+        var isSender = "true".equals(stanza.getAttributeAsString("is_sender", null));
 
         var key = new MessageKeyBuilder()
                 .id(id)
@@ -154,7 +154,7 @@ public final class NewsletterStatusStreamHandler extends SocketStreamHandler.Con
      * {@code <status>} stanza is treated as if it had never arrived.
      *
      * @param id        the stanza identifier, included in the debug log message for traceability
-     * @param plaintext the raw protobuf bytes lifted from the {@code <plaintext>} child node
+     * @param plaintext the raw protobuf bytes lifted from the {@code <plaintext>} child stanza
      * @return the decoded {@link MessageContainer}, or {@code null} when the bytes cannot be parsed
      */
     private MessageContainer decodeMessage(String id, byte[] plaintext) {
@@ -174,11 +174,11 @@ public final class NewsletterStatusStreamHandler extends SocketStreamHandler.Con
      * method parses that long into an {@link Instant}, returning {@code null} when the attribute is
      * absent.
      *
-     * @param node the {@code <status>} stanza node
+     * @param stanza the {@code <status>} stanza stanza
      * @return the parsed {@link Instant}, or {@code null} when the attribute is missing
      */
-    private Instant resolveTimestamp(Node node) {
-        var timestamp = node.getAttributeAsLong("t", (Long) null);
+    private Instant resolveTimestamp(Stanza stanza) {
+        var timestamp = stanza.getAttributeAsLong("t", (Long) null);
         return timestamp == null ? null : Instant.ofEpochSecond(timestamp);
     }
 

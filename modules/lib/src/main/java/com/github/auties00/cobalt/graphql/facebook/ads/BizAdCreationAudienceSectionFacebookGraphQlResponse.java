@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdAudienceSection;
@@ -112,7 +112,7 @@ public final class BizAdCreationAudienceSectionFacebookGraphQlResponse implement
 
     /**
      * Projects the {@code savedAudiences} connection onto a list of {@link BusinessAdSavedAudience}
-     * entries by reading each edge's {@code node}.
+     * entries by reading each edge's {@code stanza}.
      *
      * @param connection the {@code savedAudiences} connection, or {@code null}
      * @return the projected saved audiences, empty when {@code connection} is {@code null}

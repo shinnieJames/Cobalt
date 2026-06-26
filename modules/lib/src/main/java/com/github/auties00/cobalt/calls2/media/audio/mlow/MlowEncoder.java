@@ -164,6 +164,24 @@ public final class MlowEncoder {
     }
 
     /**
+     * Re-targets the encoder's bitrate mid-stream, the native rewrite of {@code mainBitRate} the encoder API
+     * performs each rate-control round.
+     *
+     * <p>Delegates to {@link CoreEncoder#updateTargetBitrate(int)} so the next packet's
+     * {@link com.github.auties00.cobalt.calls2.media.audio.mlow.encode.BitrateController} sees the new target and
+     * steers the instantaneous bitrate toward it through its feedback loop. A call that does not change the target
+     * leaves the encode byte-for-byte identical to the fixed-rate path. The rate class
+     * ({@link #lowRate}) and the TOC {@code low_rate} bit are not re-derived: the native {@code smpl_enc_api.c}
+     * fixes the rate class once at codec open and only the controller target varies, so the rate-class bit written
+     * into every packet keeps the construction value while the adaptive target tracks the engine estimate.
+     *
+     * @param bps the new target bitrate in bits per second, the native {@code mainBitRate}
+     */
+    public void updateTargetBitrate(int bps) {
+        coreEncoder.updateTargetBitrate(bps);
+    }
+
+    /**
      * Returns this encoder to its freshly constructed state, the equivalent of {@code smpl_core_encoder_init}.
      *
      * <p>Resets the wrapped parameter serializer. Call this between independent encode sessions; do not call it

@@ -18,7 +18,9 @@ import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyI
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyRequest;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyRequestBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncdCoordinator;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateCriticalDataProcessingEventBuilder;
@@ -148,7 +150,7 @@ public final class LiveMissingSyncKeyRequestService implements MissingSyncKeyReq
      *
      * @implNote This implementation intentionally bypasses the {@code handleMissingKeys} body:
      * the resume gate ({@link LinkedWhatsAppStore#isResumeFromRestartComplete()}) and the
-     * deduplication filter against {@link com.github.auties00.cobalt.store.SyncStore#findMissingSyncKey(byte[])} are skipped
+     * deduplication filter against {@link LinkedWhatsAppSyncStore#findMissingSyncKey(byte[])} are skipped
      * because the keys are by construction already tracked and the periodic job runs only after
      * resume has long completed.
      */
@@ -287,7 +289,7 @@ public final class LiveMissingSyncKeyRequestService implements MissingSyncKeyReq
      * @implNote This implementation runs the per-device sends sequentially rather than in
      * parallel: under the virtual-thread model the parallel fan-out savings do not justify the
      * bookkeeping, and the sequential loop preserves the peer-message store ordering established
-     * by {@link com.github.auties00.cobalt.store.ChatStore#addPeerMessage(String, ChatMessageInfo)}. The beacon fires after
+     * by {@link LinkedWhatsAppChatStore#addPeerMessage(String, ChatMessageInfo)}. The beacon fires after
      * the fan-out so it reflects the delivery outcome rather than the intent.
      *
      * @param keyRequest the {@code AppStateSyncKeyRequest} payload

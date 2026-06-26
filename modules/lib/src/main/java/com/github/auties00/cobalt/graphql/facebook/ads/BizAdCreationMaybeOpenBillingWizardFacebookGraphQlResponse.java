@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdPaymentSection;
@@ -76,7 +76,7 @@ public final class BizAdCreationMaybeOpenBillingWizardFacebookGraphQlResponse im
      * {@code wizard_props_json}, which are mapped onto the model's setup-name and setup-inputs fields.
      *
      * @param node the {@code required_action} object, or {@code null}
-     * @return the projected setup step, or {@code null} when {@code node} or its {@code action} is
+     * @return the projected setup step, or {@code null} when {@code stanza} or its {@code action} is
      *         {@code null}
      */
     private static BusinessAdPaymentSection.RequiredSetup requiredSetup(JSONObject node) {

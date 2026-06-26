@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -18,7 +19,7 @@ import java.util.OptionalInt;
  * {@code t}, {@code type}, {@code from}, {@code participant}, {@code recipient}, {@code error})
  * and adds its own class-specific payload; the subtypes of this interface project both layers.
  *
- * <p>{@link AckParser#parse(com.github.auties00.cobalt.node.Node)} dispatches on the {@code class}
+ * <p>{@link AckParser#parse(Stanza)} dispatches on the {@code class}
  * attribute and returns the matching subtype:
  * <ul>
  *   <li>{@code message} → {@link MessageAck} (carries the message-fanout slots: {@code sync},
@@ -58,7 +59,7 @@ public sealed interface AckResult permits MessageAck, ReceiptAck, NotificationAc
      * Returns the server timestamp carried on the ack.
      *
      * <p>Always populated on a real server ack; an empty result surfaces only when a synthetic
-     * node was fed through {@link AckParser}.
+     * stanza was fed through {@link AckParser}.
      *
      * @return the parsed {@link Instant}, or {@link Optional#empty()} when the {@code t}
      *         attribute was absent

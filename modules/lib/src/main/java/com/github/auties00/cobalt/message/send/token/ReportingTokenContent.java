@@ -490,7 +490,7 @@ public final class ReportingTokenContent {
         int fieldNumber();
 
         /**
-         * Writes this node's bytes into {@code out} starting at {@code cursor}.
+         * Writes this stanza's bytes into {@code out} starting at {@code cursor}.
          *
          * @implSpec
          * Implementations must write exactly the bytes accounted for in the emit

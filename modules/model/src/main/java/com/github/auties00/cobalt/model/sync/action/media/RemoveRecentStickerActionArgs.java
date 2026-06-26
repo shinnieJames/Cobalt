@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.media;
 
 
-import com.github.auties00.cobalt.model.sync.SyncActionArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncActionArgs;
 
 /**
  * Sync index arguments that identify which sticker is being removed from the

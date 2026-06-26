@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.migration.LidMigrationService;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 
 /**
@@ -46,7 +46,7 @@ public final class NotificationBusinessDispatcher extends SocketStreamHandler.Co
      *
      * <p>Called once during {@link NodeStreamService} setup. The {@code lidMigrationService} is consumed only by the
      * {@code NotificationMexStreamHandler} when applying LID-change Meta Exchange events; the {@link LinkedWhatsAppClient}
-     * and {@link AckSender} are forwarded to every sub-handler for store and node access and for emitting the
+     * and {@link AckSender} are forwarded to every sub-handler for store and stanza access and for emitting the
      * per-notification outbound {@code <ack>} stanza.
      *
      * @param whatsapp            the client forwarded to every sub-handler
@@ -60,7 +60,7 @@ public final class NotificationBusinessDispatcher extends SocketStreamHandler.Co
     }
 
     /**
-     * Forwards {@code node} to the sub-handler whose category matches the stanza's {@code type} attribute.
+     * Forwards {@code stanza} to the sub-handler whose category matches the stanza's {@code type} attribute.
      *
      * <p>Stanzas with no {@code type} and stanzas whose {@code type} this dispatcher does not own are dropped; the
      * outer stream pipeline owns the NACK decision for stanzas this dispatcher does not match. The three
@@ -68,20 +68,20 @@ public final class NotificationBusinessDispatcher extends SocketStreamHandler.Co
      * to {@link NotificationBusinessStreamHandler}; {@code mex} routes to {@code NotificationMexStreamHandler} and
      * {@code pay} routes to {@code NotificationPaymentStreamHandler}.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza", exports = "handleLoggedInStanza", adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    public void handle(Node node) {
-        var type = node.getAttributeAsString("type", null);
+    public void handle(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", null);
         if (type == null) {
             return;
         }
 
         switch (type) {
-            case "business", "digital_commerce_subscription", "fb:update" -> businessHandler.handle(node);
-            case "mex" -> mexHandler.handle(node);
-            case "pay" -> paymentHandler.handle(node);
+            case "business", "digital_commerce_subscription", "fb:update" -> businessHandler.handle(stanza);
+            case "mex" -> mexHandler.handle(stanza);
+            case "pay" -> paymentHandler.handle(stanza);
             default -> {
             }
         }

@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -114,16 +114,16 @@ public record LinkQueryStanza(String token,
     }
 
     /**
-     * Builds the {@code <link_query token media action link_creator link_creator_pn/>} action node.
+     * Builds the {@code <link_query token media action link_creator link_creator_pn/>} action stanza.
      *
      * <p>The {@code action}, {@code link_creator}, and {@code link_creator_pn} attributes are omitted
      * when their backing components are absent.
      *
-     * @return the link-query action node
+     * @return the link-query action stanza
      */
     @Override
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toStanza() {
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(TOKEN_ATTRIBUTE, token)
                 .attribute(MEDIA_ATTRIBUTE, media.wireValue())
@@ -134,22 +134,22 @@ public record LinkQueryStanza(String token,
     }
 
     /**
-     * Decodes a {@code <link_query>} action node into a {@link LinkQueryStanza}.
+     * Decodes a {@code <link_query>} action stanza into a {@link LinkQueryStanza}.
      *
-     * @param node the {@code <link_query>} node
+     * @param stanza the {@code <link_query>} stanza
      * @return the decoded link-query signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code token} attribute is absent or the
      *                                {@code media} attribute is absent or unrecognized
      */
-    public static LinkQueryStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var token = node.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
-        var media = CallLinkMedia.ofWire(node.getAttributeAsString(MEDIA_ATTRIBUTE).orElse(null))
+    public static LinkQueryStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var token = stanza.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
+        var media = CallLinkMedia.ofWire(stanza.getAttributeAsString(MEDIA_ATTRIBUTE).orElse(null))
                 .orElseThrow(() -> new NoSuchElementException("link_query is missing a recognized media attribute"));
-        var action = node.getAttributeAsString(ACTION_ATTRIBUTE);
-        var linkCreator = node.getAttributeAsJid(LINK_CREATOR_ATTRIBUTE);
-        var linkCreatorPn = node.getAttributeAsJid(LINK_CREATOR_PN_ATTRIBUTE);
+        var action = stanza.getAttributeAsString(ACTION_ATTRIBUTE);
+        var linkCreator = stanza.getAttributeAsJid(LINK_CREATOR_ATTRIBUTE);
+        var linkCreatorPn = stanza.getAttributeAsJid(LINK_CREATOR_PN_ATTRIBUTE);
         return new LinkQueryStanza(token, media, action, linkCreator, linkCreatorPn);
     }
 }

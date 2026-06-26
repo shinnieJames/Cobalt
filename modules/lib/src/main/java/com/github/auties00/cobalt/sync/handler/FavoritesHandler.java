@@ -5,10 +5,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.FavoritesAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,10 +30,10 @@ import java.util.logging.Logger;
  * @implNote
  * This implementation resolves each favourite JID against the chat table
  * first, then through
- * {@link com.github.auties00.cobalt.store.ContactStore#findPhoneByLid(Jid)}
+ * {@link LinkedWhatsAppContactStore#findPhoneByLid(Jid)}
  * when the raw JID carries the LID server, then falls back to the raw JID, and
  * persists the resolved list directly through
- * {@link com.github.auties00.cobalt.store.ChatStore#setFavoriteChats(List)}.
+ * {@link LinkedWhatsAppChatStore#setFavoriteChats(List)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebFavoritesSync")
 public final class FavoritesHandler implements WebAppStateActionHandler {
@@ -167,10 +169,10 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
      * <p>Resolves each entry in iteration order: entries whose raw id is absent
      * are skipped, the chat table is consulted first, then a LID-to-phone
      * fallback via
-     * {@link com.github.auties00.cobalt.store.ContactStore#findPhoneByLid(Jid)}
+     * {@link LinkedWhatsAppContactStore#findPhoneByLid(Jid)}
      * is attempted when the raw {@link Jid} carries the LID server, and the raw
      * JID is preserved as a final fallback. The resolved list is persisted
-     * through {@link com.github.auties00.cobalt.store.ChatStore#setFavoriteChats(List)}.
+     * through {@link LinkedWhatsAppChatStore#setFavoriteChats(List)}.
      *
      * @param client   the {@link LinkedWhatsAppClient} whose store will be mutated
      * @param mutation the source mutation whose

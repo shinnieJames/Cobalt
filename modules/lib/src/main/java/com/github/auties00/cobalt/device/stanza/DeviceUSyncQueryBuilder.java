@@ -6,8 +6,8 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.info.DeviceListHashInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.util.RandomIdUtils;
 
 import java.util.*;
@@ -17,7 +17,7 @@ import java.util.*;
  *
  * <p>Callers (typically {@link com.github.auties00.cobalt.device.DeviceService}) pass a set of user
  * {@link Jid}s plus an optional dhash-and-timestamp map and receive one or more IQ
- * {@link NodeBuilder} instances they can send through the socket. Each IQ wraps the WAP
+ * {@link StanzaBuilder} instances they can send through the socket. Each IQ wraps the WAP
  * {@code <iq xmlns="usync" type="get">} shape that
  * {@link com.github.auties00.cobalt.device.adv.DeviceADVValidator} and
  * {@link DeviceUSyncResponseParser} consume on the response side. This is the wire-level entry point
@@ -96,7 +96,7 @@ public final class DeviceUSyncQueryBuilder {
      * Builds one or more USync device-protocol IQ stanzas for the given users.
      *
      * <p>The {@code userJids} set is sliced into batches of up to {@value MAX_USERS_PER_QUERY} entries
-     * (see {@link #MAX_USERS_PER_QUERY}), and one IQ {@link NodeBuilder} is returned per batch for the
+     * (see {@link #MAX_USERS_PER_QUERY}), and one IQ {@link StanzaBuilder} is returned per batch for the
      * caller to send in turn. The {@code context} value is written verbatim onto the {@code <usync>}
      * element and must be a valid USync context wire literal ({@code "interactive"}, {@code "message"},
      * {@code "voip"}, {@code "background"}, or {@code "notification"}); the relay does not recognise
@@ -117,13 +117,13 @@ public final class DeviceUSyncQueryBuilder {
      *                                {@code null} for an unconditional refresh
      * @param includeUsernameProtocol whether to add the {@code <username/>} probe to the
      *                                {@code <query>} element
-     * @return the IQ {@link NodeBuilder} instances, one per batch
+     * @return the IQ {@link StanzaBuilder} instances, one per batch
      * @throws NullPointerException if {@code userJids} or {@code context} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static List<NodeBuilder> build(Set<Jid> userJids, String context, Map<Jid, DeviceListHashInfo> hashInfos, boolean includeUsernameProtocol) {
+    public static List<StanzaBuilder> build(Set<Jid> userJids, String context, Map<Jid, DeviceListHashInfo> hashInfos, boolean includeUsernameProtocol) {
         Objects.requireNonNull(userJids, "userJids cannot be null");
         Objects.requireNonNull(context, "context cannot be null");
 
@@ -133,7 +133,7 @@ public final class DeviceUSyncQueryBuilder {
         } else {
             var iterator = userJids.iterator();
             var batch = new ArrayList<Jid>(MAX_USERS_PER_QUERY);
-            var batches = new ArrayList<NodeBuilder>(userJidsCount / MAX_USERS_PER_QUERY);
+            var batches = new ArrayList<StanzaBuilder>(userJidsCount / MAX_USERS_PER_QUERY);
             while (iterator.hasNext()) {
                 batch.add(iterator.next());
                 if (batch.size() == MAX_USERS_PER_QUERY) {
@@ -166,35 +166,35 @@ public final class DeviceUSyncQueryBuilder {
      *
      * @param userJid the phone-number user JID whose LID must be resolved
      * @param context the {@code context} attribute written onto the {@code <usync>} element
-     * @return the IQ {@link NodeBuilder} ready for dispatch
+     * @return the IQ {@link StanzaBuilder} ready for dispatch
      * @throws NullPointerException if {@code userJid} or {@code context} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",
             exports = "USyncLidProtocol",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static NodeBuilder buildLidQuery(Jid userJid, String context) {
+    public static StanzaBuilder buildLidQuery(Jid userJid, String context) {
         Objects.requireNonNull(userJid, "userJid cannot be null");
         Objects.requireNonNull(context, "context cannot be null");
 
         var sessionId = RandomIdUtils.newId();
 
-        var userNode = new NodeBuilder()
+        var userNode = new StanzaBuilder()
                 .description("user")
                 .attribute("jid", userJid.toUserJid())
                 .build();
-        var listNode = new NodeBuilder()
+        var listNode = new StanzaBuilder()
                 .description("list")
                 .content(userNode)
                 .build();
-        var lidNode = new NodeBuilder()
+        var lidNode = new StanzaBuilder()
                 .description("lid")
                 .build();
-        var queryNode = new NodeBuilder()
+        var queryNode = new StanzaBuilder()
                 .description("query")
                 .content(lidNode)
                 .build();
 
-        var usyncNode = new NodeBuilder()
+        var usyncNode = new StanzaBuilder()
                 .description("usync")
                 .attribute("sid", sessionId)
                 .attribute("index", "0")
@@ -204,7 +204,7 @@ public final class DeviceUSyncQueryBuilder {
                 .content(queryNode, listNode)
                 .build();
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("to", JidServer.user())
                 .attribute("xmlns", "usync")
@@ -225,14 +225,14 @@ public final class DeviceUSyncQueryBuilder {
      * @implNote
      * This implementation mirrors the JS attribute insertion order ({@code sid}, {@code index},
      * {@code last}, {@code mode}, {@code context}) so the serialised WAP bytes match live traffic. The
-     * outer {@code <iq>} {@link Node} has no {@code id} attribute; the transport layer assigns one at
-     * send time, which is why a {@link NodeBuilder} is returned instead of a built {@link Node}.
+     * outer {@code <iq>} {@link Stanza} has no {@code id} attribute; the transport layer assigns one at
+     * send time, which is why a {@link StanzaBuilder} is returned instead of a built {@link Stanza}.
      *
      * @param userJids                the JIDs forming this batch
      * @param context                 the {@code context} attribute
      * @param hashInfos               the per-user dhash map, or {@code null}
      * @param includeUsernameProtocol whether to add the {@code <username/>} probe
-     * @return the partially built {@link NodeBuilder} for the IQ
+     * @return the partially built {@link StanzaBuilder} for the IQ
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",
@@ -240,7 +240,7 @@ public final class DeviceUSyncQueryBuilder {
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "USyncUsernameProtocol",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private static NodeBuilder buildEntry(Collection<Jid> userJids, String context, Map<Jid, DeviceListHashInfo> hashInfos, boolean includeUsernameProtocol) {
+    private static StanzaBuilder buildEntry(Collection<Jid> userJids, String context, Map<Jid, DeviceListHashInfo> hashInfos, boolean includeUsernameProtocol) {
         var sessionId = RandomIdUtils.newId();
 
         var userNodes = userJids.stream()
@@ -248,43 +248,43 @@ public final class DeviceUSyncQueryBuilder {
                 .map(jid -> buildUserNode(jid, hashInfos))
                 .toList();
 
-        var listNode = new NodeBuilder()
+        var listNode = new StanzaBuilder()
                 .description("list")
                 .content(userNodes)
                 .build();
 
-        var devicesNode = new NodeBuilder()
+        var devicesNode = new StanzaBuilder()
                 .description("devices")
                 .attribute("version", "2")
                 .build();
 
-        Node queryNode;
+        Stanza queryStanza;
         if (includeUsernameProtocol) {
-            var usernameNode = new NodeBuilder()
+            var usernameNode = new StanzaBuilder()
                     .description("username")
                     .build();
-            queryNode = new NodeBuilder()
+            queryStanza = new StanzaBuilder()
                     .description("query")
                     .content(devicesNode, usernameNode)
                     .build();
         } else {
-            queryNode = new NodeBuilder()
+            queryStanza = new StanzaBuilder()
                     .description("query")
                     .content(devicesNode)
                     .build();
         }
 
-        var usyncNode = new NodeBuilder()
+        var usyncNode = new StanzaBuilder()
                 .description("usync")
                 .attribute("sid", sessionId)
                 .attribute("index", "0")
                 .attribute("last", "true")
                 .attribute("mode", "query")
                 .attribute("context", context)
-                .content(queryNode, listNode)
+                .content(queryStanza, listNode)
                 .build();
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("to", JidServer.user())
                 .attribute("xmlns", "usync")
@@ -308,12 +308,12 @@ public final class DeviceUSyncQueryBuilder {
      * {@code USyncDeviceProtocol.getUserElement} which returns {@code null} in the same case.
      *
      * @param hashInfo the cached dhash record for the user, or {@code null}
-     * @return the {@code <devices>} {@link Node}, or {@code null} when no attributes would be set
+     * @return the {@code <devices>} {@link Stanza}, or {@code null} when no attributes would be set
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "USyncDeviceProtocol",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static Node buildUserDevicesElement(DeviceListHashInfo hashInfo) {
+    private static Stanza buildUserDevicesElement(DeviceListHashInfo hashInfo) {
         if (hashInfo == null) {
             return null;
         }
@@ -326,7 +326,7 @@ public final class DeviceUSyncQueryBuilder {
             return null;
         }
 
-        var devicesBuilder = new NodeBuilder()
+        var devicesBuilder = new StanzaBuilder()
                 .description("devices");
         if (hash != null) {
             devicesBuilder.attribute("device_hash", hash);
@@ -344,7 +344,7 @@ public final class DeviceUSyncQueryBuilder {
      * Builds the {@code <user jid="...">} envelope for one entry of the USync batch.
      *
      * <p>This is the inner worker for {@link #buildEntry(Collection, String, Map, boolean)}; one
-     * {@code <user>} node is emitted per JID that survives the announcements-account filter. When a
+     * {@code <user>} stanza is emitted per JID that survives the announcements-account filter. When a
      * dhash map is supplied and holds a record for the user, the optional {@code <devices>} child
      * produced by {@link #buildUserDevicesElement(DeviceListHashInfo)} is attached.
      *
@@ -355,14 +355,14 @@ public final class DeviceUSyncQueryBuilder {
      *
      * @param jid       the user JID
      * @param hashInfos the dhash map keyed by user JID, or {@code null}
-     * @return the built {@code <user>} {@link Node}
+     * @return the built {@code <user>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private static Node buildUserNode(Jid jid, Map<Jid, DeviceListHashInfo> hashInfos) {
+    private static Stanza buildUserNode(Jid jid, Map<Jid, DeviceListHashInfo> hashInfos) {
         var userJid = jid.toUserJid();
-        var builder = new NodeBuilder()
+        var builder = new StanzaBuilder()
                 .description("user")
                 .attribute("jid", userJid);
 

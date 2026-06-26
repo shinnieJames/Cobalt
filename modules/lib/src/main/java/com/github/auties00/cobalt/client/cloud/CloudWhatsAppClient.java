@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.client.cloud;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import com.github.auties00.cobalt.exception.WhatsAppCloudException;
 import com.github.auties00.cobalt.exception.WhatsAppCloudException.CloudApiException;
 import com.github.auties00.cobalt.exception.WhatsAppCloudException.CloudAuthException;
@@ -49,7 +50,8 @@ import java.util.*;
  */
 public sealed interface CloudWhatsAppClient extends WhatsAppClient<CloudWhatsAppClient> permits LiveCloudWhatsAppClient {
     /**
-     * Returns the entry point for assembling a configured {@link CloudWhatsAppClient}.
+     * Returns the entry point for assembling a configured {@link CloudWhatsAppClient}, backed by the
+     * {@link CloudWhatsAppStoreFactory#persistent() persistent} store factory.
      *
      * @apiNote
      * Embedders chain the connection step
@@ -60,6 +62,22 @@ public sealed interface CloudWhatsAppClient extends WhatsAppClient<CloudWhatsApp
      */
     static CloudWhatsAppClientBuilder builder() {
         return new CloudWhatsAppClientBuilder();
+    }
+
+    /**
+     * Returns the entry point for assembling a configured {@link CloudWhatsAppClient}, backed by the
+     * given store factory.
+     *
+     * @apiNote
+     * Supply {@link CloudWhatsAppStoreFactory#temporary()} for a RAM-only session or
+     * {@link CloudWhatsAppStoreFactory#persistent(java.nio.file.Path)} for a custom storage directory.
+     *
+     * @param storeFactory the factory that resolves the backing store
+     * @return a fresh {@link CloudWhatsAppClientBuilder}
+     * @throws NullPointerException if {@code storeFactory} is {@code null}
+     */
+    static CloudWhatsAppClientBuilder builder(CloudWhatsAppStoreFactory storeFactory) {
+        return new CloudWhatsAppClientBuilder(storeFactory);
     }
 
     /**
@@ -479,7 +497,7 @@ public sealed interface CloudWhatsAppClient extends WhatsAppClient<CloudWhatsApp
     /**
      * Queries a single message template by its server-assigned id.
      *
-     * <p>Resolves the template directly from its node rather than from the account's template list, so it
+     * <p>Resolves the template directly from its stanza rather than from the account's template list, so it
      * is returned regardless of its review status. Returns {@link Optional#empty()} when no template
      * carries the id.
      *

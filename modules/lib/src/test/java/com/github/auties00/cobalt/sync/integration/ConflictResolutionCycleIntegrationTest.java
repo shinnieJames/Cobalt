@@ -3,12 +3,12 @@ package com.github.auties00.cobalt.sync.integration;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.handler.ArchiveChatHandler;
@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Exercises the conflict-resolution cycle that runs when a remote mutation
  * arrives carrying the same index as a local pending mutation: the owning
  * {@link ArchiveChatHandler#resolveConflicts} decides which mutation wins and
- * yields a {@link ConflictResolutionState}. The synthetic group drives the
+ * yields a {@link MutationConflictResolutionState}. The synthetic group drives the
  * timestamp-tiebreaker outcomes directly; the captured group is gated on
  * {@link SyncFixtures#isAvailable(String)} so it skips cleanly until the recorded
  * concurrent-mutation corpus is committed.
@@ -98,15 +98,15 @@ class ConflictResolutionCycleIntegrationTest {
         }
 
         @Test
-        @DisplayName("every ConflictResolutionState variant has at least one captured fixture")
+        @DisplayName("every MutationConflictResolutionState variant has at least one captured fixture")
         void allStatesRepresented() {
             // Each state maps to its own fixture sub-topic (apply-remote-drop-local,
             // skip-remote, skip-remote-drop-local, apply-remote-keep-local); this is
             // a smoke gate until that corpus is committed.
-            for (var state : ConflictResolutionState.values()) {
+            for (var state : MutationConflictResolutionState.values()) {
                 assertNotNull(state);
             }
-            assertTrue(ConflictResolutionState.values().length > 0);
+            assertTrue(MutationConflictResolutionState.values().length > 0);
         }
     }
 }

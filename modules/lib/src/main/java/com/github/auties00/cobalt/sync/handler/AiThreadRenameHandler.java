@@ -6,13 +6,14 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.bot.AiThreadTitleBuilder;
-import com.github.auties00.cobalt.model.device.DeviceCapabilities;
+import com.github.auties00.cobalt.model.device.capabilities.DeviceCapabilities;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
@@ -22,7 +23,7 @@ import java.util.logging.Logger;
  * <p>When a single AI conversation thread is renamed on another device, the
  * server replays the rename here and the stored title is updated; the new
  * title is read back through
- * {@link com.github.auties00.cobalt.store.BusinessStore#findAiThreadTitle(String)}.
+ * {@link LinkedWhatsAppBusinessStore#findAiThreadTitle(String)}.
  *
  * @implNote
  * This implementation collapses WA Web's full {@code ThreadsMetadata}
@@ -76,7 +77,7 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
      * <p>Validates the JSON index {@code ["ai_thread_rename", chatJid, threadId]}
      * and the {@link AiThreadRenameAction#newTitle()} payload, confirms the chat
      * JID is a bot, gates on AI-thread support, and stores the new title via
-     * {@link com.github.auties00.cobalt.store.BusinessStore#putAiThreadTitle(com.github.auties00.cobalt.model.bot.AiThreadTitle)}.
+     * {@link LinkedWhatsAppBusinessStore#putAiThreadTitle(com.github.auties00.cobalt.model.bot.AiThreadTitle)}.
      * Returns {@link SyncActionState#UNSUPPORTED} for non-{@link SyncdOperation#SET}
      * operations or when AI-thread support is off, {@link SyncActionState#ORPHAN}
      * when no matching thread is in the store, and {@link SyncActionState#FAILED}

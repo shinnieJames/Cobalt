@@ -8,12 +8,14 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.InteractiveMessageState;
 import com.github.auties00.cobalt.model.chat.InteractiveMessageStateBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction.InteractiveMessageActionMode;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.Collection;
@@ -32,12 +34,12 @@ import java.util.Collection;
  *
  * @implNote
  * This implementation persists the per-CTA state through
- * {@link com.github.auties00.cobalt.store.BusinessStore#putInteractiveMessageState(InteractiveMessageState)}
+ * {@link LinkedWhatsAppBusinessStore#putInteractiveMessageState(InteractiveMessageState)}
  * keyed by {@code agmId|<id>}, {@code messageId|<id>} and the full composite
  * index, resolving the chat directly via
- * {@link com.github.auties00.cobalt.store.ChatStore#findChatByJid(com.github.auties00.cobalt.model.jid.JidProvider)}
+ * {@link LinkedWhatsAppChatStore#findChatByJid(com.github.auties00.cobalt.model.jid.JidProvider)}
  * and the message via
- * {@link com.github.auties00.cobalt.store.ChatStore#findMessageById(com.github.auties00.cobalt.model.chat.Chat, String)}
+ * {@link LinkedWhatsAppChatStore#findMessageById(com.github.auties00.cobalt.model.chat.Chat, String)}
  * rather than through a batched resolution cache.
  */
 @WhatsAppWebModule(moduleName = "WAWebInteractiveMessageSync")

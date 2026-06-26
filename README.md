@@ -113,7 +113,7 @@ Your agent will automatically recognize the MCP server if your working directory
 Cobalt also ships a `/validate` command for agentic coding tools ([.claude/commands/validate.md](.claude/commands/validate.md)). It orchestrates a fleet of agents that try to prove Cobalt implements every WhatsApp feature correctly, on two levels:
 
 - **Source parity**: each Cobalt module is checked against the behaviour of its WhatsApp counterpart.
-- **Observable parity**: the nodes, events and requests Cobalt produces for a given input are diffed against what the real WhatsApp runtime produces for the same input, captured live through the MCP.
+- **Observable parity**: the stanzas, events and requests Cobalt produces for a given input are diffed against what the real WhatsApp runtime produces for the same input, captured live through the MCP.
 
 To be transparent, I'm not that much into agentic coding: this is highly experimental, something I built because I like trying things out and wanted to see whether it could help us maintain a repository of this size long term. 
 Treat it as an experiment, not as a required part of the workflow.

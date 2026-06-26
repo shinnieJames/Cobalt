@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.calls2.stream;
 
+import java.net.URI;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Objects;
 
 /**
@@ -27,7 +29,8 @@ import java.util.Objects;
  * @apiNote An embedder implements this interface for a custom audio source, or obtains a bundled
  * buffered or device-backed implementation from one of the factories on this type: {@link #buffered()}
  * for a manually-written source, {@link #fromMicrophone()} for live capture, {@link #file(Path)} for a
- * media file, and {@link #tone(double)} or {@link #silence()} for synthetic audio. The {@link #take()}
+ * local media file, {@link #uri(URI)} for a media stream addressed by URI, and {@link #tone(double)} or
+ * {@link #silence()} for synthetic audio. The {@link #take()}
  * and {@link #shutdown()} methods belong to the engine; application code drives a programmatic source
  * through {@link #write(AudioFrame)} and never calls the engine-facing pair directly.
  */
@@ -77,6 +80,53 @@ public interface AudioOutput {
     static AudioOutput file(Path path) {
         Objects.requireNonNull(path, "path cannot be null");
         return new FileAudioOutput(path);
+    }
+
+    /**
+     * Returns a source that transmits the audio track of a media stream addressed by a URI, with a
+     * fifteen-second timeout on every blocking network operation.
+     *
+     * <p>Generalizes {@link #file(Path)} to any protocol the bundled FFmpeg build enables: in addition to
+     * a local {@code file:} path, an {@code http:}/{@code https:} asset, an {@code rtsp:}/{@code rtmp:}/
+     * {@code srt:} live stream, and so on. A faster-than-real-time source is paced to the call's real-time
+     * send rate exactly as a local file is; a live source is paced by its own arrival rate. The accepted
+     * schemes are restricted to a fixed allowlist, so an application-supplied string cannot reach an
+     * unintended protocol.
+     *
+     * @param uri the media stream to open
+     * @return a URI-bound source
+     * @throws NullPointerException     if {@code uri} is {@code null}
+     * @throws IllegalArgumentException if the URI has no scheme or its scheme is not permitted
+     * @throws IllegalStateException    if the stream cannot be opened or has no audio stream
+     */
+    static AudioOutput uri(URI uri) {
+        return uri(uri, Duration.ofSeconds(15));
+    }
+
+    /**
+     * Returns a source that transmits the audio track of a media stream addressed by a URI, bounding every
+     * blocking network operation by the given timeout.
+     *
+     * <p>Behaves as {@link #uri(URI)} but takes the timeout explicitly: if a connect, stream probe, or
+     * read makes no progress within {@code ioTimeout}, the operation is aborted and the source ends with an
+     * error rather than stalling the call's encode thread. A short timeout fails fast on a dead host; a
+     * longer one tolerates a slow link.
+     *
+     * @param uri       the media stream to open
+     * @param ioTimeout the maximum time any single connect, probe, or read may block; must be positive
+     * @return a URI-bound source
+     * @throws NullPointerException     if {@code uri} or {@code ioTimeout} is {@code null}
+     * @throws IllegalArgumentException if {@code ioTimeout} is not positive, the URI has no scheme, or its
+     *                                  scheme is not permitted
+     * @throws IllegalStateException    if the stream cannot be opened or has no audio stream
+     */
+    static AudioOutput uri(URI uri, Duration ioTimeout) {
+        Objects.requireNonNull(uri, "uri cannot be null");
+        Objects.requireNonNull(ioTimeout, "ioTimeout cannot be null");
+        if (ioTimeout.isNegative() || ioTimeout.isZero()) {
+            throw new IllegalArgumentException("ioTimeout must be positive, got " + ioTimeout);
+        }
+        return new UriAudioOutput(uri, ioTimeout);
     }
 
     /**

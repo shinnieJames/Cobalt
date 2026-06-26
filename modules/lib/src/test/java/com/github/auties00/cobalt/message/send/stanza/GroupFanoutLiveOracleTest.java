@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.message.send.stanza;
 
 import com.github.auties00.cobalt.message.MessageFixtures;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -92,7 +92,7 @@ class GroupFanoutLiveOracleTest {
         }
     }
 
-    private static Node loadOutgoingMessage(String topic) {
+    private static Stanza loadOutgoingMessage(String topic) {
         var events = MessageFixtures.loadEvents(topic);
         var outgoing = events.stream()
                 .filter(e -> "out".equals(e.getString("direction")))

@@ -4,7 +4,8 @@ import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.CallAck;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -16,7 +17,7 @@ import java.util.OptionalInt;
  *
  * <p>The relay credentials a call needs to bring up its media plane are not pushed asynchronously;
  * they are the synchronous reply to the offer. An outbound offer is shipped through the
- * id-correlated {@link LinkedWhatsAppClient#sendNode(NodeBuilder)}, which blocks the calling virtual
+ * id-correlated {@link LinkedWhatsAppClient#sendNode(StanzaBuilder)}, which blocks the calling virtual
  * thread until the matching {@code <ack class="call" type="offer">} arrives and returns it as the
  * call value. On success that ack carries one {@code <relay>} child fully populated with the
  * {@link RelayInfo#tokens() relay tokens}, {@link RelayInfo#endpoints() edge endpoints},
@@ -25,7 +26,7 @@ import java.util.OptionalInt;
  * {@code call-creator} / {@code call-id} attributes. The outbound accept follows the same contract
  * ("Accept ACK: error code = %d. Treating as an Accept NACK"), so the same outcome models both legs.
  *
- * <p>This type is the typed projection of that return node, shaped like {@link CallAck} so callers
+ * <p>This type is the typed projection of that return stanza, shaped like {@link CallAck} so callers
  * move between the two without surprise: {@link #relay()} is the parsed {@link RelayInfo} when the ack
  * carried a usable {@code <relay>} child; {@link #error()} carries the server's NACK code;
  * {@link #isAck()} is the boolean accept/reject test the caller branches on before reading the relay.
@@ -66,7 +67,7 @@ public final class CallAckOutcome {
      * Constructs an outcome from its already-decoded fields.
      *
      * <p>Package-private so {@link CallAckParser} stays the single construction point; consumers obtain
-     * an instance from {@link CallAckParser#parse(com.github.auties00.cobalt.node.Node)}.
+     * an instance from {@link CallAckParser#parse(Stanza)}.
      *
      * @param id    the correlation identifier echoed from the outbound stanza
      * @param type  the leg type, or {@code null} when absent
@@ -92,7 +93,7 @@ public final class CallAckOutcome {
      * media plane consumes rather than the legacy relay carried on {@link CallAck#relay()}. Used only
      * by {@link CallAckParser}; package-private so the parse seam stays the single construction point.
      *
-     * @param ack   the reused {@link CallAck} the shared ack parser produced for the return node
+     * @param ack   the reused {@link CallAck} the shared ack parser produced for the return stanza
      * @param relay the calls2 {@link RelayInfo} re-parsed from the ack's {@code <relay>} child, or
      *              {@code null} when none was present
      * @return the typed outcome

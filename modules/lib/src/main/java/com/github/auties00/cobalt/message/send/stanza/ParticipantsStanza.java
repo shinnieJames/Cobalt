@@ -6,15 +6,15 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Builds the {@code <participants>} stanza node for group SKMSG fanout and its content-binding-only variant.
+ * Builds the {@code <participants>} stanza stanza for group SKMSG fanout and its content-binding-only variant.
  * <p>
  * Composed by {@link GroupSkmsgFanoutStanza} and {@link ChatFanoutStanza}. Two emission shapes are produced: a
  * sender-key distribution wrapper ({@link #buildSenderKeyDistribution(List, Map, String)}) carrying one
@@ -34,7 +34,7 @@ public final class ParticipantsStanza {
     }
 
     /**
-     * Builds a {@code <participants>} node for sender-key distribution.
+     * Builds a {@code <participants>} stanza for sender-key distribution.
      * <p>
      * Each device payload becomes a {@code <to jid="..."><enc decrypt-fail="hide" .../><content_binding .../></to>}
      * child. Distribution {@code <enc>}s carry {@code decrypt-fail="hide"} unless the caller passes an explicit
@@ -45,11 +45,11 @@ public final class ParticipantsStanza {
      * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}, or {@code null} when RCAT does not apply
      * @param decryptFail     the explicit {@code decrypt-fail} attribute for the distribution {@code <enc>} nodes, or
      *                        {@code null} to use the default {@code "hide"}
-     * @return the {@code <participants>} {@link Node}, or {@code null} when {@code payloads} is empty
+     * @return the {@code <participants>} {@link Stanza}, or {@code null} when {@code payloads} is empty
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildSenderKeyDistribution(
+    public static Stanza buildSenderKeyDistribution(
             List<MessageEncryptedPayload> payloads,
             Map<Jid, byte[]> contentBindings,
             String decryptFail
@@ -58,13 +58,13 @@ public final class ParticipantsStanza {
             return null;
         }
 
-        var children = new ArrayList<Node>(payloads.size());
+        var children = new ArrayList<Stanza>(payloads.size());
         for (var payload : payloads) {
             if (payload.recipientJid() == null) {
                 continue;
             }
 
-            var encNode = new NodeBuilder()
+            var encNode = new StanzaBuilder()
                     .description("enc")
                     .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                     .attribute("type", payload.type().protocolValue())
@@ -75,7 +75,7 @@ public final class ParticipantsStanza {
             var contentBindingNode = resolveContentBinding(
                     payload.recipientJid(), contentBindings);
 
-            var toNode = new NodeBuilder()
+            var toNode = new StanzaBuilder()
                     .description("to")
                     .attribute("jid", payload.recipientJid())
                     .content(encNode, contentBindingNode)
@@ -83,14 +83,14 @@ public final class ParticipantsStanza {
             children.add(toNode);
         }
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("participants")
                 .content(children)
                 .build();
     }
 
     /**
-     * Builds a {@code <participants>} node carrying only content-binding tags for existing SK recipients.
+     * Builds a {@code <participants>} stanza carrying only content-binding tags for existing SK recipients.
      * <p>
      * Used when no sender-key distribution is needed but RCAT tags must still be delivered to existing SK recipients
      * (e.g. for an edit on an established group). Returns {@code null} when no binding matches any of the supplied device
@@ -101,11 +101,11 @@ public final class ParticipantsStanza {
      *
      * @param devices         the existing SK device {@link Jid}s
      * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}
-     * @return the {@code <participants>} {@link Node}, or {@code null}
+     * @return the {@code <participants>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildContentBindingOnly(
+    public static Stanza buildContentBindingOnly(
             List<Jid> devices,
             Map<Jid, byte[]> contentBindings
     ) {
@@ -113,13 +113,13 @@ public final class ParticipantsStanza {
             return null;
         }
 
-        var children = new ArrayList<Node>();
+        var children = new ArrayList<Stanza>();
         for (var device : devices) {
             var bindingNode = resolveContentBinding(device, contentBindings);
             if (bindingNode == null) {
                 continue;
             }
-            var toNode = new NodeBuilder()
+            var toNode = new StanzaBuilder()
                     .description("to")
                     .attribute("jid", device)
                     .content(bindingNode)
@@ -127,7 +127,7 @@ public final class ParticipantsStanza {
             children.add(toNode);
         }
 
-        return children.isEmpty() ? null : new NodeBuilder()
+        return children.isEmpty() ? null : new StanzaBuilder()
                 .description("participants")
                 .content(children)
                 .build();
@@ -137,7 +137,7 @@ public final class ParticipantsStanza {
      * Returns whether any payload is a pre-key message, signalling that the outer stanza must include a
      * {@code <device-identity>} child.
      * <p>
-     * A PKMSG payload triggers the identity node because the recipient needs the sender's ADV identity to decrypt the
+     * A PKMSG payload triggers the identity stanza because the recipient needs the sender's ADV identity to decrypt the
      * PreKey envelope.
      *
      * @param payloads the encrypted payloads, possibly {@code null}
@@ -161,11 +161,11 @@ public final class ParticipantsStanza {
      *
      * @param deviceJid       the device {@link Jid}
      * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}, or {@code null}
-     * @return the {@code <content_binding>} {@link Node}, or {@code null}
+     * @return the {@code <content_binding>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static Node resolveContentBinding(Jid deviceJid, Map<Jid, byte[]> contentBindings) {
+    private static Stanza resolveContentBinding(Jid deviceJid, Map<Jid, byte[]> contentBindings) {
         if (contentBindings == null) {
             return null;
         }
@@ -176,7 +176,7 @@ public final class ParticipantsStanza {
             return null;
         }
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("content_binding")
                 .content(binding)
                 .build();

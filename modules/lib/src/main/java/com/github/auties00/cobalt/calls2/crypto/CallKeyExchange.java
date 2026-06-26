@@ -20,7 +20,7 @@ import java.util.Optional;
  * encrypt and decrypt through the reused Signal pipeline.
  *
  * <p>The interface carries the offer-time fanout a one-to-one call needs and the group-only rekey fanout
- * the group placement path drives; the lower-level node-level and explicit-variant decrypt overloads
+ * the group placement path drives; the lower-level stanza-level and explicit-variant decrypt overloads
  * remain on {@link CallKeyCryptography} itself, because no caller drives them through this seam.
  *
  * @see CallKeyCryptography

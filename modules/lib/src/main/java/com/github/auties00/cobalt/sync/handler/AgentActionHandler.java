@@ -5,11 +5,12 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.business.AgentStateBuilder;
 import com.github.auties00.cobalt.model.sync.action.device.AgentAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -19,7 +20,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * account. {@link SyncdOperation#SET} mutations upsert an agent entry by id;
  * {@link SyncdOperation#REMOVE} mutations drop an entry by id. The reconciled
  * roster is read back through
- * {@link com.github.auties00.cobalt.store.BusinessStore#findAgentState(String)}.
+ * {@link LinkedWhatsAppBusinessStore#findAgentState(String)}.
  *
  * @implNote
  * This implementation omits two side effects that WA Web performs after

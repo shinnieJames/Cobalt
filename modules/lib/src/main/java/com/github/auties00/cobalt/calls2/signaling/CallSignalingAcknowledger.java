@@ -4,8 +4,8 @@ import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Objects;
 import java.util.Set;
@@ -144,7 +144,7 @@ public final class CallSignalingAcknowledger {
      *         for a missing required attribute
      * @throws NullPointerException if {@code envelope} or {@code payload} is {@code null}
      */
-    public boolean acknowledge(Node envelope, Node payload, String callId) {
+    public boolean acknowledge(Stanza envelope, Stanza payload, String callId) {
         Objects.requireNonNull(envelope, "envelope cannot be null");
         Objects.requireNonNull(payload, "payload cannot be null");
         var tag = payload.description();
@@ -174,18 +174,18 @@ public final class CallSignalingAcknowledger {
      * @return {@code true} when the receipt was dispatched, {@code false} when it was dropped for a
      *         missing local identity or inbound identifier
      */
-    public boolean sendReceipt(Node envelope, Jid to, String callId, Jid callCreator, String childTag) {
+    public boolean sendReceipt(Stanza envelope, Jid to, String callId, Jid callCreator, String childTag) {
         var self = resolveReceiptFrom(to);
         var stanzaId = envelope.getAttributeAsString(ID_ATTRIBUTE, null);
         if (self == null || stanzaId == null) {
             return false;
         }
-        var child = new NodeBuilder()
+        var child = new StanzaBuilder()
                 .description(childTag)
                 .attribute(CALL_ID_ATTRIBUTE, callId)
                 .attribute(CALL_CREATOR_ATTRIBUTE, callCreator)
                 .build();
-        var receipt = new NodeBuilder()
+        var receipt = new StanzaBuilder()
                 .description(RECEIPT_ELEMENT)
                 .attribute(TO_ATTRIBUTE, to)
                 .attribute(FROM_ATTRIBUTE, self)
@@ -210,7 +210,7 @@ public final class CallSignalingAcknowledger {
      *         {@code id} or {@code from}
      * @throws NullPointerException if {@code envelope} is {@code null}
      */
-    public boolean sendAck(Node envelope, String payloadTag) {
+    public boolean sendAck(Stanza envelope, String payloadTag) {
         Objects.requireNonNull(envelope, "envelope cannot be null");
         return ackSender.ack(AckClass.CALL, envelope)
                 .type(payloadTag)

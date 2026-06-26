@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.sync;
 
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.Assertions;
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * Covers the factory and record-equality contract of {@link ConflictResolution}: the
- * {@link ConflictResolution#of(ConflictResolutionState)} and
+ * {@link ConflictResolution#of(MutationConflictResolutionState)} and
  * {@link ConflictResolution#merged(DecryptedMutation.Trusted)} factories plus the auto-generated
  * record equality and {@code toString}. The merged-mutation fixture is built directly through the
  * model builder with deterministic timestamps; only the equality identity matters here, not the
@@ -42,16 +42,16 @@ class ConflictResolutionTest {
         @Test
         @DisplayName("of(state) carries the state and a null merged mutation")
         void stateOnly() {
-            var resolution = ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            var resolution = ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
             assertNull(resolution.mergedMutation(),
                     "of(state) never carries a merged mutation");
         }
 
         @Test
-        @DisplayName("every ConflictResolutionState variant is constructible via of(state)")
+        @DisplayName("every MutationConflictResolutionState variant is constructible via of(state)")
         void everyVariantConstructible() {
-            for (var variant : ConflictResolutionState.values()) {
+            for (var variant : MutationConflictResolutionState.values()) {
                 var r = ConflictResolution.of(variant);
                 assertEquals(variant, r.state(), "variant=" + variant);
                 assertNull(r.mergedMutation(), "variant=" + variant);
@@ -67,7 +67,7 @@ class ConflictResolutionTest {
         void mergedForcesState() {
             var merged = sampleTrusted();
             var resolution = ConflictResolution.merged(merged);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, resolution.state(),
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, resolution.state(),
                     "merged() always sets the SKIP_REMOTE_DROP_LOCAL state per WAWebSyncActionStore.doConflictResolution");
         }
 
@@ -88,19 +88,19 @@ class ConflictResolutionTest {
         @DisplayName("two resolutions with the same state and null merged are equal")
         void equalsStateOnly() {
             assertEquals(
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE),
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE));
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE),
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE));
             assertEquals(
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE).hashCode(),
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE).hashCode());
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE).hashCode(),
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE).hashCode());
         }
 
         @Test
         @DisplayName("resolutions with different state are not equal")
         void differentStateUnequal() {
             assertNotEquals(
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE),
-                    ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL));
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE),
+                    ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL));
         }
 
         @Test
@@ -113,7 +113,7 @@ class ConflictResolutionTest {
         @Test
         @DisplayName("toString includes the state name")
         void toStringIncludesState() {
-            var s = ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL).toString();
+            var s = ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL).toString();
             assertNotNull(s);
             Assertions.assertTrue(s.contains("APPLY_REMOTE_DROP_LOCAL"),
                     "toString should surface the state name for diagnostic logging");

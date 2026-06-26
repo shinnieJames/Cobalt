@@ -3,7 +3,8 @@ package com.github.auties00.cobalt.sync.factory;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValue;
 import com.github.auties00.cobalt.model.sync.action.business.BroadcastListParticipantAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListActionBuilder;
@@ -134,7 +135,7 @@ public final class BusinessBroadcastListMutationFactory {
      *
      * @implNote
      * This implementation emits a {@link SyncdOperation#REMOVE} with an empty
-     * {@link com.github.auties00.cobalt.model.sync.SyncActionValue}.
+     * {@link SyncActionValue}.
      *
      * @param listId    the broadcast-list identifier to delete
      * @param timestamp the mutation timestamp

@@ -4,8 +4,10 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.store.CloudWhatsAppStore;
-import com.github.auties00.cobalt.store.CloudWhatsAppStoreBuilder;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStore;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
+import com.github.auties00.cobalt.store.cloud.protobuf.ProtobufCloudWhatsAppStore;
+import com.github.auties00.cobalt.store.cloud.protobuf.ProtobufCloudWhatsAppStoreBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +16,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -34,10 +37,10 @@ class CloudMarkChatAsReadTest {
         }
     }
 
-    private static CloudWhatsAppStore restoredStore(String chatJid, String messageId) {
+    private static ProtobufCloudWhatsAppStore restoredStore(String chatJid, String messageId) {
         var map = new ConcurrentHashMap<String, String>();
         map.put(chatJid, messageId);
-        return new CloudWhatsAppStoreBuilder()
+        return new ProtobufCloudWhatsAppStoreBuilder()
                 .accessToken("token")
                 .phoneNumberId(PHONE_ID)
                 .apiVersion(CloudApiVersion.V21_0.version())
@@ -46,13 +49,34 @@ class CloudMarkChatAsReadTest {
                 .build();
     }
 
+    // A factory that always resolves to the given pre-populated store, standing in for a session
+    // restored from persistence so the builder's load path returns markers seeded before the test.
+    private static CloudWhatsAppStoreFactory factoryReturning(CloudWhatsAppStore store) {
+        return new CloudWhatsAppStoreFactory() {
+            @Override
+            public Optional<CloudWhatsAppStore> load(String phoneNumberId) {
+                return Optional.of(store);
+            }
+
+            @Override
+            public Optional<CloudWhatsAppStore> loadLatest() {
+                return Optional.of(store);
+            }
+
+            @Override
+            public CloudWhatsAppStore create(String accessToken, String phoneNumberId) {
+                return store;
+            }
+        };
+    }
+
     @Test
     @DisplayName("a dispatched inbound message drives markChatAsRead to post a read for that id")
     void recordsThenReadsAfterDispatch() throws Exception {
         var http = new RecordingHttpClient();
         var port = freePort();
         var delivered = new CountDownLatch(1);
-        var client = CloudWhatsAppClient.builder()
+        var client = CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V21_0)
                 .httpClient(http)
@@ -85,11 +109,12 @@ class CloudMarkChatAsReadTest {
 
     @Test
     @DisplayName("a restored store mapping drives markChatAsRead to post a read for the stored id")
-    void readsFromRestoredStore() {
+    void readsFromRestoredStore() throws Exception {
         var http = new RecordingHttpClient();
-        var store = restoredStore(SENDER.toString(), "wamid.RESTORED");
-        var client = CloudWhatsAppClient.builder()
-                .loadConnection(store)
+        var factory = factoryReturning(restoredStore(SENDER.toString(), "wamid.RESTORED"));
+        var client = CloudWhatsAppClient.builder(factory)
+                .loadConnection(PHONE_ID)
+                .orElseThrow()
                 .httpClient(http)
                 .build();
         client.markChatAsRead(SENDER);
@@ -100,10 +125,12 @@ class CloudMarkChatAsReadTest {
 
     @Test
     @DisplayName("markChatAsRead for an unknown chat posts nothing")
-    void unknownChatNoOp() {
+    void unknownChatNoOp() throws Exception {
         var http = new RecordingHttpClient();
-        var client = CloudWhatsAppClient.builder()
-                .loadConnection(restoredStore(SENDER.toString(), "wamid.RESTORED"))
+        var factory = factoryReturning(restoredStore(SENDER.toString(), "wamid.RESTORED"));
+        var client = CloudWhatsAppClient.builder(factory)
+                .loadConnection(PHONE_ID)
+                .orElseThrow()
                 .httpClient(http)
                 .build();
         client.markChatAsRead(Jid.of("19998887777"));

@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.model.call.CallInteraction;
 import com.github.auties00.cobalt.model.call.IncomingCall;
 import com.github.auties00.cobalt.exception.*;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
-import com.github.auties00.cobalt.graphql.web.WhatsAppWebGraphQlOperation;
+import com.github.auties00.cobalt.graphql.whatsapp.WhatsAppGraphQlOperation;
 import com.github.auties00.cobalt.listener.WhatsAppListener;
 import com.github.auties00.cobalt.listener.linked.*;
 import com.github.auties00.cobalt.model.bot.profile.BotDirectory;
@@ -73,6 +73,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.LidChange;
 import com.github.auties00.cobalt.model.media.MediaProvider;
+import com.github.auties00.cobalt.model.media.SizedInputStream;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageKey;
@@ -97,22 +98,19 @@ import com.github.auties00.cobalt.model.setting.privacy.ContactBlacklistAddressi
 import com.github.auties00.cobalt.model.setting.privacy.OptOutListUpdate;
 import com.github.auties00.cobalt.model.setting.push.PushConfig;
 import com.github.auties00.cobalt.model.signal.*;
-import com.github.auties00.cobalt.model.sync.AppStateSyncCollection;
-import com.github.auties00.cobalt.model.sync.AppStateSyncCollectionResult;
-import com.github.auties00.cobalt.model.sync.AppStateSyncResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.RecentEmojiWeight;
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethod;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.node.iq.IqOperation;
-import com.github.auties00.cobalt.node.mex.MexOperation;
-import com.github.auties00.cobalt.node.smax.SmaxOperation;
-import com.github.auties00.cobalt.node.usync.UsyncQuery;
-import com.github.auties00.cobalt.node.usync.UsyncResult;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.stanza.iq.IqStanza;
+import com.github.auties00.cobalt.stanza.mex.MexStanza;
+import com.github.auties00.cobalt.stanza.smax.SmaxStanza;
+import com.github.auties00.cobalt.stanza.usync.UsyncQuery;
+import com.github.auties00.cobalt.stanza.usync.UsyncResult;
+import com.github.auties00.cobalt.store.linked.*;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.util.BusinessLabelConstants;
 
@@ -206,20 +204,20 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Completes the pending request whose {@code id} attribute matches
-     * the inbound node.
+     * the inbound stanza.
      *
      * @apiNote
      * Internal plumbing for request/response correlation: every
      * request carries an id that the matching response echoes back,
      * and this call wakes the parked
-     * {@link #sendNode(NodeBuilder)} caller whose id corresponds to
-     * the inbound node. Embedders driving custom stanzas through
-     * {@link #sendNode(NodeBuilder)} do not call this directly.
+     * {@link #sendNode(StanzaBuilder)} caller whose id corresponds to
+     * the inbound stanza. Embedders driving custom stanzas through
+     * {@link #sendNode(StanzaBuilder)} do not call this directly.
      *
-     * @param node the inbound node that may carry a response to a
+     * @param stanza the inbound stanza that may carry a response to a
      *             pending request
      */
-    void resolvePendingRequest(Node node);
+    void resolvePendingRequest(Stanza stanza);
 
     /**
      * Tears down the session for the given reason and propagates that
@@ -242,7 +240,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void disconnect(WhatsAppClientDisconnectReason reason);
 
     /**
-     * Sends the given node on the current socket without waiting for a
+     * Sends the given stanza on the current socket without waiting for a
      * response.
      *
      * @apiNote
@@ -250,33 +248,33 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * stanzas, receipts, and analytics broadcasts that either do not
      * require an acknowledgment or whose acknowledgment arrives as a
      * separate inbound notification. For request/response exchanges
-     * call {@link #sendNode(NodeBuilder)} instead.
+     * call {@link #sendNode(StanzaBuilder)} instead.
      *
-     * @param node the node to send
+     * @param stanza the stanza to send
      * @throws WhatsAppSessionException.Closed if the socket is no longer
      *                                         open
      */
-    void sendNodeWithNoResponse(Node node);
+    void sendNodeWithNoResponse(Stanza stanza);
 
     /**
-     * Sends a request node and blocks until the corresponding response
+     * Sends a request stanza and blocks until the corresponding response
      * arrives.
      *
      * @apiNote
-     * Convenience overload that matches the first inbound node carrying
+     * Convenience overload that matches the first inbound stanza carrying
      * the same {@code id} attribute as the outgoing request. Equivalent
-     * to calling {@link #sendNode(NodeBuilder, Function)} with a
+     * to calling {@link #sendNode(StanzaBuilder, Function)} with a
      * {@code null} filter.
      *
      * @param node the outgoing request builder
-     * @return the response node
+     * @return the response stanza
      * @throws WhatsAppSessionException.Closed if the socket is no longer
      *                                         open
      */
-    Node sendNode(NodeBuilder node);
+    Stanza sendNode(StanzaBuilder node);
 
     /**
-     * Sends a request node and blocks the calling virtual thread until a
+     * Sends a request stanza and blocks the calling virtual thread until a
      * response matching the supplied filter arrives.
      *
      * @apiNote
@@ -286,24 +284,24 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * exchange or a vendor extension). If the builder has no
      * correlation id one is generated and injected before
      * serialisation so the response matcher always has something to
-     * correlate on. The outgoing node is also delivered to listeners
+     * correlate on. The outgoing stanza is also delivered to listeners
      * through
-     * {@link LinkedWhatsAppClientListener#onNodeSent(LinkedWhatsAppClient, Node)}
+     * {@link LinkedWhatsAppClientListener#onNodeSent(LinkedWhatsAppClient, Stanza)}
      * before this method returns.
      *
      * @param node   the outgoing request builder; may be mutated to
      *               inject an {@code id} attribute
      * @param filter an optional predicate restricting the accepted
      *               responses; {@code null} accepts any response
-     * @return the response node
+     * @return the response stanza
      * @throws WhatsAppSessionException.Closed if the socket is no longer
      *                                         open
      */
-    Node sendNode(NodeBuilder node, Function<Node, Boolean> filter);
+    Stanza sendNode(StanzaBuilder node, Function<Stanza, Boolean> filter);
 
     /**
      * Dispatches a typed MEX (GraphQL-over-XMPP) request and returns the
-     * parsed response node.
+     * parsed response stanza.
      *
      * @apiNote
      * Lowest-level entry point for the MEX (GraphQL-over-XMPP)
@@ -315,13 +313,13 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * failure telemetry.
      *
      * @param request the typed MEX request to dispatch
-     * @return the response node from the WhatsApp relay
+     * @return the response stanza from the WhatsApp relay
      * @throws NullPointerException            if {@code request} is
      *                                         {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no
      *                                         longer open
      */
-    Node sendNode(MexOperation.Request request);
+    Stanza sendNode(MexStanza.Request request);
 
     /**
      * Dispatches a typed MEX request whose response is discarded while
@@ -332,7 +330,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * caller cares about (for example a newsletter join or leave). The
      * method still blocks on the response and records the same
      * success/failure telemetry as
-     * {@link #sendNode(MexOperation.Request)}, minus the value
+     * {@link #sendNode(MexStanza.Request)}, minus the value
      * return.
      *
      * @param request the typed MEX request to dispatch
@@ -341,13 +339,13 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws WhatsAppSessionException.Closed if the socket is no
      *                                         longer open
      */
-    void sendNodeWithNoResponse(MexOperation.Request request);
+    void sendNodeWithNoResponse(MexStanza.Request request);
 
     /**
      * Dispatches a typed {@code http_relay} GraphQL request over HTTP and returns the unwrapped
      * GraphQL {@code data} object.
      *
-     * <p>Unlike {@link #sendNode(MexOperation.Request)}, which carries a GraphQL document over the
+     * <p>Unlike {@link #sendNode(MexStanza.Request)}, which carries a GraphQL document over the
      * encrypted socket inside a {@code w:mex} stanza, the WhatsApp Web GraphQL transport issues a same-origin
      * {@code POST https://web.whatsapp.com/graphql/} authenticated by the WhatsApp Web browser
      * session. The returned {@link JSONObject} is the GraphQL {@code data} map; callers project it
@@ -356,7 +354,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote The WhatsApp Web GraphQL transport authenticates with the WhatsApp Web session cookie established by
      * the canonical {@code /auth/token/} exchange (a browser flow) plus the {@code lsd} anti-CSRF
      * token from the page bootstrap. Cobalt is a linked socket client and does not perform that
-     * exchange itself, so the caller must supply both out of band; prefer {@link #sendNode(MexOperation.Request)}
+     * exchange itself, so the caller must supply both out of band; prefer {@link #sendNode(MexStanza.Request)}
      * when an operation is available over MEX.
      *
      * @param request       the typed WhatsApp Web GraphQL request to dispatch
@@ -367,20 +365,20 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws WhatsAppServerRuntimeException if the transport fails or the relay reports GraphQL
      *                                        errors
      */
-    JSONObject sendGraphQl(WhatsAppWebGraphQlOperation.Request request, String sessionCookie, String lsdToken);
+    JSONObject sendGraphQl(WhatsAppGraphQlOperation.Request request, String sessionCookie, String lsdToken);
 
     /**
      * Dispatches a typed {@code http_relay} GraphQL request using the WhatsApp Web GraphQL session credentials stored
-     * in {@link com.github.auties00.cobalt.store.WebSessionStore}, and returns the unwrapped GraphQL
+     * in {@link LinkedWebSessionStore}, and returns the unwrapped GraphQL
      * {@code data} object.
      *
-     * <p>This is the convenience form of {@link #sendGraphQl(WhatsAppWebGraphQlOperation.Request, String, String)}:
+     * <p>This is the convenience form of {@link #sendGraphQl(WhatsAppGraphQlOperation.Request, String, String)}:
      * the session cookie and {@code lsd} token are read from the store, where they are placed
      * automatically after a successful connection on a WhatsApp Web client. When no WhatsApp Web GraphQL session is
      * stored the client attempts a {@link #refreshWhatsAppWebGraphQlSession() refresh} once before failing.
      *
      * @apiNote Prefer this form; the WhatsApp Web GraphQL session is established and refreshed for you. Use
-     * {@link #sendGraphQl(WhatsAppWebGraphQlOperation.Request, String, String)} only to supply credentials extracted
+     * {@link #sendGraphQl(WhatsAppGraphQlOperation.Request, String, String)} only to supply credentials extracted
      * out of band from a browser session.
      *
      * @param request the typed WhatsApp Web GraphQL request to dispatch
@@ -389,11 +387,11 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws WhatsAppServerRuntimeException if no WhatsApp Web GraphQL session can be established or the relay reports
      *                                        GraphQL errors
      */
-    JSONObject sendGraphQl(WhatsAppWebGraphQlOperation.Request request);
+    JSONObject sendGraphQl(WhatsAppGraphQlOperation.Request request);
 
     /**
      * Re-bootstraps the WhatsApp Web GraphQL session credentials and stores them in
-     * {@link com.github.auties00.cobalt.store.WebSessionStore}.
+     * {@link LinkedWebSessionStore}.
      *
      * <p>Re-runs the canonical {@code /auth/token/} exchange from the durable canonical credentials
      * seeded at pairing, minting a fresh session cookie and {@code lsd} token without re-pairing, and
@@ -473,7 +471,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Dispatches a typed {@code http_comet} GraphQL request using the Facebook GraphQL session stored in
-     * {@link com.github.auties00.cobalt.store.WebSessionStore}, and returns the unwrapped GraphQL
+     * {@link LinkedWebSessionStore}, and returns the unwrapped GraphQL
      * {@code data} object.
      *
      * <p>This is the convenience form of {@link #sendGraphQl(FacebookGraphQlOperation.Request, CtwaAccessTokenSession)}:
@@ -495,7 +493,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Refreshes the WhatsApp Business Facebook GraphQL session credentials and stores them in
-     * {@link com.github.auties00.cobalt.store.WebSessionStore}.
+     * {@link LinkedWebSessionStore}.
      *
      * <p>Drives a four-stage non-interactive refresh: snapshot the current business account nonce,
      * request a silent nonce from the relay, correlate the asynchronous nonce-push notification
@@ -539,24 +537,24 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Dispatches a typed SMAX request and returns the parsed response
-     * node.
+     * stanza.
      *
      * @apiNote
      * Lowest-level entry point for the SMAX RPC family, modelled as
-     * typed {@link SmaxOperation.Request} values. Use this for
+     * typed {@link SmaxStanza.Request} values. Use this for
      * endpoints whose response carries data the caller consumes (for
      * example call-link queries); use
-     * {@link #sendNodeWithNoResponse(SmaxOperation.Request)} for
+     * {@link #sendNodeWithNoResponse(SmaxStanza.Request)} for
      * fire-and-forget mutations whose payload is ignored.
      *
      * @param request the typed SMAX request to dispatch
-     * @return the inbound response node
+     * @return the inbound response stanza
      * @throws NullPointerException            if {@code request} is
      *                                         {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no
      *                                         longer open
      */
-    Node sendNode(SmaxOperation.Request request);
+    Stanza sendNode(SmaxStanza.Request request);
 
     /**
      * Dispatches a typed SMAX request whose response is discarded.
@@ -565,7 +563,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Use this for fire-and-forget SMAX RPCs where the side effect of
      * sending the request is the whole contract and the response
      * carries no payload the caller cares about. Compare
-     * {@link #sendNode(SmaxOperation.Request)} for the value-returning
+     * {@link #sendNode(SmaxStanza.Request)} for the value-returning
      * variant.
      *
      * @param request the typed SMAX request to dispatch
@@ -574,7 +572,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws WhatsAppSessionException.Closed if the socket is no
      *                                         longer open
      */
-    void sendNodeWithNoResponse(SmaxOperation.Request request);
+    void sendNodeWithNoResponse(SmaxStanza.Request request);
 
     /**
      * Dispatches a USync query and returns the parsed result.
@@ -791,32 +789,15 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * as the ack id.
      *
      * @apiNote
-     * Convenience over {@link #sendAck(String, Node)} for callers
+     * Convenience over {@link #sendAck(String, Stanza)} for callers
      * that need to confirm receipt of a stanza without substituting
      * their own correlation id. The library invokes this internally
      * on every received message, receipt, IQ result, and notification
      * so the server stops retransmitting.
      *
-     * @param node the inbound node to acknowledge
+     * @param stanza the inbound stanza to acknowledge
      */
-    void sendAck(Node node);
-
-    /**
-     * Acknowledges an inbound stanza using the supplied id.
-     *
-     * @apiNote
-     * Acknowledges receipt of an inbound stanza so the server stops
-     * retransmitting it; the ack is addressed back to the original
-     * sender and tagged with the kind of stanza being acknowledged.
-     * Use this when the caller needs to acknowledge with a synthesised
-     * id (for example a coalesced delivery receipt covering a batch);
-     * for the common one-stanza-one-ack case prefer
-     * {@link #sendAck(Node)}.
-     *
-     * @param id   the acknowledgment id
-     * @param node the inbound node being acknowledged
-     */
-    void sendAck(String id, Node node);
+    void sendAck(Stanza stanza);
 
     /**
      * Generates and uploads a fresh batch of Signal pre-keys so remote
@@ -904,7 +885,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     Optional<BusinessProfile> queryBusinessProfile(JidProvider contact);
 
     /**
-     * Parses a single {@code <category>} node into a
+     * Parses a single {@code <category>} stanza into a
      * {@link BusinessCategory}.
      *
      * @apiNote
@@ -916,11 +897,11 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * is exposed so extensions parsing custom stanzas can reuse the
      * same logic.
      *
-     * @param node the {@code category} node
+     * @param stanza the {@code category} stanza
      * @return the parsed category
      * @throws NoSuchElementException if the category content is missing
      */
-    BusinessCategory parseBusinessCategory(Node node);
+    BusinessCategory parseBusinessCategory(Stanza stanza);
 
     /**
      * Persists an updated WhatsApp Business profile for the
@@ -1941,25 +1922,77 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void cancelScheduledCall(MessageKey creationKey);
 
     /**
-     * Resolves a shared call-link token and places a one-to-one call to the link's owning device.
+     * Joins the shared call link {@code link} carrying the supplied media streams and returns a live
+     * session.
+     *
+     * <p>The {@code link} is a {@code https://call.whatsapp.com/voice/<token>} or
+     * {@code .../video/<token>} URL; its path supplies both the opaque link token and the link's
+     * configured media kind ({@code voice/} maps to {@link CallLinkMedia#AUDIO}, {@code video/} maps to
+     * {@link CallLinkMedia#VIDEO}), which is carried on the link query and join so the relay can confirm
+     * it against the link's configuration.
+     *
+     * <p>The local user joins with video when {@code videoOut} is non-{@code null} and audio-only
+     * otherwise, independently of the link's media kind. The two outbound sources supply the local audio
+     * and video the call transmits, and the two inbound sinks receive the remote audio and video; the
+     * streams are owned by the call engine and ended automatically when the call ends, so the application
+     * never closes them.
      *
      * @apiNote
-     * Drives the "Join via link" flow exposed by tapping a
-     * {@code call.whatsapp.com/voice/<token>} or
-     * {@code .../video/<token>} URL: looks up the link's creator JID,
-     * then places an outgoing call to that creator with audio or
-     * video selected by {@code media}. Returns
-     * {@link Optional#empty()} when the relay accepts the link query
-     * but reports no resolvable creator (revoked or expired link).
+     * Drives the "Join via link" flow exposed by following a {@code call.whatsapp.com} link: resolves the
+     * link through a preview query and a join request, registers the resulting {@link Call} in the
+     * in-flight call store, and returns it with the session connecting rather than connected. Supply the
+     * streams with the stream factories such as {@link AudioOutput#fromMicrophone()} and
+     * {@link AudioInput#toSpeaker()}, or pump frames yourself for a call-to-call bridge or a bot. For an
+     * audio-only join prefer the {@link #joinCallLink(URI, AudioOutput, AudioInput)} overload.
      *
-     * @param token the call-link token, i.e. the path segment after {@code https://call.whatsapp.com/voice/} or {@code .../video/}; never {@code null}
-     * @param media the media kind expected by the link; never {@code null}
-     * @return the live {@link Call} session, or {@link Optional#empty()} when the link cannot be resolved to a callable creator
-     * @throws NullPointerException            if any argument is {@code null}
+     * @param link     the {@code https://call.whatsapp.com/{voice|video}/<token>} call-link URL; never {@code null}
+     * @param audioOut the source the engine drains local audio from for transmission; never {@code null}
+     * @param audioIn  the sink the engine fills with received remote audio; never {@code null}
+     * @param videoOut the source the engine drains local video from for transmission, or {@code null} to
+     *                 join audio-only
+     * @param videoIn  the sink the engine fills with received remote video, or {@code null} to join
+     *                 audio-only
+     * @return the live {@link Call} session bound to the joined call
+     * @throws UnsupportedOperationException   if this client is not a web client; calls are only supported
+     *                                         on the WhatsApp Web flavour
+     * @throws NullPointerException            if {@code link}, {@code audioOut}, or {@code audioIn} is
+     *                                         {@code null}
+     * @throws IllegalArgumentException        if {@code link} is not a well-formed
+     *                                         {@code call.whatsapp.com/{voice|video}/<token>} call-link URL
+     * @throws IllegalStateException           if this client is not logged in, or call links are disabled
+     *                                         for this account by the server feature gate
+     * @throws WhatsAppServerRuntimeException  if the relay rejects the link query
+     * @throws WhatsAppSessionException.Closed if the socket has been closed
+     * @see #joinCallLink(URI, AudioOutput, AudioInput)
+     * @see #startCall(JidProvider, AudioOutput, AudioInput, VideoOutput, VideoInput)
+     */
+    Call joinCallLink(URI link, AudioOutput audioOut, AudioInput audioIn,
+                      VideoOutput videoOut, VideoInput videoIn);
+
+    /**
+     * Joins the shared call link {@code link} as audio-only carrying the supplied audio streams and
+     * returns a live session.
+     *
+     * @apiNote
+     * Convenience for {@link #joinCallLink(URI, AudioOutput, AudioInput, VideoOutput, VideoInput)} with no
+     * video; the joined leg can still be upgraded to video later.
+     *
+     * @param link     the {@code https://call.whatsapp.com/{voice|video}/<token>} call-link URL; never {@code null}
+     * @param audioOut the source the engine drains local audio from for transmission; never {@code null}
+     * @param audioIn  the sink the engine fills with received remote audio; never {@code null}
+     * @return the live {@link Call} session bound to the joined call
+     * @throws UnsupportedOperationException   if this client is not a web client; calls are only supported
+     *                                         on the WhatsApp Web flavour
+     * @throws NullPointerException            if {@code link}, {@code audioOut}, or {@code audioIn} is
+     *                                         {@code null}
+     * @throws IllegalArgumentException        if {@code link} is not a well-formed
+     *                                         {@code call.whatsapp.com/{voice|video}/<token>} call-link URL
+     * @throws IllegalStateException           if this client is not logged in, or call links are disabled
+     *                                         for this account by the server feature gate
      * @throws WhatsAppServerRuntimeException  if the relay rejects the link query
      * @throws WhatsAppSessionException.Closed if the socket has been closed
      */
-    Optional<Call> joinCallLink(String token, CallLinkMedia media);
+    Call joinCallLink(URI link, AudioOutput audioOut, AudioInput audioIn);
 
     /**
      * Reconciles the local view of the Channels tab with the server.
@@ -1993,19 +2026,19 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void refreshGroups();
 
     /**
-     * Queries the current invite code attached to the given group, without supplying a telemetry context tag.
+     * Reads the current invite code attached to the given group without rotating it.
      *
      * @apiNote
-     * Single-argument convenience for
-     * {@link #queryGroupInviteCode(JidProvider, String)} that omits
-     * the telemetry context tag, matching the call shape used outside
-     * the dedicated invite-link admin panel.
+     * The invite code is the opaque scalar backing the shareable
+     * {@code chat.whatsapp.com/<code>} link. Use
+     * {@link #createGroupInviteCode(JidProvider, String)} to rotate it
+     * and invalidate any previously distributed link.
      *
      * @param group the target group JID; never {@code null}
      * @return the current invite-code scalar, or {@link Optional#empty()} when the relay returned no payload
-     * @throws NullPointerException     if {@code group} is {@code null}
-     * @throws IllegalArgumentException if the JID is not a group or community JID
-     * @see #queryGroupInviteCode(JidProvider, String)
+     * @throws NullPointerException            if {@code group} is {@code null}
+     * @throws IllegalArgumentException        if the JID is not a group or community JID
+     * @throws WhatsAppSessionException.Closed if the socket is no longer open
      */
     Optional<String> queryGroupInviteCode(JidProvider group);
 
@@ -2062,30 +2095,9 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws NullPointerException            if any argument is {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no longer open
      * @throws NoSuchElementException          if the server reply carries no picture entry
-     * @see #queryGroupInvitePicture(JidProvider, String, String)
      * @see #queryGroupInvitePicturePreview(JidProvider, String)
      */
     GroupInvitePicture queryGroupInvitePicture(JidProvider group, String inviteCode);
-
-    /**
-     * Fetches the full-resolution profile picture of a group through a public invite link, forwarding a server-side lookup hint.
-     *
-     * @apiNote
-     * Three-argument variant of
-     * {@link #queryGroupInvitePicture(JidProvider, String)} that
-     * forwards a server-side lookup hint; pass {@code "url"} to
-     * request a CDN download URL or {@code null} to ask for identity
-     * metadata only.
-     *
-     * @param group      the JID of the group the invite refers to; must be a group JID
-     * @param inviteCode the public invite code; never {@code null}
-     * @param query      the {@code query} attribute value, or {@code null} to omit it
-     * @return the picture identity, type, download URL and direct-path tuple
-     * @throws NullPointerException            if {@code group} or {@code inviteCode} is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is no longer open
-     * @throws NoSuchElementException          if no picture entry is returned
-     */
-    GroupInvitePicture queryGroupInvitePicture(JidProvider group, String inviteCode, String query);
 
     /**
      * Fetches the low-resolution thumbnail of a group icon through a public invite link.
@@ -2102,28 +2114,9 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws NullPointerException            if any argument is {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no longer open
      * @throws NoSuchElementException          if no picture entry is returned
-     * @see #queryGroupInvitePicturePreview(JidProvider, String, String)
      * @see #queryGroupInvitePicture(JidProvider, String)
      */
     GroupInvitePicture queryGroupInvitePicturePreview(JidProvider group, String inviteCode);
-
-    /**
-     * Fetches the low-resolution thumbnail of a group icon through a public invite link, forwarding a server-side lookup hint.
-     *
-     * @apiNote
-     * Three-argument variant of
-     * {@link #queryGroupInvitePicturePreview(JidProvider, String)}
-     * that forwards a server-side lookup hint.
-     *
-     * @param group      the JID of the group the invite refers to; must be a group JID
-     * @param inviteCode the public invite code; never {@code null}
-     * @param query      the {@code query} attribute value, or {@code null} to omit it
-     * @return the picture identity, type, download URL and direct-path tuple
-     * @throws NullPointerException            if {@code group} or {@code inviteCode} is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is no longer open
-     * @throws NoSuchElementException          if no picture entry is returned
-     */
-    GroupInvitePicture queryGroupInvitePicturePreview(JidProvider group, String inviteCode, String query);
 
     /**
      * Queries group metadata using a v4 invite received in-band via a {@link GroupInviteMessage}.
@@ -2368,14 +2361,17 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     Newsletter createNewsletter(NewsletterCreate create);
 
     /**
-     * Edits the mutable metadata (name, description, picture) of a newsletter owned by this account.
+     * Edits the mutable metadata (name, description, picture, reaction policy) of a newsletter owned by this account.
      *
      * @apiNote
      * Drives the "Edit channel info" affordance on the newsletter
-     * admin sheet. Each of name, description, and picture is sent
-     * only when the corresponding field on
+     * admin sheet. Each of name, description, picture, and reaction
+     * policy is sent only when the corresponding field on
      * {@link NewsletterMetadataEdit} is present; absent fields are
      * omitted from the request so the server leaves them untouched.
+     * Setting {@link NewsletterMetadataEdit#reactionSetting()} drives
+     * the "Reactions" picker (allowed reaction code set, all-emoji vs
+     * none, blocklist) alongside any other pending metadata change.
      *
      * @param edit the newsletter JID together with the fields to edit; never {@code null}
      * @throws NullPointerException            if {@code edit} is {@code null}
@@ -2459,22 +2455,6 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void unmuteNewsletter(JidProvider newsletter);
 
     /**
-     * Posts, updates or revokes an emoji reaction on a newsletter message.
-     *
-     * @apiNote
-     * Drives the reaction picker on a newsletter message: posting a
-     * non-empty {@code emoji} sets or replaces the reaction; passing
-     * {@code null} or an empty string revokes the existing reaction.
-     *
-     * @param newsletter      the newsletter JID hosting the message; never {@code null}
-     * @param serverMessageId the target server message id; never {@code null}
-     * @param emoji           the reaction emoji to set, or {@code null}/empty to revoke the existing reaction
-     * @throws NullPointerException            if {@code newsletter} or {@code serverMessageId} is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is closed
-     */
-    void reactToNewsletterMessage(JidProvider newsletter, String serverMessageId, String emoji);
-
-    /**
      * Admin-revokes a message previously published on a newsletter owned by this account.
      *
      * @apiNote
@@ -2526,40 +2506,6 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void revokeNewsletterAdminInvite(JidProvider newsletter, JidProvider admin);
 
     /**
-     * Demotes an existing newsletter administrator back to a regular follower.
-     *
-     * @apiNote
-     * Drives the "Dismiss as admin" affordance and the admin's own
-     * "Step down" affordance on the newsletter admin sheet: the
-     * supplied admin's local membership role drops back to
-     * {@code Subscriber} on success. The owner may demote any admin;
-     * an admin may demote themselves.
-     *
-     * @param newsletter the newsletter JID; never {@code null}
-     * @param admin      the JID of the admin being demoted; never {@code null}
-     * @throws NullPointerException            if any argument is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is closed
-     */
-    void demoteNewsletterAdmin(JidProvider newsletter, JidProvider admin);
-
-    /**
-     * Updates the reaction policy for a newsletter owned by this account.
-     *
-     * @apiNote
-     * Drives the "Reactions" picker on the newsletter settings sheet
-     * (allowed reaction code set, all-emoji vs none, etc.): the new
-     * reaction policy is rolled into a regular newsletter metadata
-     * edit so the server applies it alongside any other pending
-     * changes.
-     *
-     * @param newsletter the newsletter JID whose reaction policy is being changed; never {@code null}
-     * @param setting    the reaction policy to install; never {@code null}
-     * @throws NullPointerException            if any argument is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is closed
-     */
-    void editNewsletterReactionSetting(JidProvider newsletter, NewsletterReactionSettings setting);
-
-    /**
      * Queries the capability flags granted to this account on the given newsletter.
      *
      * @apiNote
@@ -2589,7 +2535,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws NullPointerException           if {@code newsletter} is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    OptionalLong queryNewsletterAdminInfo(JidProvider newsletter);
+    OptionalLong queryNewsletterAdminsCount(JidProvider newsletter);
 
     /**
      * Queries a page of followers for the given newsletter.
@@ -2631,63 +2577,27 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     List<NewsletterAdminInvite> queryNewsletterPendingInvites(JidProvider newsletter);
 
     /**
-     * Fetches the first page of the given newsletter directory slice with no filters and the relay's default page size.
+     * Queries a paginated page of the newsletter directory described by the given query.
      *
      * @apiNote
-     * Convenience overload of
-     * {@link #queryNewsletterDirectoryList(NewsletterDirectoryListView, List, List, Long, String, boolean)};
-     * use it as the entry point into the explore tab when the caller
-     * does not yet need country or category narrowing.
-     *
-     * @param view the directory slice to query; never {@code null}
-     * @return the first page of results
-     * @throws NullPointerException           if {@code view} is {@code null}
-     * @throws WhatsAppServerRuntimeException if the relay returned no payload
-     */
-    NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListView view);
-
-    /**
-     * Fetches a subsequent page of the given newsletter directory slice with no filters.
-     *
-     * @apiNote
-     * Convenience overload of
-     * {@link #queryNewsletterDirectoryList(NewsletterDirectoryListView, List, List, Long, String, boolean)};
-     * pass the {@link NewsletterDirectoryPage#nextCursor()} returned
-     * by the previous page as {@code cursorToken} to walk the explore
-     * tab forward.
-     *
-     * @param view        the directory slice to query; never {@code null}
-     * @param cursorToken the pagination cursor returned by a previous page
-     * @return the requested page of results
-     * @throws NullPointerException           if {@code view} is {@code null}
-     * @throws WhatsAppServerRuntimeException if the relay returned no payload
-     */
-    NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListView view, String cursorToken);
-
-    /**
-     * Queries a paginated page of the newsletter directory filtered by view and optional country/category filters.
-     *
-     * @apiNote
-     * Powers the explore tab of the newsletter directory: the
-     * {@link NewsletterDirectoryListView} selects one of
+     * Powers the explore tab of the newsletter directory: the query's
+     * {@link NewsletterDirectoryListQuery#view() view} selects one of
      * {@code RECOMMENDED}, {@code NEW}, {@code POPULAR},
-     * {@code FEATURED}, or {@code TRENDING}, and the optional filters
-     * narrow by country and category. The returned page bundles the
-     * directory entries together with a forward-only cursor that
-     * callers feed back to fetch the following page; pass
-     * {@code null} as {@code cursorToken} on the first call.
+     * {@code FEATURED}, or {@code TRENDING}, and its optional country
+     * and category filters narrow the slice. The returned page bundles
+     * the directory entries together with a forward-only cursor that
+     * callers feed back through
+     * {@link NewsletterDirectoryListQuery#cursorToken()} to fetch the
+     * following page; leave the cursor unset on the first call.
      *
-     * @param view                the directory slice to query; never {@code null}
-     * @param countryCodes        the ISO country codes to filter by, or {@code null} for no country filter
-     * @param categories          the upper-case category wire strings to filter by (e.g. {@code "BUSINESS"}), or {@code null} for no category filter
-     * @param limit               the page size, or {@code null} to let the relay apply its default
-     * @param cursorToken         the start cursor for pagination, or {@code null} on the first page
-     * @param fetchStatusMetadata {@code true} to request the optional {@code status_metadata} sub-selection
+     * @param query the directory query carrying the view and the optional
+     *              country/category filters, page size and pagination
+     *              cursor; never {@code null}
      * @return the directory page bundling the entries and the next-page cursor; never {@code null}
-     * @throws NullPointerException           if {@code view} is {@code null}
+     * @throws NullPointerException           if {@code query} or its view is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListView view, List<String> countryCodes, List<String> categories, Long limit, String cursorToken, boolean fetchStatusMetadata);
+    NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListQuery query);
 
     /**
      * Searches the newsletter directory for channels matching the given free-text query.
@@ -2726,7 +2636,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Drives the directory search box on the newsletter explore tab.
      * Pagination follows the same cursor protocol as
-     * {@link #queryNewsletterDirectoryList(NewsletterDirectoryListView, List, List, Long, String, boolean)};
+     * {@link #queryNewsletterDirectoryList(NewsletterDirectoryListQuery)};
      * pass {@code null} on the initial call and feed back the cursor
      * returned by {@link NewsletterDirectoryPage#nextCursor()} on
      * subsequent calls.
@@ -2759,70 +2669,38 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     List<NewsletterDirectoryCategory> queryNewsletterDirectoryCategoriesPreview(String input);
 
     /**
-     * Queries the recommended-newsletters feed personalised for this account using the relay's defaults.
-     *
-     * @apiNote
-     * Convenience overload of
-     * {@link #queryRecommendedNewsletters(Long, List, boolean)} that
-     * lets the relay choose the page size, omits the country scope
-     * and skips the {@code status_metadata} sub-selection.
-     *
-     * @return the directory page bundling the recommended entries and the next-page cursor; never {@code null}
-     * @throws WhatsAppServerRuntimeException if the relay returned no payload
-     */
-    NewsletterDirectoryPage queryRecommendedNewsletters();
-
-    /**
      * Queries the recommended-newsletters feed personalised for this account.
      *
      * @apiNote
      * Powers the "Recommended for you" rail on the newsletter explore
      * tab. The recommendation engine runs entirely server-side; the
-     * client only supplies the page size and an optional country
-     * scope.
+     * query only supplies the page size and an optional country scope,
+     * each of which may be left unset to take the relay's default.
      *
-     * @param limit               the maximum number of recommended newsletters to return, or {@code null} to let the relay apply its default page size
-     * @param countryCodes        the ISO country codes used to scope the recommendation, or {@code null} to omit the field
-     * @param fetchStatusMetadata {@code true} to request the optional {@code status_metadata} sub-selection
+     * @param query the recommendation query carrying the optional page
+     *              size, country scope and status-metadata flag; never {@code null}
      * @return the directory page bundling the recommended entries and the next-page cursor; never {@code null}
+     * @throws NullPointerException            if {@code query} is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    NewsletterDirectoryPage queryRecommendedNewsletters(Long limit, List<String> countryCodes, boolean fetchStatusMetadata);
+    NewsletterDirectoryPage queryRecommendedNewsletters(RecommendedNewslettersQuery query);
 
     /**
-     * Queries newsletters similar to the given seed using the relay's defaults.
-     *
-     * @apiNote
-     * Convenience overload of
-     * {@link #querySimilarNewsletters(JidProvider, Long, List, boolean)}
-     * that lets the relay choose the page size, omits the country
-     * scope and skips the {@code status_metadata} sub-selection.
-     *
-     * @param newsletter the seed newsletter JID; never {@code null}
-     * @return the similar newsletters reported by the relay
-     * @throws NullPointerException           if {@code newsletter} is {@code null}
-     * @throws WhatsAppServerRuntimeException if the relay returned no payload
-     */
-    List<NewsletterDirectoryEntry> querySimilarNewsletters(JidProvider newsletter);
-
-    /**
-     * Queries newsletters similar to the given seed newsletter.
+     * Queries newsletters similar to the seed newsletter described by the given query.
      *
      * @apiNote
      * Powers the "you might also like" rail on a newsletter channel
      * page. The relay computes similarity entirely server-side; the
-     * client only supplies the seed JID, the page size, and an
+     * query supplies the seed JID, the optional page size, and an
      * optional country scope.
      *
-     * @param newsletter          the seed newsletter JID; never {@code null}
-     * @param limit               the maximum number of similar newsletters to return, or {@code null} to let the relay apply its default
-     * @param countryCodes        the ISO country codes used to scope the recommendation, or {@code null} to omit the field
-     * @param fetchStatusMetadata {@code true} to request the optional {@code status_metadata} sub-selection
+     * @param query the similarity query carrying the seed newsletter JID
+     *              and the optional page size and country scope; never {@code null}
      * @return the similar newsletters reported by the relay; never {@code null}
-     * @throws NullPointerException           if {@code newsletter} is {@code null}
+     * @throws NullPointerException            if {@code query} or its seed newsletter is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    List<NewsletterDirectoryEntry> querySimilarNewsletters(JidProvider newsletter, Long limit, List<String> countryCodes, boolean fetchStatusMetadata);
+    List<NewsletterDirectoryEntry> querySimilarNewsletters(SimilarNewslettersQuery query);
 
     /**
      * Queries the server-side link preview for a URL pasted into a newsletter compose surface.
@@ -2870,31 +2748,29 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * present on the message, so callers can filter to a single code
      * client-side.
      *
-     * @param newsletter      the newsletter JID; never {@code null}
-     * @param serverMessageId the server-assigned message id
+     * @param message the newsletter message whose reactions to read; never {@code null}
      * @return the per-emoji reactor list, in server order; never {@code null}
-     * @throws NullPointerException           if {@code newsletter} is {@code null}
+     * @throws NullPointerException           if {@code message} is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    List<NewsletterReactor> queryNewsletterMessageReactionSenders(JidProvider newsletter, long serverMessageId);
+    List<NewsletterReactor> queryNewsletterMessageReactionSenders(NewsletterMessageInfo message);
 
     /**
      * Queries the list of voters on a newsletter poll across every option.
      *
      * @apiNote
      * Convenience overload of
-     * {@link #queryNewsletterPollVoters(JidProvider, long, long, String)}
+     * {@link #queryNewsletterPollVoters(NewsletterMessageInfo, long, String)}
      * that forwards a {@code null} option hash, so the relay returns
      * voters bucketed by every option of the poll.
      *
-     * @param newsletter      the newsletter JID hosting the poll; never {@code null}
-     * @param serverMessageId the poll message id
-     * @param limit           the maximum voter edges per option
+     * @param message the newsletter poll message whose voters to read; never {@code null}
+     * @param limit   the maximum voter edges per option
      * @return the per-option voter groups
-     * @throws NullPointerException           if {@code newsletter} is {@code null}
+     * @throws NullPointerException           if {@code message} is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    List<NewsletterPollVoter> queryNewsletterPollVoters(JidProvider newsletter, long serverMessageId, long limit);
+    List<NewsletterPollVoter> queryNewsletterPollVoters(NewsletterMessageInfo message, long limit);
 
     /**
      * Queries the list of voters on a newsletter poll, optionally narrowed to a single option.
@@ -2907,15 +2783,14 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * specific option; passing {@code null} returns voters across
      * every option of the poll.
      *
-     * @param newsletter      the newsletter JID hosting the poll; never {@code null}
-     * @param serverMessageId the server-assigned id of the poll message
-     * @param limit           the maximum number of voter edges to return
-     * @param voteHash        the base64-encoded option hash to filter on, or {@code null} to return voters across every option
+     * @param message  the newsletter poll message whose voters to read; never {@code null}
+     * @param limit    the maximum number of voter edges to return
+     * @param voteHash the base64-encoded option hash to filter on, or {@code null} to return voters across every option
      * @return the per-option voter groups, in server order; never {@code null}
-     * @throws NullPointerException           if {@code newsletter} is {@code null}
+     * @throws NullPointerException           if {@code message} is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    List<NewsletterPollVoter> queryNewsletterPollVoters(JidProvider newsletter, long serverMessageId, long limit, String voteHash);
+    List<NewsletterPollVoter> queryNewsletterPollVoters(NewsletterMessageInfo message, long limit, String voteHash);
 
     /**
      * Transfers ownership of the given newsletter to the supplied user.
@@ -2967,12 +2842,11 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * an existing message so the server renders the disclosure badge
      * alongside it.
      *
-     * @param newsletter      the newsletter JID hosting the message being labelled; never {@code null}
-     * @param serverMessageId the server-assigned message id of the post being labelled; never {@code null}
-     * @throws NullPointerException           if any argument is {@code null}
+     * @param message the newsletter message to label; never {@code null}
+     * @throws NullPointerException           if {@code message} is {@code null}
      * @throws WhatsAppServerRuntimeException if the relay returned no payload
      */
-    void addNewsletterPaidPartnershipLabel(JidProvider newsletter, String serverMessageId);
+    void addNewsletterPaidPartnershipLabel(NewsletterMessageInfo message);
 
     /**
      * Logs a batch of newsletter exposure events for attribution and directory-ranking purposes.
@@ -3109,7 +2983,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Refreshes the cached "about" status text of the given user from the server.
      *
      * <p>Fetches the value via {@link #queryAbout(JidProvider)}, then stores it and notifies listeners:
-     * when {@code jid} is the logged-in account the value updates {@link com.github.auties00.cobalt.store.AccountStore#selfTextStatus()}
+     * when {@code jid} is the logged-in account the value updates {@link LinkedWhatsAppAccountStore#selfTextStatus()}
      * and fires {@link LinkedWhatsAppClientListener#onAboutChanged}; otherwise it updates the per-contact
      * text-status cache and fires {@link LinkedWhatsAppClientListener#onContactTextStatus}.
      *
@@ -3556,10 +3430,10 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * paired device, or whenever the marketing-message settings
      * surface for that category should redraw against an
      * authoritative copy. The new entries replace
-     * {@link com.github.auties00.cobalt.store.SettingsStore#optOutListEntries(String)} for the
+     * {@link LinkedWhatsAppSettingsStore#optOutListEntries(String)} for the
      * category, and {@link LinkedWhatsAppClientListener#onOptOutList} fires
      * with the new set. Reads the cached digest from
-     * {@link com.github.auties00.cobalt.store.SettingsStore#optOutListHash(String)} so an unchanged
+     * {@link LinkedWhatsAppSettingsStore#optOutListHash(String)} so an unchanged
      * server-side view is a no-op.
      *
      * @param category the opt-out category
@@ -3581,10 +3455,10 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * {@code "online"}) against an authoritative copy. The
      * addressing-mode parameter chooses between the phone-number and
      * the LID variant. The new entries replace
-     * {@link com.github.auties00.cobalt.store.SettingsStore#contactBlacklistEntries(String)} for the
+     * {@link LinkedWhatsAppSettingsStore#contactBlacklistEntries(String)} for the
      * category, and {@link LinkedWhatsAppClientListener#onContactBlacklist}
      * fires with the new set. Reads the cached digest from
-     * {@link com.github.auties00.cobalt.store.SettingsStore#contactBlacklistHash(String)} so an
+     * {@link LinkedWhatsAppSettingsStore#contactBlacklistHash(String)} so an
      * unchanged server-side view is a no-op.
      *
      * @param category       the privacy axis category name
@@ -3642,7 +3516,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Refreshes the logged-in account's own profile picture from the server.
      *
      * <p>Fetches the picture URL for the authenticated account, stores it into
-     * {@link com.github.auties00.cobalt.store.AccountStore#profilePicture()}, and fires
+     * {@link LinkedWhatsAppAccountStore#profilePicture()}, and fires
      * {@link LinkedWhatsAppClientListener#onProfilePictureChanged} for the account JID.
      *
      * @apiNote
@@ -3661,7 +3535,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *
      * @apiNote
      * Backs the "Your name" edit on the profile drawer: writes the
-     * new name into {@link com.github.auties00.cobalt.store.AccountStore#setName(String)} and
+     * new name into {@link LinkedWhatsAppAccountStore#setName(String)} and
      * notifies listeners.
      *
      * @param newPushName the new broadcast display name
@@ -3690,19 +3564,23 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *
      * @apiNote
      * Backs the "Change profile picture" tap on the profile drawer:
-     * the full-size JPEG and a 96x96 preview thumbnail (generated
-     * locally) are uploaded together.
+     * the full-size JPEG (drained from the supplied stream) and a
+     * 96x96 preview thumbnail (generated locally) are uploaded
+     * together. The {@link SizedInputStream} must yield a fresh,
+     * readable stream.
      *
-     * @param jpegBytes the full-size JPEG payload
-     * @throws NullPointerException            if {@code jpegBytes} is
-     *                                         {@code null}
-     * @throws IllegalArgumentException        if {@code jpegBytes} is not
+     * @param jpeg the full-size JPEG payload as a sized stream
+     * @throws NullPointerException            if {@code jpeg} is {@code null}
+     *                                         or yields a {@code null} stream
+     * @throws IllegalArgumentException        if the supplied bytes are not
      *                                         a valid image
+     * @throws java.io.UncheckedIOException    if reading the supplied stream
+     *                                         fails
      * @throws IllegalStateException           if the self JID is not
      *                                         known
      * @throws WhatsAppSessionException.Closed if the socket is closed
      */
-    void editProfilePicture(byte[] jpegBytes);
+    void editProfilePicture(SizedInputStream jpeg);
 
     /**
      * Removes this account's profile picture.
@@ -3726,7 +3604,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Convenience overload that calls
      * {@link #editPresence(ContactStatus, String)} with
-     * {@link com.github.auties00.cobalt.store.AccountStore#name()} as the display-name override.
+     * {@link LinkedWhatsAppAccountStore#name()} as the display-name override.
      *
      * @param status {@link ContactStatus#AVAILABLE} or
      *               {@link ContactStatus#UNAVAILABLE}
@@ -3864,6 +3742,15 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * (or {@link NewsletterMessageInfo} for newsletter JIDs),
      * encrypts per-device, and dispatches through the chat, group,
      * status, or newsletter sender appropriate to the JID server.
+     *
+     * <p>Poll messages are created and voted on through this same entry
+     * point. Send a {@code PollCreationMessage} (name, options,
+     * selectable count) to create a poll: the send pipeline adopts the
+     * message's per-message secret as the poll's vote-encryption key. To
+     * cast a vote, send a {@code PollUpdateMessage} built with its
+     * {@code pollCreationMessageKey} and {@code selectedOptions}; the
+     * pipeline resolves the referenced poll-creation message and encrypts
+     * the vote in place.
      *
      * @param jid       the destination chat JID
      * @param container the message payload to send
@@ -4006,7 +3893,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Use to redraw the Status privacy panel against an authoritative
      * copy of the selected distribution mode and the JID list paired
      * with the whitelist or except-contacts modes. The new value
-     * replaces {@link com.github.auties00.cobalt.store.SettingsStore#statusPrivacy()} and
+     * replaces {@link LinkedWhatsAppSettingsStore#statusPrivacy()} and
      * {@link LinkedWhatsAppClientListener#onStatusPrivacyChanged} fires
      * with the new value.
      *
@@ -4075,8 +3962,12 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * and dispatches it through the standard send pipeline; the
      * reaction is automatically wrapped in an encrypted-reaction
      * envelope when the target chat is a CAG community subgroup.
-     * Sending an empty emoji is equivalent to
-     * {@link #removeReaction(MessageKey)}.
+     * When {@code messageKey} identifies a newsletter message (its
+     * {@code parentJid} is a newsletter JID) the reaction is instead
+     * published through the newsletter reaction stanza, keyed by the
+     * cached message's server id, so the same entry point covers both
+     * regular chats and channels. Sending an empty emoji is equivalent
+     * to {@link #removeReaction(MessageKey)}.
      *
      * @param messageKey the key of the message being reacted to
      * @param emoji      the reaction emoji; empty string removes the
@@ -4084,6 +3975,9 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws NullPointerException     if any argument is {@code null}
      * @throws IllegalArgumentException if {@code messageKey} has no
      *                                  {@code parentJid}
+     * @throws NoSuchElementException   if {@code messageKey} targets a
+     *                                  newsletter message that is not in
+     *                                  the local message cache
      */
     void addReaction(MessageKey messageKey, String emoji);
 
@@ -4334,39 +4228,38 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void unlockChat(JidProvider chat);
 
     /**
-     * Creates a new business chat label with the given name and palette
-     * colour index.
+     * Creates a new business chat label from the given creation request.
      *
      * @apiNote
      * Drives the "New label" form on the Business labels manager:
-     * the name is mapped to a predefined id when applicable via
+     * the {@link LabelCreate#name() name} is mapped to a predefined id
+     * when applicable via
      * {@link BusinessLabelConstants#mapLabelNameToPredefinedId(String)}
      * and the label is registered as a regular (non-predefined)
      * custom label.
      *
-     * @param name       the user-visible display name of the label
-     * @param colorIndex the palette colour index
+     * @param create the label creation request carrying the display name
+     *               and palette colour index; never {@code null}
      * @return the newly-allocated label id (stringified integer)
-     * @throws NullPointerException if {@code name} is {@code null}
+     * @throws NullPointerException if {@code create} is {@code null}
      */
-    String createLabel(String name, int colorIndex);
+    String createLabel(LabelCreate create);
 
     /**
      * Edits the display name and palette colour of an existing chat label.
      *
      * @apiNote
      * Drives the "Edit label" form on the Business labels manager.
-     * Pair this entry point with {@link #createLabel(String, int)}
+     * Pair this entry point with {@link #createLabel(LabelCreate)}
      * when applications surface a single add-or-edit affordance.
      *
-     * @param labelId    the label identifier
-     * @param name       the new display name
-     * @param colorIndex the new palette colour index
+     * @param edit the label edit request carrying the label id, the new
+     *             display name and the new palette colour index; never {@code null}
      * @return the updated label, or {@link Optional#empty()} when no label
-     *         with {@code labelId} exists in the local store
-     * @throws NullPointerException if {@code labelId} or {@code name} is {@code null}
+     *         with the requested id exists in the local store
+     * @throws NullPointerException if {@code edit} is {@code null}
      */
-    Optional<Label> editLabel(String labelId, String name, int colorIndex);
+    Optional<Label> editLabel(LabelEdit edit);
 
     /**
      * Deletes an existing chat label along with every chat or contact
@@ -4662,7 +4555,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * seed the "new chat" UI, or after
      * {@link #editDefaultDisappearingMode(ChatEphemeralTimer)} to
      * confirm the change took effect. The new value replaces
-     * {@link com.github.auties00.cobalt.store.SettingsStore#disappearingMode()} and
+     * {@link LinkedWhatsAppSettingsStore#disappearingMode()} and
      * {@link LinkedWhatsAppClientListener#onDisappearingModeChanged}
      * fires.
      *
@@ -4696,7 +4589,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Refreshes the server-side acceptance state for the named Terms-of-Service
      * and disclosure notices.
      *
-     * <p>Records the identifiers of the returned notices into {@link com.github.auties00.cobalt.store.SettingsStore#tosNotices()} and fires
+     * <p>Records the identifiers of the returned notices into {@link LinkedWhatsAppSettingsStore#tosNotices()} and fires
      * {@link LinkedWhatsAppClientListener#onTosNoticesChanged}.
      *
      * @apiNote
@@ -4773,7 +4666,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Refreshes the local account's privacy configuration from the server, storing each returned
-     * category into {@link com.github.auties00.cobalt.store.SettingsStore#privacySettings()}.
+     * category into {@link LinkedWhatsAppSettingsStore#privacySettings()}.
      *
      * @apiNote
      * Mirrors the Settings privacy panel: refreshes the active audience
@@ -5201,9 +5094,9 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *
      * @apiNote
      * Convenience over
-     * {@link #queryGroupInfo(JidProvider, boolean, String, String)} that
+     * {@link #queryGroupInfo(JidProvider, boolean, String)} that
      * fetches a cold metadata snapshot with no participant-list partial
-     * hash and no query-context tag.
+     * hash.
      *
      * @param group the group JID
      * @return the parsed metadata, or {@link Optional#empty()} when the
@@ -5218,7 +5111,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *
      * @apiNote
      * Backs the group info panel for consumer groups. Use
-     * {@link #queryGroupInfoIncludingBots(JidProvider, boolean, String, String)}
+     * {@link #queryGroupInfoIncludingBots(JidProvider, boolean, String)}
      * when the UI renders bots as first-class members.
      *
      * @param group             the group JID to query; never {@code null}
@@ -5227,15 +5120,12 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @param participantsPhash the participant-list partial hash
      *                          carried for incremental refreshes;
      *                          {@code null} on a cold fetch
-     * @param queryContext      a telemetry tag identifying the UI
-     *                          surface that triggered the fetch;
-     *                          {@code null} when no tag applies
      * @return the parsed {@link GroupMetadata}, or
      *         {@link Optional#empty()} when the relay returned no payload
      * @throws NullPointerException            if {@code group} is {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no longer open
      */
-    Optional<GroupMetadata> queryGroupInfo(JidProvider group, boolean includeUsername, String participantsPhash, String queryContext);
+    Optional<GroupMetadata> queryGroupInfo(JidProvider group, boolean includeUsername, String participantsPhash);
 
     /**
      * Queries the full metadata envelope for a group, including bot
@@ -5244,43 +5134,19 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Used by chat UIs that render bots as first-class members; the
      * non-bot variant is
-     * {@link #queryGroupInfo(JidProvider, boolean, String, String)}.
+     * {@link #queryGroupInfo(JidProvider, boolean, String)}.
      *
      * @param group             the group JID to query; never {@code null}
      * @param includeUsername   whether to hydrate the username subtree
      *                          on every participant
      * @param participantsPhash the participant-list partial hash, or
      *                          {@code null} on a cold fetch
-     * @param queryContext      a telemetry tag identifying the UI
-     *                          surface that triggered the fetch, or
-     *                          {@code null}
      * @return the parsed {@link GroupMetadata}, or
      *         {@link Optional#empty()} when the relay returned no payload
      * @throws NullPointerException            if {@code group} is {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no longer open
      */
-    Optional<GroupMetadata> queryGroupInfoIncludingBots(JidProvider group, boolean includeUsername, String participantsPhash, String queryContext);
-
-    /**
-     * Reads the current invite code attached to the given group without
-     * rotating it.
-     *
-     * @apiNote
-     * The invite code is the opaque scalar backing the shareable
-     * {@code chat.whatsapp.com/<code>} link. Use
-     * {@link #createGroupInviteCode(JidProvider, String)} to rotate it
-     * and invalidate any previously distributed link.
-     *
-     * @param group        the group JID to query; never {@code null}
-     * @param queryContext a telemetry tag identifying the UI surface
-     *                     that triggered the fetch; {@code null} when
-     *                     no tag applies
-     * @return the current invite-code scalar, or
-     *         {@link Optional#empty()} when the relay returned no payload
-     * @throws NullPointerException            if {@code group} is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is no longer open
-     */
-    Optional<String> queryGroupInviteCode(JidProvider group, String queryContext);
+    Optional<GroupMetadata> queryGroupInfoIncludingBots(JidProvider group, boolean includeUsername, String participantsPhash);
 
     /**
      * Rotates the invite code for the given group, community or contact,
@@ -5305,45 +5171,26 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     String createGroupInviteCode(JidProvider receiver, String entryPoint);
 
     /**
-     * Creates a new WhatsApp community with the given name and optional
-     * description, leaving disappearing messages off.
-     *
-     * @apiNote
-     * Convenience over
-     * {@link #createCommunity(String, String, ChatEphemeralTimer)}
-     * preset to {@link ChatEphemeralTimer#OFF}.
-     *
-     * @param name        the community display name; never {@code null}
-     * @param description an optional community description; {@code null}
-     *                    to omit
-     * @return the parsed metadata of the freshly created community
-     * @throws NullPointerException if {@code name} is {@code null}
-     */
-    CommunityMetadata createCommunity(String name, String description);
-
-    /**
-     * Creates a new WhatsApp community with the given name, description
-     * and default disappearing-message timer.
+     * Creates a new WhatsApp community from the given creation request.
      *
      * @apiNote
      * Drives the "New community" creation flow on the sidebar; the
      * parent group is created in request-required mode, so additions
      * to subgroups require admin approval. The community appears in
-     * the local store immediately after this call returns.
+     * the local store immediately after this call returns. An unset
+     * {@link CommunityCreate#ephemeralTimer()} leaves disappearing
+     * messages off ({@link ChatEphemeralTimer#OFF}).
      *
-     * @param name           the community display name; never {@code null}
-     * @param description    an optional community description;
-     *                       {@code null} to omit
-     * @param ephemeralTimer the initial disappearing-message timer;
-     *                       {@link ChatEphemeralTimer#OFF} disables it
+     * @param create the community creation request carrying the display
+     *               name, optional description and disappearing-message
+     *               timer; never {@code null}
      * @return the parsed metadata of the freshly created community
-     * @throws NullPointerException   if {@code name} or
-     *                                {@code ephemeralTimer} is {@code null}
+     * @throws NullPointerException   if {@code create} is {@code null}
      * @throws NoSuchElementException if the server response does not
      *                                carry a {@code <group>} community
      *                                subtree
      */
-    CommunityMetadata createCommunity(String name, String description, ChatEphemeralTimer ephemeralTimer);
+    CommunityMetadata createCommunity(CommunityCreate create);
 
     /**
      * Deactivates a community parent group on the server, turning every
@@ -5428,42 +5275,38 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * the community as an official subgroup.
      *
      * @apiNote
-     * The {@code suggestionCreator} is the user that originally proposed
-     * the candidate; it travels through
-     * {@link #querySubgroupSuggestions(JidProvider)} on the
+     * The {@link SubgroupSuggestion#suggestionCreator() suggestionCreator}
+     * is the user that originally proposed the candidate; it travels
+     * through {@link #querySubgroupSuggestions(JidProvider)} on the
      * {@code creator.id} field of each suggestion edge.
      *
-     * @param community         the parent community JID; never {@code null}
-     * @param suggestedSubgroup the JID of the suggested group to approve;
-     *                          never {@code null}
-     * @param suggestionCreator the JID of the user that proposed the
-     *                          suggestion; never {@code null}
-     * @throws NullPointerException     if any argument is {@code null}
+     * @param suggestion the suggestion verdict subject carrying the parent
+     *                   community, the suggested subgroup and the
+     *                   suggestion creator; never {@code null}
+     * @throws NullPointerException     if {@code suggestion} is {@code null}
      * @throws IllegalArgumentException if either group JID is not a
      *                                  group/community
      */
-    void approveSubgroupSuggestion(JidProvider community, JidProvider suggestedSubgroup, JidProvider suggestionCreator);
+    void approveSubgroupSuggestion(SubgroupSuggestion suggestion);
 
     /**
      * Rejects a pending subgroup suggestion, declining the recommendation
      * to move the group into the community.
      *
      * @apiNote
-     * The {@code suggestionCreator} is the user that originally proposed
-     * the candidate; it travels through
-     * {@link #querySubgroupSuggestions(JidProvider)} on the
+     * The {@link SubgroupSuggestion#suggestionCreator() suggestionCreator}
+     * is the user that originally proposed the candidate; it travels
+     * through {@link #querySubgroupSuggestions(JidProvider)} on the
      * {@code creator.id} field of each suggestion edge.
      *
-     * @param community         the parent community JID; never {@code null}
-     * @param suggestedSubgroup the JID of the suggested group to reject;
-     *                          never {@code null}
-     * @param suggestionCreator the JID of the user that proposed the
-     *                          suggestion; never {@code null}
-     * @throws NullPointerException     if any argument is {@code null}
+     * @param suggestion the suggestion verdict subject carrying the parent
+     *                   community, the suggested subgroup and the
+     *                   suggestion creator; never {@code null}
+     * @throws NullPointerException     if {@code suggestion} is {@code null}
      * @throws IllegalArgumentException if either group JID is not a
      *                                  group/community
      */
-    void rejectSubgroupSuggestion(JidProvider community, JidProvider suggestedSubgroup, JidProvider suggestionCreator);
+    void rejectSubgroupSuggestion(SubgroupSuggestion suggestion);
 
     /**
      * Reads the participant count of a single subgroup by piggy-backing
@@ -5598,20 +5441,24 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void promoteGroupParticipants(JidProvider group, Collection<? extends JidProvider> toPromote);
 
     /**
-     * Demotes one or more administrators of a WhatsApp group to regular
-     * members.
+     * Demotes one or more administrators of a WhatsApp group, community or
+     * newsletter to regular members.
      *
      * @apiNote
      * Drives the "Dismiss as admin" affordance on the group info
      * panel. The inverse of
-     * {@link #promoteGroupParticipants(JidProvider, Collection)}.
+     * {@link #promoteGroupParticipants(JidProvider, Collection)}. When
+     * {@code group} is a newsletter JID this demotes each supplied
+     * newsletter administrator back to a regular follower, including
+     * the admin's own "Step down" action.
      *
-     * @param group     the target group JID; never {@code null}
+     * @param group     the target group, community or newsletter JID; never {@code null}
      * @param toDemote  the user JIDs to demote; never {@code null} and
      *                  must be non-empty
      * @throws NullPointerException     if any argument is {@code null}
-     * @throws IllegalArgumentException if the JID is not a group/community
-     *                                  or the collection is empty
+     * @throws IllegalArgumentException if the JID is not a group, community
+     *                                  or newsletter, or the collection is
+     *                                  empty
      */
     void demoteGroupParticipants(JidProvider group, Collection<? extends JidProvider> toDemote);
 
@@ -5656,47 +5503,6 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws NullPointerException if {@code stickerHash} is {@code null}
      */
     void removeRecentSticker(String stickerHash);
-
-    /**
-     * Creates and sends a new poll in the specified chat.
-     *
-     * @apiNote
-     * Drives the "Create poll" affordance on the composer.
-     * The returned {@link ChatMessageInfo} carries the server-allocated
-     * message id and timestamp; pair it with
-     * {@link #votePoll(MessageKey, List)} and
-     * {@link #closePoll(MessageKey)} for the read and lifecycle paths.
-     *
-     * @param create the poll envelope carrying the chat JID, question,
-     *               option labels and selectable-options count
-     * @return the {@link ChatMessageInfo} carrying the sent poll
-     *         creation message
-     * @throws NullPointerException     if any argument is {@code null}
-     * @throws IllegalArgumentException if the chat is not currently
-     *                                  signed in
-     */
-    ChatMessageInfo createPoll(PollCreate create);
-
-    /**
-     * Casts a vote on an existing poll.
-     *
-     * @apiNote
-     * Drives the "Vote" affordance on the poll bubble. The
-     * vote is delivered end-to-end encrypted to the poll creator; the
-     * relay forwards the ciphertext opaquely. Re-voting on the same poll
-     * by re-issuing this call replaces the previous selection.
-     *
-     * @param pollKey          the {@link MessageKey} of the
-     *                         {@link PollCreationMessage} being voted on
-     * @param selectedOptions  the ordered list of selected option labels
-     * @throws NullPointerException     if any argument is {@code null}
-     * @throws IllegalArgumentException if {@code pollKey} has no parent
-     *                                  JID, the referenced poll-creation
-     *                                  message is missing from the local
-     *                                  store, or it carries no
-     *                                  {@code messageSecret}
-     */
-    void votePoll(MessageKey pollKey, List<String> selectedOptions);
 
     /**
      * Closes the given poll so that no further votes can be cast.
@@ -5909,7 +5715,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Drives the "Use 24-hour time" toggle in Settings; eagerly
      * writes through to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setTwentyFourHourFormat(boolean)} so
+     * {@link LinkedWhatsAppSettingsStore#setTwentyFourHourFormat(boolean)} so
      * local reads see the new value before the linked-device fanout
      * returns.
      *
@@ -5924,7 +5730,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Drives the "Use 24-hour time" toggle in Settings; eagerly
      * writes through to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setTwentyFourHourFormat(boolean)} so
+     * {@link LinkedWhatsAppSettingsStore#setTwentyFourHourFormat(boolean)} so
      * local reads see the new value before the linked-device fanout
      * returns.
      *
@@ -5961,7 +5767,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Drives the "Keep chats archived" toggle in Settings; eagerly
      * writes through to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setUnarchiveChats(boolean)} so subsequent
+     * {@link LinkedWhatsAppSettingsStore#setUnarchiveChats(boolean)} so subsequent
      * local reads observe the new preference immediately.
      *
      * @throws WhatsAppSessionException.Closed if the socket is closed
@@ -5976,7 +5782,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Drives the "Keep chats archived" toggle in Settings; eagerly
      * writes through to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setUnarchiveChats(boolean)} so subsequent
+     * {@link LinkedWhatsAppSettingsStore#setUnarchiveChats(boolean)} so subsequent
      * local reads observe the new preference immediately.
      *
      * @throws WhatsAppSessionException.Closed if the socket is closed
@@ -5991,7 +5797,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Surfaces the forward-looking notification-activity setting
      * (action index 60, collection {@code REGULAR}); eagerly writes
      * through to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setNotificationActivitySetting(NotificationActivitySettingAction.NotificationActivitySetting)}
+     * {@link LinkedWhatsAppSettingsStore#setNotificationActivitySetting(NotificationActivitySettingAction.NotificationActivitySetting)}
      * so subsequent local reads see the new value.
      *
      * @param setting the non-{@code null}
@@ -6103,7 +5909,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Refreshes the current SMB-data-sharing-with-Meta consent value
      * from the server.
      *
-     * <p>Stores the fetched consent into {@link com.github.auties00.cobalt.store.BusinessStore#businessPrivacySetting()} and fires
+     * <p>Stores the fetched consent into {@link LinkedWhatsAppBusinessStore#businessPrivacySetting()} and fires
      * {@link LinkedWhatsAppClientListener#onBusinessPrivacySettingChanged}.
      *
      * @apiNote
@@ -6164,7 +5970,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Convenience overload of
-     * {@link #queryMeteredMessagingCheckout(List, boolean, boolean, String, List)}
+     * {@link #queryMeteredMessagingCheckout(BusinessMeteredMessagingCheckoutRequest)}
      * for the basic quote-only case.
      *
      * @apiNote
@@ -6187,33 +5993,27 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Drives the marketing-campaign creation surface that needs to
      * surface the per-recipient cost, the remaining campaign quota,
      * and the per-recipient eligibility tuple before letting the user
-     * confirm a paid broadcast. The optional markers select extra
-     * projections returned by the relay.
+     * confirm a paid broadcast. The optional markers carried on
+     * {@code request} select extra projections returned by the relay.
      *
-     * @param participants     the non-{@code null} recipient JIDs;
-     *                         must be in the 1..2000 range
-     * @param useAdAccount     whether to bill the campaign against the
-     *                         linked ad account
-     * @param skipDedupe       whether to skip recipient deduplication
-     * @param offerId          the optional offer id; may be {@code null}
-     * @param pendingCampaigns optional pending-campaign list (max 200);
-     *                         may be {@code null}
+     * @param request the non-{@code null} checkout request carrying the
+     *                recipients (in the 1..2000 range) and the optional
+     *                billing, deduplication, offer and pending-campaign
+     *                (max 200) knobs
      * @return an {@link Optional} carrying the parsed
      *         {@link BusinessMeteredMessagingCheckout}, or empty on
      *         no-parse
-     * @throws NullPointerException            if {@code participants}
-     *                                         is {@code null}
-     * @throws IllegalArgumentException        if {@code participants}
-     *                                         is outside the supported
-     *                                         range or
-     *                                         {@code pendingCampaigns}
+     * @throws NullPointerException            if {@code request} is {@code null}
+     * @throws IllegalArgumentException        if the recipients are
+     *                                         outside the supported range
+     *                                         or the pending-campaign list
      *                                         exceeds 200 entries
      * @throws WhatsAppServerRuntimeException  if the relay rejected the
      *                                         request with a documented
      *                                         client/server error
      * @throws WhatsAppSessionException.Closed if the socket is closed
      */
-    Optional<BusinessMeteredMessagingCheckout> queryMeteredMessagingCheckout(List<? extends JidProvider> participants, boolean useAdAccount, boolean skipDedupe, String offerId, List<BusinessMeteredMessagingPendingCampaign> pendingCampaigns);
+    Optional<BusinessMeteredMessagingCheckout> queryMeteredMessagingCheckout(BusinessMeteredMessagingCheckoutRequest request);
 
     /**
      * Issues a silent CTWA access-token nonce probe.
@@ -6390,16 +6190,16 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *
      * @apiNote
      * Escape hatch for callers that hand-craft an
-     * {@link IqOperation.Request} and want the raw {@link Node}
+     * {@link IqStanza.Request} and want the raw {@link Stanza}
      * back instead of a model projection; the higher-level helpers
      * delegate through this when no typed model is wired up yet.
      *
      * @param request the non-{@code null} typed legacy-IQ request
-     * @return the non-{@code null} raw inbound reply node
+     * @return the non-{@code null} raw inbound reply stanza
      * @throws NullPointerException            if {@code request} is {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no longer open
      */
-    Node sendNode(IqOperation.Request request);
+    Stanza sendNode(IqStanza.Request request);
 
     /**
      * Convenience overload of
@@ -6419,6 +6219,23 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws NullPointerException if {@code catalogJid} is {@code null}
      */
     List<BusinessProduct> queryBusinessCatalogProducts(JidProvider catalogJid, List<String> productIds, int width, int height);
+
+    /**
+     * Convenience overload of
+     * {@link #queryBusinessCatalogProducts(JidProvider, List, int, int)} that requests WhatsApp's
+     * default catalog image dimensions.
+     *
+     * @apiNote
+     * Forwards WhatsApp's default 100x100-pixel catalog image
+     * dimensions, matching the storefront's default product-thumbnail
+     * request when no specific size is needed.
+     *
+     * @param catalogJid the merchant's catalog JID; never {@code null}
+     * @param productIds the product ids to fetch; never {@code null}
+     * @return the products
+     * @throws NullPointerException if {@code catalogJid} or {@code productIds} is {@code null}
+     */
+    List<BusinessProduct> queryBusinessCatalogProducts(JidProvider catalogJid, List<String> productIds);
 
     /**
      * Fetches the WhatsApp Business catalog product list for a
@@ -6800,32 +6617,6 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     Optional<PrivateStatsToken> issuePrivateStatsToken(byte[] blindedCredential, byte[] projectName);
 
     /**
-     * Performs a SyncD app-state server-sync round trip.
-     *
-     * @apiNote
-     * Drives the app-state collections (chats, contacts, settings,
-     * etc.). Each {@link AppStateSyncCollection} entry either
-     * requests a snapshot (when the locally-known version is empty)
-     * or the patches above the known version; entries shipping local
-     * mutations attach the encoded {@code SyncdPatch} bytes via
-     * {@link AppStateSyncCollection#patch()}. The returned
-     * {@link AppStateSyncResult} carries one
-     * {@link AppStateSyncCollectionResult} per requested collection;
-     * callers iterate the list to drive their per-collection retry,
-     * reconcile, and snapshot-fetch logic.
-     *
-     * @param collections the non-{@code null} per-collection entries;
-     *                    may be empty
-     * @return the non-{@code null} parsed sync result
-     * @throws NullPointerException            if {@code collections} is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is no longer open
-     * @throws WhatsAppServerRuntimeException  if the relay returned a
-     *                                         documented client- or
-     *                                         server-error variant
-     */
-    AppStateSyncResult syncAppState(List<AppStateSyncCollection> collections);
-
-    /**
      * Acknowledges full ingestion of a group's metadata and history
      * snapshot.
      *
@@ -6893,8 +6684,28 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *                                         a documented
      *                                         {@code ClientError} or
      *                                         {@code ServerError}
+     * @see #queryGroupMetadata(JidProvider...)
      */
-    List<GroupMetadata> batchQueryGroupInfo(Collection<? extends JidProvider> groups);
+    List<GroupMetadata> queryGroupMetadata(Collection<? extends JidProvider> groups);
+
+    /**
+     * Queries metadata for the given groups in one round trip.
+     *
+     * @apiNote
+     * Varargs convenience for {@link #queryGroupMetadata(Collection)}.
+     *
+     * @param groups the non-{@code null} group JIDs being queried
+     * @return an unmodifiable list of {@link GroupMetadata} entries in
+     *         the relay's reply order, possibly empty
+     * @throws NullPointerException            if {@code groups} is {@code null} or contains {@code null}
+     * @throws WhatsAppSessionException.Closed if the socket is no longer open
+     * @throws WhatsAppServerRuntimeException  when the relay returned
+     *                                         a documented
+     *                                         {@code ClientError} or
+     *                                         {@code ServerError}
+     * @see #queryGroupMetadata(Collection)
+     */
+    List<GroupMetadata> queryGroupMetadata(JidProvider... groups);
 
     /**
      * Cancels one or more pending self-issued membership-approval
@@ -7062,22 +6873,16 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * Backs the "Go to parent community" and "Go to general
      * sub-group" navigation actions in the chat UI. The
      * {@code queryLinkedType} discriminator selects which projection
-     * the relay returns:
-     * <ul>
-     *   <li>{@code "parent"}: the parent community itself.</li>
-     *   <li>{@code "general"}: the community's general-chat
-     *   sub-group.</li>
-     *   <li>{@code "sub_group"}: the specific sub-group identified by
-     *   {@code queryLinkedJid}.</li>
-     * </ul>
+     * the relay returns: {@link LinkedGroupType#PARENT_GROUP} for the
+     * parent community itself, or {@link LinkedGroupType#SUB_GROUP}
+     * for the specific sub-group identified by {@code queryLinkedJid}.
      *
      * @param community       the non-{@code null} parent community JID
-     * @param queryLinkedType the non-{@code null} linked-type
+     * @param queryLinkedType the non-{@code null} linkage-direction
      *                        discriminator
      * @param queryLinkedJid  the specific linked-group JID; required
      *                        when {@code queryLinkedType} is
-     *                        {@code "sub_group"}, may be {@code null}
-     *                        for {@code "parent"} and {@code "general"}
+     *                        {@link LinkedGroupType#SUB_GROUP}
      * @return an {@link Optional} carrying the parsed metadata, either
      *         {@link GroupMetadata} for a sub-group projection or
      *         {@link CommunityMetadata} for the parent-community
@@ -7090,7 +6895,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *                                         {@code ClientError} or
      *                                         {@code ServerError}
      */
-    Optional<ChatMetadata> queryLinkedGroup(JidProvider community, String queryLinkedType, JidProvider queryLinkedJid);
+    Optional<ChatMetadata> queryLinkedGroup(JidProvider community, LinkedGroupType queryLinkedType, JidProvider queryLinkedJid);
 
     /**
      * Returns the union of participants across every group linked to a
@@ -7200,8 +7005,12 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @param community           the non-{@code null} parent community JID
      * @param subgroup            the non-{@code null} sub-group JID
      *                            being joined
-     * @param joinLinkedGroupType the non-{@code null} join-type
+     * @param linkedGroupType     the non-{@code null} sub-group-kind
      *                            discriminator carried in the request
+     *                            ({@link LinkedGroupType#SUB_GROUP} for
+     *                            an ordinary sub-group,
+     *                            {@link LinkedGroupType#DEFAULT_SUB_GROUP}
+     *                            for a linked announcement group)
      * @return {@code true} when the relay routed the join into the
      *         pending-approval queue, {@code false} when the caller
      *         was admitted immediately
@@ -7212,7 +7021,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *                                         {@code ClientError} or
      *                                         {@code ServerError}
      */
-    boolean joinLinkedGroup(JidProvider community, JidProvider subgroup, String joinLinkedGroupType);
+    boolean joinLinkedGroup(JidProvider community, JidProvider subgroup, LinkedGroupType linkedGroupType);
 
     /**
      * Links existing groups under a community parent.
@@ -7374,7 +7183,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Convenience overload of
-     * {@link #queryNewsletterMessageUpdates(JidProvider, int, Long, NewsletterHistoryDirection)}
+     * {@link #queryNewsletterMessageUpdates(JidProvider, int, Instant, NewsletterHistoryDirection)}
      * for a cold fetch.
      *
      * @apiNote
@@ -7402,7 +7211,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *
      * @param newsletter the non-{@code null} newsletter JID being queried
      * @param count      the per-call cap; must be non-negative
-     * @param since      the reference timestamp delta-cursor; may be {@code null}
+     * @param since      the reference {@link Instant} delta-cursor (a unix-second floor); may be {@code null}
      * @param direction  the optional pagination cursor; may be {@code null}
      * @return the non-{@code null} message-update slice
      * @throws NullPointerException            if {@code newsletter} is {@code null}
@@ -7413,7 +7222,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *                                         {@code ServerError}, or
      *                                         the envelope did not parse
      */
-    NewsletterMessageHistory queryNewsletterMessageUpdates(JidProvider newsletter, int count, Long since, NewsletterHistoryDirection direction);
+    NewsletterMessageHistory queryNewsletterMessageUpdates(JidProvider newsletter, int count, Instant since, NewsletterHistoryDirection direction);
 
     /**
      * Returns a windowed page of newsletter message envelopes,
@@ -7550,7 +7359,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     /**
      * Convenience overload of
-     * {@link #queryNewsletterStatusUpdates(JidProvider, int, Long, NewsletterHistoryDirection)}
+     * {@link #queryNewsletterStatusUpdates(JidProvider, int, Instant, NewsletterHistoryDirection)}
      * for a cold fetch.
      *
      * @apiNote
@@ -7572,13 +7381,13 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *
      * @apiNote
      * Status-scoped sister of
-     * {@link #queryNewsletterMessageUpdates(JidProvider, int, Long, NewsletterHistoryDirection)};
+     * {@link #queryNewsletterMessageUpdates(JidProvider, int, Instant, NewsletterHistoryDirection)};
      * drives the newsletter sync path that backfills the local
      * status store after a reconnect.
      *
      * @param newsletter the non-{@code null} newsletter JID
      * @param count      the per-call cap; must be non-negative
-     * @param since      the reference timestamp delta-cursor; may be {@code null}
+     * @param since      the reference {@link Instant} delta-cursor (a unix-second floor); may be {@code null}
      * @param direction  the optional pagination cursor; may be {@code null}
      * @return the non-{@code null} status-update slice
      * @throws NullPointerException            if {@code newsletter} is {@code null}
@@ -7589,7 +7398,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *                                         {@code ServerError}, or
      *                                         the envelope did not parse
      */
-    NewsletterStatusHistory queryNewsletterStatusUpdates(JidProvider newsletter, int count, Long since, NewsletterHistoryDirection direction);
+    NewsletterStatusHistory queryNewsletterStatusUpdates(JidProvider newsletter, int count, Instant since, NewsletterHistoryDirection direction);
 
     /**
      * Fetches a windowed page of newsletter status envelopes,
@@ -7978,40 +7787,6 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void editPushConfig(PushConfig config);
 
     /**
-     * Publishes a view receipt for one or more status posts.
-     *
-     * @apiNote
-     * Drives the "Seen by" surface on the publisher's side. Distinct
-     * from a regular read receipt because the wire shape batches
-     * several server ids under a single posting; the supplied
-     * {@link ViewReceipt} carries the receipt id, publisher JID, the
-     * status-namespace flag, and the list of viewed server ids.
-     *
-     * @param receipt the non-{@code null} view-receipt payload
-     * @throws NullPointerException            if {@code receipt} is {@code null}
-     * @throws WhatsAppSessionException.Closed if the socket is closed
-     */
-    void publishViewReceipt(ViewReceipt receipt);
-
-    /**
-     * Sends a buffered batch of low-priority client-side stats
-     * events to the relay.
-     *
-     * @apiNote
-     * Counterpart of the main telemetry stream for events that are
-     * too cheap to warrant standalone events; the client keeps a
-     * separate stats-buffer aggregator and ships it through this
-     * call on a flush tick.
-     *
-     * @param addT            the non-{@code null} buffer add timestamp
-     * @param addElementValue the non-{@code null} serialised event blob
-     * @throws NullPointerException            if any argument is {@code null}
-     * @throws WhatsAppServerRuntimeException  if the relay rejected the request
-     * @throws WhatsAppSessionException.Closed if the socket is closed
-     */
-    void sendStatsBuffer(Instant addT, byte[] addElementValue);
-
-    /**
      * Sends a free-form support feedback report.
      *
      * @apiNote
@@ -8264,14 +8039,15 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * {@link #queryCallLink(String, CallLinkMedia, String)} replies
      * surface the new state via {@link CallLink#waitingRoom()}.
      *
-     * @param linkToken the non-{@code null} link token
-     * @param media     the non-{@code null} link media kind
-     * @throws NullPointerException            if any reference argument is {@code null}
+     * @param link the {@code https://call.whatsapp.com/{voice|video}/<token>} call-link URL; never {@code null}
+     * @throws NullPointerException            if {@code link} is {@code null}
+     * @throws IllegalArgumentException        if {@code link} is not a well-formed
+     *                                         {@code call.whatsapp.com/{voice|video}/<token>} call-link URL
      * @throws WhatsAppServerRuntimeException  if the relay rejected the request
      * @throws WhatsAppSessionException.Closed if the socket is closed
-     * @see #disableCallLinkWaitingRoom(String, CallLinkMedia)
+     * @see #disableCallLinkWaitingRoom(URI)
      */
-    void enableCallLinkWaitingRoom(String linkToken, CallLinkMedia media);
+    void enableCallLinkWaitingRoom(URI link);
 
     /**
      * Disables the waiting-room gate on an existing call link.
@@ -8282,14 +8058,15 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * {@link #queryCallLink(String, CallLinkMedia, String)} replies
      * surface the new state via {@link CallLink#waitingRoom()}.
      *
-     * @param linkToken the non-{@code null} link token
-     * @param media     the non-{@code null} link media kind
-     * @throws NullPointerException            if any reference argument is {@code null}
+     * @param link the {@code https://call.whatsapp.com/{voice|video}/<token>} call-link URL; never {@code null}
+     * @throws NullPointerException            if {@code link} is {@code null}
+     * @throws IllegalArgumentException        if {@code link} is not a well-formed
+     *                                         {@code call.whatsapp.com/{voice|video}/<token>} call-link URL
      * @throws WhatsAppServerRuntimeException  if the relay rejected the request
      * @throws WhatsAppSessionException.Closed if the socket is closed
-     * @see #enableCallLinkWaitingRoom(String, CallLinkMedia)
+     * @see #enableCallLinkWaitingRoom(URI)
      */
-    void disableCallLinkWaitingRoom(String linkToken, CallLinkMedia media);
+    void disableCallLinkWaitingRoom(URI link);
 
     /**
      * Checks whether the user already has an active federated-identity
@@ -8871,8 +8648,6 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     LinkedWhatsAppClient addWebHistorySyncMessagesListener(LinkedWebHistorySyncMessagesListener listener);
 
     LinkedWhatsAppClient addNewStatusListener(LinkedNewStatusListener listener);
-
-    LinkedWhatsAppClient addAccountTypeChangedListener(LinkedAccountTypeChangedListener listener);
 
     LinkedWhatsAppClient addAboutChangedListener(LinkedAboutChangedListener listener);
 

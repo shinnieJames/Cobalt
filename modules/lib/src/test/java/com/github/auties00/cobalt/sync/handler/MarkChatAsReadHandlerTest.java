@@ -5,13 +5,13 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionMessage;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageRangeBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessage;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRangeBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadAction;
 import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadActionBuilder;
@@ -236,7 +236,7 @@ class MarkChatAsReadHandlerTest {
             var remote = readMutation(true, PEER, Instant.ofEpochSecond(200L), remoteRange);
 
             var resolution = new MarkChatAsReadHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -251,7 +251,7 @@ class MarkChatAsReadHandlerTest {
             var remote = readMutation(false, PEER, Instant.ofEpochSecond(100L), remoteRange);
 
             var resolution = new MarkChatAsReadHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
 
         @Test
@@ -261,7 +261,7 @@ class MarkChatAsReadHandlerTest {
             var remote = readMutation(true, PEER, Instant.ofEpochSecond(200L), rangeWithLast(100L));
 
             var resolution = new MarkChatAsReadHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -271,7 +271,7 @@ class MarkChatAsReadHandlerTest {
             var remote = readMutation(false, PEER, Instant.ofEpochSecond(200L), rangeWithLast(100L));
 
             var resolution = new MarkChatAsReadHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
 
         @Test
@@ -291,7 +291,7 @@ class MarkChatAsReadHandlerTest {
             var remote = readMutation(true, PEER, Instant.ofEpochSecond(200L), remoteRange);
 
             var resolution = new MarkChatAsReadHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, resolution.state());
             assertNotNull(resolution.mergedMutation());
             var merged = resolution.mergedMutation().value().flatMap(sav -> sav.action()).filter(a -> a instanceof MarkChatAsReadAction).map(a -> (MarkChatAsReadAction) a).orElseThrow();
             assertTrue(merged.read(),

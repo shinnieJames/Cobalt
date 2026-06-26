@@ -273,8 +273,9 @@ public final class FcbSearch {
             for (int i = 0; i < fcbSubfrlen; i++) {
                 den[i] += dDen;
             }
+            float twoSign = 2.0f * sgn;
             for (int i = nzr[0]; i < nzr[1]; i++) {
-                den[i] += 2.0f * sgn * dSign[i] * phiFlip[phiCol + i];
+                den[i] += bandTerm(dSign[i], phiFlip[phiCol + i], twoSign);
             }
             celpQ(num, den, fcbSubfrlen, q);
             positions[pulseNr] = getMaxi(q, fcbSubfrlen);
@@ -549,8 +550,9 @@ public final class FcbSearch {
             for (int i = 0; i < fcbSubfrlen; i++) {
                 stateW.den[i] += dDen;
             }
+            float twoSign = 2.0f * fcb.signNew;
             for (int i = nzr[0]; i < nzr[1]; i++) {
-                stateW.den[i] += 2.0f * fcb.signNew * dSign[i] * phiFlip[phiCol + i];
+                stateW.den[i] += bandTerm(dSign[i], phiFlip[phiCol + i], twoSign);
             }
         } else {
             int[] nzr = new int[2];
@@ -702,6 +704,30 @@ public final class FcbSearch {
         nonZeroRange[0] = Math.max(col - lResp + 1, 0);
         nonZeroRange[1] = Math.min(col + lResp, fcbSubfrlen);
         return MAX_SF_LEN - col;
+    }
+
+    /**
+     * Computes one cross-energy band term of the denominator update, the native
+     * {@code 2.0f * sign_new * d_sign[i] * PhiCol[i]} of {@code add_pulse} and {@code smpl_fcb_search}.
+     *
+     * <p>Multiplies the target sign, the flipped auto-correlation entry, and twice the new pulse sign with the
+     * association {@code (dSign * phi) * twoSign}.
+     *
+     * @param dSign   the target sign at the band index, {@code d_sign[i]}
+     * @param phi     the flipped auto-correlation entry at the band index, {@code PhiCol[i]}
+     * @param twoSign twice the new pulse sign, {@code 2.0f * sign_new}
+     * @return the band term to add to the running denominator at this index
+     * @implNote This implementation reproduces the single-precision multiply association the {@code -Ofast}
+     * (with {@code -ffast-math} reassociation) SSE-vectorized native band loop uses. The vectorized body, which
+     * covers all but the up-to-three-element scalar remainder of the {@code 63}-wide non-zero band
+     * ({@code 2 * SMPL_PERC_RESP_LEN - 1}), groups the product as {@code (d_sign[i] * PhiCol[i]) * (2 * sign)},
+     * not the source left-to-right {@code ((2 * sign) * d_sign[i]) * PhiCol[i]}. The two orders can differ by
+     * one unit in the last place in the running {@code den}, which the {@code Q = num^2 / den} argmax can
+     * resolve differently when two candidate positions are near-tied. The factor {@code 2.0f * sign} equals
+     * {@code sign + sign} bit-for-bit, so the native add-doubled formation needs no special handling here.
+     */
+    private static float bandTerm(float dSign, float phi, float twoSign) {
+        return (dSign * phi) * twoSign;
     }
 
     /**

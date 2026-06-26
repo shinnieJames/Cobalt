@@ -18,7 +18,6 @@ import com.github.auties00.cobalt.listener.linked.internal.InternalLinkedListene
  */
 public sealed interface LinkedListener extends WhatsAppListener permits
         LinkedAboutChangedListener,
-        LinkedAccountTypeChangedListener,
         LinkedBlockedContactsListener,
         LinkedBusinessPrivacySettingChangedListener,
         LinkedCallEndedListener,

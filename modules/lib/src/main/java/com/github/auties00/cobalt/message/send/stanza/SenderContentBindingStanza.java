@@ -7,8 +7,8 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.security.GeneralSecurityException;
 import java.util.List;
@@ -46,7 +46,7 @@ public final class SenderContentBindingStanza {
      * <p>
      * Returns {@code null} when any prerequisite fails: the message carries no {@link ChatMessageInfo#messageSecret()},
      * the body is not an {@link ExtendedTextMessage} with a non-empty matched URL, or RCAT derivation fails. The returned
-     * node carries the raw RCAT bytes as its content; the surrounding stanza is rejected as malformed if the RCAT does
+     * stanza carries the raw RCAT bytes as its content; the surrounding stanza is rejected as malformed if the RCAT does
      * not match the URL after URL-rewriting.
      *
      * @implNote This implementation hashes on {@link ContentBindingToken#resolveContentId(String)} so URLs that differ
@@ -54,13 +54,13 @@ public final class SenderContentBindingStanza {
      *
      * @param messageInfo the outgoing {@link ChatMessageInfo}
      * @param selfJid     the sender's {@link Jid}
-     * @return the {@code <sender_content_binding>} {@link Node}, or {@code null}
+     * @return the {@code <sender_content_binding>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WAWebMsgRcatUtils", exports = "genContentBindingForMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static Node buildForUser(ChatMessageInfo messageInfo, Jid selfJid) {
+    public static Stanza buildForUser(ChatMessageInfo messageInfo, Jid selfJid) {
         var messageSecret = messageInfo.messageSecret().orElse(null);
         if (messageSecret == null) {
             return null;
@@ -98,11 +98,11 @@ public final class SenderContentBindingStanza {
      *
      * @param senderJid       the sender's device {@link Jid}
      * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}, or {@code null}
-     * @return the {@code <sender_content_binding>} {@link Node}, or {@code null}
+     * @return the {@code <sender_content_binding>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node build(Jid senderJid, Map<Jid, byte[]> contentBindings) {
+    public static Stanza build(Jid senderJid, Map<Jid, byte[]> contentBindings) {
         if (contentBindings == null) {
             return null;
         }
@@ -112,7 +112,7 @@ public final class SenderContentBindingStanza {
             return null;
         }
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("sender_content_binding")
                 .content(binding)
                 .build();

@@ -7,18 +7,19 @@ import com.github.auties00.cobalt.model.business.BusinessVerifiedName;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Builds the optional {@code <biz>} child node carried inside an outgoing {@code <message>} stanza for hosted-business
+ * Builds the optional {@code <biz>} child stanza carried inside an outgoing {@code <message>} stanza for hosted-business
  * and native-flow sends.
  * <p>
- * {@link ChatFanoutStanza} composes a {@code <biz>} node when the recipient is a verified business with privacy mode
+ * {@link ChatFanoutStanza} composes a {@code <biz>} stanza when the recipient is a verified business with privacy mode
  * set, or when the message carries a native-flow name such as an interactive payment button or a review-and-pay form.
  * The server reads the resulting attributes to route the stanza to the correct business backend.
  */
@@ -42,42 +43,42 @@ public final class BizStanza {
     }
 
     /**
-     * Builds the {@code <biz>} node for a recipient with no native-flow context.
+     * Builds the {@code <biz>} stanza for a recipient with no native-flow context.
      * <p>
      * Delegates to {@link #build(Jid, String, boolean)} with no native-flow name and returns {@code null} when the
      * recipient has no hosted-business privacy mode recorded.
      *
      * @param chatJid the recipient chat {@link Jid}
-     * @return the {@code <biz>} {@link Node}, or {@code null} when not applicable
+     * @return the {@code <biz>} {@link Stanza}, or {@code null} when not applicable
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node build(Jid chatJid) {
+    public Stanza build(Jid chatJid) {
         return build(chatJid, null, false);
     }
 
     /**
-     * Builds the {@code <biz>} node for a recipient, optionally including a native-flow name and an
+     * Builds the {@code <biz>} stanza for a recipient, optionally including a native-flow name and an
      * {@code <interactive>}/{@code <native_flow>} subtree.
      * <p>
-     * Three forms are emitted in priority order: a hosted-business node carrying the {@code host_storage},
-     * {@code actual_actors}, and {@code privacy_mode_ts} attributes (plus {@code native_flow_name} when present); a node
+     * Three forms are emitted in priority order: a hosted-business stanza carrying the {@code host_storage},
+     * {@code actual_actors}, and {@code privacy_mode_ts} attributes (plus {@code native_flow_name} when present); a stanza
      * wrapping {@code <interactive v="1" type="native_flow"><native_flow name="..."/></interactive>} when the message is
-     * a native-flow interactive payload; and a bare node carrying only {@code native_flow_name}. Returns {@code null}
+     * a native-flow interactive payload; and a bare stanza carrying only {@code native_flow_name}. Returns {@code null}
      * when none of the three conditions apply.
      *
      * @implNote This implementation reads the privacy-mode triplet from the {@link BusinessVerifiedName} contact record
-     * via {@link com.github.auties00.cobalt.store.ContactStore#findVerifiedBusinessName(Jid)}.
+     * via {@link LinkedWhatsAppContactStore#findVerifiedBusinessName(Jid)}.
      *
      * @param chatJid                 the recipient chat {@link Jid}
      * @param nativeFlowName          the native-flow name from the message protobuf, or {@code null}
      * @param isNativeFlowInteractive {@code true} when the message is a native-flow interactive payload that must wrap
      *                                an {@code <interactive>} subtree
-     * @return the {@code <biz>} {@link Node}, or {@code null} when none of the three branches apply
+     * @return the {@code <biz>} {@link Stanza}, or {@code null} when none of the three branches apply
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node build(Jid chatJid, String nativeFlowName, boolean isNativeFlowInteractive) {
+    public Stanza build(Jid chatJid, String nativeFlowName, boolean isNativeFlowInteractive) {
         var verifiedName = store.contactStore().findVerifiedBusinessName(chatJid)
                 .orElse(null);
         if (verifiedName != null && verifiedName.hasPrivacyMode()) {
@@ -91,7 +92,7 @@ public final class BizStanza {
                     .map(Instant::getEpochSecond)
                     .orElse(null);
 
-            return new NodeBuilder()
+            return new StanzaBuilder()
                     .description("biz")
                     .attribute("host_storage", hostStorage)
                     .attribute("actual_actors", actualActors)
@@ -101,24 +102,24 @@ public final class BizStanza {
         }
 
         if (nativeFlowName != null && isNativeFlowInteractive) {
-            var nativeFlowNode = new NodeBuilder()
+            var nativeFlowNode = new StanzaBuilder()
                     .description("native_flow")
                     .attribute("name", nativeFlowName)
                     .build();
-            var interactiveNode = new NodeBuilder()
+            var interactiveNode = new StanzaBuilder()
                     .description("interactive")
                     .attribute("v", "1")
                     .attribute("type", "native_flow")
                     .content(nativeFlowNode)
                     .build();
-            return new NodeBuilder()
+            return new StanzaBuilder()
                     .description("biz")
                     .content(interactiveNode)
                     .build();
         }
 
         if (nativeFlowName != null) {
-            return new NodeBuilder()
+            return new StanzaBuilder()
                     .description("biz")
                     .attribute("native_flow_name", nativeFlowName)
                     .build();
@@ -128,7 +129,7 @@ public final class BizStanza {
     }
 
     /**
-     * Builds the {@code <biz>} node for a group SKMSG send carrying a {@code payment_info} native-flow interactive
+     * Builds the {@code <biz>} stanza for a group SKMSG send carrying a {@code payment_info} native-flow interactive
      * message.
      * <p>
      * Groups attach a {@code <biz><interactive type="native_flow"><native_flow name="payment_info"/>} subtree only for
@@ -136,11 +137,11 @@ public final class BizStanza {
      * non-interactive bodies.
      *
      * @param container the outgoing {@link MessageContainer}
-     * @return the {@code <biz>} {@link Node}, or {@code null}
+     * @return the {@code <biz>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node buildGroup(MessageContainer container) {
+    public Stanza buildGroup(MessageContainer container) {
         if (!(container.content() instanceof InteractiveMessage im)) {
             return null;
         }
@@ -160,17 +161,17 @@ public final class BizStanza {
             return null;
         }
 
-        var nativeFlowNode = new NodeBuilder()
+        var nativeFlowNode = new StanzaBuilder()
                 .description("native_flow")
                 .attribute("name", nativeFlowName.get())
                 .build();
-        var interactiveNode = new NodeBuilder()
+        var interactiveNode = new StanzaBuilder()
                 .description("interactive")
                 .attribute("v", "1")
                 .attribute("type", "native_flow")
                 .content(nativeFlowNode)
                 .build();
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("biz")
                 .content(interactiveNode)
                 .build();

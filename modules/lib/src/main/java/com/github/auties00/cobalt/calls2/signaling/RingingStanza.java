@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -59,29 +59,29 @@ public record RingingStanza(String callId, Jid callCreator) implements CallMessa
     }
 
     /**
-     * Builds the {@code <ringing call-id call-creator/>} action node.
+     * Builds the {@code <ringing call-id call-creator/>} action stanza.
      *
-     * @return the ringing action node
+     * @return the ringing action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .build();
     }
 
     /**
-     * Decodes a {@code <ringing>} action node into a {@link RingingStanza}.
+     * Decodes a {@code <ringing>} action stanza into a {@link RingingStanza}.
      *
-     * @param node the {@code <ringing>} node
+     * @param stanza the {@code <ringing>} stanza
      * @return the decoded ringing signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static RingingStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+    public static RingingStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
         return new RingingStanza(callId, callCreator);
     }
 }

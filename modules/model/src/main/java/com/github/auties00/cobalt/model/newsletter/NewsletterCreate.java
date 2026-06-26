@@ -1,10 +1,10 @@
 package com.github.auties00.cobalt.model.newsletter;
 
+import com.github.auties00.cobalt.model.media.SizedInputStream;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -31,10 +31,13 @@ public final class NewsletterCreate {
     final String description;
 
     /**
-     * Optional JPEG-encoded profile picture.
+     * Optional JPEG-encoded profile picture supplied as a sized stream. The
+     * stream is read fully when the newsletter is created and its advertised
+     * length lets the payload be streamed into its Base64 form without
+     * buffering it.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
-    final byte[] picture;
+    final SizedInputStream picture;
 
     /**
      * Constructs a new {@code NewsletterCreate}.
@@ -44,7 +47,7 @@ public final class NewsletterCreate {
      * @param picture     the JPEG-encoded profile picture, or {@code null}
      * @throws NullPointerException if {@code name} is {@code null}
      */
-    NewsletterCreate(String name, String description, byte[] picture) {
+    NewsletterCreate(String name, String description, SizedInputStream picture) {
         this.name = Objects.requireNonNull(name, "name cannot be null");
         this.description = description;
         this.picture = picture;
@@ -72,10 +75,9 @@ public final class NewsletterCreate {
     /**
      * Returns the JPEG-encoded profile picture.
      *
-     * @return an {@link Optional} carrying the picture bytes, or empty
-     *         when unset
+     * @return an {@link Optional} carrying the picture, or empty when unset
      */
-    public Optional<byte[]> picture() {
+    public Optional<SizedInputStream> picture() {
         return Optional.ofNullable(picture);
     }
 
@@ -84,14 +86,14 @@ public final class NewsletterCreate {
         if (obj == this) return true;
         if (obj == null || obj.getClass() != this.getClass()) return false;
         var that = (NewsletterCreate) obj;
+        // picture is excluded: a sized stream has no meaningful value equality
         return Objects.equals(name, that.name) &&
-                Objects.equals(description, that.description) &&
-                Arrays.equals(picture, that.picture);
+                Objects.equals(description, that.description);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, description, Arrays.hashCode(picture));
+        return Objects.hash(name, description);
     }
 
     @Override
@@ -99,6 +101,6 @@ public final class NewsletterCreate {
         return "NewsletterCreate[" +
                 "name=" + name + ", " +
                 "description=" + description + ", " +
-                "picture=" + (picture == null ? "null" : picture.length + " bytes") + ']';
+                "picture=" + (picture == null ? "unset" : "set") + ']';
     }
 }

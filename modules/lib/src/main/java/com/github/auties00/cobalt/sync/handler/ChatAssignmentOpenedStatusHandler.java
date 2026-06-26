@@ -7,10 +7,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatAssignmentBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentOpenedStatusAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -22,7 +23,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * {@link ChatAssignmentOpenedStatusAction} here, and the result becomes
  * observable via the {@code opened} flag on
  * {@link com.github.auties00.cobalt.model.chat.ChatAssignment} as surfaced by
- * {@link com.github.auties00.cobalt.store.BusinessStore#findChatAssignment(Jid)}.
+ * {@link LinkedWhatsAppBusinessStore#findChatAssignment(Jid)}.
  *
  * @implNote
  * This implementation reuses the same

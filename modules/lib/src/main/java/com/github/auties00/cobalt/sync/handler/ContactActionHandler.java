@@ -6,14 +6,16 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.OrphanMutationEntry;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.OrphanMutationEntry;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteAction;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.ArrayList;
@@ -28,7 +30,7 @@ import java.util.regex.Pattern;
  * renames, or deletes an address-book contact on another device, the server
  * replays the change here as a {@link ContactAction}, and the result becomes
  * observable through
- * {@link com.github.auties00.cobalt.store.ContactStore#findContactByJid(com.github.auties00.cobalt.model.jid.JidProvider)}.
+ * {@link LinkedWhatsAppContactStore#findContactByJid(com.github.auties00.cobalt.model.jid.JidProvider)}.
  *
  * @implNote
  * This implementation drops several WA Web batch-level side effects
@@ -41,7 +43,7 @@ import java.util.regex.Pattern;
  * implemented per-mutation against the local
  * {@link com.github.auties00.cobalt.model.contact.Contact#isAddedByUsername()}
  * flag instead. LID-PN learning is performed inline via
- * {@link com.github.auties00.cobalt.store.ContactStore#registerLidMapping(Jid, Jid)}
+ * {@link LinkedWhatsAppContactStore#registerLidMapping(Jid, Jid)}
  * rather than batched and committed via WA Web's
  * {@code createLidPnMappings(flushImmediately:true, learningSource:"other")}.
  */
@@ -221,7 +223,7 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
      *
      * @implNote
      * This implementation walks
-     * {@link com.github.auties00.cobalt.store.SyncStore#findOrphanMutationsByModel(SyncPatchType, String)}
+     * {@link LinkedWhatsAppSyncStore#findOrphanMutationsByModel(SyncPatchType, String)}
      * and dispatches each entry through {@link UserStatusMuteHandler}.
      * Any thrown exception is caught and reported via
      * {@link Logger#warning(String)}, replacing WA Web's

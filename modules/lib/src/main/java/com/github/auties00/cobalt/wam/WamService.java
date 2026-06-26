@@ -6,9 +6,10 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.props.ABProp;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.wam.binary.WamEventDecoder;
 import com.github.auties00.cobalt.wam.binary.WamEventEncoder;
@@ -446,7 +447,7 @@ public abstract class WamService {
      * (id {@code 13}).
      *
      * <p>It is sourced from
-     * {@link com.github.auties00.cobalt.store.AccountStore#name()} at
+     * {@link LinkedWhatsAppAccountStore#name()} at
      * {@link #initialize()}; mirrors WA Web's
      * {@code WAWebBrowserInfo().os}.
      */
@@ -2121,15 +2122,15 @@ public abstract class WamService {
      * }
      *
      * @param buffer the encoded WAM buffer
-     * @return the server response node
+     * @return the server response stanza
      */
-    private Node sendViaIq(byte[] buffer) {
-        var add = new NodeBuilder()
+    private Stanza sendViaIq(byte[] buffer) {
+        var add = new StanzaBuilder()
                 .description("add")
                 .attribute("t", String.valueOf(now().getEpochSecond()))
                 .content(buffer)
                 .build();
-        var iq = new NodeBuilder()
+        var iq = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:stats")
                 .attribute("to", "s.whatsapp.net")
@@ -2148,10 +2149,10 @@ public abstract class WamService {
      * returns {@code 0} when no {@code <error>} child is present, which the
      * caller treats as permanent.
      *
-     * @param response the server response node
+     * @param response the server response stanza
      * @return the error code, or {@code 0} when no error child exists
      */
-    private static int parseErrorCode(Node response) {
+    private static int parseErrorCode(Stanza response) {
         var children = response.getChildren("error");
         if (children.isEmpty()) {
             return 0;

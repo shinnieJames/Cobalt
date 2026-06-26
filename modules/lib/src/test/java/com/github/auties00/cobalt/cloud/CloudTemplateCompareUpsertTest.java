@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.model.cloud.template.CloudOtpButton;
 import com.github.auties00.cobalt.model.cloud.template.CloudTemplateBlockReason;
 import com.github.auties00.cobalt.model.cloud.template.CloudTemplateCategory;
 import com.github.auties00.cobalt.model.cloud.template.CloudTemplateStatus;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -33,8 +34,8 @@ class CloudTemplateCompareUpsertTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .whatsappBusinessAccountId(WABA_ID)
                 .apiVersion(CloudApiVersion.V25_0)
@@ -47,7 +48,7 @@ class CloudTemplateCompareUpsertTest {
     class Compare {
         @Test
         @DisplayName("targets the base template compare edge with template_ids, start, and end")
-        void requestShape() {
+        void requestShape() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[]}");
             client(http).compareMessageTemplates(new CloudMessageTemplateComparisonRequestBuilder()
@@ -67,7 +68,7 @@ class CloudTemplateCompareUpsertTest {
 
         @Test
         @DisplayName("flattens the metric array into the three views")
-        void parseMetrics() {
+        void parseMetrics() throws Exception {
             var http = http();
             http.respondWith("""
                     {"data":[
@@ -91,7 +92,7 @@ class CloudTemplateCompareUpsertTest {
 
         @Test
         @DisplayName("leaves absent metrics empty and maps unknown block reasons to UNKNOWN")
-        void parsePartial() {
+        void parsePartial() throws Exception {
             var http = http();
             http.respondWith("""
                     {"data":[{"metric":"TOP_BLOCK_REASON","string_values":[{"key":"100","value":"WAT"}]}]}""");
@@ -112,7 +113,7 @@ class CloudTemplateCompareUpsertTest {
     class Upsert {
         @Test
         @DisplayName("posts the authentication body with languages and OTP buttons, omitting button text")
-        void requestShape() {
+        void requestShape() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[]}");
             var apps = List.of(new CloudOtpButton.App("com.mycompany.myapp", "K8a/AINcGX7"));
@@ -140,7 +141,7 @@ class CloudTemplateCompareUpsertTest {
 
         @Test
         @DisplayName("parses the per-language data entries")
-        void parseResponse() {
+        void parseResponse() throws Exception {
             var http = http();
             http.respondWith("""
                     {"data":[{"id":"111","language":"en_US","status":"APPROVED","category":"AUTHENTICATION"},

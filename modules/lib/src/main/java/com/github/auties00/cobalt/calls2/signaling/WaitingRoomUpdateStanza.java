@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -70,39 +70,39 @@ public record WaitingRoomUpdateStanza(String callId,
 
     /**
      * Builds the {@code <waiting_room_update call-id call-creator enabled is_admin link-token><user/>*
-     * </waiting_room_update>} action node.
+     * </waiting_room_update>} action stanza.
      *
      * <p>Each optional flag and the link token are omitted when their backing component is absent; the
      * element carries one {@code <user>} child per waiting participant.
      *
-     * @return the waiting-room update action node
+     * @return the waiting-room update action stanza
      */
     @Override
-    public Node toNode() {
+    public Stanza toStanza() {
         return WaitingRoomStanzas.build(type().wireTag().orElseThrow(), callId, callCreator,
                 enabled, linkToken, admin, users);
     }
 
     /**
-     * Decodes a {@code <waiting_room_update>} action node into a {@link WaitingRoomUpdateStanza}.
+     * Decodes a {@code <waiting_room_update>} action stanza into a {@link WaitingRoomUpdateStanza}.
      *
      * <p>Absent {@code enabled} and {@code is_admin} attributes yield empty optionals so a re-emitted
      * update preserves which flags arrived; every nested {@code <user>} child forms the waiting roster.
      *
-     * @param node the {@code <waiting_room_update>} node
+     * @param stanza the {@code <waiting_room_update>} stanza
      * @return the decoded waiting-room update signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static WaitingRoomUpdateStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var enabled = WaitingRoomStanzas.enabled(node);
-        var admin = WaitingRoomStanzas.admin(node);
-        var linkToken = WaitingRoomStanzas.linkToken(node);
-        var users = WaitingRoomStanzas.users(node);
+    public static WaitingRoomUpdateStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var enabled = WaitingRoomStanzas.enabled(stanza);
+        var admin = WaitingRoomStanzas.admin(stanza);
+        var linkToken = WaitingRoomStanzas.linkToken(stanza);
+        var users = WaitingRoomStanzas.users(stanza);
         return new WaitingRoomUpdateStanza(callId, callCreator, enabled, admin, linkToken, users);
     }
 }

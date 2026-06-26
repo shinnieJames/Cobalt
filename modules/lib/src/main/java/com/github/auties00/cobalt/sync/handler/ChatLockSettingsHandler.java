@@ -7,9 +7,10 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
 import com.github.auties00.cobalt.model.setting.ChatLockSettingsBuilder;
 import com.github.auties00.cobalt.model.setting.UserPassword;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +24,7 @@ import java.util.logging.Logger;
  * user toggles either field on another device, the server replays the
  * resulting {@link ChatLockSettings} here, and the result becomes readable
  * through
- * {@link com.github.auties00.cobalt.store.SettingsStore#chatLockSettings()}.
+ * {@link LinkedWhatsAppSettingsStore#chatLockSettings()}.
  *
  * @implNote
  * This implementation validates the secret-code payload exactly the
@@ -119,7 +120,7 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
      * <p>Iterates the batch, building up a single pending
      * {@link ChatLockSettings} record across all SET mutations, and persists it
      * once via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setChatLockSettings(ChatLockSettings)}.
+     * {@link LinkedWhatsAppSettingsStore#setChatLockSettings(ChatLockSettings)}.
      * If no SET mutation ever populated the pending record, emits the
      * mutations-parse-failed warning.
      *

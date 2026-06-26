@@ -5,10 +5,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.preference.Label;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelReorderingAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -73,7 +74,7 @@ public final class LabelReorderingHandler implements WebAppStateActionHandler {
      * {@link MutationApplicationResult#unsupported()}, an absent action payload
      * and an empty {@link LabelReorderingAction#sortedLabelIds()} list as
      * malformed. Each id is matched against the store via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#findLabel(String)};
+     * {@link LinkedWhatsAppSettingsStore#findLabel(String)};
      * present rows have their {@link Label#orderIndex()} set to the loop
      * position while absent ids are skipped. Labels present in the store but
      * absent from the action keep their existing {@link Label#orderIndex()}.

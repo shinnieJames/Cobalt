@@ -5,9 +5,9 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction;
@@ -16,7 +16,8 @@ import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartn
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,12 +35,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ({@link ClientPlatformType#IOS_BUSINESS} / {@link ClientPlatformType#ANDROID_BUSINESS}), the
  * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} gating, the SET happy path that
  * persists the action via
- * {@link com.github.auties00.cobalt.store.BusinessStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}, the malformed-value
+ * {@link LinkedWhatsAppBusinessStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}, the malformed-value
  * branch, the REMOVE rejection and the inherited timestamp-based conflict resolution.
  *
  * <p>The handler is built with a stubbed {@link TestABPropsService} so the gating prop can be
  * flipped per test, and runs against an in-memory {@link DeviceFixtures#temporaryStore} via
- * {@link TestWhatsAppClient} so the {@link com.github.auties00.cobalt.store.BusinessStore#merchantPaymentPartner()} read-back can be
+ * {@link TestWhatsAppClient} so the {@link LinkedWhatsAppBusinessStore#merchantPaymentPartner()} read-back can be
  * asserted directly.
  */
 @DisplayName("MerchantPaymentPartnerHandler")
@@ -290,7 +291,7 @@ class MerchantPaymentPartnerHandlerTest {
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -299,7 +300,7 @@ class MerchantPaymentPartnerHandlerTest {
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
 

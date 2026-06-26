@@ -21,6 +21,7 @@ import com.github.auties00.cobalt.model.cloud.template.library.CloudTemplateLibr
 import com.github.auties00.cobalt.model.cloud.template.library.CloudTemplateLibraryButtonInputBuilder;
 import com.github.auties00.cobalt.model.cloud.template.library.CloudTemplateLibraryButtonType;
 import com.github.auties00.cobalt.model.cloud.template.library.CloudTemplateLibraryButtonValue;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -48,8 +49,8 @@ class CloudTemplateManagementTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http, CloudApiVersion version) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http, CloudApiVersion version) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .whatsappBusinessAccountId(WABA_ID)
                 .apiVersion(version)
@@ -57,7 +58,7 @@ class CloudTemplateManagementTest {
                 .build();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
         return client(http, CloudApiVersion.V25_0);
     }
 
@@ -65,8 +66,8 @@ class CloudTemplateManagementTest {
     @DisplayName("get and query")
     class GetAndQuery {
         @Test
-        @DisplayName("queryMessageTemplateById fetches the template node by id")
-        void getById() {
+        @DisplayName("queryMessageTemplateById fetches the template stanza by id")
+        void getById() throws Exception {
             var http = http();
             http.respondWith("""
                     {"id":"1234567890","name":"order_confirmation","language":"en_US","category":"UTILITY",
@@ -86,7 +87,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("queryMessageTemplateById returns empty when the response carries no id")
-        void getByIdMissing() {
+        void getByIdMissing() throws Exception {
             var http = http();
             http.respondWith("{}");
             assertTrue(client(http).queryMessageTemplateById("nope").isEmpty());
@@ -98,7 +99,7 @@ class CloudTemplateManagementTest {
     class Pagination {
         @Test
         @DisplayName("queryAllMessageTemplates follows the cursor to the end")
-        void followsCursor() {
+        void followsCursor() throws Exception {
             var http = new PagingHttpClient(
                     "{\"data\":[{\"id\":\"1\",\"name\":\"a\",\"language\":\"en\",\"category\":\"UTILITY\"}],"
                             + "\"paging\":{\"cursors\":{\"after\":\"C1\"},\"next\":\"https://x?after=C1\"}}",
@@ -109,7 +110,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("queryAllMessageTemplates restarts once on a stale-cursor (#100) rejection")
-        void restartsOnStaleCursor() {
+        void restartsOnStaleCursor() throws Exception {
             var http = new PagingHttpClient(
                     "{\"data\":[{\"id\":\"1\",\"name\":\"a\",\"language\":\"en\",\"category\":\"UTILITY\"}],"
                             + "\"paging\":{\"cursors\":{\"after\":\"C1\"},\"next\":\"https://x?after=C1\"}}",
@@ -122,14 +123,14 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("queryAllMessageTemplates rethrows a non-100 CloudApiException")
-        void rethrowsAuthError() {
+        void rethrowsAuthError() throws Exception {
             var http = new PagingHttpClient("__ERROR_131009__");
             assertThrows(WhatsAppCloudException.CloudApiException.class,
                     () -> clientFor(http).queryAllMessageTemplates());
         }
 
-        private static CloudWhatsAppClient clientFor(PagingHttpClient http) {
-            return CloudWhatsAppClient.builder()
+        private static CloudWhatsAppClient clientFor(PagingHttpClient http) throws Exception {
+            return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                     .loadConnection("token", PHONE_ID)
                     .whatsappBusinessAccountId(WABA_ID)
                     .apiVersion(CloudApiVersion.V24_0)
@@ -143,7 +144,7 @@ class CloudTemplateManagementTest {
     class Deletion {
         @Test
         @DisplayName("deleteMessageTemplateLanguage(name, id) sends both name and hsm_id")
-        void deleteByNameAndId() {
+        void deleteByNameAndId() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).deleteMessageTemplateLanguage("order_confirmation", "1627019861106475");
@@ -156,7 +157,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("deleteMessageTemplates sends hsm_ids as a JSON array")
-        void batchDelete() {
+        void batchDelete() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).deleteMessageTemplates(List.of("111", "222"));
@@ -168,7 +169,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("deleteMessageTemplates on a v24 client throws CloudUnsupportedVersionException")
-        void batchDeleteGuard() {
+        void batchDeleteGuard() throws Exception {
             var http = http();
             var client = client(http, CloudApiVersion.V24_0);
             var exception = assertThrows(WhatsAppCloudException.CloudUnsupportedVersionException.class,
@@ -181,7 +182,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("deleteMessageTemplates rejects an empty id list")
-        void batchDeleteEmpty() {
+        void batchDeleteEmpty() throws Exception {
             var http = http();
             assertThrows(IllegalArgumentException.class,
                     () -> client(http).deleteMessageTemplates(List.of()));
@@ -193,7 +194,7 @@ class CloudTemplateManagementTest {
     class Library {
         @Test
         @DisplayName("createTemplateFromLibrary forwards the library name and button inputs")
-        void createFromLibrary() {
+        void createFromLibrary() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"1071234567890123\",\"status\":\"PENDING\",\"category\":\"UTILITY\"}");
             var button = new CloudTemplateLibraryButtonInputBuilder()
@@ -229,7 +230,7 @@ class CloudTemplateManagementTest {
     class TypedComponents {
         @Test
         @DisplayName("createMessageTemplate serializes header, body, footer, and buttons to the wire shape")
-        void serializesFullTemplate() {
+        void serializesFullTemplate() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"1234567890\",\"status\":\"PENDING\",\"category\":\"MARKETING\"}");
             var header = new CloudTemplateComponentHeaderBuilder()
@@ -287,7 +288,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("createMessageTemplate serializes a carousel of cards recursively")
-        void serializesCarousel() {
+        void serializesCarousel() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"1\",\"status\":\"PENDING\",\"category\":\"MARKETING\"}");
             var cardBody = new CloudTemplateComponentBodyBuilder().text("Card one").build();
@@ -312,7 +313,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("queryMessageTemplateById parses a Graph components array into the typed tree")
-        void parsesComponents() {
+        void parsesComponents() throws Exception {
             var http = http();
             http.respondWith("""
                     {"id":"1","name":"order_update","language":"en_US","category":"MARKETING","status":"APPROVED",
@@ -351,7 +352,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("an OTP authentication template builds via the typed OTP button and flows through create")
-        void otpAuthenticationTemplate() {
+        void otpAuthenticationTemplate() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"1234567890\",\"status\":\"PENDING\",\"category\":\"AUTHENTICATION\"}");
             var otp = new CloudTemplateButtonOtpBuilder()
@@ -377,7 +378,7 @@ class CloudTemplateManagementTest {
 
         @Test
         @DisplayName("a copy-code button without an example omits the example field")
-        void copyCodeWithoutExample() {
+        void copyCodeWithoutExample() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"1\",\"status\":\"PENDING\",\"category\":\"UTILITY\"}");
             var copyCode = new com.github.auties00.cobalt.model.cloud.template.CloudTemplateButtonCopyCodeBuilder().build();

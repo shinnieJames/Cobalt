@@ -2,12 +2,13 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -31,7 +32,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * @implNote
  * This implementation persists the action through
- * {@link com.github.auties00.cobalt.store.BusinessStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}
+ * {@link LinkedWhatsAppBusinessStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}
  * instead of WA Web's UserPrefs write, since Cobalt has no UserPrefs
  * key-value store. The SMB and A/B-prop gates are evaluated per mutation
  * rather than once for the batch, so a server-side prop flip reaches the next
@@ -87,7 +88,7 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
      * {@link MutationApplicationResult#unsupported()}. When both gates are
      * open and the operation is {@link SyncdOperation#SET}, the value is
      * persisted directly through
-     * {@link com.github.auties00.cobalt.store.BusinessStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}.
+     * {@link LinkedWhatsAppBusinessStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}.
      */
     @Override
     public MutationApplicationResult applyMutation(LinkedWhatsAppClient client, DecryptedMutation.Trusted mutation) {

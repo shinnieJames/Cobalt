@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.model.sync.action.chat;
 
-import com.github.auties00.cobalt.model.sync.SyncAction;
+import com.github.auties00.cobalt.model.sync.action.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;

@@ -16,7 +16,7 @@ import java.util.Objects;
  *
  * <p>The factory methods ({@link #integer(BigInteger)}, {@link #oid(String)}, {@link #time(Instant)}, and the
  * rest) and the {@link #sequence()} builder produce {@link Node}s rather than byte arrays, so composing a nested
- * structure allocates only the lightweight node objects, never an intermediate encoding. The lengths are
+ * structure allocates only the lightweight stanza objects, never an intermediate encoding. The lengths are
  * computed bottom-up exactly once when {@link Node#encode()} sizes the output buffer, and the bytes are written
  * straight into that one buffer; no value is encoded into a temporary array and then copied into a larger one,
  * which is the wasteful pattern a per-TLV encoder forces on a deeply nested document like an X.509 certificate.
@@ -104,24 +104,24 @@ final class Der {
     }
 
     /**
-     * Builds an {@code INTEGER} node from a {@link BigInteger}.
+     * Builds an {@code INTEGER} stanza from a {@link BigInteger}.
      *
      * <p>{@link BigInteger#toByteArray()} already yields the minimal big-endian two's-complement encoding,
      * including the leading {@code 0x00} a positive value with its high bit set needs to stay positive, so it is
      * the DER {@code INTEGER} content verbatim.
      *
      * @param value the integer value
-     * @return the {@code INTEGER} node
+     * @return the {@code INTEGER} stanza
      */
     static Node integer(BigInteger value) {
         return new Primitive(TAG_INTEGER, value.toByteArray());
     }
 
     /**
-     * Builds an {@code OBJECT IDENTIFIER} node from its dotted-decimal form.
+     * Builds an {@code OBJECT IDENTIFIER} stanza from its dotted-decimal form.
      *
      * @param dotted the dotted-decimal OID, for example {@code "1.2.840.10045.4.3.2"}
-     * @return the {@code OBJECT IDENTIFIER} node
+     * @return the {@code OBJECT IDENTIFIER} stanza
      * @throws IllegalArgumentException if {@code dotted} has fewer than two arcs or a non-numeric arc
      */
     static Node oid(String dotted) {
@@ -129,32 +129,32 @@ final class Der {
     }
 
     /**
-     * Builds a {@code BIT STRING} node whose bits are exactly the given octets with no unused trailing bits.
+     * Builds a {@code BIT STRING} stanza whose bits are exactly the given octets with no unused trailing bits.
      *
      * @param bytes the bit-string octets
-     * @return the {@code BIT STRING} node
+     * @return the {@code BIT STRING} stanza
      */
     static Node bitString(byte[] bytes) {
         return new BitString(bytes);
     }
 
     /**
-     * Builds the ASN.1 {@code NULL} node.
+     * Builds the ASN.1 {@code NULL} stanza.
      *
-     * @return the {@code NULL} node
+     * @return the {@code NULL} stanza
      */
     static Node nullValue() {
         return new Primitive(TAG_NULL, EMPTY);
     }
 
     /**
-     * Builds an X.509 {@code Time} node, choosing the representation RFC 5280 mandates for the year.
+     * Builds an X.509 {@code Time} stanza, choosing the representation RFC 5280 mandates for the year.
      *
      * <p>The instant is truncated to whole seconds and rendered in UTC. Years in {@code [1950, 2050)} use
      * {@code UTCTime} ({@code YYMMDDHHMMSSZ}); all others use {@code GeneralizedTime} ({@code YYYYMMDDHHMMSSZ}).
      *
      * @param instant the point in time
-     * @return the {@code UTCTime} or {@code GeneralizedTime} node
+     * @return the {@code UTCTime} or {@code GeneralizedTime} stanza
      */
     static Node time(Instant instant) {
         var truncated = instant.truncatedTo(ChronoUnit.SECONDS);
@@ -166,32 +166,32 @@ final class Der {
     }
 
     /**
-     * Wraps an already-DER-encoded value as a node so it can be spliced into a larger structure without being
+     * Wraps an already-DER-encoded value as a stanza so it can be spliced into a larger structure without being
      * re-encoded.
      *
      * <p>Used for the {@code Name} and {@code SubjectPublicKeyInfo} blobs the JDK hands back pre-encoded, and for
      * a {@code TBSCertificate} that has been encoded once so it could be signed.
      *
      * @param der an already-DER-encoded value
-     * @return a node that emits {@code der} verbatim
+     * @return a stanza that emits {@code der} verbatim
      */
     static Node raw(byte[] der) {
         return new Raw(der);
     }
 
     /**
-     * Builds a context-specific {@code [tagNumber] EXPLICIT} node around another node.
+     * Builds a context-specific {@code [tagNumber] EXPLICIT} stanza around another stanza.
      *
      * @param tagNumber the context-specific tag number
-     * @param content   the node being tagged
-     * @return the explicitly-tagged node
+     * @param content   the stanza being tagged
+     * @return the explicitly-tagged stanza
      */
     static Node explicit(int tagNumber, Node content) {
         return new Constructed(0xA0 | tagNumber, List.of(content));
     }
 
     /**
-     * Begins building a constructed {@code SEQUENCE} node.
+     * Begins building a constructed {@code SEQUENCE} stanza.
      *
      * @return a fresh sequence builder
      */
@@ -200,21 +200,21 @@ final class Der {
     }
 
     /**
-     * A node in the ASN.1 value tree that can report its own encoded length and write itself into a buffer.
+     * A stanza in the ASN.1 value tree that can report its own encoded length and write itself into a buffer.
      *
      * <p>Sizing and writing are split so the whole tree can be measured once to allocate one exactly-sized
      * buffer, then written into it in a single pass.
      */
     sealed interface Node permits Primitive, BitString, Constructed, Raw {
         /**
-         * Returns the number of bytes this node occupies once encoded.
+         * Returns the number of bytes this stanza occupies once encoded.
          *
          * @return the encoded length
          */
         int encodedLength();
 
         /**
-         * Writes this node's encoding into {@code out} starting at {@code offset}.
+         * Writes this stanza's encoding into {@code out} starting at {@code offset}.
          *
          * @param out    the destination buffer, sized to hold the whole document
          * @param offset the index at which to start writing
@@ -223,9 +223,9 @@ final class Der {
         int writeTo(byte[] out, int offset);
 
         /**
-         * Encodes this node into a fresh, exactly-sized byte array.
+         * Encodes this stanza into a fresh, exactly-sized byte array.
          *
-         * @return the DER encoding of this node
+         * @return the DER encoding of this stanza
          */
         default byte[] encode() {
             var out = new byte[encodedLength()];
@@ -235,7 +235,7 @@ final class Der {
     }
 
     /**
-     * A primitive node: a tag wrapping a fixed value body.
+     * A primitive stanza: a tag wrapping a fixed value body.
      *
      * @param tag   the ASN.1 tag octet
      * @param value the value body
@@ -255,7 +255,7 @@ final class Der {
     }
 
     /**
-     * A node that emits an already-encoded value verbatim.
+     * A stanza that emits an already-encoded value verbatim.
      *
      * @param der the complete encoded value
      */
@@ -272,7 +272,7 @@ final class Der {
     }
 
     /**
-     * A {@code BIT STRING} node whose bits are exactly the held octets with no unused trailing bits.
+     * A {@code BIT STRING} stanza whose bits are exactly the held octets with no unused trailing bits.
      *
      * <p>The mandatory {@code 0x00} unused-bit-count octet is written straight into the output buffer ahead of
      * the octets, so the held array is never copied into a larger one just to prepend that byte.
@@ -296,7 +296,7 @@ final class Der {
     }
 
     /**
-     * A constructed node: a tag wrapping an ordered list of child nodes.
+     * A constructed stanza: a tag wrapping an ordered list of child nodes.
      */
     static final class Constructed implements Node {
         /**
@@ -310,7 +310,7 @@ final class Der {
         private final List<Node> children;
 
         /**
-         * Constructs a constructed node over a tag and its children.
+         * Constructs a constructed stanza over a tag and its children.
          *
          * @param tag      the ASN.1 tag octet
          * @param children the ordered children
@@ -351,7 +351,7 @@ final class Der {
     }
 
     /**
-     * A fluent builder that accumulates the children of a {@code SEQUENCE} and produces the node.
+     * A fluent builder that accumulates the children of a {@code SEQUENCE} and produces the stanza.
      */
     static final class SequenceBuilder {
         /**
@@ -366,21 +366,21 @@ final class Der {
         }
 
         /**
-         * Appends a child node to the sequence.
+         * Appends a child stanza to the sequence.
          *
          * @param node the child to append
          * @return this builder
-         * @throws NullPointerException if {@code node} is {@code null}
+         * @throws NullPointerException if {@code stanza} is {@code null}
          */
         SequenceBuilder add(Node node) {
-            children.add(Objects.requireNonNull(node, "node cannot be null"));
+            children.add(Objects.requireNonNull(node, "stanza cannot be null"));
             return this;
         }
 
         /**
-         * Produces the immutable {@code SEQUENCE} node over the accumulated children.
+         * Produces the immutable {@code SEQUENCE} stanza over the accumulated children.
          *
-         * @return the sequence node
+         * @return the sequence stanza
          */
         Node build() {
             return new Constructed(TAG_SEQUENCE, List.copyOf(children));

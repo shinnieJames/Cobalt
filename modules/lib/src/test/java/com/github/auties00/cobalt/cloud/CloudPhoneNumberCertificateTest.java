@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.cloud;
 
 import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,8 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CloudPhoneNumberCertificateTest {
     private static final String PHONE_ID = "1234567890";
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V21_0)
                 .httpClient(http)
@@ -22,7 +23,7 @@ class CloudPhoneNumberCertificateTest {
 
     @Test
     @DisplayName("queryPhoneNumber maps new_certificate when present")
-    void parsesNewCertificate() {
+    void parsesNewCertificate() throws Exception {
         var http = new RecordingHttpClient();
         http.respondWith("""
                 {"id":"123456789","certificate":"Y2VydA==","new_certificate":"bmV3Y2VydA=="}""");
@@ -33,7 +34,7 @@ class CloudPhoneNumberCertificateTest {
 
     @Test
     @DisplayName("queryPhoneNumber requests the new_certificate field")
-    void requestsNewCertificate() {
+    void requestsNewCertificate() throws Exception {
         var http = new RecordingHttpClient();
         http.respondWith("{}");
         client(http).queryPhoneNumber();
@@ -42,7 +43,7 @@ class CloudPhoneNumberCertificateTest {
 
     @Test
     @DisplayName("queryPhoneNumber leaves new_certificate empty when absent")
-    void absentNewCertificate() {
+    void absentNewCertificate() throws Exception {
         var http = new RecordingHttpClient();
         http.respondWith("{\"id\":\"123456789\"}");
         var number = client(http).queryPhoneNumber();

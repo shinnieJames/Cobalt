@@ -20,7 +20,9 @@ import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.setting.GlobalSettings;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.Lid11MigrationLifecycleEventBuilder;
 import com.github.auties00.cobalt.wam.type.MigrationStageEnum;
@@ -2263,11 +2265,11 @@ public final class LiveLidMigrationService implements LidMigrationService {
      *
      * <p>This underpins {@link #toCommonAddressingMode(Jid, Jid)} and
      * {@link #getAlternateMsgKey(MessageKey)}. The fast path recognises the
-     * current user from {@link com.github.auties00.cobalt.store.AccountStore#jid()} and
-     * {@link com.github.auties00.cobalt.store.AccountStore#lid()} so a "me" flip never touches the mapping
+     * current user from {@link LinkedWhatsAppAccountStore#jid()} and
+     * {@link LinkedWhatsAppAccountStore#lid()} so a "me" flip never touches the mapping
      * table; any other JID falls back to
-     * {@link com.github.auties00.cobalt.store.ContactStore#findPhoneByLid(Jid)} or
-     * {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(Jid)}.
+     * {@link LinkedWhatsAppContactStore#findPhoneByLid(Jid)} or
+     * {@link LinkedWhatsAppContactStore#findLidByPhone(Jid)}.
      *
      * @implNote
      * This implementation collapses WhatsApp Web's separate alternate-user,

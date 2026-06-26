@@ -20,10 +20,11 @@ import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -45,7 +46,7 @@ import java.util.function.Function;
  * place that binds each seam to the concrete unit that backs it for a live client, so the call service can
  * hold a fully wired engine without knowing how a transition, a timer, or an event reaches its unit. It
  * composes the units a live client already owns: the offer-ack send rides the client's id-correlated
- * {@link LinkedWhatsAppClient#sendNode(com.github.auties00.cobalt.node.NodeBuilder) sendNode}, the call-key
+ * {@link LinkedWhatsAppClient#sendNode(StanzaBuilder) sendNode}, the call-key
  * crypto is the {@link CallKeyCryptography} facade over the reused Signal pipeline, signaling egress and
  * randomness come
  * from {@link LiveVoipHostApi}, the at-most-two call contexts live in a single {@link Calls2CallManager},
@@ -294,7 +295,7 @@ public final class Calls2EngineAssembler {
      *
      * @implNote This implementation keys the media plane on the LID device JID rather than the account
      * phone-number JID, fixing the divergence where the self-JID holder carried the
-     * {@link com.github.auties00.cobalt.store.AccountStore#jid()} phone-number form: the native
+     * {@link LinkedWhatsAppAccountStore#jid()} phone-number form: the native
      * {@code call_generate_device_ssrc} (fn10901) and {@code derive_sframe_key} (fn10896) key on the device's
      * {@code <lid>:<device>@lid} JID (verified in re/calls2-spec/captures/group-sframe-frame.json against
      * device JID {@code 83116928594056:2@lid}), so the self device JID must be the LID device form for the
@@ -320,10 +321,10 @@ public final class Calls2EngineAssembler {
     /**
      * Sends an offer envelope on the client's id-correlated socket and returns its synchronous call ack.
      *
-     * <p>The controller builds the {@code <call>} offer envelope and hands it here as a built {@link Node};
-     * the client's value-returning send takes a {@link com.github.auties00.cobalt.node.NodeBuilder} and
+     * <p>The controller builds the {@code <call>} offer envelope and hands it here as a built {@link Stanza};
+     * the client's value-returning send takes a {@link StanzaBuilder} and
      * auto-injects the stanza id, so this sender re-wraps the envelope's recipient and offer child into a
-     * fresh builder and blocks on {@link LinkedWhatsAppClient#sendNode(com.github.auties00.cobalt.node.NodeBuilder)}
+     * fresh builder and blocks on {@link LinkedWhatsAppClient#sendNode(StanzaBuilder)}
      * for the relay-bearing ack.
      */
     private record ClientOfferAckSender(LinkedWhatsAppClient whatsapp) implements Calls2OfferAckSender {
@@ -341,19 +342,19 @@ public final class Calls2EngineAssembler {
          *
          * @implNote This implementation reads the {@code to} recipient and the single offer child off the
          * built envelope and rebuilds the {@code <call>} envelope as a
-         * {@link com.github.auties00.cobalt.node.NodeBuilder} so the client send can stamp the dispatcher
+         * {@link StanzaBuilder} so the client send can stamp the dispatcher
          * id, then blocks for the matching {@code <ack class="call">}. A
          * {@link WhatsAppCallException.DataChannel} surfaces a send failure as the non-fatal call exception
          * the controller expects.
          */
         @Override
-        public Node sendOfferAndAwaitAck(Node offerEnvelope) {
+        public Stanza sendOfferAndAwaitAck(Stanza offerEnvelope) {
             Objects.requireNonNull(offerEnvelope, "offerEnvelope cannot be null");
             var to = offerEnvelope.getAttributeAsJid("to")
                     .orElseThrow(() -> new WhatsAppCallException.DataChannel("offer envelope has no recipient"));
             var child = offerEnvelope.getChild()
                     .orElseThrow(() -> new WhatsAppCallException.DataChannel("offer envelope has no action"));
-            var builder = new com.github.auties00.cobalt.node.NodeBuilder()
+            var builder = new StanzaBuilder()
                     .description(offerEnvelope.description())
                     .attribute("to", to)
                     .content(child);
@@ -367,29 +368,29 @@ public final class Calls2EngineAssembler {
 
     /**
      * Dispatches a call-link or waiting-room request-reply IQ over the client's id-correlated socket and
-     * returns the echoed action node of the reply.
+     * returns the echoed action stanza of the reply.
      *
      * <p>This is the live {@link CallLinkIqSender} the call-link and waiting-room control units depend on. It
-     * wraps the typed request's {@linkplain CallMessage#toNode() action node} in the
+     * wraps the typed request's {@linkplain CallMessage#toStanza() action stanza} in the
      * {@code <call to="call">} envelope addressed to the {@code call} service and blocks on
-     * {@link LinkedWhatsAppClient#sendNode(NodeBuilder)} for the matching {@code <ack class="call">} reply,
+     * {@link LinkedWhatsAppClient#sendNode(StanzaBuilder)} for the matching {@code <ack class="call">} reply,
      * then unwraps the reply's echoed action child so the controller's ack parser receives the
-     * {@code <link_query>}, {@code <link_join>}, or {@code <waiting_room>} node it expects rather than the
+     * {@code <link_query>}, {@code <link_join>}, or {@code <waiting_room>} stanza it expects rather than the
      * {@code <ack>} envelope.
      *
      * @implNote This implementation reproduces the {@code to="call"} SMAX round trip the native call-link and
      * waiting-room IQ senders of module {@code ff-tScznZ8P} ({@code protocol/xmpp/stanzas/call_link.cc} and
      * {@code waiting_room.cc}) perform, modeled on the proven legacy
-     * {@link com.github.auties00.cobalt.node.smax.voip.SmaxLinkQueryRequest} wire shape
+     * {@link com.github.auties00.cobalt.stanza.smax.voip.SmaxLinkQueryRequest} wire shape
      * ({@code <call to="call"><link_query/></call>}). The per-operation native message-type code (query
      * {@code 0x84}, admit {@code 0x47}, deny {@code 0x49}) is the relay's internal classification and is not
      * stamped as a wire attribute, because the relay routes the request on its single child element tag, the
      * same tag the request record renders; the proven legacy query and toggle RPCs likewise carry no
      * {@code type} attribute on the {@code <call>} envelope. The reply is the {@code <ack class="call">}
      * envelope whose single echoed action child each ack parser
-     * ({@link com.github.auties00.cobalt.calls2.signaling.LinkQueryAck#of(Node)},
-     * {@link com.github.auties00.cobalt.calls2.signaling.LinkJoinAck#of(Node)},
-     * {@link com.github.auties00.cobalt.calls2.signaling.WaitingRoomAdmitAck#of(Node)}) parses, so this sender
+     * ({@link com.github.auties00.cobalt.calls2.signaling.LinkQueryAck#of(Stanza)},
+     * {@link com.github.auties00.cobalt.calls2.signaling.LinkJoinAck#of(Stanza)},
+     * {@link com.github.auties00.cobalt.calls2.signaling.WaitingRoomAdmitAck#of(Stanza)}) parses, so this sender
      * returns that child; an error reply with no echoed child returns the envelope so the parser surfaces the
      * missing required attribute.
      */
@@ -416,22 +417,22 @@ public final class Calls2EngineAssembler {
         /**
          * {@inheritDoc}
          *
-         * @implNote This implementation wraps the request's action node in a {@code <call to="call">}
+         * @implNote This implementation wraps the request's action stanza in a {@code <call to="call">}
          * envelope, blocks on the client's id-correlated send for the {@code <ack class="call">} reply, and
          * returns the reply's echoed action child (preferring the child whose tag matches the request, then
          * the single child, then the envelope itself) so the controller's ack parser receives the echoed
-         * action node rather than the {@code <ack>} wrapper. A send failure surfaces as a non-fatal
+         * action stanza rather than the {@code <ack>} wrapper. A send failure surfaces as a non-fatal
          * {@link WhatsAppCallException.DataChannel} the controller treats as the operation failing.
          */
         @Override
-        public Node sendForReply(CallMessage request) {
+        public Stanza sendForReply(CallMessage request) {
             Objects.requireNonNull(request, "request cannot be null");
-            var action = request.toNode();
-            var builder = new NodeBuilder()
+            var action = request.toStanza();
+            var builder = new StanzaBuilder()
                     .description(CALL_ELEMENT)
                     .attribute(TO_ATTRIBUTE, JidServer.call())
                     .content(action);
-            Node reply;
+            Stanza reply;
             try {
                 reply = whatsapp.sendNode(builder);
             } catch (RuntimeException exception) {

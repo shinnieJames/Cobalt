@@ -31,17 +31,21 @@ import java.util.Objects;
  * low-band path with the postfilter disabled: a 60 ms MLow packet carries 960 samples regardless of the
  * {@code frameSize} requested, because the sample count is fixed by the packet's TOC.
  *
- * <p>The codec runs at the locked 9600 bps profile, so {@link #modify(OpusCodecParams)} is a no-op: MLow
- * carries its own internal rate control rather than the Opus bitrate and complexity knobs, and this scope
- * pins the rate. Packet-loss recovery ({@link #recover(byte[], int)}, the MLow PLC and RED-based
+ * <p>The codec is constructed in the high-rate class and adapts its target bitrate to the engine bandwidth
+ * estimate: {@link #modify(OpusCodecParams)} reads the live target the audio rate-control loop writes,
+ * clamps it to the MLow rate window {@code [6000, 32000]} bps, and re-targets the internal
+ * {@code BitrateController}; MLow's own per-subframe rate control then steers the instantaneous bitrate
+ * toward it. The remaining Opus knobs (complexity, maximum bandwidth, packet-loss percentage) do not map to
+ * the MLow CELP core and are not applied. Packet-loss recovery ({@link #recover(byte[], int)}, the MLow PLC and RED-based
  * reconstruction) and in-band forward-error-correction decode are out of scope for this milestone and
  * throw. The 1:1 and group media paths select MLow over {@link OpusAudioCodec} on the per-call
- * {@code p->use_mlow_codec} voip parameter.
+ * {@code encode.use_mlow_codec_v1} voip parameter.
  *
  * @implNote This implementation routes the encode path through the pure-Java {@code AudioEncoderMLowImpl}
  * port {@link MlowEncoder} and the decode path through the {@code AudioDecoderMLowImpl} port
  * {@link MlowDecoder} of the wa-voip WASM module {@code ff-tScznZ8P}; the codec is selected per call by the
- * engine field {@code p->use_mlow_codec} ({@code media.encoder.use_mlow_codec}). The per-frame
+ * engine field {@code p->use_mlow_codec_v1}, delivered in the {@code encode} section of the
+ * {@code <voip_settings>} document as {@code encode.use_mlow_codec_v1}. The per-frame
  * classification flags are read back from the emitted TOC byte ({@code bit 6} is the VAD flag, {@code bit 1}
  * the in-band FEC flag), matching {@code mlow_packet_has_vad_flag} and {@code mlow_packet_has_fec_content};
  * the level reproduces the RMS {@code -dBov} the native encode stamps, identical to
@@ -81,6 +85,35 @@ public final class MLowAudioCodec implements AudioCodec {
     private static final int TOC_FEC_MASK = 0x02;
 
     /**
+     * The lowest target bitrate, in bits per second, MLow is re-targeted to, the native low-rate floor.
+     *
+     * <p>The {@code [6000, 32000]} window matches the native MLow rate range; the engine bandwidth estimate
+     * never crosses below the 8700 bps 60 ms low-rate threshold on the adaptive path, so the floor is the
+     * low-rate profile's own target.
+     */
+    private static final int MIN_TARGET_BITRATE = 6000;
+
+    /**
+     * The highest target bitrate, in bits per second, MLow is re-targeted to, matching WhatsApp's observed cap.
+     */
+    private static final int MAX_TARGET_BITRATE = 32000;
+
+    /**
+     * The initial target bitrate, in bits per second, the encoder is constructed at before the first
+     * {@link #modify(OpusCodecParams)} re-targets it.
+     *
+     * <p>Set to WhatsApp's {@code 25000} bps high-quality target, the 16 kHz wideband default the Opus path
+     * also seeds from {@link OpusDefaultAttr#WB}; the rate-control loop then adapts it downward toward the
+     * engine bandwidth estimate under congestion.
+     */
+    private static final int INITIAL_TARGET_BITRATE = 25000;
+
+    /**
+     * The system logger MLow uses to record an applied target-bitrate change, at {@code INFO} level.
+     */
+    private static final System.Logger LOGGER = System.getLogger(MLowAudioCodec.class.getName());
+
+    /**
      * The pure-Java MLow CELP analysis-by-synthesis kernel the encode path delegates to.
      *
      * <p>Threads cross-frame and cross-packet state internally, so it is constructed once per stream and
@@ -113,6 +146,15 @@ public final class MLowAudioCodec implements AudioCodec {
     private boolean lastWasDiscontinuous;
 
     /**
+     * The target bitrate, in bits per second, last applied to the {@link MlowEncoder}.
+     *
+     * <p>Seeded to {@link #INITIAL_TARGET_BITRATE} at construction and updated by
+     * {@link #modify(OpusCodecParams)} only when the clamped engine target changes, so a steady target leaves
+     * the encoder untouched and its fixed-rate output byte-for-byte identical.
+     */
+    private int appliedTargetBitrate;
+
+    /**
      * Whether this codec has been closed; once closed every operation throws.
      */
     private boolean closed;
@@ -123,8 +165,9 @@ public final class MLowAudioCodec implements AudioCodec {
      * <p>Both kernels start in their reset state, ready to code the first frame of a stream.
      */
     public MLowAudioCodec() {
-        this.encoder = new MlowEncoder();
+        this.encoder = new MlowEncoder(INITIAL_TARGET_BITRATE);
         this.kernel = new MlowDecoder();
+        this.appliedTargetBitrate = INITIAL_TARGET_BITRATE;
         this.closed = false;
     }
 
@@ -192,13 +235,32 @@ public final class MLowAudioCodec implements AudioCodec {
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation is a no-op: MLow runs the locked 9600 bps profile and carries its own
-     * internal rate control rather than the Opus bitrate and complexity knobs {@code params} expresses, so
-     * there is nothing to reconfigure on this scope.
+     * @implNote This implementation re-targets MLow's internal rate controller from the engine bandwidth
+     * estimate: it reads the live target {@link OpusCodecParams#defaultBitrate()} the audio rate-control loop
+     * writes each round (the same field {@link OpusAudioCodec#modify(OpusCodecParams)} reads), clamps it to the
+     * MLow rate window {@code [6000, 32000]} bps, and forwards it to {@link MlowEncoder#updateTargetBitrate(int)}
+     * so the next packet's {@code BitrateController} steers toward it. The automatic-bitrate sentinel
+     * {@link OpusCodecParams#BITRATE_AUTO} is ignored because MLow has no encoder-chosen target to resolve. A
+     * round whose clamped target equals the last applied value is skipped, so a steady bitrate leaves the
+     * encoder untouched and its output byte-for-byte identical to the fixed-rate path. The other Opus knobs
+     * ({@code complexity}, {@code maxBandwidth}, packet-loss percentage) do not map to the MLow CELP core and
+     * are not applied.
      */
     @Override
     public void modify(OpusCodecParams params) {
+        Objects.requireNonNull(params, "params cannot be null");
         requireOpen();
+        var requested = params.defaultBitrate();
+        if (requested == OpusCodecParams.BITRATE_AUTO) {
+            return;
+        }
+        var clamped = Math.clamp(requested, MIN_TARGET_BITRATE, MAX_TARGET_BITRATE);
+        if (clamped == appliedTargetBitrate) {
+            return;
+        }
+        encoder.updateTargetBitrate(clamped);
+        appliedTargetBitrate = clamped;
+        LOGGER.log(System.Logger.Level.INFO, "calls2 MLow audio target bitrate -> {0} bps", clamped);
     }
 
     /**

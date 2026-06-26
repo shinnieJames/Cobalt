@@ -6,12 +6,13 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatAction;
 import com.github.auties00.cobalt.model.sync.action.setting.UnarchiveChatsSetting;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ import java.util.List;
  * the handler re-archives previously-archived chats per their stored
  * {@link ArchiveChatAction} entries. The boolean preference itself is persisted
  * on
- * {@link com.github.auties00.cobalt.store.SettingsStore#setUnarchiveChats(boolean)}.
+ * {@link LinkedWhatsAppSettingsStore#setUnarchiveChats(boolean)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebArchiveSettingSync")
 public final class UnarchiveChatsSettingHandler implements WebAppStateActionHandler {
@@ -104,7 +105,7 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
      * to a {@link UnarchiveChatsSetting} is reported as malformed; otherwise the
      * boolean preference (a missing nullable Boolean coalescing to {@code false})
      * is persisted via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setUnarchiveChats(boolean)}
+     * {@link LinkedWhatsAppSettingsStore#setUnarchiveChats(boolean)}
      * and {@link #updateSideEffectOnChats(LinkedWhatsAppClient, boolean)} runs. Any
      * thrown exception maps to {@link MutationApplicationResult#failed()}.
      *

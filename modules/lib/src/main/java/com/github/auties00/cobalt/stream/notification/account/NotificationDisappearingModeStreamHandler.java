@@ -1,12 +1,12 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
-import com.github.auties00.cobalt.node.Node;
 
 import java.time.Instant;
 
@@ -56,18 +56,18 @@ final class NotificationDisappearingModeStreamHandler extends SocketStreamHandle
      * Applies the new ephemeral timer to the addressed chat (when known) and sends the protocol-level
      * ACK.
      *
-     * <p>Delegates to {@link #handleDisappearingModeNotification(Node)} for the mutation, then always
+     * <p>Delegates to {@link #handleDisappearingModeNotification(Stanza)} for the mutation, then always
      * sends the ACK regardless of whether the chat existed.</p>
      *
      * @implNote This implementation always sends the ACK regardless of whether the chat existed, matching
      * WA Web which returns the ack from the parser's promise resolution path.
      *
-     * @param node the non-{@code null} {@code <notification>} stanza
+     * @param stanza the non-{@code null} {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        handleDisappearingModeNotification(node);
-        sendNotificationAck(node);
+    public void handle(Stanza stanza) {
+        handleDisappearingModeNotification(stanza);
+        sendNotificationAck(stanza);
     }
 
     /**
@@ -83,13 +83,13 @@ final class NotificationDisappearingModeStreamHandler extends SocketStreamHandle
      * @implNote This implementation applies the same timestamp guard WA Web applies, but at the
      * chat-record level rather than the contact-record level.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handleDisappearingModeNotification(Node node) {
-        var from = node.getAttributeAsJid("from")
+    private void handleDisappearingModeNotification(Stanza stanza) {
+        var from = stanza.getAttributeAsJid("from")
                 .map(jid -> jid.toUserJid())
                 .orElse(null);
-        var disappearingMode = node.getChild("disappearing_mode").orElse(null);
+        var disappearingMode = stanza.getChild("disappearing_mode").orElse(null);
         if (from == null || disappearingMode == null) {
             return;
         }
@@ -119,9 +119,9 @@ final class NotificationDisappearingModeStreamHandler extends SocketStreamHandle
      *
      * <p>The ack is fire-and-forget.</p>
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("disappearing_mode").send();
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("disappearing_mode").send();
     }
 }

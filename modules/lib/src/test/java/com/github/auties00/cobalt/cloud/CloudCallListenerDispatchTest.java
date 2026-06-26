@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
 import com.github.auties00.cobalt.model.cloud.CloudCallEvent;
 import com.github.auties00.cobalt.model.cloud.CloudCallPermissionResponse;
 import com.github.auties00.cobalt.model.cloud.CloudCallStatus;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -38,8 +39,8 @@ class CloudCallListenerDispatchTest {
         }
     }
 
-    private static CloudWhatsAppClient client(int port) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(int port) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .httpClient(new RecordingHttpClient())

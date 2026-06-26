@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link AudioFrame#ptsMicros()} microsecond clock rather than the legacy millisecond clock.
  */
 public sealed class BufferedAudioOutput implements AudioOutput
-        permits FileAudioOutput, MicrophoneAudioOutput, SilenceAudioOutput, ToneAudioOutput {
+        permits FfmpegAudioOutput, MicrophoneAudioOutput, SilenceAudioOutput, ToneAudioOutput {
     /**
      * Holds the maximum number of buffered frames before {@link #write(AudioFrame)} blocks.
      *

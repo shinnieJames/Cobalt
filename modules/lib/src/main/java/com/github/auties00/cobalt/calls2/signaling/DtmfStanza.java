@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -72,36 +72,36 @@ public record DtmfStanza(String callId, Jid callCreator, String tone)
     }
 
     /**
-     * Builds the {@code <dtmf> <tone/> </dtmf>} action node.
+     * Builds the {@code <dtmf> <tone/> </dtmf>} action stanza.
      *
-     * @return the DTMF action node
+     * @return the DTMF action stanza
      */
     @Override
-    public Node toNode() {
-        var toneNode = new NodeBuilder()
+    public Stanza toStanza() {
+        var toneNode = new StanzaBuilder()
                 .description(TONE_ELEMENT)
                 .content(tone)
                 .build();
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .content(toneNode)
                 .build();
     }
 
     /**
-     * Decodes a {@code <dtmf>} action node into a {@link DtmfStanza}.
+     * Decodes a {@code <dtmf>} action stanza into a {@link DtmfStanza}.
      *
-     * @param node the {@code <dtmf>} node
+     * @param stanza the {@code <dtmf>} stanza
      * @return the decoded DTMF action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent, or if the {@code <tone>} child element is absent
      */
-    public static DtmfStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var tone = node.getChild(TONE_ELEMENT)
-                .flatMap(Node::toContentString)
+    public static DtmfStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var tone = stanza.getChild(TONE_ELEMENT)
+                .flatMap(Stanza::toContentString)
                 .orElseThrow(() -> new NoSuchElementException("dtmf requires a tone child element"));
         return new DtmfStanza(callId, callCreator, tone);
     }

@@ -4,16 +4,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import com.github.auties00.cobalt.sync.factory.DisableLinkPreviewsMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Each test runs against a fresh in-memory {@link DeviceFixtures#temporaryStore}
  * built through {@link TestWhatsAppClient}, so the
- * {@link com.github.auties00.cobalt.store.SettingsStore#disableLinkPreviews()}
+ * {@link LinkedWhatsAppSettingsStore#disableLinkPreviews()}
  * read-back can be asserted directly.
  */
 @DisplayName("DisableLinkPreviewsHandler")
@@ -180,7 +180,7 @@ class DisableLinkPreviewsHandlerTest {
         void newerRemoteApplies() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new DisableLinkPreviewsHandler().resolveConflicts(local, remote).state());
         }
 
@@ -189,7 +189,7 @@ class DisableLinkPreviewsHandlerTest {
         void olderRemoteSkipped() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     new DisableLinkPreviewsHandler().resolveConflicts(local, remote).state());
         }
     }

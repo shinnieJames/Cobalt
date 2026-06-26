@@ -5,10 +5,10 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionMessage;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageRangeBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessage;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRangeBuilder;
 
 import java.time.Instant;
 import java.util.*;

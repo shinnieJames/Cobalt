@@ -4,13 +4,10 @@ import com.github.auties00.cobalt.sync.LiveWebAppStateService;
 import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
-import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
-import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import org.junit.jupiter.api.DisplayName;
@@ -57,9 +54,9 @@ class DeviceServiceHandleDeviceNotificationTest {
      * mirroring the way the stream handler unwraps the outer {@code <notification>} before dispatch.
      *
      * @param topic the fixture topic
-     * @return the {@code <devices>} child node
+     * @return the {@code <devices>} child stanza
      */
-    private static Node loadDevicesNode(String topic) {
+    private static Stanza loadDevicesNode(String topic) {
         for (var event : DeviceFixtures.loadEvents(topic)) {
             if (!"in".equals(event.getString("direction"))) continue;
             var notification = DeviceFixtures.buildNodeFromEvent(event);

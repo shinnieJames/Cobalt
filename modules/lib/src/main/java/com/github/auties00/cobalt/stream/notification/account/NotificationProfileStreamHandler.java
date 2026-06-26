@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -9,7 +11,6 @@ import com.github.auties00.cobalt.listener.linked.LinkedProfilePictureChangedLis
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -80,23 +81,23 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
     }
 
     /**
-     * Routes the incoming stanza to {@link #handlePicture(Node)} or {@link #handleAbout(Node)} based on
+     * Routes the incoming stanza to {@link #handlePicture(Stanza)} or {@link #handleAbout(Stanza)} based on
      * the stanza's {@code type} attribute.
      *
      * <p>Stanzas whose type is neither {@code "picture"} nor {@code "status"} return without
      * side-effects.</p>
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (node.hasDescription("notification") && node.hasAttribute("type", "picture")) {
-            handlePicture(node);
+    public void handle(Stanza stanza) {
+        if (stanza.hasDescription("notification") && stanza.hasAttribute("type", "picture")) {
+            handlePicture(stanza);
             return;
         }
 
-        if (node.hasDescription("notification") && node.hasAttribute("type", "status")) {
-            handleAbout(node);
+        if (stanza.hasDescription("notification") && stanza.hasAttribute("type", "status")) {
+            handleAbout(stanza);
         }
     }
 
@@ -114,22 +115,22 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      * @implNote This implementation always ACKs in the {@code finally} block, matching WA Web which
      * returns the ack from the parser's promise resolution.
      *
-     * @param node the {@code <notification type="picture"/>} stanza
+     * @param stanza the {@code <notification type="picture"/>} stanza
      */
-    private void handlePicture(Node node) {
+    private void handlePicture(Stanza stanza) {
         try {
-            var actionNode = node.getChild("delete", "set", "request", "set_avatar")
+            var actionNode = stanza.getChild("delete", "set", "request", "set_avatar")
                     .orElse(null);
             if (actionNode == null) {
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Picture notification {0} has no known action child",
-                        node.getAttributeAsString("id", "[missing-id]"));
+                        stanza.getAttributeAsString("id", "[missing-id]"));
                 return;
             }
 
             var actionType = actionNode.description();
-            var stanzaId = node.getAttributeAsString("id", null);
-            var from = node.getAttributeAsJid("from")
+            var stanzaId = stanza.getAttributeAsString("id", null);
+            var from = stanza.getAttributeAsJid("from")
                     .map(Jid::withoutData)
                     .orElse(null);
 
@@ -154,7 +155,7 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
             if (targetJid != null) {
                 switch (actionType) {
                     case "delete", "set" -> {
-                        handlePictureSetOrDelete(targetJid, actionType, node, actionNode);
+                        handlePictureSetOrDelete(targetJid, actionType, stanza, actionNode);
                     }
                     case "request" -> {
                     }
@@ -172,9 +173,9 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle picture notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
+                    stanza.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
         } finally {
-            sendPictureNotificationAck(node);
+            sendPictureNotificationAck(stanza);
         }
     }
 
@@ -193,10 +194,10 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      *
      * @param targetJid  the non-{@code null} JID of the entity whose picture changed
      * @param actionType either {@code "set"} or {@code "delete"}
-     * @param node       the notification stanza, used for timestamp extraction on group targets
-     * @param actionNode the action child, used for author extraction on group targets
+     * @param stanza       the notification stanza, used for timestamp extraction on group targets
+     * @param actionStanza the action child, used for author extraction on group targets
      */
-    private void handlePictureSetOrDelete(Jid targetJid, String actionType, Node node, Node actionNode) {
+    private void handlePictureSetOrDelete(Jid targetJid, String actionType, Stanza stanza, Stanza actionStanza) {
         if (isSelf(targetJid)) {
             if ("delete".equals(actionType)) {
                 whatsapp.store().accountStore().setProfilePicture((URI) null);
@@ -207,14 +208,14 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
         }
 
         if (targetJid.hasGroupOrCommunityServer()) {
-            var ts = node.getAttributeAsLong("t", (Long) null);
+            var ts = stanza.getAttributeAsLong("t", (Long) null);
             if (ts != null) {
                 // TODO: synthesize the group-pic-change system message via MessageService once it is injected here; today the change is only delivered via the listener fan-out below.
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Group {0} picture changed at {1} by {2} - system message generation not available",
                         targetJid,
                         Instant.ofEpochSecond(ts),
-                        actionNode.getAttributeAsJid("author").map(Jid::toUserJid).orElse(null));
+                        actionStanza.getAttributeAsJid("author").map(Jid::toUserJid).orElse(null));
             }
         }
 
@@ -226,32 +227,32 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      * change, hash-based side-list change, or unknown.
      *
      * <p>A {@code <set>} child without a {@code hash} attribute is an inline change applied by
-     * {@link #handleAboutChange(Node, Node, String)}; a {@code <set hash=.../>} child is a side-list
-     * change applied by {@link #handleAboutSideListChange(Node, String)}; any other shape is logged and
+     * {@link #handleAboutChange(Stanza, Stanza, String)}; a {@code <set hash=.../>} child is a side-list
+     * change applied by {@link #handleAboutSideListChange(Stanza, String)}; any other shape is logged and
      * ignored. The ACK is always sent in the {@code finally} block.</p>
      *
-     * @param node the {@code <notification type="status"/>} stanza
+     * @param stanza the {@code <notification type="status"/>} stanza
      */
-    private void handleAbout(Node node) {
+    private void handleAbout(Stanza stanza) {
         try {
-            var stanzaId = node.getAttributeAsString("id", null);
-            var setNode = node.getChild("set").orElse(null);
+            var stanzaId = stanza.getAttributeAsString("id", null);
+            var setNode = stanza.getChild("set").orElse(null);
 
             if (setNode != null && !setNode.hasAttribute("hash")) {
-                handleAboutChange(node, setNode, stanzaId);
+                handleAboutChange(stanza, setNode, stanzaId);
             } else if (setNode != null && setNode.hasAttribute("hash")) {
                 handleAboutSideListChange(setNode, stanzaId);
             } else {
-                var fromStr = node.getAttributeAsString("from", "[unknown]");
+                var fromStr = stanza.getAttributeAsString("from", "[unknown]");
                 LOGGER.log(System.Logger.Level.WARNING,
                         "handleAboutNotification: unhandled type unknown from {0}", fromStr);
             }
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle status notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
+                    stanza.getAttributeAsString("id", "[missing-id]"), throwable.getMessage());
         } finally {
-            sendStatusNotificationAck(node);
+            sendStatusNotificationAck(stanza);
         }
     }
 
@@ -269,12 +270,12 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      * push-name pipeline runs from a different stanza category, but Cobalt's listener API needs the
      * chosen-name fresh for the about-text affordance.
      *
-     * @param node     the {@code <notification>} stanza (for {@code from}, {@code notify}, {@code t})
-     * @param setNode  the {@code <set>} child carrying the inline content
+     * @param stanza     the {@code <notification>} stanza (for {@code from}, {@code notify}, {@code t})
+     * @param setStanza  the {@code <set>} child carrying the inline content
      * @param stanzaId the stanza id, used for logging
      */
-    private void handleAboutChange(Node node, Node setNode, String stanzaId) {
-        var from = node.getAttributeAsJid("from")
+    private void handleAboutChange(Stanza stanza, Stanza setStanza, String stanzaId) {
+        var from = stanza.getAttributeAsJid("from")
                 .map(Jid::toUserJid)
                 .orElse(null);
         if (from == null) {
@@ -284,10 +285,10 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
             return;
         }
 
-        node.getAttributeAsString("notify")
+        stanza.getAttributeAsString("notify")
                 .ifPresent(pushName -> updateContactChosenName(from, pushName));
 
-        var content = setNode.toContentString().orElse(null);
+        var content = setStanza.toContentString().orElse(null);
 
         var jidsToUpdate = new ArrayList<Jid>();
         jidsToUpdate.add(from);
@@ -322,11 +323,11 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      * exists for the resolved JID; WA Web unconditionally fires the refresh and lets the response handler
      * create the record on demand.
      *
-     * @param setNode  the {@code <set hash=.../>} child
+     * @param setStanza  the {@code <set hash=.../>} child
      * @param stanzaId the stanza id, used for logging
      */
-    private void handleAboutSideListChange(Node setNode, String stanzaId) {
-        var hash = setNode.getAttributeAsString("hash", null);
+    private void handleAboutSideListChange(Stanza setStanza, String stanzaId) {
+        var hash = setStanza.getAttributeAsString("hash", null);
         if (hash == null) {
             return;
         }
@@ -362,7 +363,7 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      * about the user's own profile resolve, since the account is not stored as a contact.</p>
      *
      * @implNote This implementation re-computes the hash for the self JIDs and for every contact in
-     * {@link com.github.auties00.cobalt.store.ContactStore#contacts}; for small directories (a
+     * {@link LinkedWhatsAppContactStore#contacts}; for small directories (a
      * few thousand entries) this is cheap, and a hash-keyed cache would help only at much higher contact
      * counts.
      *
@@ -428,7 +429,7 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      * Returns the LID-counterpart for a PN JID, or the PN-counterpart for a LID JID, or {@code null} when
      * no mapping is registered.
      *
-     * <p>Used by {@link #handleAboutChange(Node, Node, String)} to fan the about-text update out to both
+     * <p>Used by {@link #handleAboutChange(Stanza, Stanza, String)} to fan the about-text update out to both
      * JID forms a contact may appear under.</p>
      *
      * @param jid the source JID
@@ -446,7 +447,7 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
     /**
      * Returns whether the given JID identifies the authenticated account.
      *
-     * <p>Used by {@link #handlePictureSetOrDelete(Jid, String, Node, Node)} to distinguish self-picture
+     * <p>Used by {@link #handlePictureSetOrDelete(Jid, String, Stanza, Stanza)} to distinguish self-picture
      * changes (persist the URI) from peer changes (listener-only).</p>
      *
      * @param jid the JID to check
@@ -461,7 +462,7 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
     /**
      * Writes the chosen-name field on the contact, creating a new contact record when none exists.
      *
-     * <p>Used by {@link #handleAboutChange(Node, Node, String)} to consume the stanza's {@code notify}
+     * <p>Used by {@link #handleAboutChange(Stanza, Stanza, String)} to consume the stanza's {@code notify}
      * attribute (the pushname) alongside the about-text update. A {@code null} or blank name is ignored.</p>
      *
      * @param contactJid the JID of the contact being updated
@@ -482,7 +483,7 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      * Fans the profile-picture-changed callback out to every registered listener on its own virtual
      * thread.
      *
-     * <p>Used by {@link #handlePictureSetOrDelete(Jid, String, Node, Node)}.</p>
+     * <p>Used by {@link #handlePictureSetOrDelete(Jid, String, Stanza, Stanza)}.</p>
      *
      * @param jid the JID of the entity whose picture changed
      */
@@ -497,8 +498,8 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
     /**
      * Fans the contact-text-status callback out to every registered listener on its own virtual thread.
      *
-     * <p>Used by {@link #handleAboutChange(Node, Node, String)} and
-     * {@link #handleAboutSideListChange(Node, String)}.</p>
+     * <p>Used by {@link #handleAboutChange(Stanza, Stanza, String)} and
+     * {@link #handleAboutSideListChange(Stanza, String)}.</p>
      *
      * @param contactJid the JID whose text status changed
      * @param status     the updated text-status record
@@ -516,10 +517,10 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      *
      * <p>The ack is fire-and-forget.</p>
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendPictureNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("picture").send();
+    private void sendPictureNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("picture").send();
     }
 
     /**
@@ -527,9 +528,9 @@ public final class NotificationProfileStreamHandler extends SocketStreamHandler.
      *
      * <p>The ack is fire-and-forget.</p>
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendStatusNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("status").send();
+    private void sendStatusNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("status").send();
     }
 }

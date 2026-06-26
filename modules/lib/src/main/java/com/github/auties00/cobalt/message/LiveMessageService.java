@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 
@@ -148,8 +148,8 @@ public final class LiveMessageService implements MessageService {
     }
 
     @Override
-    public MessageInfo process(Node node) {
-        return receivingService.process(node);
+    public MessageInfo process(Stanza stanza) {
+        return receivingService.process(stanza);
     }
 
     @Override

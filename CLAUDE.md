@@ -29,7 +29,7 @@ Everything is sealed for exhaustive pattern matching. The `client` package is sp
 - `WhatsAppClient` (sealed) permits `LinkedWhatsAppClient` and `CloudWhatsAppClient`; carries the transport-agnostic surface: lifecycle (`connect`/`disconnect`/`reconnect`/`waitForDisconnection`), message send, reactions, read receipts (`markChatAsRead` + message-keyed `markMessageAsRead`), typing indicator, own business profile (edit + query), block list (`blockContact`/`unblockContact`/`queryBlockedContacts`), shared-listener registration, and `removeListener(WhatsAppListener)`.
 - `LinkedWhatsAppClient` -> implemented by package-private `LiveLinkedWhatsAppClient`. Flavour selected by `LinkedWhatsAppClientType`: `WEB` (companion device) or `MOBILE` (primary device, SMS/voice/OTP registration via the `registration` package). Linked-only support types carry the `LinkedWhatsAppClient*` prefix (`LinkedWhatsAppClientDevice`, `LinkedWhatsAppClientVerificationHandler`, `LinkedWhatsAppClientSixPartsKeys`, ...).
 - `CloudWhatsAppClient` -> implemented by `LiveCloudWhatsAppClient`. Backed by the `cloud` package: `CloudApiClient` (HTTPS to `graph.facebook.com`, Bearer token + optional `appsecret_proof`), `CloudMessageEncoder` (`MessageContainer` -> `/messages` JSON), `CloudWebhookDecoder` (webhook payloads -> `ChatMessageInfo`/typed update models), `CloudWebhookServer` (`jdk.httpserver` on virtual threads; `hub.challenge` GET handshake, `X-Hub-Signature-256` HmacSHA256 verification on POST). Phone-number verification mirrors the Linked ceremony via `CloudWhatsAppClientVerificationHandler` (`CloudWhatsAppClient.verifyPhoneNumber`). The complete Cloud surface (messaging including interactive/commerce/payment sends, media including the resumable upload API, message templates plus the template library, Flows, the Calling API, analytics, conversational automation, commerce settings, WABA management, embedded-signup onboarding, business encryption, QR short-links, and the webhook change-fields) is carried on the single `CloudWhatsAppClient` interface; the Graph version is a runtime concern, not a type split: `CloudApiVersion` is ordered (`isAtLeast`/`major`/`minor`), and operations newer than the v19.0 floor are gated at runtime by `LiveCloudWhatsAppClient` (throwing `CloudUnsupportedVersionException` when the configured version is too old) and documented with the `@WhatsAppCloudMethod(since = ...)` source marker (in `modules/source-meta`).
-- Builders: `WhatsAppClient.builder()` -> `.linkedApi()` (`LinkedWhatsAppClientBuilder` -> `.webClient()` / `.mobileClient()` / `.customClient()`) or `.cloudApi()` (`CloudWhatsAppClientBuilder`, staged like the Linked builder: `.loadConnection(accessToken, phoneNumberId)` -> `Options` (Graph config, proxy, error handler) -> optional `.webhook(verifyToken, port)` sub-stage -> `.build()`; `.loadConnection(CloudWhatsAppStore)` is the pre-built-store branch). Flavour interfaces also expose `LinkedWhatsAppClient.builder()` / `CloudWhatsAppClient.builder()` directly.
+- Builders: `WhatsAppClient.builder()` -> `.linkedApi()` (`LinkedWhatsAppClientBuilder` -> `.webClient()` / `.mobileClient()` / `.customClient()`) or `.cloudApi()` / `.cloudApi(CloudWhatsAppStoreFactory)` (`CloudWhatsAppClientBuilder`, staged like the Linked builder: the store factory is a constructor argument, persistent by default; `.loadConnection(accessToken, phoneNumberId)` (load-or-create through the factory), `.loadConnection(phoneNumberId)` / `.loadLatestConnection()` (resume) -> `Options` (Graph config, proxy, error handler) -> optional `.webhook(verifyToken, port)` sub-stage -> `.build()`). Flavour interfaces also expose `LinkedWhatsAppClient.builder()` / `LinkedWhatsAppClient.builder(...)` and `CloudWhatsAppClient.builder()` / `CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory)` directly.
 - **Naming rule:** production implementations are `Live<Interface>` (e.g., `LiveLinkedWhatsAppClient`, `LiveCallService`); the interface keeps the clean name. Never `Default*`. When the two transports expose the same operation, the Linked name wins and the Cloud method is renamed to match.
 
 ### Threading Model
@@ -87,7 +87,7 @@ Custom protobuf library (`com.github.auties00:protobuf-serialization-plugin`), N
 
 ### Nodes/Stanzas
 Built via `NodeBuilder` with `.description()`, `.attribute()`, `.content()`.
-`Node` has convenience methods to get and stream attributes and content: use the best convenience method to improve code readability. Typed stanza models live in `node/iq`, `node/mex`, `node/smax`, `node/usync`.
+`Node` has convenience methods to get and stream attributes and content: use the best convenience method to improve code readability. Typed stanza models live in `stanza/iq`, `stanza/mex`, `stanza/smax`, `stanza/usync`.
 
 ### Naming Conventions
 Cobalt class names mirror WA Web modules but drop the `WA`/`WAWeb` prefix:
@@ -100,7 +100,7 @@ Cobalt class names mirror WA Web modules but drop the `WA`/`WAWeb` prefix:
 | `*Service` (e.g., `DeviceService`)        | Stateful service modules                                                 |
 | `*Mex` (e.g., `FetchAboutStatusMex`)      | MEX/GraphQL operations                                                   |
 | `*Action` (e.g., `ArchiveChatAction`)     | Sync action protobuf models                                              |
-| `*Stanza` (e.g., `ChatFanoutStanza`)      | Stanza/node builders                                                     |
+| `*Stanza` (e.g., `ChatFanoutStanza`)      | Stanza/stanza builders                                                     |
 | `Live*` (e.g., `LiveCallService`)         | Production impl of a Cobalt interface (no WA counterpart for the prefix) |
 | `Cloud*` (e.g., `CloudMessageEncoder`)    | Meta Cloud API surface (no WA Web counterpart)                           |
 
@@ -128,7 +128,7 @@ The Cloud API surface has no WA Web/Mobile counterpart: `cloud` package classes 
 
 ## Tools (`tools/`)
 
-Reverse-engineering and codegen tooling. All `tools/web/*` are TypeScript/Node (build `npm run build`, run `npm start` or `node dist/index.js`); they are NOT part of the Maven build.
+Reverse-engineering and codegen tooling. All `tools/web/*` are TypeScript/Node (build `npm run build`, run `npm start` or `stanza dist/index.js`); they are NOT part of the Maven build.
 
 | Tool                                       | Purpose                                                                                                                                                                                                                                                                                                              |
 |--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

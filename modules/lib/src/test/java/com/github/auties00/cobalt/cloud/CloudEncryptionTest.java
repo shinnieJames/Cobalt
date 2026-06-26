@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
 import com.github.auties00.cobalt.model.cloud.waba.CloudBusinessEncryption;
 import com.github.auties00.cobalt.model.cloud.waba.CloudBusinessEncryptionSignatureStatus;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -25,8 +26,8 @@ class CloudEncryptionTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .httpClient(http)
@@ -38,7 +39,7 @@ class CloudEncryptionTest {
     class Get {
         @Test
         @DisplayName("maps the first data entry to the model with a valid status")
-        void valid() {
+        void valid() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[{\"business_public_key\":\"" + PEM.replace("\n", "\\n")
                     + "\",\"business_public_key_signature_status\":\"VALID\"}]}");
@@ -52,7 +53,7 @@ class CloudEncryptionTest {
 
         @Test
         @DisplayName("carries the mismatch status verbatim")
-        void mismatch() {
+        void mismatch() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[{\"business_public_key\":\"" + PEM.replace("\n", "\\n")
                     + "\",\"business_public_key_signature_status\":\"MISMATCH\"}]}");
@@ -63,7 +64,7 @@ class CloudEncryptionTest {
 
         @Test
         @DisplayName("returns empty for an empty data array")
-        void empty() {
+        void empty() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[]}");
             assertTrue(client(http).queryBusinessEncryption().isEmpty());
@@ -75,7 +76,7 @@ class CloudEncryptionTest {
     class Edit {
         @Test
         @DisplayName("posts the public key as a form field")
-        void post() {
+        void post() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).editBusinessEncryption(new CloudBusinessEncryption(PEM, null));
@@ -86,7 +87,7 @@ class CloudEncryptionTest {
 
         @Test
         @DisplayName("rejects a null encryption configuration")
-        void nullKey() {
+        void nullKey() throws Exception {
             assertThrows(NullPointerException.class, () -> client(http()).editBusinessEncryption(null));
         }
     }

@@ -1,11 +1,11 @@
 package com.github.auties00.cobalt.model.newsletter;
 
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.media.SizedInputStream;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -14,9 +14,9 @@ import java.util.Optional;
  * {@link #newsletter} JID identifies the target; the remaining fields
  * are optional and only the ones that are set are written to the server.
  *
- * <p>{@link #newsletter} is required. The other three fields are
- * independently optional — unset fields are omitted from the wire
- * update and leave the corresponding server-side value untouched.
+ * <p>{@link #newsletter} is required. The other fields are independently
+ * optional; unset fields are omitted from the wire update and leave the
+ * corresponding server-side value untouched.
  */
 @ProtobufMessage
 public final class NewsletterMetadataEdit {
@@ -41,28 +41,40 @@ public final class NewsletterMetadataEdit {
     final String description;
 
     /**
-     * Optional new JPEG-encoded profile picture, or {@code null} to
-     * leave the existing picture untouched. A zero-length array clears
-     * the picture, mirroring WhatsApp Web's {@code encodePicture}
-     * semantics.
+     * Optional new JPEG-encoded profile picture supplied as a sized stream,
+     * or {@code null} to leave the existing picture untouched. A picture
+     * whose stream is empty clears the picture, mirroring WhatsApp Web's
+     * {@code encodePicture} semantics. The stream is read fully when the
+     * edit is dispatched and its advertised length lets the payload be
+     * streamed into its Base64 form without buffering it.
      */
     @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
-    final byte[] picture;
+    final SizedInputStream picture;
+
+    /**
+     * Optional new reaction policy, or {@code null} to leave the
+     * existing reaction settings untouched.
+     */
+    @ProtobufProperty(index = 5, type = ProtobufType.MESSAGE)
+    final NewsletterReactionSettings reactionSetting;
 
     /**
      * Constructs a new {@code NewsletterMetadataEdit}.
      *
-     * @param newsletter  the newsletter JID; required
-     * @param name        the new display name, or {@code null}
-     * @param description the new description, or {@code null}
-     * @param picture     the new JPEG-encoded picture, or {@code null}
+     * @param newsletter      the newsletter JID; required
+     * @param name            the new display name, or {@code null}
+     * @param description     the new description, or {@code null}
+     * @param picture         the new JPEG-encoded picture, or {@code null}
+     * @param reactionSetting the new reaction policy, or {@code null}
      * @throws NullPointerException if {@code newsletter} is {@code null}
      */
-    NewsletterMetadataEdit(Jid newsletter, String name, String description, byte[] picture) {
+    NewsletterMetadataEdit(Jid newsletter, String name, String description, SizedInputStream picture,
+                           NewsletterReactionSettings reactionSetting) {
         this.newsletter = Objects.requireNonNull(newsletter, "newsletter cannot be null");
         this.name = name;
         this.description = description;
         this.picture = picture;
+        this.reactionSetting = reactionSetting;
     }
 
     /**
@@ -94,13 +106,23 @@ public final class NewsletterMetadataEdit {
     }
 
     /**
-     * Returns the new JPEG-encoded picture bytes.
+     * Returns the new JPEG-encoded picture.
      *
-     * @return an {@link Optional} carrying the new picture, or empty
-     *         when unset
+     * @return an {@link Optional} carrying the new picture, or empty when
+     *         unset
      */
-    public Optional<byte[]> picture() {
+    public Optional<SizedInputStream> picture() {
         return Optional.ofNullable(picture);
+    }
+
+    /**
+     * Returns the new reaction policy.
+     *
+     * @return an {@link Optional} carrying the new reaction settings, or
+     *         empty when unset
+     */
+    public Optional<NewsletterReactionSettings> reactionSetting() {
+        return Optional.ofNullable(reactionSetting);
     }
 
     @Override
@@ -108,15 +130,16 @@ public final class NewsletterMetadataEdit {
         if (obj == this) return true;
         if (obj == null || obj.getClass() != this.getClass()) return false;
         var that = (NewsletterMetadataEdit) obj;
+        // picture is excluded: a sized stream has no meaningful value equality
         return Objects.equals(newsletter, that.newsletter) &&
                 Objects.equals(name, that.name) &&
                 Objects.equals(description, that.description) &&
-                Arrays.equals(picture, that.picture);
+                Objects.equals(reactionSetting, that.reactionSetting);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(newsletter, name, description, Arrays.hashCode(picture));
+        return Objects.hash(newsletter, name, description, reactionSetting);
     }
 
     @Override
@@ -125,6 +148,7 @@ public final class NewsletterMetadataEdit {
                 "newsletter=" + newsletter + ", " +
                 "name=" + name + ", " +
                 "description=" + description + ", " +
-                "picture=" + (picture == null ? "null" : picture.length + " bytes") + ']';
+                "picture=" + (picture == null ? "unset" : "set") + ", " +
+                "reactionSetting=" + reactionSetting + ']';
     }
 }

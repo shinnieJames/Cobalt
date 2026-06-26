@@ -1446,7 +1446,7 @@ public final class VideoPipeline {
      */
     private static int roundEven(int value) {
         var rounded = value - (value & 1);
-        return rounded < 2 ? 2 : rounded;
+        return Math.max(rounded, 2);
     }
 
     /**

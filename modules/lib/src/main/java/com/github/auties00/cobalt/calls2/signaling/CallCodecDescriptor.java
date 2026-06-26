@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -143,17 +143,17 @@ public record CallCodecDescriptor(String element, String enc, int rate, String d
     }
 
     /**
-     * Builds the codec-format node, a flat {@code <audio>} or {@code <video>} element carrying the
+     * Builds the codec-format stanza, a flat {@code <audio>} or {@code <video>} element carrying the
      * format attributes.
      *
-     * <p>Absent numeric values and the absent decode token are omitted from the node rather than
+     * <p>Absent numeric values and the absent decode token are omitted from the stanza rather than
      * written as sentinels, so an audio format emits only {@code enc} and {@code rate} while a video
      * format emits {@code dec}, {@code enc}, and the geometry attributes.
      *
-     * @return the codec-format node
+     * @return the codec-format stanza
      */
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toStanza() {
+        return new StanzaBuilder()
                 .description(element)
                 .attribute(DEC_ATTRIBUTE, dec)
                 .attribute(ENC_ATTRIBUTE, enc)
@@ -165,29 +165,29 @@ public record CallCodecDescriptor(String element, String enc, int rate, String d
     }
 
     /**
-     * Decodes a flat {@code <audio>} or {@code <video>} node into a {@link CallCodecDescriptor}.
+     * Decodes a flat {@code <audio>} or {@code <video>} stanza into a {@link CallCodecDescriptor}.
      *
-     * <p>The node's tag is retained as the descriptor {@link #element()} so a round trip preserves
-     * whether it was an audio or video format. A node without an {@code enc} attribute yields an empty
+     * <p>The stanza's tag is retained as the descriptor {@link #element()} so a round trip preserves
+     * whether it was an audio or video format. A stanza without an {@code enc} attribute yields an empty
      * result so callers iterating a mixed child list can skip it.
      *
-     * @param node the codec-format node
-     * @return the decoded descriptor, or an empty result when the node carries no {@code enc}
+     * @param stanza the codec-format stanza
+     * @return the decoded descriptor, or an empty result when the stanza carries no {@code enc}
      *         attribute
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @throws NullPointerException if {@code stanza} is {@code null}
      */
-    public static Optional<CallCodecDescriptor> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var enc = node.getAttributeAsString(ENC_ATTRIBUTE, null);
+    public static Optional<CallCodecDescriptor> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var enc = stanza.getAttributeAsString(ENC_ATTRIBUTE, null);
         if (enc == null) {
             return Optional.empty();
         }
-        var rate = node.getAttributeAsInt(RATE_ATTRIBUTE, -1);
-        var dec = node.getAttributeAsString(DEC_ATTRIBUTE, null);
-        var deviceOrientation = node.getAttributeAsInt(DEVICE_ORIENTATION_ATTRIBUTE, -1);
-        var screenWidth = node.getAttributeAsInt(SCREEN_WIDTH_ATTRIBUTE, -1);
-        var screenHeight = node.getAttributeAsInt(SCREEN_HEIGHT_ATTRIBUTE, -1);
-        return Optional.of(new CallCodecDescriptor(node.description(), enc, rate, dec, deviceOrientation,
+        var rate = stanza.getAttributeAsInt(RATE_ATTRIBUTE, -1);
+        var dec = stanza.getAttributeAsString(DEC_ATTRIBUTE, null);
+        var deviceOrientation = stanza.getAttributeAsInt(DEVICE_ORIENTATION_ATTRIBUTE, -1);
+        var screenWidth = stanza.getAttributeAsInt(SCREEN_WIDTH_ATTRIBUTE, -1);
+        var screenHeight = stanza.getAttributeAsInt(SCREEN_HEIGHT_ATTRIBUTE, -1);
+        return Optional.of(new CallCodecDescriptor(stanza.description(), enc, rate, dec, deviceOrientation,
                 screenWidth, screenHeight));
     }
 }

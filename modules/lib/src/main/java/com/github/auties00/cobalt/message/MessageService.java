@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 /**
  * Facade that fans message traffic between the outbound send pipeline and the inbound receive
@@ -100,17 +100,17 @@ public interface MessageService {
      * distinguish them from genuine payloads.
      *
      * @implSpec
-     * Implementations must delegate to {@link MessageReceivingService#process(Node)}.
+     * Implementations must delegate to {@link MessageReceivingService#process(Stanza)}.
      *
-     * @param node the raw inbound {@code <message>} node
+     * @param stanza the raw inbound {@code <message>} stanza
      * @return the processed {@link MessageInfo}, or {@code null} for
      *         unavailable fanout placeholders
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @throws NullPointerException if {@code stanza} is {@code null}
      * @throws WhatsAppMessageException.Receive
      *         if decryption or validation fails for an encrypted payload
-     * @see MessageReceivingService#process(Node)
+     * @see MessageReceivingService#process(Stanza)
      */
-    MessageInfo process(Node node);
+    MessageInfo process(Stanza stanza);
 
     /**
      * Resolves the LID addressing a one-to-one call offer to {@code peer} must use.

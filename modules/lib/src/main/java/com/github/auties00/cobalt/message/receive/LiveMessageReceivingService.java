@@ -6,8 +6,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.MessageInfo;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.Objects;
 
@@ -54,7 +54,7 @@ public final class LiveMessageReceivingService implements MessageReceivingServic
      *
      * <p>Guards against the same E2E message being processed twice when the server
      * fanout duplicates a delivery during an offline-to-online transition; entries are
-     * short-lived and removed in the {@code finally} block of {@link #process(Node)}.
+     * short-lived and removed in the {@code finally} block of {@link #process(Stanza)}.
      */
     private final MessageDedup dedup;
 
@@ -100,15 +100,15 @@ public final class LiveMessageReceivingService implements MessageReceivingServic
     @WhatsAppWebExport(moduleName = "WAWebHandleMsg", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    public MessageInfo process(Node node) {
-        Objects.requireNonNull(node, "node");
+    public MessageInfo process(Stanza stanza) {
+        Objects.requireNonNull(stanza, "node");
 
-        var fromJid = node.getRequiredAttributeAsJid("from");
+        var fromJid = stanza.getRequiredAttributeAsJid("from");
         if (fromJid.hasNewsletterServer()) {
-            return newsletterReceiver.receive(node, fromJid);
+            return newsletterReceiver.receive(stanza, fromJid);
         }
 
-        var id = node.getRequiredAttributeAsString("id");
+        var id = stanza.getRequiredAttributeAsString("id");
         var dedupKey = fromJid + ":" + id;
         if (dedup.isPending(dedupKey)) {
             LOGGER.log(System.Logger.Level.DEBUG,
@@ -118,7 +118,7 @@ public final class LiveMessageReceivingService implements MessageReceivingServic
         dedup.add(dedupKey);
 
         try {
-            return chatReceiver.receive(node, fromJid);
+            return chatReceiver.receive(stanza, fromJid);
         } finally {
             dedup.remove(dedupKey);
         }

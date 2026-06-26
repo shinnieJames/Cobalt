@@ -25,8 +25,8 @@ import com.github.auties00.cobalt.model.message.system.QuestionResponseMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 
@@ -109,7 +109,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
             var plaintextNode = isMedia
                     ? NewsletterStanza.buildPlaintext(payload, mediaSubtype)
                     : NewsletterStanza.buildPlaintext(payload);
-            var stanzaBuilder = new NodeBuilder()
+            var stanzaBuilder = new StanzaBuilder()
                     .description("message")
                     .attribute("id", messageInfo.key().id().orElseThrow())
                     .attribute("to", newsletterJid)
@@ -166,14 +166,14 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterTextMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildText(NewsletterMessageInfo info, Jid newsletterJid) {
+    private StanzaBuilder buildText(NewsletterMessageInfo info, Jid newsletterJid) {
         var payload = MessageContainerSpec.encode(info.message());
         var plaintextNode = NewsletterStanza.buildPlaintext(payload);
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
@@ -191,15 +191,15 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * @param messageInfo   the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
      * @param container     the question-response {@link MessageContainer}
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterQuestionResponsePublishMixin",
             exports = "applyMixin", adaptation = WhatsAppAdaptation.DIRECT)
-    private static NodeBuilder buildQuestionResponse(NewsletterMessageInfo messageInfo, Jid newsletterJid, MessageContainer container) {
+    private static StanzaBuilder buildQuestionResponse(NewsletterMessageInfo messageInfo, Jid newsletterJid, MessageContainer container) {
         var payload = MessageContainerSpec.encode(container);
         var metaNode = MetaStanza.buildNewsletterQuestionResponse();
         var plaintextNode = NewsletterStanza.buildPlaintext(payload);
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", messageInfo.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
@@ -220,16 +220,16 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
      * @param mediaType     the SMAX media-subtype string
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterMediaPublishMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildMedia(
+    private StanzaBuilder buildMedia(
             NewsletterMessageInfo info, Jid newsletterJid, String mediaType
     ) {
         var payload = MessageContainerSpec.encode(info.message());
         var plaintextNode = NewsletterStanza.buildPlaintext(payload, mediaType);
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
@@ -250,22 +250,22 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * @param newsletterJid the newsletter {@link Jid}
      * @param polltype      the poll-type marker ({@code "creation"} or
      *                      {@code "result_snapshot"})
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypePollCreationMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypePollResultSnapshotMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildPoll(
+    private StanzaBuilder buildPoll(
             NewsletterMessageInfo info, Jid newsletterJid, String polltype
     ) {
         var payload = MessageContainerSpec.encode(info.message());
-        var metaNode = new NodeBuilder()
+        var metaNode = new StanzaBuilder()
                 .description("meta")
                 .attribute("polltype", polltype)
                 .build();
         var plaintextNode = NewsletterStanza.buildPlaintext(payload);
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
@@ -282,15 +282,15 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterRevokeMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildRevoke(NewsletterMessageInfo info, Jid newsletterJid) {
-        var plaintextNode = new NodeBuilder()
+    private StanzaBuilder buildRevoke(NewsletterMessageInfo info, Jid newsletterJid) {
+        var plaintextNode = new StanzaBuilder()
                 .description("plaintext")
                 .build();
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
@@ -309,11 +309,11 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      *
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterEditMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildEdit(NewsletterMessageInfo info, Jid newsletterJid) {
+    private StanzaBuilder buildEdit(NewsletterMessageInfo info, Jid newsletterJid) {
         var protocolMessage = (ProtocolMessage) info.message().content();
         var editedMessage = protocolMessage.editedMessage();
         var editedContent = editedMessage.map(MessageContainer::content).orElse(null);
@@ -327,7 +327,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
                 ? NewsletterStanza.buildPlaintext(payload, mediaSubtype)
                 : NewsletterStanza.buildPlaintext(payload);
 
-        var builder = new NodeBuilder()
+        var builder = new StanzaBuilder()
                 .description("message")
                 .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
@@ -351,7 +351,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
      * @param reaction      the {@link ReactionMessage} payload
-     * @return the {@code <message>} {@link NodeBuilder}
+     * @return the {@code <message>} {@link StanzaBuilder}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypeReactionMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -359,14 +359,14 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterReactionRevokeMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private NodeBuilder buildReaction(
+    private StanzaBuilder buildReaction(
             NewsletterMessageInfo info, Jid newsletterJid, ReactionMessage reaction
     ) {
         var parentServerId = resolveParentServerId(reaction.key().orElse(null));
 
         var isRevoke = reaction.text().filter(t -> !t.isEmpty()).isEmpty();
 
-        var builder = new NodeBuilder()
+        var builder = new StanzaBuilder()
                 .description("message")
                 .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
@@ -389,12 +389,12 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * the canonical reaction string (typically a single emoji).
      *
      * @param s the reaction emoji code
-     * @return the {@code <reaction>} {@link Node}
+     * @return the {@code <reaction>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypeReactionMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Node buildReactionContent(String s) {
-        return new NodeBuilder()
+    private Stanza buildReactionContent(String s) {
+        return new StanzaBuilder()
                 .description("reaction")
                 .attribute("code", s)
                 .build();
@@ -407,12 +407,12 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * <p>Used by the revoke branch of {@link #buildReaction}; the child
      * intentionally carries no attributes.
      *
-     * @return the empty {@code <reaction>} {@link Node}
+     * @return the empty {@code <reaction>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterReactionRevokeMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private Node buildReactionRevoke() {
-        return new NodeBuilder()
+    private Stanza buildReactionRevoke() {
+        return new StanzaBuilder()
                 .description("reaction")
                 .build();
     }
@@ -452,13 +452,13 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
      * @param info          the outgoing {@link NewsletterMessageInfo}
      * @param newsletterJid the newsletter {@link Jid}
      * @param pollUpdate    the {@link PollUpdateMessage} payload
-     * @return the {@code <message>} {@link NodeBuilder}, or {@code null}
+     * @return the {@code <message>} {@link StanzaBuilder}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypePollVoteMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterPollVoteMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private NodeBuilder buildPollVote(
+    private StanzaBuilder buildPollVote(
             NewsletterMessageInfo info, Jid newsletterJid, PollUpdateMessage pollUpdate
     ) {
         var pollKey = pollUpdate.pollCreationMessageKey();
@@ -477,22 +477,22 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
                 .stream()
                 .map(PollCreationMessage.Option::optionName)
                 .flatMap(Optional::stream)
-                .map(name -> new NodeBuilder()
+                .map(name -> new StanzaBuilder()
                         .description("vote")
                         .content(name)
                         .build())
                 .toList();
-        var votesNode = new NodeBuilder()
+        var votesNode = new StanzaBuilder()
                 .description("votes")
                 .content(voteChildren)
                 .build();
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("type", "poll")
                 .attribute("server_id", parentNewsletter.serverId())
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("meta")
                         .attribute("polltype", "vote")
                         .build(), votesNode);

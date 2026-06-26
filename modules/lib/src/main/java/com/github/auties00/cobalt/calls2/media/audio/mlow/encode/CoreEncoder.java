@@ -322,8 +322,14 @@ public final class CoreEncoder {
 
     /**
      * The target bitrate in bits per second, the native {@code enc_status->bitRate} and {@code mainBitRate}.
+     *
+     * <p>Seeded at construction and re-targeted mid-stream by {@link #updateTargetBitrate(int)} from the engine
+     * bandwidth estimate, the native {@code mainBitRate} the encoder API rewrites each rate-control round. Every
+     * {@link BitrateController#control} and {@link BitrateController#updateScale} call reads it freshly, so the
+     * next frame's pulse budget and feedback target track the new value; the controller reseeds its one-shot
+     * per-rate scale whenever the target it sees changes.
      */
-    private final int bitRate;
+    private int bitRate;
 
     /**
      * Whether the low-rate encode path is active, the native {@code lowRate} of {@code smpl_enc_api.c}.
@@ -396,6 +402,29 @@ public final class CoreEncoder {
         this.percCorrsPrev = new float[PERC_CORRS_LEN];
         this.nonflatnessState = new float[NON_FLAT_STATE_LEN];
         this.prevVoicedCarry = 0;
+    }
+
+    /**
+     * Re-targets the controller's main bitrate mid-stream, the native rewrite of {@code enc_status->mainBitRate}
+     * the encoder API performs each rate-control round.
+     *
+     * <p>Stores the new target so the next {@link #encodePacket} passes it into every
+     * {@link BitrateController#control} and {@link BitrateController#updateScale} call; the controller seeds a
+     * fresh one-shot per-rate scale the first time it sees the changed target and then integrates the feedback
+     * loop toward it, which is how the native encoder threads a changing target without reopening the codec. A
+     * call that does not change the target is a no-op, so the byte-exact fixed-rate behaviour is preserved
+     * whenever the engine holds the bitrate steady.
+     *
+     * <p>The rate class ({@link #lowRate}) and the subframe geometry it selects are not re-derived: the native
+     * {@code smpl_enc_api.c} fixes {@code lowRate} once at codec open from the initial bitrate and only the
+     * controller's {@code mainBitRate} varies thereafter, so the constructed CELP, pitch, and subframe wiring stay
+     * coherent across the re-target. The adaptive audio target range is well above the 8700 bps 60 ms low-rate
+     * threshold, so a high-rate stream stays high rate across its whole life.
+     *
+     * @param bps the new target bitrate in bits per second, the native {@code mainBitRate}
+     */
+    public void updateTargetBitrate(int bps) {
+        this.bitRate = bps;
     }
 
     /**

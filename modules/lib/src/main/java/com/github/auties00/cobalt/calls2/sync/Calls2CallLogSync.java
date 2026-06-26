@@ -8,6 +8,8 @@ import com.github.auties00.cobalt.model.call.CallLogBuilder;
 import com.github.auties00.cobalt.model.call.CallLogParticipantInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.action.call.CallLogAction;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.sync.factory.CallLogMutationFactory;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 
@@ -25,7 +27,7 @@ import java.util.Objects;
  * reaches its ending transition, the lifecycle controller hands the finished {@link Calls2CallContext} and
  * the terminal {@link CallEndReason} to {@link #recordEndOfCall(Calls2CallContext, CallEndReason)}. That
  * builds one {@link CallLog} from the context, mirrors it into the runtime call-history table through
- * {@link com.github.auties00.cobalt.store.ChatStore#addCallLog(CallLog)}, and queues an outbound
+ * {@link LinkedWhatsAppChatStore#addCallLog(CallLog)}, and queues an outbound
  * {@code call_log} mutation through {@link CallLogMutationFactory} so every linked device's call tab updates.
  *
  * <p>Seeding the call tab on a fresh link is not this collaborator's job: the primary ships the existing
@@ -41,7 +43,7 @@ import java.util.Objects;
  *
  * @apiNote This is an internal engine collaborator the call service ({@code LiveCalls2Service}) drives;
  * embedders never call it directly. Embedders observe call history through
- * {@link com.github.auties00.cobalt.store.ChatStore#callLogStates()} and call-end through the
+ * {@link LinkedWhatsAppChatStore#callLogStates()} and call-end through the
  * {@code LinkedCallEndedListener} the event bus fans out.
  * @implNote This implementation reproduces the host-side half of the engine's call-log seam (the native
  * {@code fill_call_log_event_for_ending_call} build and the {@code send_1to1_call_log_update_event} host
@@ -115,7 +117,7 @@ public final class Calls2CallLogSync {
      *
      * <p>Builds one {@link CallLog} from the finished context and the terminal reason through
      * {@link #buildCallLog(Calls2CallContext, CallEndReason)}, mirrors it into the runtime call-history
-     * table through {@link com.github.auties00.cobalt.store.ChatStore#addCallLog(CallLog)}, resolves the
+     * table through {@link LinkedWhatsAppChatStore#addCallLog(CallLog)}, resolves the
      * caller JID that keys the cross-device index through
      * {@link #resolveCallerJid(Calls2CallContext)}, and pushes a {@code call_log} SET mutation built by
      * {@link CallLogMutationFactory} on the {@link CallLogAction#COLLECTION_NAME} collection. The outbound
@@ -290,13 +292,13 @@ public final class Calls2CallLogSync {
      *
      * <p>Follows the native index-key order: the {@linkplain Calls2CallContext#creator() call creator}
      * first; failing that the local device's own JID from
-     * {@link com.github.auties00.cobalt.store.AccountStore#jid()} when the call was
+     * {@link LinkedWhatsAppAccountStore#jid()} when the call was
      * {@linkplain Calls2CallContext#outgoing() outgoing}; failing that the
      * {@linkplain Calls2CallContext#peer() peer}. Every candidate is normalized to its user JID so the
      * index segment is device-stripped and stable across devices.
      *
      * @implNote This implementation moves the Me-user lookup store-side (the
-     * {@link com.github.auties00.cobalt.store.AccountStore}) here rather than into
+     * {@link LinkedWhatsAppAccountStore}) here rather than into
      * {@link CallLogMutationFactory}, matching the factory's contract that the caller pre-resolves the
      * index JID. The creator is normally already present on the context, so the self and peer fallbacks
      * only fire for an outgoing call whose creator was not stamped.

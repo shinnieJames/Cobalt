@@ -6,11 +6,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -85,7 +86,7 @@ public final class ShareOwnPnHandler implements WebAppStateActionHandler {
      * WA Web accumulates valid entries across the whole batch and flushes them
      * once through {@code WAWebUpdateLidMetadataJob}; Cobalt collapses that
      * pipeline into a direct per-mutation contact update because the unified
-     * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} is itself the source
+     * {@link LinkedWhatsAppStore} is itself the source
      * of truth and there is no IDB layer to batch.
      */
     @Override

@@ -8,11 +8,12 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.BroadcastListParticipant;
 import com.github.auties00.cobalt.model.business.BroadcastListParticipantBuilder;
 import com.github.auties00.cobalt.model.business.BusinessBroadcastListBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.ArrayList;
@@ -27,7 +28,7 @@ import java.util.logging.Logger;
  * deleted on another device, the server replays the change here as a
  * {@link SyncdOperation#SET} (upsert) or {@link SyncdOperation#REMOVE}; the
  * result is read back via
- * {@link com.github.auties00.cobalt.store.BusinessStore#findBusinessBroadcastList(String)}.
+ * {@link LinkedWhatsAppBusinessStore#findBusinessBroadcastList(String)}.
  *
  * @implNote
  * This implementation stores the wire-shape protobuf action directly

@@ -5,7 +5,7 @@ package com.github.auties00.cobalt.calls2.core.participant;
  *
  * <p>Every participant is classified as either a regular account ({@link #REGULAR}) or a
  * guest account ({@link #GUEST}) based on the {@code account_kind} attribute on its
- * membership node. A guest is a participant who joined through a call link without a
+ * membership stanza. A guest is a participant who joined through a call link without a
  * full account; every other participant is regular.
  *
  * <p>Each constant carries the {@link #code() integer code} the engine assigns. The

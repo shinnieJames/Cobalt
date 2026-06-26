@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
@@ -7,7 +8,6 @@ import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
-import com.github.auties00.cobalt.node.Node;
 
 /**
  * Routes inbound {@code <notification>} stanzas in the account category to the matching per-type handler.
@@ -71,7 +71,7 @@ public final class NotificationAccountDispatcher extends SocketStreamHandler.Con
      * uses it when refreshing the authenticated user's own device list; the {@code whatsapp} client and
      * {@code ackSender} are forwarded to every sub-handler.</p>
      *
-     * @param whatsapp      the {@link LinkedWhatsAppClient} forwarded to every sub-handler for store and node access
+     * @param whatsapp      the {@link LinkedWhatsAppClient} forwarded to every sub-handler for store and stanza access
      * @param deviceService the {@link DeviceService} consumed only by {@link NotificationAccountStreamHandler}
      * @param ackSender     the {@link AckSender} forwarded to every sub-handler for the per-notification {@code <ack>} stanza
      */
@@ -84,7 +84,7 @@ public final class NotificationAccountDispatcher extends SocketStreamHandler.Con
     }
 
     /**
-     * Forwards {@code node} to the sub-handler whose category matches the stanza's {@code type} attribute.
+     * Forwards {@code stanza} to the sub-handler whose category matches the stanza's {@code type} attribute.
      *
      * <p>Stanzas with no {@code type} attribute and stanzas whose type is unknown to this dispatcher
      * return without side-effects. The {@code "picture"} and {@code "status"} types both route to
@@ -94,22 +94,22 @@ public final class NotificationAccountDispatcher extends SocketStreamHandler.Con
      * {@link NotificationProfileStreamHandler} because WA Web's two source modules share enough structure
      * (action child, hash-vs-jid resolution, ack format) that Cobalt merges them into one handler.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza", exports = "handleLoggedInStanza", adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    public void handle(Node node) {
-        var type = node.getAttributeAsString("type", null);
+    public void handle(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", null);
         if (type == null) {
             return;
         }
 
         switch (type) {
-            case "account_sync" -> accountHandler.handle(node);
-            case "contacts" -> contactHandler.handle(node);
-            case "disappearing_mode" -> disappearingModeHandler.handle(node);
-            case "privacy_token" -> privacyHandler.handle(node);
-            case "picture", "status" -> profileHandler.handle(node);
+            case "account_sync" -> accountHandler.handle(stanza);
+            case "contacts" -> contactHandler.handle(stanza);
+            case "disappearing_mode" -> disappearingModeHandler.handle(stanza);
+            case "privacy_token" -> privacyHandler.handle(stanza);
+            case "picture", "status" -> profileHandler.handle(stanza);
             default -> {
             }
         }

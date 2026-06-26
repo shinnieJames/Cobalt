@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessBoostedComponent;
@@ -63,7 +63,7 @@ public final class CometCreateBoostedComponentFacebookGraphQlResponse implements
      * Projects the {@code create_boosted_component} root object onto a {@link BusinessBoostedComponent}.
      *
      * @param node the {@code create_boosted_component} object, or {@code null}
-     * @return the projected component, or {@code null} when {@code node} is {@code null}
+     * @return the projected component, or {@code null} when {@code stanza} is {@code null}
      */
     private static BusinessBoostedComponent component(JSONObject node) {
         if (node == null) {
@@ -93,7 +93,7 @@ public final class CometCreateBoostedComponentFacebookGraphQlResponse implements
      * Projects the {@code context_spec} object onto a {@link BusinessBoostedComponent.Placement}.
      *
      * @param node the {@code context_spec} object, or {@code null}
-     * @return the projected placement, or {@code null} when {@code node} is {@code null}
+     * @return the projected placement, or {@code null} when {@code stanza} is {@code null}
      */
     private static BusinessBoostedComponent.Placement placement(JSONObject node) {
         if (node == null) {
@@ -111,7 +111,7 @@ public final class CometCreateBoostedComponentFacebookGraphQlResponse implements
      * Projects the {@code audience} object onto a {@link BusinessBoostedComponent.Audience}.
      *
      * @param node the {@code audience} object, or {@code null}
-     * @return the projected audience, or {@code null} when {@code node} is {@code null}
+     * @return the projected audience, or {@code null} when {@code stanza} is {@code null}
      */
     private static BusinessBoostedComponent.Audience audience(JSONObject node) {
         if (node == null) {
@@ -128,7 +128,7 @@ public final class CometCreateBoostedComponentFacebookGraphQlResponse implements
      * Reads the {@code offset_amount} of a {@code CurrencyQuantity} budget object.
      *
      * @param node the {@code budget} object, or {@code null}
-     * @return the budget amount string, or {@code null} when {@code node} is {@code null}
+     * @return the budget amount string, or {@code null} when {@code stanza} is {@code null}
      */
     private static String budget(JSONObject node) {
         return node == null ? null : node.getString("offset_amount");
@@ -138,7 +138,7 @@ public final class CometCreateBoostedComponentFacebookGraphQlResponse implements
      * Reads the {@code title} of an {@code objective_spec} object.
      *
      * @param node the {@code objective_spec} object, or {@code null}
-     * @return the objective title, or {@code null} when {@code node} is {@code null}
+     * @return the objective title, or {@code null} when {@code stanza} is {@code null}
      */
     private static String objective(JSONObject node) {
         return node == null ? null : node.getString("title");

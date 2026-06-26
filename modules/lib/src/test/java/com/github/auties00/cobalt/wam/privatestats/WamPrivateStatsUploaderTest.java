@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.wam.privatestats;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -153,7 +153,7 @@ class WamPrivateStatsUploaderTest {
     void issuerFailureSurfacesAsErrorCredential() {
         var hitHttp = new AtomicReference<Boolean>(false);
         var client = TestWhatsAppClient.create()
-                .withSendNodeHandler(builder -> new NodeBuilder()
+                .withSendNodeHandler(builder -> new StanzaBuilder()
                         .description("iq")
                         .attribute("type", "error")
                         .build());
@@ -189,18 +189,18 @@ class WamPrivateStatsUploaderTest {
     }
 
     // A success sign-credential IQ so the issuer sees a canned-correct response.
-    private static Node issuerResponse(byte[] signed, byte[] pk) {
-        return new NodeBuilder()
+    private static Stanza issuerResponse(byte[] signed, byte[] pk) {
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "result")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("sign_credential")
                         .content(List.of(
-                                new NodeBuilder()
+                                new StanzaBuilder()
                                         .description("signed_credential")
                                         .content(signed)
                                         .build(),
-                                new NodeBuilder()
+                                new StanzaBuilder()
                                         .description("acs_public_key")
                                         .content(pk)
                                         .build()))

@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -10,7 +10,7 @@ import java.util.Optional;
  * Represents the acknowledgement of a {@link LinkEditStanza}: the relay's confirmation of an edit.
  *
  * <p>A link-edit ack is delivered inside the host stanza layer's shared {@code <ack>} envelope, whose
- * body echoes a {@code <link_edit>} node confirming the {@link #token() edited token} and, when the edit
+ * body echoes a {@code <link_edit>} stanza confirming the {@link #token() edited token} and, when the edit
  * touched the waiting-room gate, the applied {@link #waitingRoomEnabled() gate state}. It is a parse-only
  * result model, not a transmittable action, so it implements no {@link CallMessage} contract.
  *
@@ -50,17 +50,17 @@ public record LinkEditAck(String token, Optional<Boolean> waitingRoomEnabled) {
     }
 
     /**
-     * Decodes a {@code <link_edit>} ack node into a {@link LinkEditAck}.
+     * Decodes a {@code <link_edit>} ack stanza into a {@link LinkEditAck}.
      *
-     * @param node the echoed {@code <link_edit>} node from the {@code <ack>} body
+     * @param stanza the echoed {@code <link_edit>} stanza from the {@code <ack>} body
      * @return the decoded link-edit ack
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code token} attribute is absent
      */
-    public static LinkEditAck of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var token = node.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
-        var waitingRoomEnabled = node.getAttributeAsString(WAITING_ROOM_ENABLED_ATTRIBUTE)
+    public static LinkEditAck of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var token = stanza.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
+        var waitingRoomEnabled = stanza.getAttributeAsString(WAITING_ROOM_ENABLED_ATTRIBUTE)
                 .map("1"::equals);
         return new LinkEditAck(token, waitingRoomEnabled);
     }

@@ -8,10 +8,10 @@ import com.github.auties00.cobalt.exception.WhatsAppAdvValidationException;
 import com.github.auties00.cobalt.model.device.identity.*;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalProtocolAddress;
@@ -31,10 +31,10 @@ import java.util.Optional;
  * primary WhatsApp account.
  *
  * <p>This is the single entry point for every ADV signature check Cobalt performs: pairing (local
- * device identity from a {@code <device-identity>} pair-success node, via
- * {@link #extractAndValidateLocalSignedDeviceIdentity(Node)}), prekey fetches (remote companion
- * device identity from a {@code <device-identity>} prekey node, via
- * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)}), and signed
+ * device identity from a {@code <device-identity>} pair-success stanza, via
+ * {@link #extractAndValidateLocalSignedDeviceIdentity(Stanza)}), prekey fetches (remote companion
+ * device identity from a {@code <device-identity>} prekey stanza, via
+ * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Stanza, byte[], boolean)}), and signed
  * key-index list verification during device-list synchronisation and ADV change notifications (via
  * {@link #decodeSignedKeyIndexBytes(Jid, byte[])} and {@link #verifySKeyIndexWithAccSigKey(byte[])}).
  * It covers both standard end-to-end encrypted accounts (E2EE) and hosted business-coexistence
@@ -50,8 +50,8 @@ public final class DeviceADVValidator {
      * signature.
      *
      * <p>The header is prefixed to the signed message during the account-signature check in
-     * {@link #extractAndValidateLocalSignedDeviceIdentity(Node)} and
-     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)} for
+     * {@link #extractAndValidateLocalSignedDeviceIdentity(Stanza)} and
+     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Stanza, byte[], boolean)} for
      * non-hosted accounts.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureConstants",
@@ -155,7 +155,7 @@ public final class DeviceADVValidator {
      * device signature.
      *
      * <p>This is called once during pairing, when the {@code <pair-success>} envelope carries the
-     * {@code <device-identity>} node. It verifies the HMAC over the device identity using the
+     * {@code <device-identity>} stanza. It verifies the HMAC over the device identity using the
      * locally-stored {@code advSecretKey}, verifies the account signature using the device
      * identity's embedded account signature key, and signs the bundle with the local Signal identity
      * to produce the device signature returned in the result.
@@ -167,7 +167,7 @@ public final class DeviceADVValidator {
      * when generating the local device signature; the HOSTED device-signature header only ever
      * participates in verification of remote devices.
      *
-     * @param deviceIdentityNode the {@code <device-identity>} pairing node
+     * @param deviceIdentityStanza the {@code <device-identity>} pairing stanza
      * @return the validated signed device identity, carrying the freshly generated device signature
      * @throws WhatsAppAdvValidationException if HMAC or signature validation fails
      * @throws IllegalStateException          if required store values are missing
@@ -175,8 +175,8 @@ public final class DeviceADVValidator {
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureApi",
             exports = {"verifyDeviceIdentityAccountSignature", "generateDeviceSignature"},
             adaptation = WhatsAppAdaptation.DIRECT)
-    public ADVSignedDeviceIdentity extractAndValidateLocalSignedDeviceIdentity(Node deviceIdentityNode) {
-        Objects.requireNonNull(deviceIdentityNode, "deviceIdentityNode cannot be null");
+    public ADVSignedDeviceIdentity extractAndValidateLocalSignedDeviceIdentity(Stanza deviceIdentityStanza) {
+        Objects.requireNonNull(deviceIdentityStanza, "deviceIdentityStanza cannot be null");
 
         var localJid = store.accountStore().jid()
                 .orElseThrow(() -> new IllegalStateException("Local JID not set in store"));
@@ -189,7 +189,7 @@ public final class DeviceADVValidator {
         }
 
         try {
-            var deviceIdentityHmacBytes = deviceIdentityNode.getChild("device-identity")
+            var deviceIdentityHmacBytes = deviceIdentityStanza.getChild("device-identity")
                     .orElseThrow(() -> new WhatsAppAdvValidationException.MissingDeviceIdentity(localJid))
                     .toContentBytes()
                     .orElseThrow(() -> new WhatsAppAdvValidationException.EmptyDeviceIdentity(localJid));
@@ -284,7 +284,7 @@ public final class DeviceADVValidator {
      * when the field is missing or empty.
      *
      * @param remoteJid          the remote device JID
-     * @param remoteIdentityNode the remote device identity node
+     * @param remoteIdentityStanza the remote device identity stanza
      * @param remoteIdentityKey  the remote device's claimed identity key (32 bytes)
      * @param isHostedFromJid    whether the remote JID indicates a hosted device
      * @return the validated signed device identity, or empty when validation is unnecessary or the
@@ -296,12 +296,12 @@ public final class DeviceADVValidator {
             adaptation = WhatsAppAdaptation.DIRECT)
     public Optional<ADVSignedDeviceIdentity> extractAndValidateRemoteSignedDeviceIdentity(
             Jid remoteJid,
-            Node remoteIdentityNode,
+            Stanza remoteIdentityStanza,
             byte[] remoteIdentityKey,
             boolean isHostedFromJid
     ) {
         Objects.requireNonNull(remoteJid, "remoteJid cannot be null");
-        Objects.requireNonNull(remoteIdentityNode, "remoteIdentityNode cannot be null");
+        Objects.requireNonNull(remoteIdentityStanza, "remoteIdentityStanza cannot be null");
         Objects.requireNonNull(remoteIdentityKey, "remoteIdentityKey cannot be null");
 
         if (!requiresValidation(remoteJid)) {
@@ -315,7 +315,7 @@ public final class DeviceADVValidator {
 
         var storedUserIdentityKey = findStoredUserIdentityKey(remoteJid);
 
-        var remoteIdentityBytes = remoteIdentityNode.getChild("device-identity")
+        var remoteIdentityBytes = remoteIdentityStanza.getChild("device-identity")
                 .orElseThrow(() -> new WhatsAppAdvValidationException.MissingDeviceIdentity(remoteJid))
                 .toContentBytes()
                 .orElseThrow(() -> new WhatsAppAdvValidationException.EmptyDeviceIdentity(remoteJid));
@@ -537,7 +537,7 @@ public final class DeviceADVValidator {
      * Returns the stored identity key for the exact device.
      *
      * <p>This lookup is used by
-     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)} to
+     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Stanza, byte[], boolean)} to
      * short-circuit re-validation when the device's stored identity already matches the claimed one.
      *
      * @param deviceJid the device JID, including the device number
@@ -561,7 +561,7 @@ public final class DeviceADVValidator {
      * <p>This key serves as the verification key for the standard signed-key-index-list path (where
      * the wire does not carry an embedded account signature key), and as a fallback for
      * {@code accountSignatureKey} in
-     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Node, byte[], boolean)} when the
+     * {@link #extractAndValidateRemoteSignedDeviceIdentity(Jid, Stanza, byte[], boolean)} when the
      * protobuf field is missing or empty. The device number on {@code jid} is ignored.
      *
      * @param jid the JID; the device number is ignored

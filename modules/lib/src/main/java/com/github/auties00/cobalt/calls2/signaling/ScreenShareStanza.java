@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -102,38 +102,38 @@ public record ScreenShareStanza(String callId, Jid callCreator, int state, int v
     }
 
     /**
-     * Builds the {@code <screen_share call-id call-creator screenshare_state version/>} action node.
+     * Builds the {@code <screen_share call-id call-creator screenshare_state version/>} action stanza.
      *
-     * <p>An absent {@code version} is omitted from the node.
+     * <p>An absent {@code version} is omitted from the stanza.
      *
-     * @return the screen-share action node
+     * @return the screen-share action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(STATE_ATTRIBUTE, state)
                 .attribute(VERSION_ATTRIBUTE, version, version >= 0)
                 .build();
     }
 
     /**
-     * Decodes a {@code <screen_share>} action node into a {@link ScreenShareStanza}.
+     * Decodes a {@code <screen_share>} action stanza into a {@link ScreenShareStanza}.
      *
      * <p>An absent {@code screenshare_state} decodes to {@code 0}; an absent {@code version} decodes
      * to {@code -1}.
      *
-     * @param node the {@code <screen_share>} node
+     * @param stanza the {@code <screen_share>} stanza
      * @return the decoded screen-share action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static ScreenShareStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var state = node.getAttributeAsInt(STATE_ATTRIBUTE, 0);
-        var version = node.getAttributeAsInt(VERSION_ATTRIBUTE, -1);
+    public static ScreenShareStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var state = stanza.getAttributeAsInt(STATE_ATTRIBUTE, 0);
+        var version = stanza.getAttributeAsInt(VERSION_ATTRIBUTE, -1);
         return new ScreenShareStanza(callId, callCreator, state, version);
     }
 }

@@ -13,8 +13,8 @@ import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.call.CallOfferMessage;
 import com.github.auties00.cobalt.model.message.call.CallOfferMessageBuilder;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -88,7 +88,7 @@ public final class CallKeyCryptography implements CallKeyExchange {
     /**
      * The wire attribute naming the call identifier, stamped on every action element.
      *
-     * <p>Shared with {@link CallRekeyEnvelope} so the rekey node and this service apply the same literal
+     * <p>Shared with {@link CallRekeyEnvelope} so the rekey stanza and this service apply the same literal
      * the wa-voip engine's {@code populate_common_call_attr} (fn11591) writes.
      */
     static final String CALL_ID_ATTRIBUTE = "call-id";
@@ -380,25 +380,25 @@ public final class CallKeyCryptography implements CallKeyExchange {
     }
 
     /**
-     * Decrypts the call key from an inbound {@code <enc>} node, selecting its envelope variant and
-     * ciphertext from the node's attributes and content.
+     * Decrypts the call key from an inbound {@code <enc>} stanza, selecting its envelope variant and
+     * ciphertext from the stanza's attributes and content.
      *
-     * <p>This is the node-level convenience over
+     * <p>This is the stanza-level convenience over
      * {@link #decryptCallKey(Jid, MessageEncryptionType, byte[])}: it reads the {@code type} attribute
      * and the binary content of a single {@code <enc>} element (the bare {@code <enc>} a callee receives
      * directly under {@code <offer>}, or the {@code <enc>} child of an {@code <enc_rekey>}). An
      * {@code <enc>} with a missing or unparseable {@code type}, missing content, or a failed decrypt
      * yields an empty result without throwing.
      *
-     * @param encNode   the {@code <enc>} node carrying the Signal envelope
+     * @param encStanza   the {@code <enc>} stanza carrying the Signal envelope
      * @param senderJid the device JID that authored the envelope, used as the Signal decryption sender
      * @return the recovered call key, or an empty result when it could not be recovered
-     * @throws NullPointerException if {@code encNode} or {@code senderJid} is {@code null}
+     * @throws NullPointerException if {@code encStanza} or {@code senderJid} is {@code null}
      */
-    public Optional<byte[]> decryptCallKey(Node encNode, Jid senderJid) {
-        Objects.requireNonNull(encNode, "encNode cannot be null");
+    public Optional<byte[]> decryptCallKey(Stanza encStanza, Jid senderJid) {
+        Objects.requireNonNull(encStanza, "encStanza cannot be null");
         Objects.requireNonNull(senderJid, "senderJid cannot be null");
-        var typeAttr = encNode.getAttributeAsString(TYPE_ATTRIBUTE).orElse(null);
+        var typeAttr = encStanza.getAttributeAsString(TYPE_ATTRIBUTE).orElse(null);
         if (typeAttr == null) {
             return Optional.empty();
         }
@@ -408,7 +408,7 @@ public final class CallKeyCryptography implements CallKeyExchange {
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
-        var ciphertext = encNode.toContentBytes().orElse(null);
+        var ciphertext = encStanza.toContentBytes().orElse(null);
         if (ciphertext == null) {
             return Optional.empty();
         }

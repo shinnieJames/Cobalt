@@ -6,10 +6,10 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreferenceBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.CtwaPerCustomerDataSharingAction;
-import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -21,7 +21,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * the toggle changes on another device, the server replays the resulting
  * {@link CtwaPerCustomerDataSharingAction} here, and the flag becomes readable
  * through
- * {@link com.github.auties00.cobalt.store.BusinessStore#findCtwaDataSharing(String)}.
+ * {@link LinkedWhatsAppBusinessStore#findCtwaDataSharing(String)}.
  *
  * @implNote
  * This implementation drops two WA Web side effects: the
@@ -83,7 +83,7 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
      * Cobalt model accessor is lossy on the boolean wire field so
      * the malformed branch on null-flag is unreachable here. The
      * REMOVE branch passes a possibly-null account LID through to
-     * {@link com.github.auties00.cobalt.store.BusinessStore#removeCtwaDataSharing(String)},
+     * {@link LinkedWhatsAppBusinessStore#removeCtwaDataSharing(String)},
      * matching WA Web's IDB-no-op semantic when the index slot is
      * missing.
      */

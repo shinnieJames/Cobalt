@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.SecretMessageContainerSpec;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.exception.*;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -172,7 +172,7 @@ public final class MessageDecryption {
      *
      * <p>The caller dispatches between {@link MessageEncryptionType#PKMSG} (new
      * session) and {@link MessageEncryptionType#MSG} (existing session) based on the
-     * {@code <enc>} node's {@code type} attribute. The returned plaintext has the
+     * {@code <enc>} stanza's {@code type} attribute. The returned plaintext has the
      * Signal-protocol PKCS#7 padding already stripped by {@link #removePadding(byte[])}.
      *
      * @implNote

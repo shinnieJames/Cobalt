@@ -6,9 +6,9 @@ import com.github.auties00.cobalt.exception.WhatsAppException;
 import com.github.auties00.cobalt.ProxyServer;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -36,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>Harness design: each proxy-flavour test stands up a local {@link ProxyServer} torn down in
  * {@link #tearDown()}; every scenario uses a fresh {@link LinkedWhatsAppStore} from
- * {@link WhatsAppStoreFactory#temporary()}; the {@link CapturingListener} latches on the first
- * node or close event so a scenario can verify the handshake landed without blocking on the full
+ * {@link LinkedWhatsAppStoreFactory#temporary()}; the {@link CapturingListener} latches on the first
+ * stanza or close event so a scenario can verify the handshake landed without blocking on the full
  * connect/auth flow. HTTPS-proxy tests use {@link #trustAllSslContextFactory()} because the local
  * proxy presents a self-signed certificate.
  */
@@ -286,7 +286,7 @@ class WhatsAppSocketTest {
 
     private static LinkedWhatsAppStore createMobileStore() {
         try {
-            return WhatsAppStoreFactory.temporary()
+            return LinkedWhatsAppStoreFactory.temporary()
                     .create(LinkedWhatsAppClientType.MOBILE, 15551234567L);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -295,7 +295,7 @@ class WhatsAppSocketTest {
 
     private static LinkedWhatsAppStore createWebStore() {
         try {
-            var store = WhatsAppStoreFactory.temporary()
+            var store = LinkedWhatsAppStoreFactory.temporary()
                     .create(LinkedWhatsAppClientType.WEB, UUID.randomUUID());
             store.accountStore().setDevice(new LinkedWhatsAppClientDeviceBuilder()
                     .model("Surface Pro 4")
@@ -311,7 +311,7 @@ class WhatsAppSocketTest {
 
     private static LinkedWhatsAppStore createDesktopStore() {
         try {
-            var store = WhatsAppStoreFactory.temporary()
+            var store = LinkedWhatsAppStoreFactory.temporary()
                     .create(LinkedWhatsAppClientType.WEB, UUID.randomUUID());
             store.accountStore().setDevice(new LinkedWhatsAppClientDeviceBuilder()
                     .model("MacBook Pro")
@@ -326,24 +326,24 @@ class WhatsAppSocketTest {
         }
     }
 
-    // Records every callback; the latch counts down on the first inbound node or orderly close so
+    // Records every callback; the latch counts down on the first inbound stanza or orderly close so
     // await() can park until the first event, then surfaces any captured errors as test failures.
     private static class CapturingListener implements WhatsAppSocketListener {
-        private final List<Node> nodes;
+        private final List<Stanza> stanzas;
 
         private final List<WhatsAppException> errors;
 
         private final CountDownLatch latch;
 
         public CapturingListener() {
-            this.nodes = new CopyOnWriteArrayList<>();
+            this.stanzas = new CopyOnWriteArrayList<>();
             this.errors = new CopyOnWriteArrayList<>();
             this.latch = new CountDownLatch(1);
         }
 
         @Override
-        public void onNode(Node node) {
-            nodes.add(node);
+        public void onNode(Stanza stanza) {
+            stanzas.add(stanza);
             latch.countDown();
         }
 

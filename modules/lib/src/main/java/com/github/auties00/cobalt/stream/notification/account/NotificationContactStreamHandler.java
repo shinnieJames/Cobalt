@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -8,7 +10,6 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
 
 /**
  * Handles {@code type="contacts"} notifications carrying server-side mutations to the user's contact
@@ -54,29 +55,29 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
     }
 
     /**
-     * Validates the stanza shape, dispatches to {@link #handleNotification(Node)}, logs any thrown
+     * Validates the stanza shape, dispatches to {@link #handleNotification(Stanza)}, logs any thrown
      * exception, and always sends the protocol-level ACK.
      *
      * <p>Stanzas whose description is not {@code notification} or whose {@code type} is not
      * {@code contacts} are dropped without ACK; valid stanzas are always ACKed even when handling throws.</p>
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "contacts")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "contacts")) {
             return;
         }
 
         try {
-            handleNotification(node);
+            handleNotification(stanza);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle contacts notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"),
+                    stanza.getAttributeAsString("id", "[missing-id]"),
                     throwable.getMessage());
         } finally {
-            sendNotificationAck(node);
+            sendNotificationAck(stanza);
         }
     }
 
@@ -85,33 +86,33 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
      * {@code sync}) and routes by description.
      *
      * <p>The {@code sync} branch flips
-     * {@link com.github.auties00.cobalt.store.SyncStore#setSyncedContacts} to {@code false}
+     * {@link LinkedWhatsAppSyncStore#setSyncedContacts} to {@code false}
      * so the next reconnect re-runs the contact bootstrap. The {@code add} and {@code remove} children,
      * although recognised when scanning for an action child, fall through to the {@code default} branch
      * and are debug-logged.</p>
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handleNotification(Node node) {
-        Node actionNode = null;
-        for (var child : node.children()) {
+    private void handleNotification(Stanza stanza) {
+        Stanza actionStanza = null;
+        for (var child : stanza.children()) {
             var desc = child.description();
             if ("update".equals(desc) || "add".equals(desc) || "remove".equals(desc)
                     || "modify".equals(desc) || "sync".equals(desc)) {
-                actionNode = child;
+                actionStanza = child;
                 break;
             }
         }
-        if (actionNode == null) {
+        if (actionStanza == null) {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Contacts notification {0} has no supported action child",
-                    node.getAttributeAsString("id", "[missing-id]"));
+                    stanza.getAttributeAsString("id", "[missing-id]"));
             return;
         }
 
-        switch (actionNode.description()) {
-            case "update" -> handleUpdate(node, actionNode);
-            case "modify" -> handleModify(node, actionNode);
+        switch (actionStanza.description()) {
+            case "update" -> handleUpdate(stanza, actionStanza);
+            case "modify" -> handleModify(stanza, actionStanza);
             case "sync" -> {
                 LOGGER.log(System.Logger.Level.DEBUG, "Received contact sync notification");
                 whatsapp.store().syncStore().setSyncedContacts(false);
@@ -119,8 +120,8 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
             default ->
                     LOGGER.log(System.Logger.Level.DEBUG,
                             "Ignoring unhandled contacts notification type {0} for notification {1}",
-                            actionNode.description(),
-                            node.getAttributeAsString("id", "[missing-id]"));
+                            actionStanza.description(),
+                            stanza.getAttributeAsString("id", "[missing-id]"));
         }
     }
 
@@ -136,12 +137,12 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation does not handle the {@code hash}-attribute form because Cobalt does
      * not maintain a per-contact userhash to resolve against.
      *
-     * @param notificationNode the parent {@code <notification>} stanza, used for logging
-     * @param updateNode       the {@code <update>} child
+     * @param notificationStanza the parent {@code <notification>} stanza, used for logging
+     * @param updateStanza       the {@code <update>} child
      */
-    private void handleUpdate(Node notificationNode, Node updateNode) {
-        if (updateNode.hasAttribute("jid")) {
-            var targetJid = updateNode.getAttributeAsJid("jid")
+    private void handleUpdate(Stanza notificationStanza, Stanza updateStanza) {
+        if (updateStanza.hasAttribute("jid")) {
+            var targetJid = updateStanza.getAttributeAsJid("jid")
                     .map(Jid::toUserJid)
                     .orElse(null);
             if (targetJid == null) {
@@ -159,17 +160,17 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
             return;
         }
 
-        if (updateNode.hasAttribute("hash")) {
+        if (updateStanza.hasAttribute("hash")) {
             // TODO: resolve the hash-only update by walking the contact store and matching the WA Web userhash truncation. Today the hash-only path is silently skipped.
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Ignoring hash-only contacts update notification {0}",
-                    notificationNode.getAttributeAsString("id", "[missing-id]"));
+                    notificationStanza.getAttributeAsString("id", "[missing-id]"));
             return;
         }
 
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Contacts update notification {0} has neither jid nor hash",
-                notificationNode.getAttributeAsString("id", "[missing-id]"));
+                notificationStanza.getAttributeAsString("id", "[missing-id]"));
     }
 
     /**
@@ -185,14 +186,14 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
      * that WA Web generates is not produced, because Cobalt's message generation is driven from the
      * chat-message stream rather than the contacts notification handler.
      *
-     * @param notificationNode the parent {@code <notification>} stanza
-     * @param modifyNode       the {@code <modify>} child carrying {@code old}, {@code new}, and optional {@code old_lid}/{@code new_lid}
+     * @param notificationStanza the parent {@code <notification>} stanza
+     * @param modifyStanza       the {@code <modify>} child carrying {@code old}, {@code new}, and optional {@code old_lid}/{@code new_lid}
      */
-    private void handleModify(Node notificationNode, Node modifyNode) {
-        var oldJid = modifyNode.getAttributeAsJid("old")
+    private void handleModify(Stanza notificationStanza, Stanza modifyStanza) {
+        var oldJid = modifyStanza.getAttributeAsJid("old")
                 .map(Jid::toUserJid)
                 .orElse(null);
-        var newJid = modifyNode.getAttributeAsJid("new")
+        var newJid = modifyStanza.getAttributeAsJid("new")
                 .map(Jid::toUserJid)
                 .orElse(null);
         if (oldJid == null || newJid == null) {
@@ -201,10 +202,10 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
             return;
         }
 
-        var newLid = modifyNode.getAttributeAsJid("new_lid")
+        var newLid = modifyStanza.getAttributeAsJid("new_lid")
                 .map(Jid::toUserJid)
                 .orElse(null);
-        var oldLid = modifyNode.getAttributeAsJid("old_lid")
+        var oldLid = modifyStanza.getAttributeAsJid("old_lid")
                 .map(Jid::toUserJid)
                 .orElse(null);
 
@@ -257,9 +258,9 @@ final class NotificationContactStreamHandler extends SocketStreamHandler.Concurr
      *
      * <p>The ack is fire-and-forget.</p>
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("contacts").send();
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("contacts").send();
     }
 }

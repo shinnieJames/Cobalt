@@ -9,7 +9,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.libsignal.SignalProtocolAddress;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -124,7 +125,7 @@ public final class MessageEncryption {
      * {@link SignalCryptoLocks#withSession}, keyed by the recipient {@link SignalProtocolAddress} and shared with the
      * inbound {@link MessageDecryption}, because the Signal session ratchet is a non-atomic load-ratchet-store cycle;
      * WhatsApp Web never races it since its JavaScript runs single-threaded, whereas Cobalt encrypts and decrypts on
-     * virtual threads. On encryption error it removes the failing Signal session via {@link com.github.auties00.cobalt.store.SignalStore#removeSession}
+     * virtual threads. On encryption error it removes the failing Signal session via {@link LinkedWhatsAppSignalStore#removeSession}
      * so a later retry on the same address triggers a fresh PreKey exchange rather than re-using the stale session
      * record.
      *

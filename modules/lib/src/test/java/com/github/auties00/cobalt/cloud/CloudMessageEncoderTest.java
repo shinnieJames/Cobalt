@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Outbound mapping cells for {@link CloudMessageEncoder}: each cell builds a {@link MessageContainer}
- * and asserts the produced Cloud {@code interactive} node against the Meta documented shape.
+ * and asserts the produced Cloud {@code interactive} stanza against the Meta documented shape.
  */
 @DisplayName("CloudMessageEncoder")
 class CloudMessageEncoderTest {
@@ -31,7 +31,7 @@ class CloudMessageEncoderTest {
     }
 
     @Test
-    @DisplayName("cta_url native flow button yields a cta_url interactive node")
+    @DisplayName("cta_url native flow button yields a cta_url interactive stanza")
     void ctaUrl() {
         var btn = new NativeFlowMessageInteractiveMessageNativeFlowButtonBuilder()
                 .name("cta_url")
@@ -80,7 +80,7 @@ class CloudMessageEncoderTest {
     }
 
     @Test
-    @DisplayName("media image header overrides a text title on a cta_url node")
+    @DisplayName("media image header overrides a text title on a cta_url stanza")
     void mediaHeader() {
         var btn = new NativeFlowMessageInteractiveMessageNativeFlowButtonBuilder()
                 .name("cta_url")
@@ -103,7 +103,7 @@ class CloudMessageEncoderTest {
     }
 
     @Test
-    @DisplayName("send_location native flow button yields a location_request_message node")
+    @DisplayName("send_location native flow button yields a location_request_message stanza")
     void locationRequest() {
         var flow = new InteractiveMessageNativeFlowMessageBuilder()
                 .buttons(List.of(new NativeFlowMessageInteractiveMessageNativeFlowButtonBuilder().name("send_location").build()))

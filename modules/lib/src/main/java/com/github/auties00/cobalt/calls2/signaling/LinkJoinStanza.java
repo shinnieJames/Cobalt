@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -96,15 +96,15 @@ public record LinkJoinStanza(String token, int joinState) implements CallMessage
     }
 
     /**
-     * Builds the {@code <link_join token join-state/>} action node.
+     * Builds the {@code <link_join token join-state/>} action stanza.
      *
-     * <p>An absent join state is omitted from the node.
+     * <p>An absent join state is omitted from the stanza.
      *
-     * @return the link-join action node
+     * @return the link-join action stanza
      */
     @Override
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toStanza() {
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(TOKEN_ATTRIBUTE, token)
                 .attribute(JOIN_STATE_ATTRIBUTE, joinState, joinState >= 0)
@@ -112,19 +112,19 @@ public record LinkJoinStanza(String token, int joinState) implements CallMessage
     }
 
     /**
-     * Decodes a {@code <link_join>} action node into a {@link LinkJoinStanza}.
+     * Decodes a {@code <link_join>} action stanza into a {@link LinkJoinStanza}.
      *
      * <p>An absent {@code join-state} attribute classifies to an empty {@link #joinState()}.
      *
-     * @param node the {@code <link_join>} node
+     * @param stanza the {@code <link_join>} stanza
      * @return the decoded link-join signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code token} attribute is absent
      */
-    public static LinkJoinStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var token = node.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
-        var joinState = node.getAttributeAsInt(JOIN_STATE_ATTRIBUTE, -1);
+    public static LinkJoinStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var token = stanza.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
+        var joinState = stanza.getAttributeAsInt(JOIN_STATE_ATTRIBUTE, -1);
         return new LinkJoinStanza(token, joinState);
     }
 }

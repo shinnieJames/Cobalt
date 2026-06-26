@@ -1,11 +1,13 @@
 package com.github.auties00.cobalt.stream.iq;
 
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
-import com.github.auties00.cobalt.graphql.web.auth.CanonicalNonceDecryptor;
-import com.github.auties00.cobalt.graphql.web.auth.WhatsAppWebGraphQlBootstrapClient;
+import com.github.auties00.cobalt.graphql.whatsapp.auth.CanonicalNonceDecryptor;
+import com.github.auties00.cobalt.graphql.whatsapp.auth.WhatsAppWebGraphQlBootstrapClient;
 import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSessionBuilder;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
@@ -18,9 +20,7 @@ import com.github.auties00.cobalt.model.device.pairing.ClientPairingProps;
 import com.github.auties00.cobalt.model.device.pairing.ClientPairingPropsSpec;
 import com.github.auties00.cobalt.model.device.pairing.LinkedPrimaryPlatform;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.node.smax.mdcompanion.SmaxMdSetRegEncryptionMetadata;
+import com.github.auties00.cobalt.stanza.smax.mdcompanion.SmaxMdSetRegEncryptionMetadata;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.util.DataUtils;
@@ -228,13 +228,13 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * branch based on the first child tag, and anything else is logged at
      * {@code DEBUG} and dropped.
      *
-     * @param node {@inheritDoc}
+     * @param stanza {@inheritDoc}
      */
     @Override
-    public void handle(Node node) {
-        var xmlns = node.getAttributeAsString("xmlns", null);
+    public void handle(Stanza stanza) {
+        var xmlns = stanza.getAttributeAsString("xmlns", null);
         if ("urn:xmpp:ping".equals(xmlns)) {
-            handlePing(node);
+            handlePing(stanza);
             return;
         }
 
@@ -242,15 +242,15 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
             return;
         }
 
-        var child = node.getChild().orElse(null);
+        var child = stanza.getChild().orElse(null);
         if (child == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring md iq without child: {0}", node);
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring md iq without child: {0}", stanza);
             return;
         }
 
         switch (child.description()) {
-            case "pair-device" -> handlePairDevice(node);
-            case "pair-success" -> handlePairSuccess(node);
+            case "pair-device" -> handlePairDevice(stanza);
+            case "pair-success" -> handlePairSuccess(stanza);
             default -> LOGGER.log(System.Logger.Level.DEBUG,
                     "Ignoring unsupported md iq child {0}", child.description());
         }
@@ -266,20 +266,20 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * A ping without a {@code from} attribute is logged at {@code DEBUG} and
      * dropped.
      *
-     * @param node the inbound ping {@code <iq>} stanza
+     * @param stanza the inbound ping {@code <iq>} stanza
      */
-    private void handlePing(Node node) {
-        var from = node.getAttributeAsJid("from").orElse(null);
+    private void handlePing(Stanza stanza) {
+        var from = stanza.getAttributeAsJid("from").orElse(null);
         if (from == null) {
             LOGGER.log(System.Logger.Level.DEBUG, "Ignoring ping iq without from attribute");
             return;
         }
 
-        var response = new NodeBuilder()
+        var response = new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "result")
                 .attribute("to", from)
-                .attribute("id", node.getAttributeAsString("id", null))
+                .attribute("id", stanza.getAttributeAsString("id", null))
                 .build();
         whatsapp.sendNodeWithNoResponse(response);
     }
@@ -299,18 +299,18 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * {@code WARNING} and abandoned. A failure to start the pairing-code flow
      * is logged at {@code WARNING} and swallowed.
      *
-     * @param iqNode the full {@code <iq>} stanza containing the
+     * @param iqStanza the full {@code <iq>} stanza containing the
      *               {@code <pair-device/>} child
      */
-    private void handlePairDevice(Node iqNode) {
-        var pairDevice = iqNode.getChild("pair-device").orElse(null);
+    private void handlePairDevice(Stanza iqStanza) {
+        var pairDevice = iqStanza.getChild("pair-device").orElse(null);
         if (pairDevice == null) {
             LOGGER.log(System.Logger.Level.WARNING, "Received md iq without pair-device child");
             return;
         }
 
         whatsapp.store().signalStore().setAdvSecretKey(DataUtils.randomByteArray(32));
-        sendPairDeviceAck(iqNode);
+        sendPairDeviceAck(iqStanza);
 
         if (deviceLinkingService.isEnabled()) {
             try {
@@ -339,17 +339,17 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * The ack is skipped, and the reason logged at {@code DEBUG}, when the
      * inbound stanza is missing its {@code id} or {@code from} attribute.
      *
-     * @param iqNode the original {@code <pair-device/>} IQ stanza
+     * @param iqStanza the original {@code <pair-device/>} IQ stanza
      */
-    private void sendPairDeviceAck(Node iqNode) {
-        var id = iqNode.getAttributeAsString("id", null);
-        var from = iqNode.getAttributeAsJid("from").orElse(null);
+    private void sendPairDeviceAck(Stanza iqStanza) {
+        var id = iqStanza.getAttributeAsString("id", null);
+        var from = iqStanza.getAttributeAsJid("from").orElse(null);
         if (id == null || from == null) {
             LOGGER.log(System.Logger.Level.DEBUG, "Cannot send pair-device ack: missing id or from");
             return;
         }
 
-        var response = new NodeBuilder()
+        var response = new StanzaBuilder()
                 .description("iq")
                 .attribute("id", id)
                 .attribute("to", Jid.userServer())
@@ -360,7 +360,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
 
     /**
      * Extracts the ordered set of QR ref strings from a {@code <pair-device/>}
-     * node.
+     * stanza.
      *
      * <p>Ref values may surface either as the content of the parent or its
      * {@code <ref/>} children, or in a {@code ref}, {@code value}, or
@@ -372,10 +372,10 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * list because the multi-source extraction would otherwise emit duplicates
      * when the same ref appears in both an attribute and a content blob.
      *
-     * @param pairDevice the {@code <pair-device/>} child node
+     * @param pairDevice the {@code <pair-device/>} child stanza
      * @return the ordered set of non-blank ref strings; never {@code null}
      */
-    private LinkedHashSet<String> extractPairRefs(Node pairDevice) {
+    private LinkedHashSet<String> extractPairRefs(Stanza pairDevice) {
         var refs = new LinkedHashSet<String>();
         decodeContentAsString(pairDevice).ifPresent(refs::add);
 
@@ -549,10 +549,10 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * rollback) mirror the upstream device-link reporter sequence so the funnel
      * matches the official client.
      *
-     * @param iqNode the full {@code <iq>} stanza containing the
+     * @param iqStanza the full {@code <iq>} stanza containing the
      *               {@code <pair-success/>} child
      */
-    private void handlePairSuccess(Node iqNode) {
+    private void handlePairSuccess(Stanza iqStanza) {
         if (whatsapp.store().accountStore().registered()) {
             LOGGER.log(System.Logger.Level.DEBUG, "Ignoring pair-success iq: store already registered");
             return;
@@ -564,7 +564,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
 
         var regStartSeconds = Instant.now().getEpochSecond();
 
-        var pairSuccess = iqNode.getChild("pair-success").orElse(null);
+        var pairSuccess = iqStanza.getChild("pair-success").orElse(null);
         if (pairSuccess == null) {
             LOGGER.log(System.Logger.Level.WARNING, "Received md iq without pair-success child");
             return;
@@ -605,7 +605,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
             store.accountStore().jid().ifPresent(localJid -> deviceService.persistLocalDeviceIdentityFromPairSuccess(
                     localJid, validatedIdentity.accountSignatureKey().orElse(null)));
             store.signalStore().setSignedDeviceIdentity(validatedIdentity);
-            sendPairSuccessResponse(iqNode, validatedIdentity);
+            sendPairSuccessResponse(iqStanza, validatedIdentity);
 
             emitMdLinkDeviceCompanionStage(MdLinkDeviceCompanionStage.PAIR_DEVICE_SIGN_SENT, null, mdSessionId, regStartSeconds);
 
@@ -661,7 +661,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      *                    {@code <encryption-metadata/>} child carries the
      *                    canonical nonce blob
      */
-    private void acquireWhatsAppWebGraphQlSession(Node pairSuccess) {
+    private void acquireWhatsAppWebGraphQlSession(Stanza pairSuccess) {
         try {
             var store = whatsapp.store();
             var metadata = pairSuccess.getChild("encryption-metadata")
@@ -809,12 +809,12 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * null checks are unavoidable because the inbound stanza shape is
      * server-driven.
      *
-     * @param iqNode            the original {@code <pair-success/>}
+     * @param iqStanza            the original {@code <pair-success/>}
      *                          {@code <iq>} stanza
      * @param validatedIdentity the validated {@link ADVSignedDeviceIdentity}
      */
-    private void sendPairSuccessResponse(Node iqNode, ADVSignedDeviceIdentity validatedIdentity) {
-        var id = iqNode.getAttributeAsString("id", null);
+    private void sendPairSuccessResponse(Stanza iqStanza, ADVSignedDeviceIdentity validatedIdentity) {
+        var id = iqStanza.getAttributeAsString("id", null);
         if (id == null) {
             LOGGER.log(System.Logger.Level.DEBUG, "Cannot send pair-success response: missing id");
             return;
@@ -844,18 +844,18 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
 
         var encodedIdentity = ADVSignedDeviceIdentitySpec.encode(identityForResponse);
 
-        var deviceIdentityNode = new NodeBuilder()
+        var deviceIdentityNode = new StanzaBuilder()
                 .description("device-identity")
                 .attribute("key-index", keyIndex)
                 .content(encodedIdentity)
                 .build();
 
-        var pairDeviceSignNode = new NodeBuilder()
+        var pairDeviceSignNode = new StanzaBuilder()
                 .description("pair-device-sign")
                 .content(deviceIdentityNode)
                 .build();
 
-        var response = new NodeBuilder()
+        var response = new StanzaBuilder()
                 .description("iq")
                 .attribute("id", id)
                 .attribute("to", Jid.userServer())
@@ -868,19 +868,19 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
 
     /**
      * Resolves the paired device JID or LID from a {@code <pair-success/>}
-     * node.
+     * stanza.
      *
      * <p>The value is read from the {@code jid} or {@code lid} attribute of the
      * {@code <device/>} child, selected by the {@code lid} flag.
      *
-     * @param node the {@code <pair-success/>} node
+     * @param stanza the {@code <pair-success/>} stanza
      * @param lid  {@code true} to resolve the LID, {@code false} for the device
      *             JID
      * @return the resolved {@link Jid}, or an empty {@link Optional} when the
      *         attribute is absent
      */
-    private Optional<Jid> resolvePairedJid(Node node, boolean lid) {
-        return node.getChild("device")
+    private Optional<Jid> resolvePairedJid(Stanza stanza, boolean lid) {
+        return stanza.getChild("device")
                 .flatMap(device -> device.getAttributeAsJid(lid ? "lid" : "jid"));
     }
 
@@ -897,12 +897,12 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * {@code <props/>} child does not block the next candidate from being
      * tried.
      *
-     * @param pairSuccess the {@code <pair-success/>} node
+     * @param pairSuccess the {@code <pair-success/>} stanza
      * @return the decoded {@link ClientPairingProps}, or an empty
      *         {@link Optional} when no candidate decodes cleanly
      */
-    private Optional<ClientPairingProps> extractPairingProps(Node pairSuccess) {
-        var candidates = new ArrayList<Node>();
+    private Optional<ClientPairingProps> extractPairingProps(Stanza pairSuccess) {
+        var candidates = new ArrayList<Stanza>();
         candidates.add(pairSuccess);
         for (var child : pairSuccess.children()) {
             if ("props".equals(child.description())) {
@@ -957,22 +957,22 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
     }
 
     /**
-     * Returns the first non-blank string attribute on the given node matching
+     * Returns the first non-blank string attribute on the given stanza matching
      * one of the supplied keys.
      *
      * <p>The keys are tried in order and the first non-blank value wins. This
      * supports the multi-source ref extraction in
-     * {@link #extractPairRefs(Node)}, where a ref may live on a {@code ref},
+     * {@link #extractPairRefs(Stanza)}, where a ref may live on a {@code ref},
      * {@code value}, or {@code code} attribute rather than a content blob.
      *
-     * @param node the node to search
+     * @param stanza the stanza to search
      * @param keys the attribute keys to try, in priority order
      * @return the first non-blank attribute value, or an empty {@link Optional}
      *         when none of the keys produce one
      */
-    private Optional<String> findStringAttribute(Node node, String... keys) {
+    private Optional<String> findStringAttribute(Stanza stanza, String... keys) {
         for (var key : keys) {
-            var value = node.getAttributeAsString(key).orElse(null);
+            var value = stanza.getAttributeAsString(key).orElse(null);
             if (value != null && !value.isBlank()) {
                 return Optional.of(value);
             }
@@ -981,21 +981,21 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
     }
 
     /**
-     * Returns the first {@link Jid}-typed attribute on the given node matching
+     * Returns the first {@link Jid}-typed attribute on the given stanza matching
      * one of the supplied keys.
      *
      * <p>The keys are tried in order and the first present value wins. This
      * supports stanza shapes that carry the same logical JID under multiple
      * attribute names.
      *
-     * @param node the node to search
+     * @param stanza the stanza to search
      * @param keys the attribute keys to try, in priority order
      * @return the first {@link Jid} attribute value, or an empty
      *         {@link Optional} when none of the keys produce one
      */
-    private Optional<Jid> findJidAttribute(Node node, String... keys) {
+    private Optional<Jid> findJidAttribute(Stanza stanza, String... keys) {
         for (var key : keys) {
-            var value = node.getAttributeAsJid(key).orElse(null);
+            var value = stanza.getAttributeAsJid(key).orElse(null);
             if (value != null) {
                 return Optional.of(value);
             }
@@ -1004,24 +1004,24 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
     }
 
     /**
-     * Decodes the content of the given node as a UTF-8 string.
+     * Decodes the content of the given stanza as a UTF-8 string.
      *
      * <p>The typed string accessor is preferred; when it yields nothing the raw
      * content bytes are decoded as UTF-8. This lets a ref encoded as either a
-     * {@code <ref>...</ref>} text node or a {@code <ref/>} binary blob resolve
-     * through the same path in {@link #extractPairRefs(Node)}.
+     * {@code <ref>...</ref>} text stanza or a {@code <ref/>} binary blob resolve
+     * through the same path in {@link #extractPairRefs(Stanza)}.
      *
-     * @param node the node whose content to decode
+     * @param stanza the stanza whose content to decode
      * @return the non-blank decoded string, or an empty {@link Optional} when
      *         the content is missing or blank
      */
-    private Optional<String> decodeContentAsString(Node node) {
-        var text = node.toContentString().orElse(null);
+    private Optional<String> decodeContentAsString(Stanza stanza) {
+        var text = stanza.toContentString().orElse(null);
         if (text != null && !text.isBlank()) {
             return Optional.of(text);
         }
 
-        var bytes = node.toContentBytes().orElse(null);
+        var bytes = stanza.toContentBytes().orElse(null);
         if (bytes == null || bytes.length == 0) {
             return Optional.empty();
         }

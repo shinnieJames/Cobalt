@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +20,7 @@ import java.util.Optional;
  * different subsystem: the {@code <voip_settings>} tuning bundle, the {@code <relay>} candidate set,
  * the {@code <group_info>} roster, and the {@code <bot_info>}, {@code <extension_info>}, and
  * {@code <link_info>} blocks. Only the {@code <group_info>} roster is typed here, via
- * {@link GroupInfoStanza}; the other blocks are carried as opaque {@link Node} trees and forwarded
+ * {@link GroupInfoStanza}; the other blocks are carried as opaque {@link Stanza} trees and forwarded
  * uninterpreted because their typed parse is owned by the configuration, transport, bot, extension,
  * and call-link subsystems respectively.
  *
@@ -42,7 +42,7 @@ import java.util.Optional;
  * offset {@code 0x4c752}), {@code av-upgradable} (data offset {@code 0x7be8c}), and {@code av_upgrade}
  * (data offset {@code 0x7ee2d}). Only the {@code <group_info>} roster is given a typed projection here
  * ({@link GroupInfoStanza}); the {@code voip_settings}, {@code relay}, {@code bot_info},
- * {@code extension_info}, and {@code link_info} blocks are carried as raw {@link Node} trees because
+ * {@code extension_info}, and {@code link_info} blocks are carried as raw {@link Stanza} trees because
  * their parse is owned by the configuration, transport, bot, extension, and call-link subsystems, not
  * by the signaling roster framing.
  *
@@ -63,7 +63,7 @@ import java.util.Optional;
  */
 public record GroupUpdateStanza(String callId, Jid callCreator, String avUpgrader, boolean avUpgradable,
                                 boolean avUpgrade, GroupInfoStanza groupInfo,
-                                List<Node> extraChildren) implements CallMessage {
+                                List<Stanza> extraChildren) implements CallMessage {
     /**
      * The wire element tag for a group-update action.
      */
@@ -145,23 +145,23 @@ public record GroupUpdateStanza(String callId, Jid callCreator, String avUpgrade
     }
 
     /**
-     * Builds the {@code <group_update>} action node.
+     * Builds the {@code <group_update>} action stanza.
      *
      * <p>The common header is stamped first, then the AV-upgrade attributes are written when set, then
      * the {@code <group_info>} roster (when present) and the forwarded bundle children are emitted as
      * content. An absent AV-upgrade attribute, an absent roster, and an empty extra-children list are
      * each omitted rather than written as a sentinel.
      *
-     * @return the group-update action node
+     * @return the group-update action stanza
      */
     @Override
-    public Node toNode() {
-        var children = new ArrayList<Node>();
+    public Stanza toStanza() {
+        var children = new ArrayList<Stanza>();
         if (groupInfo != null) {
-            children.add(groupInfo.toNode());
+            children.add(groupInfo.toStanza());
         }
         children.addAll(extraChildren);
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(AV_UPGRADER_ATTRIBUTE, avUpgrader)
                 .attribute(AV_UPGRADABLE_ATTRIBUTE, FLAG_TRUE, avUpgradable)
                 .attribute(AV_UPGRADE_ATTRIBUTE, FLAG_TRUE, avUpgrade);
@@ -172,32 +172,32 @@ public record GroupUpdateStanza(String callId, Jid callCreator, String avUpgrade
     }
 
     /**
-     * Decodes a {@code <group_update>} action node into a {@link GroupUpdateStanza}.
+     * Decodes a {@code <group_update>} action stanza into a {@link GroupUpdateStanza}.
      *
-     * <p>The {@code <group_info>} child is decoded through {@link GroupInfoStanza#of(Node)}; every other
+     * <p>The {@code <group_info>} child is decoded through {@link GroupInfoStanza#of(Stanza)}; every other
      * child is carried through uninterpreted into {@link #extraChildren()}. The known bundle blocks
      * ({@code voip_settings}, {@code relay}, {@code bot_info}, {@code extension_info}, {@code link_info})
      * and any further child the engine adds to the omnibus update are all forwarded verbatim rather than
      * confined to a fixed vocabulary, so an unrecognized bundle child round-trips instead of being
      * dropped.
      *
-     * @param node the {@code <group_update>} node
+     * @param stanza the {@code <group_update>} stanza
      * @return the decoded group update
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static GroupUpdateStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var avUpgrader = node.getAttributeAsString(AV_UPGRADER_ATTRIBUTE, null);
-        var avUpgradable = FLAG_TRUE.equals(node.getAttributeAsString(AV_UPGRADABLE_ATTRIBUTE, FLAG_FALSE));
-        var avUpgrade = FLAG_TRUE.equals(node.getAttributeAsString(AV_UPGRADE_ATTRIBUTE, FLAG_FALSE));
-        var groupInfo = node.getChild(GroupInfoStanza.ELEMENT)
+    public static GroupUpdateStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var avUpgrader = stanza.getAttributeAsString(AV_UPGRADER_ATTRIBUTE, null);
+        var avUpgradable = FLAG_TRUE.equals(stanza.getAttributeAsString(AV_UPGRADABLE_ATTRIBUTE, FLAG_FALSE));
+        var avUpgrade = FLAG_TRUE.equals(stanza.getAttributeAsString(AV_UPGRADE_ATTRIBUTE, FLAG_FALSE));
+        var groupInfo = stanza.getChild(GroupInfoStanza.ELEMENT)
                 .flatMap(GroupInfoStanza::of)
                 .orElse(null);
-        var extraChildren = node.streamChildren()
+        var extraChildren = stanza.streamChildren()
                 .filter(child -> !child.hasDescription(GroupInfoStanza.ELEMENT))
                 .toList();
         return new GroupUpdateStanza(callId, callCreator, avUpgrader, avUpgradable, avUpgrade, groupInfo, extraChildren);

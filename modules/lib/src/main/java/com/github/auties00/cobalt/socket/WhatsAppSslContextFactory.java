@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.socket;
 
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 
@@ -16,7 +18,7 @@ import javax.net.ssl.SSLParameters;
  * drive locally-signed proxy servers; enterprise embedders substitute a
  * custom-truststore factory for CA pinning. The factory is supplied at
  * client construction through
- * {@link WhatsAppSocketClient#newCipheredSocketClient(com.github.auties00.cobalt.store.LinkedWhatsAppStore, WhatsAppSslContextFactory)}.
+ * {@link WhatsAppSocketClient#newCipheredSocketClient(LinkedWhatsAppStore, WhatsAppSslContextFactory)}.
  *
  * @implSpec
  * The two methods deliberately split because the JDK reuses one

@@ -5,14 +5,15 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValue;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * mutation and asserting the contact store side-effect, gated on the
  * {@link ABProp#SHARE_OWN_PN_SYNC} AB-prop. The {@code shareOwnPn} action
  * carries no value payload of its own, so the
- * {@link com.github.auties00.cobalt.model.sync.SyncActionValue} fixture
+ * {@link SyncActionValue} fixture
  * sets only the wire timestamp.
  */
 @DisplayName("ShareOwnPnHandler")
@@ -222,7 +223,7 @@ class ShareOwnPnHandlerTest {
         void newerRemoteApplies() {
             var local = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -230,7 +231,7 @@ class ShareOwnPnHandlerTest {
         @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(
                             build(CONTACT_LID, SyncdOperation.SET, ts),
                             build(CONTACT_LID, SyncdOperation.SET, ts)).state());
@@ -241,7 +242,7 @@ class ShareOwnPnHandlerTest {
         void olderRemoteSkipped() {
             var local = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
     }

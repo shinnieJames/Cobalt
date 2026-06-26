@@ -24,8 +24,8 @@ import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacyMode;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder;
@@ -182,38 +182,38 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
             skDistPayloads = senderKeyDistribution.encrypt(statusJid, senderKeyBytes, skDistribDevices);
         }
 
-        var participantsChildren = new ArrayList<Node>();
+        var participantsChildren = new ArrayList<Stanza>();
         for (var payload : skDistPayloads) {
             if (payload.recipientJid() == null) {
                 continue;
             }
-            var encNode = new NodeBuilder()
+            var encNode = new StanzaBuilder()
                     .description("enc")
                     .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                     .attribute("type", payload.type().protocolValue())
                     .content(payload.ciphertext())
                     .build();
-            participantsChildren.add(new NodeBuilder()
+            participantsChildren.add(new StanzaBuilder()
                     .description("to")
                     .attribute("jid", payload.recipientJid())
                     .content(encNode)
                     .build());
         }
         for (var device : skExistingDevices) {
-            participantsChildren.add(new NodeBuilder()
+            participantsChildren.add(new StanzaBuilder()
                     .description("to")
                     .attribute("jid", device)
                     .build());
         }
 
-        var participantsNode = participantsChildren.isEmpty() ? null : new NodeBuilder()
+        var participantsNode = participantsChildren.isEmpty() ? null : new StanzaBuilder()
                 .description("participants")
                 .content(participantsChildren)
                 .build();
 
         store.signalStore().updateIdentityRange(allDevices);
 
-        var skmsgEncNode = new NodeBuilder()
+        var skmsgEncNode = new StanzaBuilder()
                 .description("enc")
                 .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                 .attribute("type", MessageEncryptionType.SKMSG.protocolValue())
@@ -231,7 +231,7 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
 
         var reportingNode = reportingStanza.build(messageInfo, selfJid, statusJid);
 
-        var stanza = new NodeBuilder()
+        var stanza = new StanzaBuilder()
                 .description("message")
                 .attribute("id", messageId)
                 .attribute("to", statusJid)

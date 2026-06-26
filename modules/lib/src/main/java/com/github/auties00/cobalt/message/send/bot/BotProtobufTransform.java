@@ -9,7 +9,8 @@ import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.system.FutureProofMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.Objects;
 
@@ -37,7 +38,7 @@ public final class BotProtobufTransform {
      * Constructs a transform bound to the given store.
      *
      * <p>The bound store provides JID resolution; its
-     * {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(com.github.auties00.cobalt.model.jid.Jid)}
+     * {@link LinkedWhatsAppContactStore#findLidByPhone(com.github.auties00.cobalt.model.jid.Jid)}
      * upgrades legacy PN participants to LID before the FBID-bot transforms emit
      * the key.
      *
@@ -84,7 +85,7 @@ public final class BotProtobufTransform {
      * <p>The server only accepts LID-form participant JIDs on the
      * {@link ContextInfo#quotedMessageSenderJid()} field for messages destined to
      * an FBID (Facebook-account) bot, so any leftover PN is rewritten via
-     * {@link com.github.auties00.cobalt.store.ContactStore#findLidByPhone(com.github.auties00.cobalt.model.jid.Jid)}.
+     * {@link LinkedWhatsAppContactStore#findLidByPhone(com.github.auties00.cobalt.model.jid.Jid)}.
      * Participants already on a bot server are left untouched.
      *
      * @param container the {@link MessageContainer} to mutate

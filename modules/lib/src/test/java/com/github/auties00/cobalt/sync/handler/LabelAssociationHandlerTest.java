@@ -5,15 +5,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.preference.LabelBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelAssociationAction;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelAssociationActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.LabelAssociationMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link LabelAssociationMutationFactory} builder.
  *
  * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
- * through {@link TestWhatsAppClient} so the {@link com.github.auties00.cobalt.store.SettingsStore#findLabel(String)}
+ * through {@link TestWhatsAppClient} so the {@link LinkedWhatsAppSettingsStore#findLabel(String)}
  * read-back can be asserted directly. Label assignments live inside the
  * {@link com.github.auties00.cobalt.model.preference.Label} model rather than in
  * a side table.
@@ -242,7 +243,7 @@ class LabelAssociationHandlerTest {
         void newerRemoteApplies() {
             var local = buildSet("42", CHAT_JID, true, Instant.ofEpochSecond(1_000));
             var remote = buildSet("42", CHAT_JID, false, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -250,7 +251,7 @@ class LabelAssociationHandlerTest {
         @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(buildSet("42", CHAT_JID, true, ts), buildSet("42", CHAT_JID, false, ts)).state());
         }
 
@@ -259,7 +260,7 @@ class LabelAssociationHandlerTest {
         void olderRemoteSkipped() {
             var local = buildSet("42", CHAT_JID, true, Instant.ofEpochSecond(2_000));
             var remote = buildSet("42", CHAT_JID, false, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
     }

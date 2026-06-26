@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -64,31 +64,31 @@ public record ReconfigureBotStanza(String callId, Jid callCreator, int requestId
     }
 
     /**
-     * Builds the {@code <reconfigure_bot call-id call-creator req_id/>} action node.
+     * Builds the {@code <reconfigure_bot call-id call-creator req_id/>} action stanza.
      *
-     * @return the reconfigure-bot action node
+     * @return the reconfigure-bot action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(REQUEST_ID_ATTRIBUTE, requestId)
                 .build();
     }
 
     /**
-     * Decodes a {@code <reconfigure_bot>} action node into a {@link ReconfigureBotStanza}.
+     * Decodes a {@code <reconfigure_bot>} action stanza into a {@link ReconfigureBotStanza}.
      *
-     * @param node the {@code <reconfigure_bot>} node
+     * @param stanza the {@code <reconfigure_bot>} stanza
      * @return the decoded reconfigure-bot action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id}, {@code call-creator}, or
      *                                {@code req_id} attribute is absent
      */
-    public static ReconfigureBotStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var requestId = node.getAttributeAsInt(REQUEST_ID_ATTRIBUTE)
+    public static ReconfigureBotStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var requestId = stanza.getAttributeAsInt(REQUEST_ID_ATTRIBUTE)
                 .orElseThrow(() -> new NoSuchElementException("reconfigure_bot requires a req_id attribute"));
         return new ReconfigureBotStanza(callId, callCreator, requestId);
     }

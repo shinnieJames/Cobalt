@@ -5,8 +5,8 @@ import com.github.auties00.cobalt.model.call.datachannel.E2eRekeyPayloadSpec;
 import com.github.auties00.cobalt.model.call.datachannel.RekeyKeyEntry;
 import com.github.auties00.cobalt.model.call.datachannel.RekeyKeyType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -201,18 +201,18 @@ public record RekeyStanza(String callId, Jid callCreator, int transactionId, int
     }
 
     /**
-     * Builds the {@code <enc_rekey>} action node.
+     * Builds the {@code <enc_rekey>} action stanza.
      *
      * <p>The common header is stamped first, then the transaction-id, version, and retry attributes
      * when present, then the {@code request_keys} attribute when this is a key-request rekey. The
      * serialized {@link E2eRekeyPayload} protobuf, when present, becomes the element's binary content.
      * Absent attributes are omitted rather than written as sentinels.
      *
-     * @return the rekey action node
+     * @return the rekey action stanza
      */
     @Override
-    public Node toNode() {
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(TRANSACTION_ID_ATTRIBUTE, transactionId, transactionId >= 0)
                 .attribute(VERSION_ATTRIBUTE, version, version >= 0)
                 .attribute(RETRY_ATTRIBUTE, retry, retry >= 0)
@@ -224,27 +224,27 @@ public record RekeyStanza(String callId, Jid callCreator, int transactionId, int
     }
 
     /**
-     * Decodes an {@code <enc_rekey>} action node into a {@link RekeyStanza}.
+     * Decodes an {@code <enc_rekey>} action stanza into a {@link RekeyStanza}.
      *
      * <p>The element's binary content, when present, is parsed as an {@link E2eRekeyPayload} protobuf;
      * an element with no content decodes to a payload-less rekey. The {@code request_keys} attribute,
      * the transaction id, the version, and the retry counter are read from the element's attributes.
      *
-     * @param node the {@code <enc_rekey>} node
+     * @param stanza the {@code <enc_rekey>} stanza
      * @return the decoded rekey
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static RekeyStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var transactionId = node.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, -1);
-        var version = node.getAttributeAsInt(VERSION_ATTRIBUTE, -1);
-        var retry = node.getAttributeAsInt(RETRY_ATTRIBUTE, -1);
-        var requestKeys = node.getAttributeAsBool(REQUEST_KEYS_ATTRIBUTE, false);
-        var payload = node.toContentBytes()
+    public static RekeyStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var transactionId = stanza.getAttributeAsInt(TRANSACTION_ID_ATTRIBUTE, -1);
+        var version = stanza.getAttributeAsInt(VERSION_ATTRIBUTE, -1);
+        var retry = stanza.getAttributeAsInt(RETRY_ATTRIBUTE, -1);
+        var requestKeys = stanza.getAttributeAsBool(REQUEST_KEYS_ATTRIBUTE, false);
+        var payload = stanza.toContentBytes()
                 .map(E2eRekeyPayloadSpec::decode)
                 .orElse(null);
         return new RekeyStanza(callId, callCreator, transactionId, version, retry, requestKeys, payload);

@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -128,18 +128,18 @@ public record MuteV2Stanza(String callId, Jid callCreator, boolean peerRequest, 
 
     /**
      * Builds the {@code <mute_v2 call-id call-creator (request-state|mute-state) broadcast/>} action
-     * node.
+     * stanza.
      *
      * <p>Exactly one of {@code request-state} or {@code mute-state} is written: {@code request-state}
      * (always {@code 1}) when {@link #peerRequest()} is {@code true}, otherwise {@code mute-state}
      * carrying {@code 1} or {@code 0} for {@link #muted()}. The {@code broadcast} attribute is omitted
      * unless {@link #broadcast()} is {@code true}.
      *
-     * @return the mute_v2 action node
+     * @return the mute_v2 action stanza
      */
     @Override
-    public Node toNode() {
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator);
+    public Stanza toStanza() {
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator);
         if (peerRequest) {
             builder.attribute(REQUEST_STATE_ATTRIBUTE, FLAG_TRUE);
         } else {
@@ -151,28 +151,28 @@ public record MuteV2Stanza(String callId, Jid callCreator, boolean peerRequest, 
     }
 
     /**
-     * Decodes a {@code <mute_v2>} action node into a {@link MuteV2Stanza}.
+     * Decodes a {@code <mute_v2>} action stanza into a {@link MuteV2Stanza}.
      *
-     * <p>The node is classified as a peer-mute request when it carries {@code request-state};
+     * <p>The stanza is classified as a peer-mute request when it carries {@code request-state};
      * otherwise it is read as a self mute-state report whose {@link #muted()} reflects the
      * {@code mute-state} attribute. An absent {@code broadcast} decodes to {@code false}.
      *
-     * @param node the {@code <mute_v2>} node
+     * @param stanza the {@code <mute_v2>} stanza
      * @return the decoded mute_v2 action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent, or if neither {@code request-state} nor
      *                                {@code mute-state} is present
      */
-    public static MuteV2Stanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var broadcast = FLAG_TRUE.equals(node.getAttributeAsString(BROADCAST_ATTRIBUTE, FLAG_FALSE));
-        if (node.getAttributeAsString(REQUEST_STATE_ATTRIBUTE).isPresent()) {
+    public static MuteV2Stanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var broadcast = FLAG_TRUE.equals(stanza.getAttributeAsString(BROADCAST_ATTRIBUTE, FLAG_FALSE));
+        if (stanza.getAttributeAsString(REQUEST_STATE_ATTRIBUTE).isPresent()) {
             return new MuteV2Stanza(callId, callCreator, true, false, broadcast);
         }
-        var muteState = node.getAttributeAsString(MUTE_STATE_ATTRIBUTE)
+        var muteState = stanza.getAttributeAsString(MUTE_STATE_ATTRIBUTE)
                 .orElseThrow(() -> new NoSuchElementException(
                         "mute_v2 requires either request-state or mute-state"));
         return new MuteV2Stanza(callId, callCreator, false, FLAG_TRUE.equals(muteState), broadcast);

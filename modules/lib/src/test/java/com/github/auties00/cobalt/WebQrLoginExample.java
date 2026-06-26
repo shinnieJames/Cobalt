@@ -6,7 +6,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 
 /**
  * Runnable example that logs a Web client in by printing a QR code to the terminal, then registers
@@ -17,7 +17,7 @@ import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 void main() throws IOException {
     System.out.println("Hello World");
     LinkedWhatsAppClient.builder()
-            .webClient(WhatsAppStoreFactory.persistent())
+            .webClient(LinkedWhatsAppStoreFactory.persistent())
             .createConnection()
             .device(LinkedWhatsAppClientDevice.web())
             .historySetting(WhatsAppWebClientHistory.standard(false))
@@ -33,8 +33,8 @@ void main() throws IOException {
             .addContactsListener((_, contacts) -> System.out.printf("Contacts: %s%n", contacts.size()))
             .addChatsListener((api, chats) -> System.out.printf("Chats: %s%n", chats.size()))
             .addNewslettersListener((_, newsletters) -> System.out.printf("Newsletters: %s%n", newsletters.size()))
-            .addNodeReceivedListener((_, incoming) -> System.out.printf("Received node %s%n", incoming))
-            .addNodeSentListener((_, outgoing) -> System.out.printf("Sent node %s%n", outgoing))
+            .addNodeReceivedListener((_, incoming) -> System.out.printf("Received stanza %s%n", incoming))
+            .addNodeSentListener((_, outgoing) -> System.out.printf("Sent stanza %s%n", outgoing))
             .addWebAppStateActionListener((_, action, info) -> System.out.printf("New action: %s, info: %s%n", action, info))
             .addMessageStatusListener((_, info) -> System.out.printf("Message status update for %s%n", info.key().id()))
             .addWebHistorySyncMessagesListener((_, chats, last) -> {

@@ -352,13 +352,22 @@ public final class GainQuantizer {
      * Computes the voiced fixed-codebook gain table, the {@code fcbgains_v} initialization of
      * {@code smpl_create_celp_tables}.
      *
+     * @implNote This implementation forms the {@code powf} exponent {@code 0.05f * db} in single precision before
+     * the power, matching the native {@code powf(10.0f, 0.05f * fcb_gain_db)} of {@code smpl_create_celp_tables}.
+     * Multiplying the {@code 0.05} scale in {@code double} (then narrowing the power) rounds the exponent the
+     * other way at 18 of the 34 levels, shifting the dequantized gain by one unit in the last place; that gain is
+     * returned verbatim by {@code calc_gains_v} and scales the reconstructed fixed-codebook excitation, so the
+     * one-ULP shift propagates through the adaptive-codebook ring and the weighting-filter memory into every
+     * later subframe. Single-precision argument plus {@link Math#pow(double, double)} reproduces the reference
+     * {@code powf} table byte-for-byte over all levels.
+     *
      * @return a freshly allocated {@code SMPL_FCBG_V_N}-entry table
      */
     private static float[] buildVoicedGains() {
         float[] tab = new float[FCBG_V_N];
         for (int ix = 0; ix < FCBG_V_N; ix++) {
             float db = ix * V_GAIN_STEP_DB + V_GAIN_MIN_DB;
-            tab[ix] = (float) Math.pow(10.0, 0.05 * db);
+            tab[ix] = (float) Math.pow(10.0, 0.05f * db);
         }
         return tab;
     }
@@ -367,13 +376,18 @@ public final class GainQuantizer {
      * Computes the unvoiced fixed-codebook gain table, the {@code fcbgains_uv} initialization of
      * {@code smpl_create_celp_tables}.
      *
+     * @implNote This implementation forms the {@code powf} exponent {@code 0.05f * db} in single precision, the
+     * same reason given on {@link #buildVoicedGains()}: the native {@code powf(10.0f, 0.05f * fcb_gain_db)} rounds
+     * differently from a {@code double}-scaled exponent at most levels, and the dequantized unvoiced gain scales
+     * the reconstructed excitation directly.
+     *
      * @return a freshly allocated {@code SMPL_UV_GAIN_IDX_LEN + 1}-entry table
      */
     private static float[] buildUnvoicedGains() {
         float[] tab = new float[UV_GAIN_IDX_LEN + 1];
         for (int ix = 0; ix <= UV_GAIN_IDX_LEN; ix++) {
             float db = ix * UV_GAIN_STEP_DB + UV_GAIN_MIN_DB;
-            tab[ix] = (float) Math.pow(10.0, 0.05 * db);
+            tab[ix] = (float) Math.pow(10.0, 0.05f * db);
         }
         return tab;
     }

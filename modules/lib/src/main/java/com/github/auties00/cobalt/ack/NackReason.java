@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.ack;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 /**
  * Enumerates the integer codes carried on the {@code error} attribute of an {@code <ack>} stanza,
@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.node.Node;
  * augmented with a {@code <meta failure_reason="..."/>} child for {@link #INVALID_PROTOBUF}.
  *
  * <p>This type is used on both sides of the ack flow. On the outbound side, a constant is passed to
- * {@link AckSender#sendNack(AckClass, Node, NackReason)} to ship the NACK. On the inbound-response
+ * {@link AckSender#sendNack(AckClass, Stanza, NackReason)} to ship the NACK. On the inbound-response
  * side, callers compare {@link AckResult#error()} against {@link #code()} or route through
  * {@link #fromCode(int)} for a typed switch; this is the branch the send pipeline uses to drive
  * recovery, for example {@link #STALE_GROUP_ADDRESSING_MODE} triggering the addressing-mode

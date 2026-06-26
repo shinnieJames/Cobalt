@@ -8,6 +8,9 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeAction;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.sync.ConflictResolution;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -27,10 +30,10 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * @implNote
  * This implementation locates the chat directly via
- * {@link com.github.auties00.cobalt.store.ChatStore#findChatByJid} rather
+ * {@link LinkedWhatsAppChatStore#findChatByJid} rather
  * than through WA Web's {@code WAWebSyncdResolveMessages.resolveMessagesForMutations}
  * cache, and uses
- * {@link com.github.auties00.cobalt.store.ChatStore#findMessageById}
+ * {@link LinkedWhatsAppChatStore#findMessageById}
  * filtered by {@code fromMe} and participant in place of the
  * {@code msgKeyToDbIdWithoutFromMeParticipant} prefix scan. Add-on cleanup,
  * {@code processDeleteForMeSingle} fallbacks, employee-only debug logging
@@ -153,10 +156,10 @@ public final class DeleteMessageForMeHandler implements WebAppStateActionHandler
      * This implementation reads only the
      * {@link DeleteMessageForMeAction#deleteMedia()} flag on each side and
      * keeps the more aggressive local mutation
-     * ({@link ConflictResolutionState#SKIP_REMOTE}) when the remote keeps
+     * ({@link MutationConflictResolutionState#SKIP_REMOTE}) when the remote keeps
      * media but the local would erase it; in every other case both
      * mutations are dropped via
-     * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. Timestamps
+     * {@link MutationConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. Timestamps
      * are intentionally ignored, mirroring WA Web. A {@code null} payload
      * on either side coalesces to {@code false} where WA Web would throw
      * via {@code WANullthrows}.
@@ -174,10 +177,10 @@ public final class DeleteMessageForMeHandler implements WebAppStateActionHandler
                 .orElse(false);
 
         if (!remoteDeleteMedia && localDeleteMedia) {
-            return ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+            return ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
         }
 
-        return ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL);
+        return ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL);
     }
 
     /**

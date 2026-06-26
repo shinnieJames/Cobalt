@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.message.receipt;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 /**
  * Enumerates the receipt {@code type} values serialised into the {@code <receipt>} stanza
@@ -29,7 +30,7 @@ public enum MessageReceiptType {
      *
      * @implNote
      * This implementation uses a {@code null} protocol value;
-     * {@link com.github.auties00.cobalt.node.NodeBuilder} drops any attribute whose value
+     * {@link StanzaBuilder} drops any attribute whose value
      * is {@code null} so the {@code type} attribute is never serialised for this constant.
      */
     @WhatsAppWebExport(moduleName = "WAWebSendReceiptJobCommon", exports = "RECEIPT_TYPE",
@@ -172,7 +173,7 @@ public enum MessageReceiptType {
      * stanza, or {@code null} for the default delivery receipt.
      * <p>
      * The returned value feeds the {@code "type"} attribute slot of a
-     * {@link com.github.auties00.cobalt.node.NodeBuilder}; a {@code null} causes the builder
+     * {@link StanzaBuilder}; a {@code null} causes the builder
      * to omit the attribute, which is the correct serialisation for {@link #DELIVERY}.
      *
      * @return the on-the-wire {@code type} literal, or {@code null} for {@link #DELIVERY}

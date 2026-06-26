@@ -1,14 +1,14 @@
 package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.exception.WhatsAppException;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 /**
  * Receives the post-handshake events that a {@link WhatsAppSocketClient}
  * surfaces over its decrypted byte stream.
  *
  * <p>Implementations are the application-level glue between the transport
- * layer and the protocol layer above it (typically a node router and a
+ * layer and the protocol layer above it (typically a stanza router and a
  * stanza dispatcher). The listener is bound for the lifetime of a single
  * {@link WhatsAppSocketClient#connect(WhatsAppSocketListener)} call; after
  * {@link #onClose()} fires no further callbacks are delivered and a fresh
@@ -17,21 +17,21 @@ import com.github.auties00.cobalt.node.Node;
  */
 public interface WhatsAppSocketListener {
     /**
-     * Receives one decrypted and decoded inbound {@link Node}.
+     * Receives one decrypted and decoded inbound {@link Stanza}.
      *
      * <p>This is invoked once per inbound {@code int24}-framed AES-GCM
      * datagram. The call runs on the socket reader virtual thread and must
      * not block on I/O of the same {@link WhatsAppSocketClient}: doing so
-     * would deadlock the reader and stall every subsequent inbound node on
+     * would deadlock the reader and stall every subsequent inbound stanza on
      * the same socket.
      *
      * @implSpec
-     * Implementations must accept any well-formed {@link Node};
+     * Implementations must accept any well-formed {@link Stanza};
      * application-level routing or filtering happens above this layer.
      *
-     * @param node the deserialized inbound node
+     * @param stanza the deserialized inbound stanza
      */
-    void onNode(Node node);
+    void onNode(Stanza stanza);
 
     /**
      * Receives a {@link WhatsAppException} observed while processing
@@ -68,7 +68,7 @@ public interface WhatsAppSocketListener {
      * a recovering listener must not reconnect against its own teardown. It
      * therefore fires at most once per
      * {@link WhatsAppSocketClient#connect(WhatsAppSocketListener)}. No further
-     * {@link #onNode(Node)} or {@link #onError(WhatsAppException)} callbacks
+     * {@link #onNode(Stanza)} or {@link #onError(WhatsAppException)} callbacks
      * are delivered after this call returns.
      */
     void onClose();

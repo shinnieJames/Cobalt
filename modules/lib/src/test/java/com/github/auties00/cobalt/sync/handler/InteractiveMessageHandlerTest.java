@@ -7,15 +7,16 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction.InteractiveMessageActionMode;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
  * through {@link TestWhatsAppClient} so the per-AGM and composite-index state
  * recorded by the handler can be read back through
- * {@link com.github.auties00.cobalt.store.BusinessStore#interactiveMessageStates()}.
+ * {@link LinkedWhatsAppBusinessStore#interactiveMessageStates()}.
  */
 @DisplayName("InteractiveMessageHandler")
 class InteractiveMessageHandlerTest {
@@ -265,7 +266,7 @@ class InteractiveMessageHandlerTest {
                     PEER, MESSAGE_ID, "0", "0", SUB_ID, Instant.ofEpochSecond(200L));
 
             var resolution = new InteractiveMessageHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -277,7 +278,7 @@ class InteractiveMessageHandlerTest {
                     PEER, MESSAGE_ID, "0", "0", SUB_ID, Instant.ofEpochSecond(200L));
 
             var resolution = new InteractiveMessageHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
     }
 

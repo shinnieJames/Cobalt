@@ -6,7 +6,7 @@ import java.util.Optional;
  * Enumerates the user-type classification the engine assigns to a call participant.
  *
  * <p>Every participant carries a user type derived from the {@code type} attribute on
- * its membership node. The type distinguishes an ordinary human participant
+ * its membership stanza. The type distinguishes an ordinary human participant
  * ({@link #NORMAL}) from one that has an associated bot ({@link #HAS_BOT}) and from a
  * participant that is itself a bot ({@link #BOT}). The engine reads this from the wire
  * token: an absent or empty token means {@link #NORMAL}, {@code "has-bot"} means

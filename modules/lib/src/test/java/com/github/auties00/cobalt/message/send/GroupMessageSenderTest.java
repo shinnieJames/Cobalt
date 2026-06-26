@@ -17,10 +17,10 @@ import com.github.auties00.cobalt.model.chat.group.GroupMetadataBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * wrapping per-device PKMSG envelopes plus a sibling {@code <device-identity>}),
  * and PN-addressed groups ({@code addressing_mode="pn"} on the outer message).
  * The sender runs against a stubbed {@link StubDeviceService} and a
- * {@link TestWhatsAppClient} that captures the first emitted {@link Node} into
+ * {@link TestWhatsAppClient} that captures the first emitted {@link Stanza} into
  * an {@link AtomicReference}.
  */
 @DisplayName("GroupMessageSender")
@@ -60,7 +60,7 @@ class GroupMessageSenderTest {
         seedGroupMetadata(senderStore, /*lidAddressing*/ true);
         senderStore.signalStore().markSenderKeyDistributed(GROUP, PARTICIPANT_LID);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = groupMessageSender(client, senderStore,
                 StubDeviceService.create().withGroupFanout(
@@ -92,7 +92,7 @@ class GroupMessageSenderTest {
         // The participant is intentionally NOT marked as already-distributed
         // so the first-time distribution branch fires.
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = groupMessageSender(client, senderStore,
                 StubDeviceService.create()
@@ -132,7 +132,7 @@ class GroupMessageSenderTest {
         seedGroupMetadata(senderStore, /*lidAddressing*/ false);
         senderStore.signalStore().markSenderKeyDistributed(GROUP, participantPn);
 
-        var captured = new AtomicReference<Node>();
+        var captured = new AtomicReference<Stanza>();
         var client = clientWithCapture(senderStore, captured);
         var sender = groupMessageSender(client, senderStore,
                 StubDeviceService.create().withGroupFanout(
@@ -158,13 +158,13 @@ class GroupMessageSenderTest {
 
     // The returned ack carries only the t attribute, which AckParser reads as
     // a success result with no error code.
-    private static TestWhatsAppClient clientWithCapture(LinkedWhatsAppStore store, AtomicReference<Node> capturedStanza) {
+    private static TestWhatsAppClient clientWithCapture(LinkedWhatsAppStore store, AtomicReference<Stanza> capturedStanza) {
         return TestWhatsAppClient.create()
                 .withStore(store)
                 .withAbPropsService(TestABPropsService.builder().build())
                 .withSendNodeHandler(nb -> {
                     capturedStanza.set(nb.build());
-                    return new NodeBuilder()
+                    return new StanzaBuilder()
                             .description("ack")
                             .attribute("t", 1700000000L)
                             .build();

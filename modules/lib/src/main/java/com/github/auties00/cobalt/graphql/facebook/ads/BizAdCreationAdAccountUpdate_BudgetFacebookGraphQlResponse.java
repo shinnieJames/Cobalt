@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdBudgetOptions;
@@ -74,7 +74,7 @@ public final class BizAdCreationAdAccountUpdate_BudgetFacebookGraphQlResponse im
      * Reads the {@code offsetAmount} of a {@code CurrencyQuantity} object.
      *
      * @param node the currency-quantity object, or {@code null}
-     * @return the amount string, or {@code null} when {@code node} is {@code null}
+     * @return the amount string, or {@code null} when {@code stanza} is {@code null}
      */
     private static String amount(JSONObject node) {
         return node == null ? null : node.getString("offsetAmount");

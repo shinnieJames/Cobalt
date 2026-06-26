@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.group;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -15,8 +16,6 @@ import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
 import com.github.auties00.cobalt.model.chat.group.GroupParticipantBuilder;
 import com.github.auties00.cobalt.model.chat.group.GroupPartipantRole;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.GroupJoinCEventBuilder;
@@ -44,7 +43,7 @@ import java.util.LinkedHashSet;
  * applied inline against the local chat and metadata, then a full metadata
  * refresh is fired for every group JID referenced by the notification.
  * WA Web routes each action through
- * {@link com.github.auties00.cobalt.node.Node} handlers that additionally
+ * {@link Stanza} handlers that additionally
  * synthesise system messages in the chat thread; Cobalt relies on the
  * post-loop refresh to reach the same final state and lets the chat-message
  * stream produce its own system messages.
@@ -98,27 +97,27 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      *
      * <p>Stanzas whose description is not {@code notification} or whose type is
      * not {@code w:gp2} are dropped without further work. For matching stanzas
-     * the notification is processed by {@link #handleNotification(Node)};
+     * the notification is processed by {@link #handleNotification(Stanza)};
      * any throwable raised during processing is logged and swallowed, and the
      * acknowledgement is sent in all cases.
      *
-     * @param node the incoming stanza
+     * @param stanza the incoming stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "w:gp2")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "w:gp2")) {
             return;
         }
 
         try {
-            handleNotification(node);
+            handleNotification(stanza);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Cannot handle w:gp2 notification {0}: {1}",
-                    node.getAttributeAsString("id", "<missing>"),
+                    stanza.getAttributeAsString("id", "<missing>"),
                     throwable.getMessage());
         } finally {
-            sendNotificationAck(node);
+            sendNotificationAck(stanza);
         }
     }
 
@@ -139,22 +138,22 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * when present, matching the WA Web side effect for actions that
      * synthesise system messages.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handleNotification(Node node) {
-        var groupJid = node.getAttributeAsJid("from").orElse(null);
+    private void handleNotification(Stanza stanza) {
+        var groupJid = stanza.getAttributeAsJid("from").orElse(null);
         if (groupJid == null || !groupJid.hasGroupOrCommunityServer()) {
             return;
         }
 
-        if (node.hasChild("groups_dirty")) {
+        if (stanza.hasChild("groups_dirty")) {
             refreshGroup(groupJid);
             return;
         }
 
         var chat = whatsapp.store().chatStore().findChatByJid(groupJid)
                 .orElseGet(() -> whatsapp.store().chatStore().addNewChat(groupJid));
-        var notificationTimestamp = resolveInstant(node, "t");
+        var notificationTimestamp = resolveInstant(stanza, "t");
         if (notificationTimestamp != null) {
             chat.setConversationTimestamp(notificationTimestamp);
             chat.setLastMsgTimestamp(notificationTimestamp);
@@ -162,8 +161,8 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
         var relatedGroups = new LinkedHashSet<Jid>();
         relatedGroups.add(groupJid);
 
-        for (var action : node.children()) {
-            handleAction(node, chat, groupJid, action, relatedGroups);
+        for (var action : stanza.children()) {
+            handleAction(stanza, chat, groupJid, action, relatedGroups);
         }
 
         for (var relatedGroup : relatedGroups) {
@@ -172,7 +171,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
     }
 
     /**
-     * Selects the per-action branch based on the action node's description.
+     * Selects the per-action branch based on the action stanza's description.
      *
      * <p>The action's group and community JID references are first collected
      * into {@code relatedGroups}, then the action is dispatched on its
@@ -190,7 +189,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * @param action        the action child being applied
      * @param relatedGroups the accumulator of related group JIDs to refresh post-loop
      */
-    private void handleAction(Node notification, Chat chat, Jid groupJid, Node action, LinkedHashSet<Jid> relatedGroups) {
+    private void handleAction(Stanza notification, Chat chat, Jid groupJid, Stanza action, LinkedHashSet<Jid> relatedGroups) {
         collectRelatedGroups(action, relatedGroups);
 
         switch (action.description()) {
@@ -270,9 +269,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * @param notification the parent {@code <notification>} stanza
      * @param chat         the local chat for the created group
      * @param groupJid     the group JID
-     * @param action       the {@code <create>} action node
+     * @param action       the {@code <create>} action stanza
      */
-    private void applyCreate(Node notification, Chat chat, Jid groupJid, Node action) {
+    private void applyCreate(Stanza notification, Chat chat, Jid groupJid, Stanza action) {
         var groupNode = action.getChild("group").orElse(action);
         var notificationAuthor = notification.getAttributeAsJid("participant").orElse(null);
         var mePnUser = whatsapp.store().accountStore().jid().orElse(null);
@@ -323,12 +322,12 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
             applyMembershipApproval(metadata, "on".equals(approvalState));
 
             var memberAddModeStr = groupNode.getChild("member_add_mode")
-                    .flatMap(Node::toContentString)
+                    .flatMap(Stanza::toContentString)
                     .orElse(null);
             applyMemberAddMode(metadata, "admin_add".equals(memberAddModeStr));
 
             var memberLinkModeContent = groupNode.getChild("member_link_mode")
-                    .flatMap(Node::toContentString)
+                    .flatMap(Stanza::toContentString)
                     .orElse(null);
             applyMemberLinkMode(metadata, memberLinkModeContent);
 
@@ -463,9 +462,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * @param notification the parent {@code <notification>} stanza
      * @param chat         the local chat
      * @param groupJid     the group JID
-     * @param action       the {@code <subject>} action node
+     * @param action       the {@code <subject>} action stanza
      */
-    private void applySubject(Node notification, Chat chat, Jid groupJid, Node action) {
+    private void applySubject(Stanza notification, Chat chat, Jid groupJid, Stanza action) {
         var subject = action.getAttributeAsString("subject", null);
         if (subject == null) {
             return;
@@ -492,9 +491,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * @param notification the parent {@code <notification>} stanza
      * @param chat         the local chat
      * @param groupJid     the group JID
-     * @param action       the {@code <description>} action node
+     * @param action       the {@code <description>} action stanza
      */
-    private void applyDescription(Node notification, Chat chat, Jid groupJid, Node action) {
+    private void applyDescription(Stanza notification, Chat chat, Jid groupJid, Stanza action) {
         var deleted = action.hasChild("delete");
         var description = deleted ? null : resolveDescriptionBody(action);
         var descriptionId = resolveDescriptionId(action);
@@ -625,7 +624,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * Applies an {@code <ephemeral>} action by writing the expiration duration
      * and setting timestamp to both the chat and the metadata.
      *
-     * <p>Reads the {@code expiration} attribute from either the action node or
+     * <p>Reads the {@code expiration} attribute from either the action stanza or
      * its nested {@code <ephemeral>} child (the create flow uses the nested
      * form) and converts it through {@link ChatEphemeralTimer#of(Integer)}.
      * Does nothing when no expiration is present. The setting time is read from
@@ -635,11 +634,11 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * @param notification the parent {@code <notification>} stanza or {@code <group>} container
      * @param chat         the local chat
      * @param groupJid     the group JID
-     * @param action       the {@code <ephemeral>} action node or {@code <group>} container
+     * @param action       the {@code <ephemeral>} action stanza or {@code <group>} container
      */
-    private void applyEphemeral(Node notification, Chat chat, Jid groupJid, Node action) {
+    private void applyEphemeral(Stanza notification, Chat chat, Jid groupJid, Stanza action) {
         var ephemeralNode = action.getChild("ephemeral").orElse(null);
-        Node expirationSource;
+        Stanza expirationSource;
         if (ephemeralNode != null) {
             expirationSource = ephemeralNode;
         } else {
@@ -693,9 +692,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * either the {@link GroupMetadata} or {@link CommunityMetadata} variant.
      *
      * @param groupJid the group JID
-     * @param action   the {@code <growth_locked>} action node
+     * @param action   the {@code <growth_locked>} action stanza
      */
-    private void applyGrowthLock(Jid groupJid, Node action) {
+    private void applyGrowthLock(Jid groupJid, Stanza action) {
         var metadata = currentMetadata(groupJid);
         var expiration = resolveInstant(action, "expiration");
         var type = action.getAttributeAsString("type", null);
@@ -736,9 +735,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * reconciled by the post-loop metadata refresh.
      *
      * @param groupJid the group JID
-     * @param action   the {@code <link>} action node
+     * @param action   the {@code <link>} action stanza
      */
-    private void applyLink(Jid groupJid, Node action) {
+    private void applyLink(Jid groupJid, Stanza action) {
         var linkType = action.getAttributeAsString("link_type", null);
         var metadata = currentMetadata(groupJid);
         if (metadata instanceof GroupMetadata groupMetadata && "parent_group".equals(linkType)) {
@@ -758,9 +757,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * types leave the metadata unchanged.
      *
      * @param groupJid the group JID
-     * @param action   the {@code <unlink>} action node
+     * @param action   the {@code <unlink>} action stanza
      */
-    private void applyUnlink(Jid groupJid, Node action) {
+    private void applyUnlink(Jid groupJid, Stanza action) {
         var unlinkType = action.getAttributeAsString("unlink_type", null);
         var metadata = currentMetadata(groupJid);
         if (metadata instanceof GroupMetadata groupMetadata && "parent_group".equals(unlinkType)) {
@@ -776,10 +775,10 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * delegates to {@link #applyMembershipApproval(ChatMetadata, boolean)} when
      * the metadata is present.
      *
-     * @param action   the {@code <membership_approval_mode>} action node
+     * @param action   the {@code <membership_approval_mode>} action stanza
      * @param groupJid the group JID
      */
-    private void applyMembershipApproval(Node action, Jid groupJid) {
+    private void applyMembershipApproval(Stanza action, Jid groupJid) {
         var state = action.getChild("group_join")
                 .flatMap(child -> child.getAttributeAsString("state"))
                 .orElse(null);
@@ -794,7 +793,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * Applies the membership-approval-mode value directly to a metadata
      * instance.
      *
-     * <p>Shared by the per-JID {@link #applyMembershipApproval(Node, Jid)}
+     * <p>Shared by the per-JID {@link #applyMembershipApproval(Stanza, Jid)}
      * entry point and the create flow. Maps the flag through
      * {@link ChatPolicy#of(boolean)} for the {@link GroupMetadata} variant and
      * writes the raw boolean for {@link CommunityMetadata}.
@@ -857,9 +856,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * present.
      *
      * @param groupJid the group JID
-     * @param action   the {@code <member_add_mode>} action node
+     * @param action   the {@code <member_add_mode>} action stanza
      */
-    private void applyMemberAddMode(Jid groupJid, Node action) {
+    private void applyMemberAddMode(Jid groupJid, Stanza action) {
         var adminOnly = "admin_add".equals(action.toContentString().orElse(null));
         var metadata = currentMetadata(groupJid);
         if (metadata != null) {
@@ -870,7 +869,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
     /**
      * Applies the member-add-mode value directly to a metadata instance.
      *
-     * <p>Shared by the per-JID {@link #applyMemberAddMode(Jid, Node)} entry
+     * <p>Shared by the per-JID {@link #applyMemberAddMode(Jid, Stanza)} entry
      * point and the create flow. Maps the flag through
      * {@link ChatPolicy#of(boolean)} for the {@link GroupMetadata} variant and
      * writes the raw boolean for {@link CommunityMetadata}.
@@ -951,13 +950,13 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * {@code MODIFY} the participant is first removed to clear any prior role,
      * then re-added. For {@code REMOVE} the participant is removed by JID. For
      * {@code PROMOTE} and {@code DEMOTE} the participant is removed and re-added
-     * with the forced role produced by {@link #parseParticipants(Node, GroupParticipantMutation)}.
+     * with the forced role produced by {@link #parseParticipants(Stanza, GroupParticipantMutation)}.
      *
      * @param groupJid the group JID
-     * @param action   the action node carrying {@code <participant>} children
+     * @param action   the action stanza carrying {@code <participant>} children
      * @param mutation the mutation type
      */
-    private void applyParticipants(Jid groupJid, Node action, GroupParticipantMutation mutation) {
+    private void applyParticipants(Jid groupJid, Stanza action, GroupParticipantMutation mutation) {
         var metadata = currentMetadata(groupJid);
         if (metadata == null) {
             return;
@@ -985,16 +984,15 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      *
      * <p>Participant nodes without a {@code jid} attribute are skipped.
      * {@code PROMOTE} always yields {@link GroupPartipantRole#ADMIN} and
-     * {@code DEMOTE} always yields {@link GroupPartipantRole#USER}; every other
-     * mutation derives the role from the participant's {@code type} attribute
-     * via {@link #parseRole(String)}. Each JID is normalised through its user
-     * form before being stored.
+     * {@code DEMOTE} always yields {@link GroupPartipantRole#MEMBER}; every other
+     * mutation derives the role from the participant's {@code type} attribute.
+     * Each JID is normalised through its user form before being stored.
      *
-     * @param action   the action node carrying participant children
+     * @param action   the action stanza carrying participant children
      * @param mutation the mutation type
      * @return an insertion-ordered set of parsed participants
      */
-    private LinkedHashSet<GroupParticipant> parseParticipants(Node action, GroupParticipantMutation mutation) {
+    private LinkedHashSet<GroupParticipant> parseParticipants(Stanza action, GroupParticipantMutation mutation) {
         var participants = new LinkedHashSet<GroupParticipant>();
         for (var participantNode : action.getChildren("participant")) {
             var jid = participantNode.getAttributeAsJid("jid").orElse(null);
@@ -1004,8 +1002,9 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
 
             var role = switch (mutation) {
                 case PROMOTE -> GroupPartipantRole.ADMIN;
-                case DEMOTE -> GroupPartipantRole.USER;
-                default -> parseRole(participantNode.getAttributeAsString("type", null));
+                case DEMOTE -> GroupPartipantRole.MEMBER;
+                default -> GroupPartipantRole.of(participantNode.getAttributeAsString("type", null))
+                        .orElse(GroupPartipantRole.MEMBER);
             };
 
             participants.add(new GroupParticipantBuilder()
@@ -1014,29 +1013,6 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
                     .build());
         }
         return participants;
-    }
-
-    /**
-     * Parses a participant {@code type} string into a
-     * {@link GroupPartipantRole}.
-     *
-     * <p>Returns {@link GroupPartipantRole#USER} for a blank or absent value,
-     * and falls back to {@link GroupPartipantRole#USER} when
-     * {@link GroupPartipantRole#of(String)} rejects the value.
-     *
-     * @param type the {@code type} attribute value, or {@code null}
-     * @return the resolved role
-     */
-    private GroupPartipantRole parseRole(String type) {
-        if (type == null || type.isBlank()) {
-            return GroupPartipantRole.USER;
-        }
-
-        try {
-            return GroupPartipantRole.of(type);
-        } catch (RuntimeException exception) {
-            return GroupPartipantRole.USER;
-        }
     }
 
     /**
@@ -1051,10 +1027,10 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * subgroup suggestions, parent-group changes) reach a consistent final
      * state.
      *
-     * @param action        the action node being scanned
+     * @param action        the action stanza being scanned
      * @param relatedGroups the accumulator set
      */
-    private void collectRelatedGroups(Node action, LinkedHashSet<Jid> relatedGroups) {
+    private void collectRelatedGroups(Stanza action, LinkedHashSet<Jid> relatedGroups) {
         action.streamChildren("group")
                 .map(child -> child.getAttributeAsJid("jid").orElse(null))
                 .filter(jid -> jid != null && jid.hasGroupOrCommunityServer())
@@ -1091,7 +1067,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
     /**
      * Writes a new subject onto the metadata when the value is non-null.
      *
-     * <p>Shared by {@link #applySubject(Node, Chat, Jid, Node)} and the create
+     * <p>Shared by {@link #applySubject(Stanza, Chat, Jid, Stanza)} and the create
      * flow, writing onto either the {@link GroupMetadata} or
      * {@link CommunityMetadata} variant. A {@code null} subject is ignored.
      *
@@ -1113,7 +1089,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
     /**
      * Writes the subject change timestamp and author onto the metadata.
      *
-     * <p>Shared by {@link #applySubject(Node, Chat, Jid, Node)} with the
+     * <p>Shared by {@link #applySubject(Stanza, Chat, Jid, Stanza)} with the
      * resolved {@code s_t} and {@code s_o} pair, writing onto either the
      * {@link GroupMetadata} or {@link CommunityMetadata} variant.
      *
@@ -1135,7 +1111,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * Writes the description, description id, timestamp, and author onto the
      * metadata.
      *
-     * <p>Shared by {@link #applyDescription(Node, Chat, Jid, Node)} and the
+     * <p>Shared by {@link #applyDescription(Stanza, Chat, Jid, Stanza)} and the
      * create flow, writing all four fields onto either the
      * {@link GroupMetadata} or {@link CommunityMetadata} variant.
      *
@@ -1163,16 +1139,16 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * Extracts the description body from the create-flow nested path
      * {@code description > body}.
      *
-     * <p>Used by {@link #applyCreate(Node, Chat, Jid, Node)} to read the
+     * <p>Used by {@link #applyCreate(Stanza, Chat, Jid, Stanza)} to read the
      * initial group description.
      *
-     * @param groupNode the {@code <group>} element from the create stanza
+     * @param groupStanza the {@code <group>} element from the create stanza
      * @return the description body, or {@code null}
      */
-    private String resolveCreateDescriptionBody(Node groupNode) {
-        return groupNode.getChild("description")
+    private String resolveCreateDescriptionBody(Stanza groupStanza) {
+        return groupStanza.getChild("description")
                 .flatMap(desc -> desc.getChild("body"))
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
     }
 
@@ -1180,44 +1156,44 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * Extracts the description id from the create-flow
      * {@code <description id=.../>} attribute.
      *
-     * <p>Used by {@link #applyCreate(Node, Chat, Jid, Node)} to read the
+     * <p>Used by {@link #applyCreate(Stanza, Chat, Jid, Stanza)} to read the
      * initial group description revision id.
      *
-     * @param groupNode the {@code <group>} element from the create stanza
+     * @param groupStanza the {@code <group>} element from the create stanza
      * @return the description id, or {@code null}
      */
-    private String resolveCreateDescriptionId(Node groupNode) {
-        return groupNode.getChild("description")
+    private String resolveCreateDescriptionId(Stanza groupStanza) {
+        return groupStanza.getChild("description")
                 .flatMap(desc -> desc.getAttributeAsString("id"))
                 .orElse(null);
     }
 
     /**
      * Extracts the description body from a non-create
-     * {@code <description><body>...</body></description>} action node.
+     * {@code <description><body>...</body></description>} action stanza.
      *
-     * <p>Used by {@link #applyDescription(Node, Chat, Jid, Node)}.
+     * <p>Used by {@link #applyDescription(Stanza, Chat, Jid, Stanza)}.
      *
-     * @param node the description action node
+     * @param stanza the description action stanza
      * @return the body text, or {@code null}
      */
-    private String resolveDescriptionBody(Node node) {
-        return node.getChild("body")
-                .flatMap(Node::toContentString)
+    private String resolveDescriptionBody(Stanza stanza) {
+        return stanza.getChild("body")
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
     }
 
     /**
      * Extracts the description id from a {@code <description id=.../>} action
-     * node.
+     * stanza.
      *
-     * <p>Used by {@link #applyDescription(Node, Chat, Jid, Node)}.
+     * <p>Used by {@link #applyDescription(Stanza, Chat, Jid, Stanza)}.
      *
-     * @param node the description action node
+     * @param stanza the description action stanza
      * @return the description id, or {@code null}
      */
-    private String resolveDescriptionId(Node node) {
-        return node.getAttributeAsString("id", null);
+    private String resolveDescriptionId(Stanza stanza) {
+        return stanza.getAttributeAsString("id", null);
     }
 
     /**
@@ -1229,13 +1205,13 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * callers pass the candidate keys in priority order. Non-positive values
      * are treated as absent.
      *
-     * @param node the node to read from
+     * @param stanza the stanza to read from
      * @param keys the attribute keys to try in order
      * @return the resolved {@link Instant}, or {@code null}
      */
-    private Instant resolveInstant(Node node, String... keys) {
+    private Instant resolveInstant(Stanza stanza, String... keys) {
         for (var key : keys) {
-            var epoch = node.getAttributeAsLong(key, (Long) null);
+            var epoch = stanza.getAttributeAsLong(key, (Long) null);
             if (epoch != null && epoch > 0) {
                 return Instant.ofEpochSecond(epoch);
             }
@@ -1265,7 +1241,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
 
     /**
      * Enumerates the participant mutation kinds applied by
-     * {@link #applyParticipants(Jid, Node, GroupParticipantMutation)}.
+     * {@link #applyParticipants(Jid, Stanza, GroupParticipantMutation)}.
      *
      * <p>The values correspond one-to-one with the WA Web action tags
      * {@code add}, {@code remove}, {@code promote}, {@code demote}, and
@@ -1296,7 +1272,7 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
         /**
          * Demotes the participant from admin to plain member.
          *
-         * <p>Forces the role to {@link GroupPartipantRole#USER} regardless of
+         * <p>Forces the role to {@link GroupPartipantRole#MEMBER} regardless of
          * the {@code type} attribute.
          */
         DEMOTE,
@@ -1317,12 +1293,12 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      * is mirrored back so the server can attribute the acknowledgement to the
      * correct action author.
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node)
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza)
                 .type("w:gp2")
-                .participant(node.getAttributeAsJid("participant").orElse(null))
+                .participant(stanza.getAttributeAsJid("participant").orElse(null))
                 .send();
     }
 }

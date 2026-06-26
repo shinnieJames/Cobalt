@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.model.device;
 
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
+import com.github.auties00.cobalt.model.device.pairing.DevicePlatformType;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.List;

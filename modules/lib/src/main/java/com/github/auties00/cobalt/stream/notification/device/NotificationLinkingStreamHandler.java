@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -9,14 +10,13 @@ import com.github.auties00.cobalt.listener.WhatsAppListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.smax.coexistence.SmaxCoexistenceOffboardingNotificationResponse;
-import com.github.auties00.cobalt.node.smax.coexistence.SmaxCoexistenceOnboardingStatusNotificationResponse;
+import com.github.auties00.cobalt.stanza.smax.coexistence.SmaxCoexistenceOffboardingNotificationResponse;
+import com.github.auties00.cobalt.stanza.smax.coexistence.SmaxCoexistenceOnboardingStatusNotificationResponse;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerMetadata;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.wam.WamService;
@@ -33,7 +33,7 @@ import java.util.function.Consumer;
  * refresh ({@code link_code_companion_reg}, {@code companion_reg_refresh}), the Meta account-linking
  * {@code waffle} event, the {@code hosted} CTWA coexistence notification, the {@code w:growth}
  * invite notification, the {@code psa} announcement notification, and the {@code newsletter}
- * live-update notification. Every supported stanza is acknowledged at the end of {@link #handle(Node)}
+ * live-update notification. Every supported stanza is acknowledged at the end of {@link #handle(Stanza)}
  * even when its mutation throws; unsupported types return without side-effects.
  *
  * @implNote This implementation collapses ten WA Web modules into one Cobalt class because they
@@ -60,7 +60,7 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
     /**
      * Holds the notification {@code type} values routed to this handler by the dispatcher.
      *
-     * <p>Consulted by {@link #handle(Node)} as the first-line filter; any stanza whose type is
+     * <p>Consulted by {@link #handle(Stanza)} as the first-line filter; any stanza whose type is
      * outside this set returns without side-effects.
      */
     private static final Set<String> SUPPORTED_TYPES = Set.of(
@@ -118,13 +118,13 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * on the companion side.
      *
      * <p>May be {@code null} when the local account is not a pairing companion, in which case
-     * {@link #handleLinkCodeRefresh(Node)} short-circuits the pairing-code branch.
+     * {@link #handleLinkCodeRefresh(Stanza)} short-circuits the pairing-code branch.
      */
     private final CompanionPairingService deviceLinkingService;
 
     /**
      * Commits the {@code ChatMessageCounts} event after a successful invite-driven new-chat
-     * creation in {@link #handleGrowth(Node)}.
+     * creation in {@link #handleGrowth(Stanza)}.
      */
     private final WamService wamService;
 
@@ -164,23 +164,23 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * caught and warning-logged, and the ACK is sent in the {@code finally} block so a valid stanza
      * is always acknowledged even when its mutation throws.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        var type = node.getAttributeAsString("type", null);
+    public void handle(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", null);
         if (!SUPPORTED_TYPES.contains(type)) {
             return;
         }
 
         try {
             switch (type) {
-                case "link_code_companion_reg", "companion_reg_refresh" -> handleLinkCodeRefresh(node);
-                case "waffle" -> handleWaffle(node);
-                case "hosted" -> handleHosted(node);
-                case "w:growth" -> handleGrowth(node);
-                case "psa" -> handlePsa(node);
-                case "newsletter" -> handleNewsletter(node);
+                case "link_code_companion_reg", "companion_reg_refresh" -> handleLinkCodeRefresh(stanza);
+                case "waffle" -> handleWaffle(stanza);
+                case "hosted" -> handleHosted(stanza);
+                case "w:growth" -> handleGrowth(stanza);
+                case "psa" -> handlePsa(stanza);
+                case "newsletter" -> handleNewsletter(stanza);
                 default -> {
                 }
             }
@@ -188,10 +188,10 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
             LOGGER.log(System.Logger.Level.WARNING,
                     "Cannot handle notification {0}/{1}: {2}",
                     type,
-                    node.getAttributeAsString("id", "<missing>"),
+                    stanza.getAttributeAsString("id", "<missing>"),
                     throwable.getMessage());
         } finally {
-            sendNotificationAck(node);
+            sendNotificationAck(stanza);
         }
     }
 
@@ -209,10 +209,10 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * ignored, and the branch returns early when no pairing service, no child, or no stage is
      * available.
      *
-     * @param node the notification stanza
+     * @param stanza the notification stanza
      */
-    private void handleLinkCodeRefresh(Node node) {
-        if (node.hasAttribute("type", "companion_reg_refresh")) {
+    private void handleLinkCodeRefresh(Stanza stanza) {
+        if (stanza.hasAttribute("type", "companion_reg_refresh")) {
             whatsapp.store().signalStore().setAdvSecretKey(DataUtils.randomByteArray(32));
             return;
         }
@@ -221,7 +221,7 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
             return;
         }
 
-        var child = node.getChild("link_code_companion_reg").orElse(null);
+        var child = stanza.getChild("link_code_companion_reg").orElse(null);
         if (child == null) {
             return;
         }
@@ -232,16 +232,16 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
         }
 
         var ref = child.getChild("link_code_pairing_ref")
-                .flatMap(Node::toContentBytes)
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
 
         switch (stage) {
             case "primary_hello" -> {
                 var wrappedPrimaryEphemeralPub = child.getChild("link_code_pairing_wrapped_primary_ephemeral_pub")
-                        .flatMap(Node::toContentBytes)
+                        .flatMap(Stanza::toContentBytes)
                         .orElse(null);
                 var primaryIdentityPublic = child.getChild("primary_identity_pub")
-                        .flatMap(Node::toContentBytes)
+                        .flatMap(Stanza::toContentBytes)
                         .orElse(null);
                 if (wrappedPrimaryEphemeralPub == null || primaryIdentityPublic == null || ref == null) {
                     LOGGER.log(System.Logger.Level.WARNING,
@@ -277,14 +277,14 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * {@code <notification_metadata>} child, and any unhandled event integer, is debug-logged and
      * ignored.
      *
-     * @param node the notification stanza
+     * @param stanza the notification stanza
      */
-    private void handleWaffle(Node node) {
-        var metadata = node.getChild("notification_metadata").orElse(null);
+    private void handleWaffle(Stanza stanza) {
+        var metadata = stanza.getChild("notification_metadata").orElse(null);
         if (metadata == null) {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Ignoring waffle notification without notification_metadata: {0}",
-                    node.getAttributeAsString("id", "<missing>"));
+                    stanza.getAttributeAsString("id", "<missing>"));
             return;
         }
 
@@ -329,14 +329,14 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * source of truth for envelope and field validation. WA Web throws {@code SmaxParsingFailure} on
      * an unsupported child; Cobalt debug-logs and lets the outer ACK fire.
      *
-     * @param node the notification stanza
+     * @param stanza the notification stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleHostedNotification",
             exports = "handleHostedNotification",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleHosted(Node node) {
-        if (node.hasChild("onboarding_status")) {
-            var onboardingStatus = SmaxCoexistenceOnboardingStatusNotificationResponse.of(node).orElse(null);
+    private void handleHosted(Stanza stanza) {
+        if (stanza.hasChild("onboarding_status")) {
+            var onboardingStatus = SmaxCoexistenceOnboardingStatusNotificationResponse.of(stanza).orElse(null);
             if (onboardingStatus != null
                     && "completed".equals(onboardingStatus.onboardingStatusStatus())
                     && "automation".equals(onboardingStatus.onboardingStatusProductSurface())) {
@@ -346,8 +346,8 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
             return;
         }
 
-        if (node.hasChild("offboarding")) {
-            var offboarding = SmaxCoexistenceOffboardingNotificationResponse.of(node).orElse(null);
+        if (stanza.hasChild("offboarding")) {
+            var offboarding = SmaxCoexistenceOffboardingNotificationResponse.of(stanza).orElse(null);
             if (offboarding != null && "automation".equals(offboarding.offboardingProductSurface())) {
                 whatsapp.store().businessStore().setHostedAutomationOnboarded(false);
                 whatsapp.store().businessStore().setDetectedOutcomesEnabled(false);
@@ -357,7 +357,7 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
 
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Ignoring unsupported hosted notification: {0}",
-                firstChildDescription(node));
+                firstChildDescription(stanza));
     }
 
     /**
@@ -376,10 +376,10 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * {@code sender_invite} stub message because Cobalt's message-generation pipeline runs from a
      * different stream.
      *
-     * @param node the notification stanza
+     * @param stanza the notification stanza
      */
-    private void handleGrowth(Node node) {
-        var receiver = node.getChild("invite")
+    private void handleGrowth(Stanza stanza) {
+        var receiver = stanza.getChild("invite")
                 .flatMap(invite -> invite.getChild("receiver"))
                 .flatMap(receiverNode -> receiverNode.getAttributeAsJid("user"))
                 .map(Jid::toUserJid)
@@ -428,25 +428,25 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation never produces a side-effect because none of the three sub-cases
      * (QP surfaces, QP prefetch timestamp, wa_chat) have a Cobalt store equivalent.
      *
-     * @param node the notification stanza
+     * @param stanza the notification stanza
      */
-    private void handlePsa(Node node) {
-        var from = node.getAttributeAsJid("from").orElse(null);
+    private void handlePsa(Stanza stanza) {
+        var from = stanza.getAttributeAsJid("from").orElse(null);
         if (from != null && from.equals(Jid.announcementsAccount())) {
-            var firstChild = node.getChild().orElse(null);
+            var firstChild = stanza.getChild().orElse(null);
             var firstChildTag = firstChild == null ? null : firstChild.description();
             if ("surfaces".equals(firstChildTag)) {
                 // TODO: implement the quick-promotion surfaces pipeline once Cobalt has the in-app QP model.
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Ignoring QP surfaces psa notification: {0}",
-                        node.getAttributeAsString("id", "<missing>"));
+                        stanza.getAttributeAsString("id", "<missing>"));
                 return;
             }
             if ("reset_smb_last_qp_prefetch_timestamp".equals(firstChildTag)) {
                 // TODO: implement the QP prefetch timestamp reset once Cobalt has the in-app QP model.
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Ignoring QP prefetch timestamp psa notification: {0}",
-                        node.getAttributeAsString("id", "<missing>"));
+                        stanza.getAttributeAsString("id", "<missing>"));
                 return;
             }
             // TODO: implement the in-app PSA campaign / wa_chat message pipeline.
@@ -458,7 +458,7 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
 
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Ignoring psa notification: {0}",
-                firstChildDescription(node));
+                firstChildDescription(stanza));
     }
 
     /**
@@ -475,15 +475,15 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * of each other. The Cobalt store's per-newsletter merge is idempotent and serial, so the queue
      * is not strictly required.
      *
-     * @param node the notification stanza
+     * @param stanza the notification stanza
      */
-    private void handleNewsletter(Node node) {
-        var newsletterJid = node.getAttributeAsJid("from").orElse(null);
+    private void handleNewsletter(Stanza stanza) {
+        var newsletterJid = stanza.getAttributeAsJid("from").orElse(null);
         if (newsletterJid == null || !newsletterJid.hasNewsletterServer()) {
             return;
         }
 
-        if (node.hasChild("live_updates")) {
+        if (stanza.hasChild("live_updates")) {
             try {
                 refreshNewsletter(newsletterJid);
             } catch (Throwable throwable) {
@@ -505,17 +505,17 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
     }
 
     /**
-     * Returns the description (tag name) of the first child, or {@code null} when the node has no
+     * Returns the description (tag name) of the first child, or {@code null} when the stanza has no
      * children.
      *
-     * <p>Used by {@link #handleHosted(Node)} and {@link #handlePsa(Node)} to log the unsupported
+     * <p>Used by {@link #handleHosted(Stanza)} and {@link #handlePsa(Stanza)} to log the unsupported
      * child without pulling its full content.
      *
-     * @param node the parent node
+     * @param stanza the parent stanza
      * @return the first child's description, or {@code null}
      */
-    private String firstChildDescription(Node node) {
-        return node.getChild().map(Node::description).orElse(null);
+    private String firstChildDescription(Stanza stanza) {
+        return stanza.getChild().map(Stanza::description).orElse(null);
     }
 
     /**
@@ -565,7 +565,7 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * Fans the given callback out to every registered listener of the given
      * type on its own virtual thread.
      *
-     * <p>Used only by {@link #handleGrowth(Node)} for the {@code onNewContact} listener fan-out.
+     * <p>Used only by {@link #handleGrowth(Stanza)} for the {@code onNewContact} listener fan-out.
      *
      * @param type     the per-event listener interface to dispatch against
      * @param consumer the callback to invoke against each matching listener
@@ -586,9 +586,9 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      * <p>The ACK reflects the {@code type} attribute from the original stanza because this handler
      * covers several different notification types.
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.sendAck(AckClass.NOTIFICATION, node);
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.sendAck(AckClass.NOTIFICATION, stanza);
     }
 }

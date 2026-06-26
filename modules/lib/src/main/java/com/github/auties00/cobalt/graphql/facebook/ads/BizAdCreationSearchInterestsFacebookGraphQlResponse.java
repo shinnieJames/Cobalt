@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdInterest;
@@ -69,7 +69,7 @@ public final class BizAdCreationSearchInterestsFacebookGraphQlResponse implement
 
     /**
      * Projects the {@code edges} array onto a list of {@link BusinessAdInterest} entries by reading
-     * each edge's {@code node}.
+     * each edge's {@code stanza}.
      *
      * @param edges the {@code edges} array, or {@code null}
      * @return the projected interests, empty when {@code edges} is {@code null}

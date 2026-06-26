@@ -4,9 +4,10 @@ import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.SyncActionData;
-import com.github.auties00.cobalt.model.sync.SyncActionDataSpec;
-import com.github.auties00.cobalt.model.sync.SyncActionValue;
+import com.github.auties00.cobalt.model.sync.action.SyncActionData;
+import com.github.auties00.cobalt.model.sync.action.SyncActionDataSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValue;
+import com.github.auties00.cobalt.model.sync.action.SyncActionEntry;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
@@ -79,7 +80,7 @@ public sealed interface DecryptedMutation {
      * <p>Produced exclusively by {@link Untrusted#of}. Downstream code consumes
      * {@link #indexMac()} and {@link #valueMac()} when feeding the
      * {@link MutationIntegrityVerifier} patch path, and {@link #keyId()} when
-     * recording the {@link com.github.auties00.cobalt.model.sync.SyncActionEntry}
+     * recording the {@link SyncActionEntry}
      * that LT-Hash recomputation reads back during consistency checks.
      */
     final class Untrusted implements DecryptedMutation {

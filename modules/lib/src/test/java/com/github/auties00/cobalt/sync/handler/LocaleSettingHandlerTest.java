@@ -4,16 +4,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.setting.LocaleSetting;
 import com.github.auties00.cobalt.model.sync.action.setting.LocaleSettingBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import com.github.auties00.cobalt.sync.factory.LocaleSettingMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
  * through {@link TestWhatsAppClient} so the
- * {@link com.github.auties00.cobalt.store.AccountStore#locale()} read-back can
+ * {@link LinkedWhatsAppAccountStore#locale()} read-back can
  * be asserted directly.
  */
 @DisplayName("LocaleSettingHandler")
@@ -190,7 +190,7 @@ class LocaleSettingHandlerTest {
         void newerRemoteApplies() {
             var local = localeMutation("en", SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = localeMutation("fr", SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new LocaleSettingHandler().resolveConflicts(local, remote).state());
         }
 
@@ -198,7 +198,7 @@ class LocaleSettingHandlerTest {
         @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void tieGoesToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new LocaleSettingHandler().resolveConflicts(
                             localeMutation("en", SyncdOperation.SET, ts),
                             localeMutation("fr", SyncdOperation.SET, ts)
@@ -210,7 +210,7 @@ class LocaleSettingHandlerTest {
         void olderRemoteSkipped() {
             var local = localeMutation("en", SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = localeMutation("fr", SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     new LocaleSettingHandler().resolveConflicts(local, remote).state());
         }
     }

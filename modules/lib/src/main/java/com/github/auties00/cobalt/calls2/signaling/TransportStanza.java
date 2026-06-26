@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -210,18 +210,18 @@ public record TransportStanza(String callId,
     }
 
     /**
-     * Builds the {@code <transport>} action node for this message.
+     * Builds the {@code <transport>} action stanza for this message.
      *
-     * <p>The node stamps {@code call-id} and {@code call-creator} as every action does. The sub-type
+     * <p>The stanza stamps {@code call-id} and {@code call-creator} as every action does. The sub-type
      * attribute is omitted for the implicit remote-candidate sub-type; {@code has-bot} is written only
      * when set; {@code p2p-cand-round} is omitted when absent. The ICE attributes, certificate, relay
      * block, network descriptor, and candidate children are emitted only when present.
      *
-     * @return the transport action node
+     * @return the transport action stanza
      */
     @Override
-    public Node toNode() {
-        var children = new ArrayList<Node>();
+    public Stanza toStanza() {
+        var children = new ArrayList<Stanza>();
         if (net != null) {
             children.add(net.toNode());
         }
@@ -234,7 +234,7 @@ public record TransportStanza(String callId,
         for (var candidate : candidates) {
             children.add(candidate.toNode());
         }
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(HAS_BOT_ATTRIBUTE, FLAG_TRUE, hasBot)
                 .attribute(TRANSPORT_MESSAGE_TYPE_ATTRIBUTE, transportSubType == null ? null : transportSubType.wireValue())
                 .attribute(P2P_CAND_ROUND_ATTRIBUTE, p2pCandRound, p2pCandRound != UNSET)
@@ -247,38 +247,38 @@ public record TransportStanza(String callId,
     }
 
     /**
-     * Decodes a {@code <transport>} action node into a {@link TransportStanza}.
+     * Decodes a {@code <transport>} action stanza into a {@link TransportStanza}.
      *
      * <p>The sub-type is resolved through {@link CallTransportSubType#ofWireValue(int)}; an absent or
      * unrecognized {@code transport-message-type} leaves the {@link #transportSubType()} null, modeling
      * the implicit remote-candidate sub-type. The optional {@code <net>}, {@code <certificate>},
      * {@code <relay>}, and {@code <candidate>} children are decoded when present.
      *
-     * @param node the {@code <transport>} node
+     * @param stanza the {@code <transport>} stanza
      * @return the decoded message
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static TransportStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var hasBot = FLAG_TRUE.equals(node.getAttributeAsString(HAS_BOT_ATTRIBUTE, null));
-        var transportSubType = node.getAttributeAsInt(TRANSPORT_MESSAGE_TYPE_ATTRIBUTE)
+    public static TransportStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var hasBot = FLAG_TRUE.equals(stanza.getAttributeAsString(HAS_BOT_ATTRIBUTE, null));
+        var transportSubType = stanza.getAttributeAsInt(TRANSPORT_MESSAGE_TYPE_ATTRIBUTE)
                 .stream()
                 .boxed()
                 .flatMap(value -> CallTransportSubType.ofWireValue(value).stream())
                 .findFirst()
                 .orElse(null);
-        var p2pCandRound = node.getAttributeAsInt(P2P_CAND_ROUND_ATTRIBUTE, UNSET);
-        var iceUfrag = node.getAttributeAsString(ICE_UFRAG_ATTRIBUTE, null);
-        var icePwd = node.getAttributeAsString(ICE_PWD_ATTRIBUTE, null);
-        var net = node.getChild(Net.ELEMENT).flatMap(Net::of).orElse(null);
-        var certificate = node.getChild(Certificate.ELEMENT).flatMap(Certificate::of).orElse(null);
-        var relay = node.getChild(RelayInfo.ELEMENT).flatMap(RelayInfo::of).orElse(null);
+        var p2pCandRound = stanza.getAttributeAsInt(P2P_CAND_ROUND_ATTRIBUTE, UNSET);
+        var iceUfrag = stanza.getAttributeAsString(ICE_UFRAG_ATTRIBUTE, null);
+        var icePwd = stanza.getAttributeAsString(ICE_PWD_ATTRIBUTE, null);
+        var net = stanza.getChild(Net.ELEMENT).flatMap(Net::of).orElse(null);
+        var certificate = stanza.getChild(Certificate.ELEMENT).flatMap(Certificate::of).orElse(null);
+        var relay = stanza.getChild(RelayInfo.ELEMENT).flatMap(RelayInfo::of).orElse(null);
         var candidates = new ArrayList<Candidate>();
-        for (var child : node.getChildren(Candidate.ELEMENT)) {
+        for (var child : stanza.getChildren(Candidate.ELEMENT)) {
             Candidate.of(child).ifPresent(candidates::add);
         }
         return new TransportStanza(callId, callCreator, hasBot, transportSubType, p2pCandRound,
@@ -348,14 +348,14 @@ public record TransportStanza(String callId,
         }
 
         /**
-         * Builds the {@code <net medium=... protocol=... health_status=.../>} node for this descriptor.
+         * Builds the {@code <net medium=... protocol=... health_status=.../>} stanza for this descriptor.
          *
          * <p>Absent attributes are omitted rather than written as a sentinel.
          *
-         * @return the network descriptor node
+         * @return the network descriptor stanza
          */
-        public Node toNode() {
-            return new NodeBuilder()
+        public Stanza toNode() {
+            return new StanzaBuilder()
                     .description(ELEMENT)
                     .attribute(MEDIUM_ATTRIBUTE, medium, medium >= 0)
                     .attribute(PROTOCOL_ATTRIBUTE, protocol, protocol >= 0)
@@ -364,19 +364,19 @@ public record TransportStanza(String callId,
         }
 
         /**
-         * Decodes a {@code <net>} node into a {@link Net}.
+         * Decodes a {@code <net>} stanza into a {@link Net}.
          *
-         * @param node the {@code <net>} node
-         * @return the decoded network descriptor, or an empty result when the node is not a
+         * @param stanza the {@code <net>} stanza
+         * @return the decoded network descriptor, or an empty result when the stanza is not a
          *         {@code <net>} element
          */
-        public static Optional<Net> of(Node node) {
-            if (node == null || !node.hasDescription(ELEMENT)) {
+        public static Optional<Net> of(Stanza stanza) {
+            if (stanza == null || !stanza.hasDescription(ELEMENT)) {
                 return Optional.empty();
             }
-            var medium = node.getAttributeAsInt(MEDIUM_ATTRIBUTE, -1);
-            var protocol = node.getAttributeAsInt(PROTOCOL_ATTRIBUTE, -1);
-            var healthStatus = node.getAttributeAsInt(HEALTH_STATUS_ATTRIBUTE, -1);
+            var medium = stanza.getAttributeAsInt(MEDIUM_ATTRIBUTE, -1);
+            var protocol = stanza.getAttributeAsInt(PROTOCOL_ATTRIBUTE, -1);
+            var healthStatus = stanza.getAttributeAsInt(HEALTH_STATUS_ATTRIBUTE, -1);
             return Optional.of(new Net(medium, protocol, healthStatus));
         }
     }
@@ -428,12 +428,12 @@ public record TransportStanza(String callId,
         }
 
         /**
-         * Builds the {@code <certificate algorithm=... fingerprint=.../>} node for this descriptor.
+         * Builds the {@code <certificate algorithm=... fingerprint=.../>} stanza for this descriptor.
          *
-         * @return the certificate descriptor node
+         * @return the certificate descriptor stanza
          */
-        public Node toNode() {
-            return new NodeBuilder()
+        public Stanza toNode() {
+            return new StanzaBuilder()
                     .description(ELEMENT)
                     .attribute(ALGORITHM_ATTRIBUTE, algorithm)
                     .attribute(FINGERPRINT_ATTRIBUTE, fingerprint)
@@ -441,18 +441,18 @@ public record TransportStanza(String callId,
         }
 
         /**
-         * Decodes a {@code <certificate>} node into a {@link Certificate}.
+         * Decodes a {@code <certificate>} stanza into a {@link Certificate}.
          *
-         * @param node the {@code <certificate>} node
-         * @return the decoded certificate descriptor, or an empty result when the node is not a
+         * @param stanza the {@code <certificate>} stanza
+         * @return the decoded certificate descriptor, or an empty result when the stanza is not a
          *         {@code <certificate>} element
          */
-        public static Optional<Certificate> of(Node node) {
-            if (node == null || !node.hasDescription(ELEMENT)) {
+        public static Optional<Certificate> of(Stanza stanza) {
+            if (stanza == null || !stanza.hasDescription(ELEMENT)) {
                 return Optional.empty();
             }
-            var algorithm = node.getAttributeAsString(ALGORITHM_ATTRIBUTE, null);
-            var fingerprint = node.getAttributeAsString(FINGERPRINT_ATTRIBUTE, null);
+            var algorithm = stanza.getAttributeAsString(ALGORITHM_ATTRIBUTE, null);
+            var fingerprint = stanza.getAttributeAsString(FINGERPRINT_ATTRIBUTE, null);
             return Optional.of(new Certificate(algorithm, fingerprint));
         }
     }
@@ -465,10 +465,10 @@ public record TransportStanza(String callId,
      * attribute view so an unrecognized candidate shape round-trips without loss.
      *
      * @param priority the {@code priority} attribute, the candidate priority, or {@code -1} when absent
-     * @param node     the underlying candidate node, preserving every attribute and child; never
+     * @param stanza     the underlying candidate stanza, preserving every attribute and child; never
      *                 {@code null}
      */
-    public record Candidate(int priority, Node node) {
+    public record Candidate(int priority, Stanza stanza) {
         /**
          * The wire element tag for a peer-to-peer candidate.
          */
@@ -482,10 +482,10 @@ public record TransportStanza(String callId,
         /**
          * Canonicalizes the record components.
          *
-         * @throws NullPointerException if {@code node} is {@code null}
+         * @throws NullPointerException if {@code stanza} is {@code null}
          */
         public Candidate {
-            Objects.requireNonNull(node, "node cannot be null");
+            Objects.requireNonNull(stanza, "stanza cannot be null");
         }
 
         /**
@@ -498,30 +498,30 @@ public record TransportStanza(String callId,
         }
 
         /**
-         * Returns the underlying candidate node.
+         * Returns the underlying candidate stanza.
          *
-         * @return the candidate node preserving every attribute and child; never {@code null}
+         * @return the candidate stanza preserving every attribute and child; never {@code null}
          */
-        public Node toNode() {
-            return node;
+        public Stanza toNode() {
+            return stanza;
         }
 
         /**
-         * Decodes a {@code <candidate>} node into a {@link Candidate}.
+         * Decodes a {@code <candidate>} stanza into a {@link Candidate}.
          *
-         * <p>The node is retained verbatim so a re-encode preserves every attribute. A node that is not
+         * <p>The stanza is retained verbatim so a re-encode preserves every attribute. A stanza that is not
          * a {@code <candidate>} element yields an empty result.
          *
-         * @param node the {@code <candidate>} node
-         * @return the decoded candidate, or an empty result when the node is not a {@code <candidate>}
+         * @param stanza the {@code <candidate>} stanza
+         * @return the decoded candidate, or an empty result when the stanza is not a {@code <candidate>}
          *         element
          */
-        public static Optional<Candidate> of(Node node) {
-            if (node == null || !node.hasDescription(ELEMENT)) {
+        public static Optional<Candidate> of(Stanza stanza) {
+            if (stanza == null || !stanza.hasDescription(ELEMENT)) {
                 return Optional.empty();
             }
-            var priority = node.getAttributeAsInt(PRIORITY_ATTRIBUTE, -1);
-            return Optional.of(new Candidate(priority, node));
+            var priority = stanza.getAttributeAsInt(PRIORITY_ATTRIBUTE, -1);
+            return Optional.of(new Candidate(priority, stanza));
         }
     }
 }

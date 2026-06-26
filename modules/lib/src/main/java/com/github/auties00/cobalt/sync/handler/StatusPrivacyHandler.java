@@ -10,10 +10,11 @@ import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntryBuilder;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.StatusPrivacyAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,7 +27,7 @@ import java.util.List;
  * <p>The sync dispatcher routes incoming {@code status_privacy} mutations here
  * whenever the user changes the status audience on another device. The handler
  * rewrites the {@link PrivacySettingType#STATUS} entry on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so subsequent status
+ * {@link LinkedWhatsAppStore} so subsequent status
  * posts use the new audience.
  */
 @WhatsAppWebModule(moduleName = "WAWebStatusPrivacySettingSync")

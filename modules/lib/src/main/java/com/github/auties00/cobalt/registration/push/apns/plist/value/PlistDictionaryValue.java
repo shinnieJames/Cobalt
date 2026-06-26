@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 
 /**
- * Holds a plist {@code <dict>} node of ordered string-keyed entries, the binary plist
+ * Holds a plist {@code <dict>} stanza of ordered string-keyed entries, the binary plist
  * {@code 0xD0..0xDF} marker family.
  *
  * <p>An instance represents a keyed structure carried by an APNS plist payload, such as the connect
@@ -23,7 +23,7 @@ import java.util.SequencedMap;
  */
 public record PlistDictionaryValue(SequencedMap<String, PlistValue> entries) implements PlistValue {
     /**
-     * Constructs a dictionary node, rejecting a {@code null} backing map.
+     * Constructs a dictionary stanza, rejecting a {@code null} backing map.
      *
      * @param entries the ordered entries
      * @throws NullPointerException if {@code entries} is {@code null}

@@ -1,7 +1,8 @@
 package com.github.auties00.cobalt.sync.factory;
 
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.action.chat.LockChatActionBuilder;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import org.junit.jupiter.api.DisplayName;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * {@code locked} flag and {@code timestampSeconds} field rather than via
  * {@link LockChatMutationFactory} directly, so the parity check exercises the protobuf encoding
  * rather than index-string formatting; the companion archive and pin mutations emitted by
- * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, com.github.auties00.cobalt.model.jid.Jid, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}
+ * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, com.github.auties00.cobalt.model.jid.Jid, SyncActionMessageRange)}
  * are covered by their own factory tests. The test skips when the oracle fixture is absent.
  */
 @DisplayName("LockChatMutationFactory")

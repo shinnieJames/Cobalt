@@ -1,25 +1,4 @@
 package com.github.auties00.cobalt.client.linked;
-import com.github.auties00.cobalt.listener.WhatsAppListener;
-import com.github.auties00.cobalt.listener.MessageDeletedListener;
-import com.github.auties00.cobalt.listener.MessageStatusListener;
-import com.github.auties00.cobalt.listener.DisconnectedListener;
-import com.github.auties00.cobalt.listener.LoggedInListener;
-import com.github.auties00.cobalt.listener.NewMessageListener;
-import com.github.auties00.cobalt.client.WhatsAppClientDisconnectReason;
-import com.github.auties00.cobalt.listener.linked.*;
-import com.github.auties00.cobalt.listener.linked.internal.InternalLinkedListener;
-import com.github.auties00.cobalt.listener.linked.internal.LinkedTrustedContactTokenListener;
-import com.github.auties00.cobalt.message.LiveMessageService;
-import com.github.auties00.cobalt.media.transcode.LiveMediaTranscoderService;
-import com.github.auties00.cobalt.sync.LiveSnapshotRecoveryService;
-import com.github.auties00.cobalt.sync.LiveWebAppStateService;
-import com.github.auties00.cobalt.migration.LiveLidMigrationService;
-import com.github.auties00.cobalt.migration.LiveInactiveGroupLidMigrationService;
-import com.github.auties00.cobalt.pairing.LiveCompanionPairingService;
-import com.github.auties00.cobalt.calls2.Calls2Service;
-import com.github.auties00.cobalt.calls2.LiveCalls2Service;
-import com.github.auties00.cobalt.calls2.core.Calls2EngineAssembler;
-import com.github.auties00.cobalt.calls2.sync.Calls2CallLogSync;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -27,46 +6,53 @@ import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.ack.AckSender;
+import com.github.auties00.cobalt.calls2.Calls2Service;
+import com.github.auties00.cobalt.calls2.LiveCalls2Service;
+import com.github.auties00.cobalt.calls2.core.Calls2EngineAssembler;
 import com.github.auties00.cobalt.calls2.stream.AudioInput;
 import com.github.auties00.cobalt.calls2.stream.AudioOutput;
-import com.github.auties00.cobalt.calls2.stream.BufferedVideoInput;
-import com.github.auties00.cobalt.calls2.stream.BufferedVideoOutput;
 import com.github.auties00.cobalt.calls2.stream.VideoInput;
 import com.github.auties00.cobalt.calls2.stream.VideoOutput;
-import com.github.auties00.cobalt.device.LiveDeviceService;
+import com.github.auties00.cobalt.calls2.sync.Calls2CallLogSync;
+import com.github.auties00.cobalt.client.WhatsAppClientDisconnectReason;
 import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.device.LiveDeviceService;
 import com.github.auties00.cobalt.exception.*;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.WhatsAppGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.graphql.facebook.ads.*;
-import com.github.auties00.cobalt.graphql.facebook.business.*;
-import com.github.auties00.cobalt.graphql.facebook.group.*;
+import com.github.auties00.cobalt.graphql.facebook.business.BizAiToolsTileEligibilityFacebookGraphQlRequest;
+import com.github.auties00.cobalt.graphql.facebook.business.BizAiToolsTileEligibilityFacebookGraphQlResponse;
+import com.github.auties00.cobalt.graphql.facebook.group.BizAdManagementHeaderButtonGroupBillingInfoProfileSectionFacebookGraphQlRequest;
+import com.github.auties00.cobalt.graphql.facebook.group.BizAdManagementHeaderButtonGroupBillingInfoProfileSectionFacebookGraphQlResponse;
 import com.github.auties00.cobalt.graphql.facebook.misc.*;
-import com.github.auties00.cobalt.graphql.web.WhatsAppWebGraphQlClient;
-import com.github.auties00.cobalt.graphql.web.auth.CanonicalCredentials;
-import com.github.auties00.cobalt.graphql.web.auth.WhatsAppWebGraphQlBootstrapClient;
-import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSession;
-import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSessionBuilder;
-import com.github.auties00.cobalt.graphql.web.WhatsAppWebGraphQlOperation;
-import com.github.auties00.cobalt.graphql.web.business.BizQueryOrderJobWhatsAppWebGraphQlRequest;
-import com.github.auties00.cobalt.graphql.web.business.BizQueryOrderJobWhatsAppWebGraphQlResponse;
-import com.github.auties00.cobalt.graphql.web.business.QueryCatalogWhatsAppWebGraphQlRequest;
-import com.github.auties00.cobalt.graphql.web.business.QueryCatalogWhatsAppWebGraphQlResponse;
-import com.github.auties00.cobalt.graphql.web.business.QueryProductCollectionsWhatsAppWebGraphQlRequest;
-import com.github.auties00.cobalt.graphql.web.business.QueryProductCollectionsWhatsAppWebGraphQlResponse;
-import com.github.auties00.cobalt.graphql.web.business.*;
-import com.github.auties00.cobalt.graphql.web.misc.*;
-import com.github.auties00.cobalt.graphql.web.auth.*;
-import com.github.auties00.cobalt.graphql.web.ads.*;
-import com.github.auties00.cobalt.graphql.web.promotion.*;
-import com.github.auties00.cobalt.graphql.web.acs.*;
-import com.github.auties00.cobalt.graphql.web.user.*;
-import com.github.auties00.cobalt.graphql.web.group.*;
+import com.github.auties00.cobalt.graphql.whatsapp.WhatsAppGraphQlOperation;
+import com.github.auties00.cobalt.graphql.whatsapp.acs.AcsServerProviderConfigWhatsAppGraphQlRequest;
+import com.github.auties00.cobalt.graphql.whatsapp.acs.AcsServerProviderConfigWhatsAppGraphQlResponse;
+import com.github.auties00.cobalt.graphql.whatsapp.acs.AcsServerProviderIssuanceWhatsAppGraphQlRequest;
+import com.github.auties00.cobalt.graphql.whatsapp.acs.AcsServerProviderIssuanceWhatsAppGraphQlResponse;
+import com.github.auties00.cobalt.graphql.whatsapp.ads.*;
+import com.github.auties00.cobalt.graphql.whatsapp.auth.*;
+import com.github.auties00.cobalt.graphql.whatsapp.business.*;
+import com.github.auties00.cobalt.graphql.whatsapp.group.GroupSuspensionAppealWhatsAppGraphQlRequest;
+import com.github.auties00.cobalt.graphql.whatsapp.group.GroupSuspensionAppealWhatsAppGraphQlResponse;
+import com.github.auties00.cobalt.graphql.whatsapp.misc.*;
+import com.github.auties00.cobalt.graphql.whatsapp.promotion.*;
+import com.github.auties00.cobalt.graphql.whatsapp.user.FetchBotProfilesGqlWhatsAppGraphQlRequest;
+import com.github.auties00.cobalt.graphql.whatsapp.user.FetchBotProfilesGqlWhatsAppGraphQlResponse;
+import com.github.auties00.cobalt.graphql.whatsapp.user.SupportContactFormSubmitWhatsAppGraphQlRequest;
+import com.github.auties00.cobalt.graphql.whatsapp.user.SupportContactFormSubmitWhatsAppGraphQlResponse;
+import com.github.auties00.cobalt.listener.*;
+import com.github.auties00.cobalt.listener.linked.*;
+import com.github.auties00.cobalt.listener.linked.internal.InternalLinkedListener;
+import com.github.auties00.cobalt.listener.linked.internal.LinkedTrustedContactTokenListener;
 import com.github.auties00.cobalt.media.LiveMediaConnectionService;
 import com.github.auties00.cobalt.media.MediaConnectionService;
+import com.github.auties00.cobalt.media.transcode.LiveMediaTranscoderService;
 import com.github.auties00.cobalt.media.transcode.MediaTranscoderService;
+import com.github.auties00.cobalt.message.LiveMessageService;
 import com.github.auties00.cobalt.message.MessageService;
-import com.github.auties00.cobalt.message.addon.EncMessageFactory;
 import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
 import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.message.send.stanza.NewsletterStanza;
@@ -75,41 +61,58 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
+import com.github.auties00.cobalt.migration.LiveInactiveGroupLidMigrationService;
+import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 import com.github.auties00.cobalt.model.bot.AiThreadTitleBuilder;
 import com.github.auties00.cobalt.model.bot.profile.*;
 import com.github.auties00.cobalt.model.business.*;
+import com.github.auties00.cobalt.model.business.acs.AnonymousCredentialIssuance;
+import com.github.auties00.cobalt.model.business.acs.AnonymousCredentialIssuanceRequest;
+import com.github.auties00.cobalt.model.business.acs.AnonymousCredentialServiceConfig;
 import com.github.auties00.cobalt.model.business.ads.*;
 import com.github.auties00.cobalt.model.business.ai.*;
-import com.github.auties00.cobalt.model.business.aichannel.*;
+import com.github.auties00.cobalt.model.business.aichannel.AiChannelAgentStatus;
+import com.github.auties00.cobalt.model.business.aichannel.AiChannelCommand;
+import com.github.auties00.cobalt.model.business.aichannel.AiChannelIdentity;
+import com.github.auties00.cobalt.model.business.aichannel.AiChannelLinkedStatus;
 import com.github.auties00.cobalt.model.business.auth.*;
 import com.github.auties00.cobalt.model.business.cart.*;
 import com.github.auties00.cobalt.model.business.catalog.*;
 import com.github.auties00.cobalt.model.business.compliance.*;
+import com.github.auties00.cobalt.model.business.crossposting.CrossPostingEligibility;
+import com.github.auties00.cobalt.model.business.crossposting.CrossPostingEligibilityQuery;
+import com.github.auties00.cobalt.model.business.crossposting.CrossPostingServiceData;
 import com.github.auties00.cobalt.model.business.ctwa.*;
+import com.github.auties00.cobalt.model.business.flow.BusinessFlowMetadata;
 import com.github.auties00.cobalt.model.business.linking.*;
-import com.github.auties00.cobalt.model.business.crossposting.*;
 import com.github.auties00.cobalt.model.business.marketing.*;
-import com.github.auties00.cobalt.model.business.subscription.*;
-import com.github.auties00.cobalt.model.business.acs.*;
-import com.github.auties00.cobalt.model.business.promotion.*;
-import com.github.auties00.cobalt.model.business.support.*;
-import com.github.auties00.cobalt.model.business.waa.*;
-import com.github.auties00.cobalt.model.business.flow.*;
 import com.github.auties00.cobalt.model.business.order.BusinessOrder;
 import com.github.auties00.cobalt.model.business.order.BusinessOrderItem;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerification;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerificationBuilder;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerificationResult;
 import com.github.auties00.cobalt.model.business.profile.*;
+import com.github.auties00.cobalt.model.business.promotion.QuickPromotionActionLog;
+import com.github.auties00.cobalt.model.business.promotion.QuickPromotionLogAcknowledgement;
+import com.github.auties00.cobalt.model.business.promotion.QuickPromotionSurfaceBatch;
+import com.github.auties00.cobalt.model.business.promotion.QuickPromotionTriggerContext;
+import com.github.auties00.cobalt.model.business.subscription.BusinessSubscriptionEntryPoints;
+import com.github.auties00.cobalt.model.business.subscription.BusinessSubscriptions;
+import com.github.auties00.cobalt.model.business.support.*;
+import com.github.auties00.cobalt.model.business.waa.*;
+import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSession;
+import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSessionBuilder;
 import com.github.auties00.cobalt.model.call.*;
 import com.github.auties00.cobalt.model.chat.*;
 import com.github.auties00.cobalt.model.chat.community.*;
 import com.github.auties00.cobalt.model.chat.group.*;
 import com.github.auties00.cobalt.model.contact.*;
+import com.github.auties00.cobalt.model.device.pairing.ClientPayload;
 import com.github.auties00.cobalt.model.error.DisconnectCode;
 import com.github.auties00.cobalt.model.federated.*;
 import com.github.auties00.cobalt.model.jid.*;
 import com.github.auties00.cobalt.model.media.MediaProvider;
+import com.github.auties00.cobalt.model.media.SizedInputStream;
 import com.github.auties00.cobalt.model.message.*;
 import com.github.auties00.cobalt.model.message.call.ScheduledCallCreationMessage;
 import com.github.auties00.cobalt.model.message.call.ScheduledCallCreationMessageBuilder;
@@ -118,7 +121,9 @@ import com.github.auties00.cobalt.model.message.call.ScheduledCallEditMessageBui
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.media.*;
-import com.github.auties00.cobalt.model.message.poll.*;
+import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
+import com.github.auties00.cobalt.model.message.poll.PollEncValueBuilder;
+import com.github.auties00.cobalt.model.message.poll.PollUpdateMessageBuilder;
 import com.github.auties00.cobalt.model.message.status.StatusPSA;
 import com.github.auties00.cobalt.model.message.system.PinInChatMessage;
 import com.github.auties00.cobalt.model.message.system.PinInChatMessageBuilder;
@@ -131,8 +136,6 @@ import com.github.auties00.cobalt.model.payment.*;
 import com.github.auties00.cobalt.model.preference.*;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.privacy.*;
-import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
-import com.github.auties00.cobalt.privacy.TrustedContactTokenService;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.model.reporting.*;
 import com.github.auties00.cobalt.model.setting.*;
@@ -146,7 +149,10 @@ import com.github.auties00.cobalt.model.setting.privacy.OptOutListUpdate;
 import com.github.auties00.cobalt.model.setting.privacy.OptOutTarget;
 import com.github.auties00.cobalt.model.setting.push.PushConfig;
 import com.github.auties00.cobalt.model.signal.*;
-import com.github.auties00.cobalt.model.sync.*;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRangeBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameAction;
 import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestAction;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
@@ -168,116 +174,113 @@ import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayA
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
 import com.github.auties00.cobalt.model.sync.action.setting.*;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.node.iq.IqOperation;
-import com.github.auties00.cobalt.node.iq.biz.*;
-import com.github.auties00.cobalt.node.iq.ctwa.IqQueryCtwaContextRequest;
-import com.github.auties00.cobalt.node.iq.ctwa.IqQueryCtwaContextResponse;
-import com.github.auties00.cobalt.node.iq.debug.IqDebugGdprReportType;
-import com.github.auties00.cobalt.node.iq.debug.IqDebugGdprRequest;
-import com.github.auties00.cobalt.node.iq.debug.IqDebugGdprResponse;
-import com.github.auties00.cobalt.node.iq.dirty.IqClearDirtyBitsRequest;
-import com.github.auties00.cobalt.node.iq.dirty.IqClearDirtyBitsResponse;
-import com.github.auties00.cobalt.node.iq.disappearing.IqQueryDisappearingModeRequest;
-import com.github.auties00.cobalt.node.iq.disappearing.IqQueryDisappearingModeResponse;
-import com.github.auties00.cobalt.node.iq.encrypt.*;
-import com.github.auties00.cobalt.node.iq.group.*;
-import com.github.auties00.cobalt.node.iq.profilepicture.IqSendProfilePictureRequest;
-import com.github.auties00.cobalt.node.iq.profilepicture.IqSendProfilePictureResponse;
-import com.github.auties00.cobalt.node.iq.push.IqGetPushServerSettingsRequest;
-import com.github.auties00.cobalt.node.iq.push.IqGetPushServerSettingsResponse;
-import com.github.auties00.cobalt.node.iq.stats.IqIssuePrivateStatsTokenRequest;
-import com.github.auties00.cobalt.node.iq.stats.IqIssuePrivateStatsTokenResponse;
-import com.github.auties00.cobalt.node.iq.status.IqSetAboutRequest;
-import com.github.auties00.cobalt.node.iq.status.IqSetAboutResponse;
-import com.github.auties00.cobalt.node.iq.syncd.IqSyncdServerSyncCollectionState;
-import com.github.auties00.cobalt.node.iq.syncd.IqSyncdServerSyncRequest;
-import com.github.auties00.cobalt.node.iq.syncd.IqSyncdServerSyncRequestCollection;
-import com.github.auties00.cobalt.node.iq.syncd.IqSyncdServerSyncResponse;
-import com.github.auties00.cobalt.node.iq.tos.*;
-import com.github.auties00.cobalt.node.mex.MexOperation;
-import com.github.auties00.cobalt.node.mex.json.community.*;
-import com.github.auties00.cobalt.node.mex.json.community.FetchAllSubgroupsMexResponse.DefaultSubGroup;
-import com.github.auties00.cobalt.node.mex.json.community.FetchAllSubgroupsMexResponse.SubGroups;
-import com.github.auties00.cobalt.node.mex.json.group.*;
-import com.github.auties00.cobalt.node.mex.json.misc.*;
-import com.github.auties00.cobalt.node.mex.json.newsletter.*;
-import com.github.auties00.cobalt.node.mex.json.user.*;
-import com.github.auties00.cobalt.node.smax.SmaxOperation;
-import com.github.auties00.cobalt.node.smax.abprops.SmaxAbPropsGetExperimentConfigRequest;
-import com.github.auties00.cobalt.node.smax.abprops.SmaxAbPropsGetExperimentConfigResponse;
-import com.github.auties00.cobalt.node.smax.abprops.SmaxAbPropsGetGroupExperimentConfigRequest;
-import com.github.auties00.cobalt.node.smax.abprops.SmaxAbPropsGetGroupExperimentConfigResponse;
-import com.github.auties00.cobalt.node.smax.account.*;
-import com.github.auties00.cobalt.node.smax.biz.*;
-import com.github.auties00.cobalt.node.smax.bot.SmaxBotBotListRequest;
-import com.github.auties00.cobalt.node.smax.bot.SmaxBotBotListResponse;
-import com.github.auties00.cobalt.node.smax.bugreporting.SmaxBugReportingReportBugMediaUpload;
-import com.github.auties00.cobalt.node.smax.bugreporting.SmaxBugReportingReportBugRequest;
-import com.github.auties00.cobalt.node.smax.bugreporting.SmaxBugReportingReportBugResponse;
-import com.github.auties00.cobalt.node.smax.chatstate.SmaxClientNotificationComposing;
-import com.github.auties00.cobalt.node.smax.chatstate.SmaxClientNotificationPaused;
-import com.github.auties00.cobalt.node.smax.chatstate.SmaxClientNotificationRequest;
-import com.github.auties00.cobalt.node.smax.groups.*;
-import com.github.auties00.cobalt.node.smax.inappcomms.SmaxInAppCommsEventRequest;
-import com.github.auties00.cobalt.node.smax.inappcomms.SmaxInAppCommsEventResponse;
-import com.github.auties00.cobalt.node.smax.message.SmaxMessagePublishNewsletterPayload;
-import com.github.auties00.cobalt.node.smax.message.SmaxMessagePublishNewsletterRequest;
-import com.github.auties00.cobalt.node.smax.message.SmaxMessagePublishNewsletterResponse;
-import com.github.auties00.cobalt.node.smax.newsletters.*;
-import com.github.auties00.cobalt.node.smax.offlinebatch.SmaxOfflineBatchRequest;
-import com.github.auties00.cobalt.node.smax.passivemode.SmaxPassiveModeActiveIQRequest;
-import com.github.auties00.cobalt.node.smax.passivemode.SmaxPassiveModeActiveIQResponse;
-import com.github.auties00.cobalt.node.smax.passivemode.SmaxPassiveModePassiveIQRequest;
-import com.github.auties00.cobalt.node.smax.passivemode.SmaxPassiveModePassiveIQResponse;
-import com.github.auties00.cobalt.node.smax.prekeys.SmaxPreKeysFetchKeyBundlesRequest;
-import com.github.auties00.cobalt.node.smax.prekeys.SmaxPreKeysFetchKeyBundlesResponse;
-import com.github.auties00.cobalt.node.smax.prekeys.SmaxPreKeysFetchMissingPreKeysRequest;
-import com.github.auties00.cobalt.node.smax.prekeys.SmaxPreKeysFetchMissingPreKeysResponse;
-import com.github.auties00.cobalt.node.smax.presence.SmaxAvailabilityRequest;
-import com.github.auties00.cobalt.node.smax.presence.SmaxSubscribeRequest;
-import com.github.auties00.cobalt.node.smax.privacy.*;
-import com.github.auties00.cobalt.node.smax.privatestats.SmaxPrivatestatsSignCredentialRequest;
-import com.github.auties00.cobalt.node.smax.privatestats.SmaxPrivatestatsSignCredentialResponse;
-import com.github.auties00.cobalt.node.smax.profilepicture.SmaxProfilePictureGetRequest;
-import com.github.auties00.cobalt.node.smax.profilepicture.SmaxProfilePictureGetResponse;
-import com.github.auties00.cobalt.node.smax.psa.*;
-import com.github.auties00.cobalt.node.smax.pushconfig.SmaxPushConfigSetConfigVariant;
-import com.github.auties00.cobalt.node.smax.pushconfig.SmaxPushConfigSetRequest;
-import com.github.auties00.cobalt.node.smax.pushconfig.SmaxPushConfigSetResponse;
-import com.github.auties00.cobalt.node.smax.pushconfig.SmaxPushConfigSetSetVariant;
-import com.github.auties00.cobalt.node.smax.receipt.SmaxReceiptPublishViewRequest;
-import com.github.auties00.cobalt.node.smax.receipt.SmaxReceiptPublishViewResponse;
-import com.github.auties00.cobalt.node.smax.stats.SmaxStatsSendBufferRequest;
-import com.github.auties00.cobalt.node.smax.stats.SmaxStatsSendBufferResponse;
-import com.github.auties00.cobalt.node.smax.status.SmaxStatusPublishPostNewsletterStatusPayload;
-import com.github.auties00.cobalt.node.smax.status.SmaxStatusPublishPostNewsletterStatusRequest;
-import com.github.auties00.cobalt.node.smax.status.SmaxStatusPublishPostNewsletterStatusResponse;
-import com.github.auties00.cobalt.node.smax.support.*;
-import com.github.auties00.cobalt.node.smax.unifiedsession.SmaxUnifiedSessionShareRequest;
-import com.github.auties00.cobalt.node.smax.usernotice.SmaxUserNoticeGetDisclosureStageByIdsRequest;
-import com.github.auties00.cobalt.node.smax.usernotice.SmaxUserNoticeGetDisclosureStageByIdsResponse;
-import com.github.auties00.cobalt.node.smax.usernotice.SmaxUserNoticeGetDisclosuresRequest;
-import com.github.auties00.cobalt.node.smax.usernotice.SmaxUserNoticeGetDisclosuresResponse;
-import com.github.auties00.cobalt.node.smax.voip.*;
-import com.github.auties00.cobalt.node.smax.waffle.*;
-import com.github.auties00.cobalt.node.usync.*;
-import com.github.auties00.cobalt.node.usync.protocol.UsyncContactProtocol;
-import com.github.auties00.cobalt.node.usync.result.ContactResult;
-import com.github.auties00.cobalt.node.usync.result.UsyncProtocolError;
+import com.github.auties00.cobalt.net.*;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.stanza.iq.IqStanza;
+import com.github.auties00.cobalt.stanza.iq.biz.*;
+import com.github.auties00.cobalt.stanza.iq.ctwa.IqQueryCtwaContextRequest;
+import com.github.auties00.cobalt.stanza.iq.ctwa.IqQueryCtwaContextResponse;
+import com.github.auties00.cobalt.stanza.iq.debug.IqDebugGdprReportType;
+import com.github.auties00.cobalt.stanza.iq.debug.IqDebugGdprRequest;
+import com.github.auties00.cobalt.stanza.iq.debug.IqDebugGdprResponse;
+import com.github.auties00.cobalt.stanza.iq.dirty.IqClearDirtyBitsRequest;
+import com.github.auties00.cobalt.stanza.iq.dirty.IqClearDirtyBitsResponse;
+import com.github.auties00.cobalt.stanza.iq.disappearing.IqQueryDisappearingModeRequest;
+import com.github.auties00.cobalt.stanza.iq.disappearing.IqQueryDisappearingModeResponse;
+import com.github.auties00.cobalt.stanza.iq.encrypt.*;
+import com.github.auties00.cobalt.stanza.iq.group.*;
+import com.github.auties00.cobalt.stanza.iq.profilepicture.IqSendProfilePictureRequest;
+import com.github.auties00.cobalt.stanza.iq.profilepicture.IqSendProfilePictureResponse;
+import com.github.auties00.cobalt.stanza.iq.push.IqGetPushServerSettingsRequest;
+import com.github.auties00.cobalt.stanza.iq.push.IqGetPushServerSettingsResponse;
+import com.github.auties00.cobalt.stanza.iq.stats.IqIssuePrivateStatsTokenRequest;
+import com.github.auties00.cobalt.stanza.iq.stats.IqIssuePrivateStatsTokenResponse;
+import com.github.auties00.cobalt.stanza.iq.status.IqSetAboutRequest;
+import com.github.auties00.cobalt.stanza.iq.status.IqSetAboutResponse;
+import com.github.auties00.cobalt.stanza.iq.tos.*;
+import com.github.auties00.cobalt.stanza.mex.MexStanza;
+import com.github.auties00.cobalt.stanza.mex.json.MexGroupQueryContext;
+import com.github.auties00.cobalt.stanza.mex.json.community.*;
+import com.github.auties00.cobalt.stanza.mex.json.community.FetchAllSubgroupsMexResponse.DefaultSubGroup;
+import com.github.auties00.cobalt.stanza.mex.json.community.FetchAllSubgroupsMexResponse.SubGroups;
+import com.github.auties00.cobalt.stanza.mex.json.group.*;
+import com.github.auties00.cobalt.stanza.mex.json.misc.*;
+import com.github.auties00.cobalt.stanza.mex.json.newsletter.*;
+import com.github.auties00.cobalt.stanza.mex.json.user.*;
+import com.github.auties00.cobalt.stanza.smax.SmaxStanza;
+import com.github.auties00.cobalt.stanza.smax.abprops.SmaxAbPropsGetExperimentConfigRequest;
+import com.github.auties00.cobalt.stanza.smax.abprops.SmaxAbPropsGetExperimentConfigResponse;
+import com.github.auties00.cobalt.stanza.smax.abprops.SmaxAbPropsGetGroupExperimentConfigRequest;
+import com.github.auties00.cobalt.stanza.smax.abprops.SmaxAbPropsGetGroupExperimentConfigResponse;
+import com.github.auties00.cobalt.stanza.smax.account.*;
+import com.github.auties00.cobalt.stanza.smax.biz.*;
+import com.github.auties00.cobalt.stanza.smax.bot.SmaxBotBotListRequest;
+import com.github.auties00.cobalt.stanza.smax.bot.SmaxBotBotListResponse;
+import com.github.auties00.cobalt.stanza.smax.bugreporting.SmaxBugReportingReportBugMediaUpload;
+import com.github.auties00.cobalt.stanza.smax.bugreporting.SmaxBugReportingReportBugRequest;
+import com.github.auties00.cobalt.stanza.smax.bugreporting.SmaxBugReportingReportBugResponse;
+import com.github.auties00.cobalt.stanza.smax.chatstate.SmaxClientNotificationComposing;
+import com.github.auties00.cobalt.stanza.smax.chatstate.SmaxClientNotificationPaused;
+import com.github.auties00.cobalt.stanza.smax.chatstate.SmaxClientNotificationRequest;
+import com.github.auties00.cobalt.stanza.smax.groups.*;
+import com.github.auties00.cobalt.stanza.smax.inappcomms.SmaxInAppCommsEventRequest;
+import com.github.auties00.cobalt.stanza.smax.inappcomms.SmaxInAppCommsEventResponse;
+import com.github.auties00.cobalt.stanza.smax.message.SmaxMessagePublishNewsletterPayload;
+import com.github.auties00.cobalt.stanza.smax.message.SmaxMessagePublishNewsletterRequest;
+import com.github.auties00.cobalt.stanza.smax.message.SmaxMessagePublishNewsletterResponse;
+import com.github.auties00.cobalt.stanza.smax.newsletters.*;
+import com.github.auties00.cobalt.stanza.smax.offlinebatch.SmaxOfflineBatchRequest;
+import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModeActiveIQRequest;
+import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModeActiveIQResponse;
+import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModePassiveIQRequest;
+import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModePassiveIQResponse;
+import com.github.auties00.cobalt.stanza.smax.prekeys.SmaxPreKeysFetchKeyBundlesRequest;
+import com.github.auties00.cobalt.stanza.smax.prekeys.SmaxPreKeysFetchKeyBundlesResponse;
+import com.github.auties00.cobalt.stanza.smax.prekeys.SmaxPreKeysFetchMissingPreKeysRequest;
+import com.github.auties00.cobalt.stanza.smax.prekeys.SmaxPreKeysFetchMissingPreKeysResponse;
+import com.github.auties00.cobalt.stanza.smax.presence.SmaxAvailabilityRequest;
+import com.github.auties00.cobalt.stanza.smax.presence.SmaxSubscribeRequest;
+import com.github.auties00.cobalt.stanza.smax.privacy.*;
+import com.github.auties00.cobalt.stanza.smax.privatestats.SmaxPrivatestatsSignCredentialRequest;
+import com.github.auties00.cobalt.stanza.smax.privatestats.SmaxPrivatestatsSignCredentialResponse;
+import com.github.auties00.cobalt.stanza.smax.profilepicture.SmaxProfilePictureGetRequest;
+import com.github.auties00.cobalt.stanza.smax.profilepicture.SmaxProfilePictureGetResponse;
+import com.github.auties00.cobalt.stanza.smax.psa.*;
+import com.github.auties00.cobalt.stanza.smax.pushconfig.SmaxPushConfigSetConfigVariant;
+import com.github.auties00.cobalt.stanza.smax.pushconfig.SmaxPushConfigSetRequest;
+import com.github.auties00.cobalt.stanza.smax.pushconfig.SmaxPushConfigSetResponse;
+import com.github.auties00.cobalt.stanza.smax.pushconfig.SmaxPushConfigSetSetVariant;
+import com.github.auties00.cobalt.stanza.smax.status.SmaxStatusPublishPostNewsletterStatusPayload;
+import com.github.auties00.cobalt.stanza.smax.status.SmaxStatusPublishPostNewsletterStatusRequest;
+import com.github.auties00.cobalt.stanza.smax.status.SmaxStatusPublishPostNewsletterStatusResponse;
+import com.github.auties00.cobalt.stanza.smax.support.*;
+import com.github.auties00.cobalt.stanza.smax.unifiedsession.SmaxUnifiedSessionShareRequest;
+import com.github.auties00.cobalt.stanza.smax.usernotice.SmaxUserNoticeGetDisclosureStageByIdsRequest;
+import com.github.auties00.cobalt.stanza.smax.usernotice.SmaxUserNoticeGetDisclosureStageByIdsResponse;
+import com.github.auties00.cobalt.stanza.smax.usernotice.SmaxUserNoticeGetDisclosuresRequest;
+import com.github.auties00.cobalt.stanza.smax.usernotice.SmaxUserNoticeGetDisclosuresResponse;
+import com.github.auties00.cobalt.stanza.smax.voip.*;
+import com.github.auties00.cobalt.stanza.smax.waffle.*;
+import com.github.auties00.cobalt.stanza.usync.*;
+import com.github.auties00.cobalt.stanza.usync.protocol.UsyncContactProtocol;
+import com.github.auties00.cobalt.stanza.usync.result.ContactResult;
+import com.github.auties00.cobalt.stanza.usync.result.UsyncProtocolError;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
+import com.github.auties00.cobalt.pairing.LiveCompanionPairingService;
+import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
+import com.github.auties00.cobalt.privacy.TrustedContactTokenService;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.LiveABPropsService;
 import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
 import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
 import com.github.auties00.cobalt.socket.WhatsAppSocketStanza;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.stream.LiveNodeStreamService;
 import com.github.auties00.cobalt.stream.NodeStreamService;
-import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
-import com.github.auties00.cobalt.sync.WebAppStateService;
+import com.github.auties00.cobalt.sync.*;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.*;
 import com.github.auties00.cobalt.sync.handler.AiThreadDeleteHandler;
@@ -293,11 +296,6 @@ import com.github.auties00.cobalt.wam.WamMsgUtils;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.*;
 import com.github.auties00.cobalt.wam.type.*;
-import com.github.auties00.cobalt.net.KeepAliveService;
-import com.github.auties00.cobalt.net.LiveKeepAliveService;
-import com.github.auties00.cobalt.net.NetworkConnectivityMonitor;
-import com.github.auties00.cobalt.net.NetworkConnectivityMonitors;
-import com.github.auties00.cobalt.net.ReconnectSupervisor;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -307,12 +305,7 @@ import com.github.auties00.libsignal.key.SignalPreKeyPair;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.StringWriter;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.http.HttpClient;
@@ -364,7 +357,7 @@ import java.util.stream.Stream;
 final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /**
      * The single-byte encoding of the Signal identity key type, used when
-     * building the {@code <type>} node in pre-key upload stanzas.
+     * building the {@code <type>} stanza in pre-key upload stanzas.
      */
     private static final byte[] SIGNAL_KEY_TYPE = {SignalIdentityPublicKey.type()};
 
@@ -419,7 +412,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /**
      * Upper bound on how long {@link #refreshFacebookGraphQlSession()} waits for
-     * the silent nonce push to land in {@link com.github.auties00.cobalt.store.BusinessStore#businessAccountNonce()}
+     * the silent nonce push to land in {@link LinkedWhatsAppBusinessStore#businessAccountNonce()}
      * before raising {@link WhatsAppFacebookGraphQlException.SilentNonceTimeout}.
      */
     private static final Duration FACEBOOK_GRAPHQL_NONCE_TIMEOUT = Duration.ofSeconds(15);
@@ -741,7 +734,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * <p>While {@code TERMINATED} the automatic reconnect entry points (the reader-loop
      * {@code onClose} callback, the {@code RECONNECTING} branch of {@link #disconnect0}, and
      * {@link #handleFailure} for any late error such as a reader-loop EOF) become no-ops and
-     * {@link #sendNode(NodeBuilder, Function)} fails fast with {@link WhatsAppSessionException.Closed}
+     * {@link #sendNode(StanzaBuilder, Function)} fails fast with {@link WhatsAppSessionException.Closed}
      * instead of writing to a dead stream. This is what stops a terminal {@code stream:error}
      * (device removed) or {@code failure reason="401"} from looping forever through reconnect
      * attempts that each get re-rejected by the server.
@@ -989,8 +982,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         try {
             client.connect(new WhatsAppSocketListener() {
                 @Override
-                public void onNode(Node node) {
-                    LiveLinkedWhatsAppClient.this.onNode(node);
+                public void onNode(Stanza stanza) {
+                    LiveLinkedWhatsAppClient.this.onNode(stanza);
                 }
 
                 @Override
@@ -1115,21 +1108,21 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     /**
-     * Dispatches an inbound {@link Node} to the listeners and stream
+     * Dispatches an inbound {@link Stanza} to the listeners and stream
      * handlers, translating any unhandled error into a recoverable
      * {@link WhatsAppStreamException}.
      *
-     * @param node the inbound node
+     * @param stanza the inbound stanza
      */
-    private void onNode(Node node) {
+    private void onNode(Stanza stanza) {
         try {
             for (var listener : store.listeners()) {
                 if (listener instanceof LinkedNodeReceivedListener typed) {
-                    Thread.startVirtualThread(() -> typed.onNodeReceived(this, node));
+                    Thread.startVirtualThread(() -> typed.onNodeReceived(this, stanza));
                 }
             }
-            resolvePendingRequest(node);
-            nodeStreamService.handle(node);
+            resolvePendingRequest(stanza);
+            nodeStreamService.handle(stanza);
         } catch (WhatsAppStreamException exception) {
             handleFailure(exception);
         } catch (Throwable throwable) {
@@ -1139,15 +1132,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public void resolvePendingRequest(Node node) {
-        var id = node.getAttributeAsString("id", null);
+    public void resolvePendingRequest(Stanza stanza) {
+        var id = stanza.getAttributeAsString("id", null);
         if (id == null) {
             return;
         }
 
         var request = pendingSocketRequests.remove(id);
         if (request != null) {
-            request.complete(node);
+            request.complete(stanza);
         }
     }
 
@@ -1230,8 +1223,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         try {
             if (reason == WhatsAppClientDisconnectReason.LOGGED_OUT || reason == WhatsAppClientDisconnectReason.BANNED) {
                 store.delete();
-            } else {
+            } else if (reason == WhatsAppClientDisconnectReason.RECONNECTING) {
+                // The process keeps running across a reconnect, so a debounced save is enough; the
+                // store's background flusher persists the latest ratchet state without blocking the
+                // reconnect on a full snapshot.
                 store.save();
+            } else {
+                // Terminal disconnect, which is also what the JVM shutdown hook drives: flush any
+                // pending snapshot synchronously so the session is durable before the process exits.
+                store.await();
             }
         } catch (IOException e) {
             handleFailure(new WhatsAppStreamException(e));
@@ -1318,7 +1318,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public void sendNodeWithNoResponse(Node node) {
+    public void sendNodeWithNoResponse(Stanza stanza) {
         // Reject sends once the stream is gone (terminal disconnect or torn-down socket) so a
         // late ack/receipt fired from a handler still draining after logout fails fast instead
         // of dereferencing the cleared socket.
@@ -1327,47 +1327,47 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new WhatsAppSessionException.Closed();
         }
         try {
-            client.sendNode(node);
+            client.sendNode(stanza);
         } catch (IOException exception) {
             throw new WhatsAppSessionException.Closed();
         }
         for (var listener : store.listeners()) {
             if (listener instanceof LinkedNodeSentListener typed) {
-                Thread.startVirtualThread(() -> typed.onNodeSent(this, node));
+                Thread.startVirtualThread(() -> typed.onNodeSent(this, stanza));
             }
         }
     }
 
     /** {@inheritDoc} */
     @Override
-    public Node sendNode(NodeBuilder node) {
+    public Stanza sendNode(StanzaBuilder node) {
         return sendNode(node, null);
     }
 
     /** {@inheritDoc} */
     @Override
-    public Node sendNode(NodeBuilder node, Function<Node, Boolean> filter) {
+    public Stanza sendNode(StanzaBuilder node, Function<Stanza, Boolean> filter) {
         return sendNode(node, filter, null);
     }
 
     /**
-     * Sends a request node and blocks for its matching response up to the given
+     * Sends a request stanza and blocks for its matching response up to the given
      * timeout.
      *
-     * <p>Generalises {@link #sendNode(NodeBuilder, Function)} so callers such as
+     * <p>Generalises {@link #sendNode(StanzaBuilder, Function)} so callers such as
      * the keepalive ping can bound the wait below the default budget. An absent
      * {@code id} attribute is filled with a random one. Fails fast with
      * {@link WhatsAppSessionException.Closed} when the session is terminated or
      * the socket is gone.
      *
-     * @param node    the request node builder
+     * @param node    the request stanza builder
      * @param filter  the response predicate, or {@code null} to accept the first
-     *                node correlated by {@code id}
+     *                stanza correlated by {@code id}
      * @param timeout the maximum time to wait for the response, or {@code null}
      *                for the default budget
-     * @return the matching response node
+     * @return the matching response stanza
      */
-    private Node sendNode(NodeBuilder node, Function<Node, Boolean> filter, Duration timeout) {
+    private Stanza sendNode(StanzaBuilder node, Function<Stanza, Boolean> filter, Duration timeout) {
         if (!node.hasAttribute("id")) {
             // randomHex(5) yields 10 uppercase hex chars (5 random bytes * 2)
             node.attribute("id", DataUtils.randomHex(5));
@@ -1409,14 +1409,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * as a dead link warranting reconnection.
      *
      * @param timeout the maximum time to wait for the ping reply
-     * @return the server's reply node
+     * @return the server's reply stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebCommsSendPing", exports = "blockSendPing",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WASmaxOutPingsClientRequest", exports = "makeClientRequest",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private Node sendPing(Duration timeout) {
-        var iq = new NodeBuilder()
+    private Stanza sendPing(Duration timeout) {
+        var iq = new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "get")
                 .attribute("xmlns", "w:p")
@@ -1428,15 +1428,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMexNativeClient", exports = "fetchQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public Node sendNode(MexOperation.Request request) {
+    public Stanza sendNode(MexStanza.Request request) {
         // from the typed request value rather than receiving them as separate scalars
         var queryId = request.id();
         var operationName = request.name();
-        var isArgoPayload = request instanceof MexOperation.Request.Argo;
+        var isArgoPayload = request instanceof MexStanza.Request.Argo;
         var start = Instant.now();
         var startTimeMs = start.toEpochMilli();
         try {
-            var response = sendNode(request.toNode());
+            var response = sendNode(request.toStanza());
             var end = Instant.now();
             commitMexEventV2(queryId, operationName, isArgoPayload, startTimeMs, end.toEpochMilli(), true, null, null);
             return response;
@@ -1453,7 +1453,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMexNativeClient", exports = "fetchQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void sendNodeWithNoResponse(MexOperation.Request request) {
+    public void sendNodeWithNoResponse(MexStanza.Request request) {
         // and discard the parsed result
         sendNode(request);
     }
@@ -1462,17 +1462,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebRelayEnvironment", exports = "getEnvironment",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public JSONObject sendGraphQl(WhatsAppWebGraphQlOperation.Request request, String sessionCookie, String lsdToken) {
+    public JSONObject sendGraphQl(WhatsAppGraphQlOperation.Request request, String sessionCookie, String lsdToken) {
         Objects.requireNonNull(request, "request cannot be null");
         Objects.requireNonNull(sessionCookie, "sessionCookie cannot be null");
         Objects.requireNonNull(lsdToken, "lsdToken cannot be null");
         var locale = store.accountStore().locale().orElse("en_US");
-        return new WhatsAppWebGraphQlClient(graphqlHttpClient, sessionCookie, lsdToken, locale).send(request);
+        return new WhatsAppGraphQlClient(graphqlHttpClient, sessionCookie, lsdToken, locale).send(request);
     }
 
     /** {@inheritDoc} */
     @Override
-    public JSONObject sendGraphQl(WhatsAppWebGraphQlOperation.Request request) {
+    public JSONObject sendGraphQl(WhatsAppGraphQlOperation.Request request) {
         Objects.requireNonNull(request, "request cannot be null");
         var session = store.webSessionStore().whatsAppWebGraphQlSession()
                 .filter(relay -> relay.sessionCookie() != null && relay.lsdToken() != null)
@@ -1600,14 +1600,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public Node sendNode(SmaxOperation.Request request) {
+    public Stanza sendNode(SmaxStanza.Request request) {
         Objects.requireNonNull(request, "request cannot be null");
-        return sendNode(request.toNode());
+        return sendNode(request.toStanza());
     }
 
     /** {@inheritDoc} */
     @Override
-    public void sendNodeWithNoResponse(SmaxOperation.Request request) {
+    public void sendNodeWithNoResponse(SmaxStanza.Request request) {
         Objects.requireNonNull(request, "request cannot be null");
         sendNode(request);
     }
@@ -1663,7 +1663,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /**
      * Serialises a dispatch failure into the JSON array shape consumed by
      * the {@code mexEventV2Errors} WAM property.
-     * @param exception the failure raised by {@link #sendNode(NodeBuilder)}
+     * @param exception the failure raised by {@link #sendNode(StanzaBuilder)}
      * @return the JSON-encoded error array
      */
     private static String mexErrorsJson(RuntimeException exception) {
@@ -1715,12 +1715,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (localJid.isEmpty()) {
             disconnect(WhatsAppClientDisconnectReason.LOGGED_OUT);
         } else {
-            var device = new NodeBuilder()
+            var device = new StanzaBuilder()
                     .description("remove-companion-device")
                     .attribute("jid", localJid.get())
                     .attribute("reason", "user_initiated")
                     .build();
-            var iqNode = new NodeBuilder()
+            var iqNode = new StanzaBuilder()
                     .description("iq")
                     .attribute("xmlns", "md")
                     .attribute("to", JidServer.user())
@@ -1737,12 +1737,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void logoutCompanion(JidProvider companionProvider) {
         var companion = Objects.requireNonNull(companionProvider, "companion cannot be null").toJid();
-        var device = new NodeBuilder()
+        var device = new StanzaBuilder()
                 .description("remove-companion-device")
                 .attribute("jid", companion)
                 .attribute("reason", "user_initiated")
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "md")
                 .attribute("to", JidServer.user())
@@ -2043,7 +2043,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * for signature.
      *
      * @param newName the new verified display name; {@code null} falls
-     *                back to {@link com.github.auties00.cobalt.store.AccountStore#name()}
+     *                back to {@link LinkedWhatsAppAccountStore#name()}
      */
     private void updateBusinessCertificate(String newName) {
         var details = new BusinessVerifiedNameCertificateDetailsBuilder()
@@ -2056,12 +2056,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .details(encodedDetails)
                 .signature(Curve25519.sign(store.signalStore().identityKeyPair().privateKey().toEncodedPoint(), encodedDetails))
                 .build();
-        var verifiedNameRequest = new NodeBuilder()
+        var verifiedNameRequest = new StanzaBuilder()
                 .description("verified_name")
                 .attribute("v", 2)
                 .content(BusinessVerifiedNameCertificateSpec.encode(certificate))
                 .build();
-        var queryRequest = new NodeBuilder()
+        var queryRequest = new StanzaBuilder()
                 .description("iq")
                 .attribute("to", Jid.userServer())
                 .attribute("type", "set")
@@ -2077,32 +2077,25 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendAck",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void sendAck(Node node) {
-        var id = node.getRequiredAttributeAsString("id");
-        sendAck(id, node);
-    }
+    public void sendAck(Stanza stanza) {
+        var id = stanza.getRequiredAttributeAsString("id");
 
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendAck",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public void sendAck(String id, Node node) {
-        var ackBuilder = new NodeBuilder()
+        var ackBuilder = new StanzaBuilder()
                 .description("ack")
                 .attribute("id", id);
 
-        var ackClass = node.description();
+        var ackClass = stanza.description();
         var isMessage = ackClass.equals("message");
         ackBuilder.attribute("class", ackClass);
 
-        var ackTo = node.getRequiredAttributeAsJid("from");
+        var ackTo = stanza.getRequiredAttributeAsJid("from");
         ackBuilder.attribute("to", ackTo);
 
-        node.getAttributeAsJid("participant")
+        stanza.getAttributeAsJid("participant")
                 .ifPresent(receiptParticipant -> ackBuilder.attribute("recipient", receiptParticipant));
 
         if (!isMessage) {
-            node.getAttributeAsString("type")
+            stanza.getAttributeAsString("type")
                     .ifPresent(type -> ackBuilder.attribute("type", type));
         }
 
@@ -2116,58 +2109,58 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void sendPreKeys(long keysCount) {
         keysCount = Math.max(keysCount, MIN_PRE_KEYS_COUNT);
         var startId = store.signalStore().hasPreKeys() ? store.signalStore().preKeys().getLast().id() + 1 : 1;
-        var listBody = new ArrayList<Node>();
+        var listBody = new ArrayList<Stanza>();
         var preKeys = new ArrayList<SignalPreKeyPair>();
         while (keysCount-- > 0) {
             var preKeyPair = SignalPreKeyPair.random(startId++);
             preKeys.add(preKeyPair);
-            var id = new NodeBuilder()
+            var id = new StanzaBuilder()
                     .description("id")
                     .content(DataUtils.intToBytes(preKeyPair.id(), 3))
                     .build();
-            var value = new NodeBuilder()
+            var value = new StanzaBuilder()
                     .description("value")
                     .content(preKeyPair.publicKey().toEncodedPoint())
                     .build();
-            var preKayNode = new NodeBuilder()
+            var preKayNode = new StanzaBuilder()
                     .description("key")
                     .content(id, value)
                     .build();
             listBody.add(preKayNode);
         }
-        var registration = new NodeBuilder()
+        var registration = new StanzaBuilder()
                 .description("registration")
                 .content(DataUtils.intToBytes(store.signalStore().registrationId(), 4))
                 .build();
-        var type = new NodeBuilder()
+        var type = new StanzaBuilder()
                 .description("type")
                 .content(SIGNAL_KEY_TYPE)
                 .build();
-        var identity = new NodeBuilder()
+        var identity = new StanzaBuilder()
                 .description("identity")
                 .content(store.signalStore().identityKeyPair().publicKey().toEncodedPoint())
                 .build();
-        var list = new NodeBuilder()
+        var list = new StanzaBuilder()
                 .description("list")
                 .content(listBody)
                 .build();
-        var skeyId = new NodeBuilder()
+        var skeyId = new StanzaBuilder()
                 .description("id")
                 .content(DataUtils.intToBytes(store.signalStore().signedKeyPair().id(), 3))
                 .build();
-        var skeyValue = new NodeBuilder()
+        var skeyValue = new StanzaBuilder()
                 .description("value")
                 .content(store.signalStore().signedKeyPair().publicKey().toEncodedPoint())
                 .build();
-        var skeySignature = new NodeBuilder()
+        var skeySignature = new StanzaBuilder()
                 .description("signature")
                 .content(store.signalStore().signedKeyPair().signature())
                 .build();
-        var skey = new NodeBuilder()
+        var skey = new StanzaBuilder()
                 .description("skey")
                 .content(skeyId, skeyValue, skeySignature)
                 .build();
-        var queryRequest = new NodeBuilder()
+        var queryRequest = new StanzaBuilder()
                 .description("iq")
                 .attribute("to", JidServer.user())
                 .attribute("type", "set")
@@ -2193,7 +2186,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             return;
         }
 
-        var receipt = new NodeBuilder()
+        var receipt = new StanzaBuilder()
                 .description("receipt")
                 .attribute("id", id)
                 .attribute("type", type)
@@ -2209,11 +2202,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
         var jid = chat.toJid();
-        var body = new NodeBuilder()
+        var body = new StanzaBuilder()
                 .description("query")
                 .attribute("request", "interactive")
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", jid)
@@ -2230,12 +2223,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * <p>If the chat is not yet known, a new entry is added to the store
      * with the subject from the server as its display name.
      *
-     * @param response the server response node
+     * @param response the server response stanza
      * @return the parsed metadata
      * @throws NoSuchElementException if the response does not contain a
-     *                                {@code group} node
+     *                                {@code group} stanza
      */
-    private ChatMetadata handleChatMetadata(Node response) {
+    private ChatMetadata handleChatMetadata(Stanza response) {
         var metadataNode = Optional.of(response)
                 .filter(entry -> entry.hasDescription("group"))
                 .or(() -> response.getChild("group"))
@@ -2249,7 +2242,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     /**
-     * Parses the {@code group} node returned by a chat metadata query
+     * Parses the {@code group} stanza returned by a chat metadata query
      * into a {@link ChatMetadata} instance, distinguishing group chats
      * from communities based on the presence of the {@code parent} child
      * element.
@@ -2258,66 +2251,66 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * fetch linked-group participants and sub-groups so the returned
      * metadata carries the full community structure.
      *
-     * @param node the {@code group} node from the server response
+     * @param stanza the {@code group} stanza from the server response
      * @return the parsed chat metadata
      */
-    private ChatMetadata parseChatMetadata(Node node) {
-        var groupIdUser = node.getRequiredAttributeAsString("id");
+    private ChatMetadata parseChatMetadata(Stanza stanza) {
+        var groupIdUser = stanza.getRequiredAttributeAsString("id");
         var groupId = Jid.of(groupIdUser, JidServer.groupOrCommunity());
-        var subject = node.getAttributeAsString("subject", "");
-        var subjectAuthor = node.getAttributeAsJid("s_o", null);
-        var subjectTimestampSeconds = node.getAttributeAsLong("s_t", 0);
-        var foundationTimestampSeconds = node.getAttributeAsLong("creation", 0);
-        var founder = node.getAttributeAsJid("creator", null);
-        var description = node.getChild("description")
+        var subject = stanza.getAttributeAsString("subject", "");
+        var subjectAuthor = stanza.getAttributeAsJid("s_o", null);
+        var subjectTimestampSeconds = stanza.getAttributeAsLong("s_t", 0);
+        var foundationTimestampSeconds = stanza.getAttributeAsLong("creation", 0);
+        var founder = stanza.getAttributeAsJid("creator", null);
+        var description = stanza.getChild("description")
                 .flatMap(parent -> parent.getChild("body"))
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
-        var descriptionId = node.getChild("description")
+        var descriptionId = stanza.getChild("description")
                 .flatMap(descriptionNode -> descriptionNode.getAttributeAsString("id"))
                 .orElse(null);
-        var ephemeral = node.getChild("ephemeral")
+        var ephemeral = stanza.getChild("ephemeral")
                 .map(ephemeralNode -> ChatEphemeralTimer.of((int) ephemeralNode.getAttributeAsLong("expiration", 0)))
                 .orElse(null);
-        var communityNode = node.getChild("parent")
+        var communityNode = stanza.getChild("parent")
                 .orElse(null);
-        var lidAddressingMode = node.hasAttribute("addressing_mode", "lid");
-        var linkedParent = node.getChild("linked_parent")
+        var lidAddressingMode = stanza.hasAttribute("addressing_mode", "lid");
+        var linkedParent = stanza.getChild("linked_parent")
                 .flatMap(parent -> parent.getAttributeAsJid("jid"))
                 .orElse(null);
-        var isIncognito = node.hasChild("incognito");
-        var defaultSubgroup = node.hasAttribute("default_sub_group", true);
+        var isIncognito = stanza.hasChild("incognito");
+        var defaultSubgroup = stanza.hasAttribute("default_sub_group", true);
         if (communityNode == null) {
-            var restrict = node.hasChild("announce");
-            var announce = node.hasChild("restrict");
-            var memberAddModeAdminOnly = node.getChild("member_add_mode")
-                    .flatMap(Node::toContentString)
+            var restrict = stanza.hasChild("announce");
+            var announce = stanza.hasChild("restrict");
+            var memberAddModeAdminOnly = stanza.getChild("member_add_mode")
+                    .flatMap(Stanza::toContentString)
                     .map(mode -> Objects.equals(mode, "admin_add"))
                     .orElse(false);
-            var groupMembershipApprovalMode = node.getChild("membership_approval_mode")
+            var groupMembershipApprovalMode = stanza.getChild("membership_approval_mode")
                     .flatMap(entry -> entry.getChild("group_join"))
                     .map(entry -> entry.hasAttribute("state", "on"))
                     .orElse(false);
-            var memberLinkModeAdminOnly = node.getChild("member_link_mode")
-                    .flatMap(Node::toContentString)
+            var memberLinkModeAdminOnly = stanza.getChild("member_link_mode")
+                    .flatMap(Stanza::toContentString)
                     .map(mode -> Objects.equals(mode, "admin_link"))
                     .orElse(false);
-            var noFrequentlyForwarded = node.hasChild("no_frequently_forwarded");
-            var groupSupport = node.hasChild("support");
-            var groupSuspended = node.hasChild("suspended");
-            var groupReportToAdminMode = node.hasChild("allow_admin_reports");
-            var generalSubgroup = node.hasChild("general_chat");
-            var groupGeneralChatAutoAddDisabled = node.hasChild("auto_add_disabled");
-            var hiddenSubgroup = node.hasChild("hidden_group");
-            var groupHasCapi = node.hasChild("capi");
-            var groupSafetyCheck = node.hasChild("group_safety_check");
-            var participants = node.streamChildren("participant")
+            var noFrequentlyForwarded = stanza.hasChild("no_frequently_forwarded");
+            var groupSupport = stanza.hasChild("support");
+            var groupSuspended = stanza.hasChild("suspended");
+            var groupReportToAdminMode = stanza.hasChild("allow_admin_reports");
+            var generalSubgroup = stanza.hasChild("general_chat");
+            var groupGeneralChatAutoAddDisabled = stanza.hasChild("auto_add_disabled");
+            var hiddenSubgroup = stanza.hasChild("hidden_group");
+            var groupHasCapi = stanza.hasChild("capi");
+            var groupSafetyCheck = stanza.hasChild("group_safety_check");
+            var participants = stanza.streamChildren("participant")
                     .filter(entry -> !entry.hasAttribute("error"))
                     .map(entry -> {
                         var id = entry.getRequiredAttributeAsJid("jid");
                         var role = entry.getAttributeAsString("type")
-                                .map(GroupPartipantRole::of)
-                                .orElse(GroupPartipantRole.USER);
+                                .flatMap(GroupPartipantRole::of)
+                                .orElse(GroupPartipantRole.MEMBER);
                         return new GroupParticipantBuilder()
                                 .userJid(id)
                                 .rank(role)
@@ -2355,35 +2348,35 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     .groupSafetyCheck(groupSafetyCheck)
                     .build();
         } else {
-            var restrict = node.hasChild("locked");
-            var announce = node.hasChild("announcement");
-            var noFrequentlyForwarded = node.hasChild("no_frequently_forwarded");
-            var communityMembershipApprovalMode = node.getChild("membership_approval_mode")
+            var restrict = stanza.hasChild("locked");
+            var announce = stanza.hasChild("announcement");
+            var noFrequentlyForwarded = stanza.hasChild("no_frequently_forwarded");
+            var communityMembershipApprovalMode = stanza.getChild("membership_approval_mode")
                     .flatMap(entry -> entry.getChild("group_join"))
                     .map(entry -> entry.hasAttribute("state", "on"))
                     .orElse(false);
-            var memberAddModeAdminOnly = node.getChild("member_add_mode")
-                    .flatMap(Node::toContentString)
+            var memberAddModeAdminOnly = stanza.getChild("member_add_mode")
+                    .flatMap(Stanza::toContentString)
                     .map(mode -> Objects.equals(mode, "admin_add"))
                     .orElse(false);
-            var memberLinkModeAdminOnly = node.getChild("member_link_mode")
-                    .flatMap(Node::toContentString)
+            var memberLinkModeAdminOnly = stanza.getChild("member_link_mode")
+                    .flatMap(Stanza::toContentString)
                     .map(mode -> Objects.equals(mode, "admin_link"))
                     .orElse(false);
-            var allowNonAdminSubGroupCreation = node.hasChild("allow_non_admin_sub_group_creation");
-            var support = node.hasChild("support");
-            var suspended = node.hasChild("suspended");
-            var reportToAdminMode = node.hasChild("allow_admin_reports");
-            var communityGeneralSubgroup = node.hasChild("general_chat");
-            var generalChatAutoAddDisabled = node.hasChild("auto_add_disabled");
-            var hiddenSubgroup = node.hasChild("hidden_group");
-            var hasCapi = node.hasChild("capi");
-            var groupSafetyCheck = node.hasChild("group_safety_check");
-            var participantLabelEnabled = node.hasChild("participant_label_enabled");
-            var limitSharingEnabled = node.hasChild("limit_sharing_enabled");
+            var allowNonAdminSubGroupCreation = stanza.hasChild("allow_non_admin_sub_group_creation");
+            var support = stanza.hasChild("support");
+            var suspended = stanza.hasChild("suspended");
+            var reportToAdminMode = stanza.hasChild("allow_admin_reports");
+            var communityGeneralSubgroup = stanza.hasChild("general_chat");
+            var generalChatAutoAddDisabled = stanza.hasChild("auto_add_disabled");
+            var hiddenSubgroup = stanza.hasChild("hidden_group");
+            var hasCapi = stanza.hasChild("capi");
+            var groupSafetyCheck = stanza.hasChild("group_safety_check");
+            var participantLabelEnabled = stanza.hasChild("participant_label_enabled");
+            var limitSharingEnabled = stanza.hasChild("limit_sharing_enabled");
             var isParentGroupClosed = communityNode.hasAttribute("default_membership_approval_mode", "request_required");
-            var size = node.getAttributeAsInt("size", null);
-            var growthLockedNode = node.getChild("growth_locked").orElse(null);
+            var size = stanza.getAttributeAsInt("size", null);
+            var growthLockedNode = stanza.getChild("growth_locked").orElse(null);
             var growthLockType = growthLockedNode != null
                     ? growthLockedNode.getAttributeAsString("type").orElse(null)
                     : null;
@@ -2393,7 +2386,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             var growthLockExpiration = growthLockExpirationSeconds > 0
                     ? Instant.ofEpochSecond(growthLockExpirationSeconds)
                     : null;
-            var descriptionNode = node.getChild("description").orElse(null);
+            var descriptionNode = stanza.getChild("description").orElse(null);
             var descriptionTimestampSeconds = descriptionNode != null
                     ? descriptionNode.getAttributeAsLong("t", 0)
                     : 0L;
@@ -2403,13 +2396,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             var descriptionAuthor = descriptionNode != null
                     ? descriptionNode.getAttributeAsJid("participant", null)
                     : null;
-            var evolutionVersion = node.getChild("evolution_version")
+            var evolutionVersion = stanza.getChild("evolution_version")
                     .map(ev -> ev.getAttributeAsInt("value", null))
                     .orElse(null);
-            var linkedGroupsQueryBody = new NodeBuilder()
+            var linkedGroupsQueryBody = new StanzaBuilder()
                     .description("linked_groups_participants")
                     .build();
-            var linkedGroupsQueryRequest = new NodeBuilder()
+            var linkedGroupsQueryRequest = new StanzaBuilder()
                     .description("iq")
                     .attribute("xmlns", "w:g2")
                     .attribute("to", groupId)
@@ -2422,7 +2415,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     .flatMap(participantNode -> participantNode.streamAttributeAsJid("jid"))
                     .map(jid -> new GroupParticipantBuilder().userJid(jid).build())
                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            var communityGroupsQuery = new FetchAllSubgroupsMexRequest(groupId.toString(), "INTERACTIVE", null);
+            var communityGroupsQuery = new FetchAllSubgroupsMexRequest(groupId.toString(), MexGroupQueryContext.INTERACTIVE, null);
             var communityGroupsResponseNode = sendNode(communityGroupsQuery);
             var communityGroupsResponse = FetchAllSubgroupsMexResponse.of(communityGroupsResponseNode);
             var communityLinkedGroups = new LinkedHashSet<CommunityLinkedGroup>();
@@ -2497,20 +2490,21 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     /**
-     * Parses a {@code participant} node into a {@link GroupParticipant},
+     * Parses a {@code participant} stanza into a {@link GroupParticipant},
      * skipping entries that carry an {@code error} attribute.
      *
-     * @param node the participant node
+     * @param stanza the participant stanza
      * @return a singleton stream with the parsed participant, or an
      *         empty stream for error entries
      */
-    private Stream<GroupParticipant> parseGroupParticipant(Node node) {
-        if (node.hasAttribute("error")) {
+    private Stream<GroupParticipant> parseGroupParticipant(Stanza stanza) {
+        if (stanza.hasAttribute("error")) {
             return Stream.empty();
         }
 
-        var id = node.getRequiredAttributeAsJid("jid");
-        var role = GroupPartipantRole.of(node.getRequiredAttributeAsString("type"));
+        var id = stanza.getRequiredAttributeAsJid("jid");
+        var role = GroupPartipantRole.of(stanza.getRequiredAttributeAsString("type"))
+                .orElse(GroupPartipantRole.MEMBER);
         var result = new GroupParticipantBuilder()
                 .userJid(id)
                 .rank(role)
@@ -2526,7 +2520,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(contact, "contact cannot be null");
         var entry = new IqQueryBusinessProfileRequestEntry(contact.toJid(), null);
         var request = new IqQueryBusinessProfileRequest(List.of(entry), 3);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqQueryBusinessProfileResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryBusinessProfileResponse.Success success -> success.profiles()
@@ -2623,9 +2617,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public BusinessCategory parseBusinessCategory(Node node) {
-        var id = node.getRequiredAttributeAsString("id");
-        var name = node.toContentString()
+    public BusinessCategory parseBusinessCategory(Stanza stanza) {
+        var id = stanza.getRequiredAttributeAsString("id");
+        var name = stanza.toContentString()
                 .map(content -> URLDecoder.decode(content, StandardCharsets.UTF_8))
                 .orElseThrow(() -> new NoSuchElementException("Missing business category content"));
         return new BusinessCategoryBuilder()
@@ -2713,17 +2707,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob", exports = "deleteCoverPhoto",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void deleteBusinessCoverPhoto() {
-        var coverPhoto = new NodeBuilder()
+        var coverPhoto = new StanzaBuilder()
                 .description("cover_photo")
                 .attribute("op", "delete")
                 .build();
-        var businessProfile = new NodeBuilder()
+        var businessProfile = new StanzaBuilder()
                 .description("business_profile")
                 .attribute("v", "3")
                 .attribute("mutation_type", "delta")
                 .content(coverPhoto)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:biz")
                 .attribute("to", JidServer.user())
@@ -2739,7 +2733,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<String> queryBusinessPublicKey(JidProvider businessJidProvider) {
         var businessJid = Objects.requireNonNull(businessJidProvider, "businessJid cannot be null").toJid();
         var request = new IqQueryGetPublicKeyRequest(businessJid);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqQueryGetPublicKeyResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryGetPublicKeyResponse.Success success -> success.certificate();
@@ -2760,7 +2754,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public BusinessSignedUserInfo queryBusinessSignedUserInfo(JidProvider businessJidProvider) {
         var businessJid = Objects.requireNonNull(businessJidProvider, "businessJid cannot be null").toJid();
         var request = new IqQueryGetSignedUserInfoRequest(businessJid);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqQueryGetSignedUserInfoResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryGetSignedUserInfoResponse.Success success -> new BusinessSignedUserInfoBuilder()
@@ -2790,7 +2784,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
         bizJids.forEach(jid -> Objects.requireNonNull(jid, "bizJids element cannot be null"));
         var request = new IqGetMerchantComplianceRequest(bizJids);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqGetMerchantComplianceResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqGetMerchantComplianceResponse.Success success -> success.entries()
@@ -2869,7 +2863,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .customerCareDetails(customerCare)
                 .grievanceOfficerDetails(grievanceOfficer)
                 .build();
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqSetMerchantComplianceResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqSetMerchantComplianceResponse.Success success -> success.entries()
@@ -2896,7 +2890,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public BusinessCategoryTypeahead queryBusinessCategoryTypeahead(String query) {
         Objects.requireNonNull(query, "query cannot be null");
         var request = new IqQueryBusinessCategoriesRequest(query);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqQueryBusinessCategoriesResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryBusinessCategoriesResponse.Success success -> {
@@ -2935,7 +2929,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(tokenBase64, "tokenBase64 cannot be null");
         var selfJid = store.accountStore().jid()
                 .orElseThrow(() -> new IllegalStateException("queryOrder requires a logged-in session"));
-        var request = new BizQueryOrderJobWhatsAppWebGraphQlRequest(
+        var request = new BizQueryOrderJobWhatsAppGraphQlRequest(
                 selfJid,
                 messageId,
                 tokenBase64,
@@ -2944,8 +2938,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 null
         );
         var response = sendGraphQl(request);
-        return BizQueryOrderJobWhatsAppWebGraphQlResponse.of(response)
-                .map(BizQueryOrderJobWhatsAppWebGraphQlResponse::order);
+        return BizQueryOrderJobWhatsAppGraphQlResponse.of(response)
+                .map(BizQueryOrderJobWhatsAppGraphQlResponse::order);
     }
 
     /** {@inheritDoc} */
@@ -3041,38 +3035,38 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /** {@inheritDoc} */
     @Override
     public Optional<BotProfile> queryBotProfile(JidProvider botJid, String personaId) {
-        var profileQueryNode = new NodeBuilder()
+        var profileQueryNode = new StanzaBuilder()
                 .description("profile")
                 .attribute("v", "1")
                 .build();
-        var botQueryNode = new NodeBuilder()
+        var botQueryNode = new StanzaBuilder()
                 .description("bot")
                 .content(profileQueryNode)
                 .build();
-        var queryNode = new NodeBuilder()
+        var queryNode = new StanzaBuilder()
                 .description("query")
                 .content(botQueryNode)
                 .build();
 
-        var userProfileNode = new NodeBuilder()
+        var userProfileNode = new StanzaBuilder()
                 .description("profile")
                 .attribute("persona_id", personaId)
                 .build();
-        var userBotNode = new NodeBuilder()
+        var userBotNode = new StanzaBuilder()
                 .description("bot")
                 .content(userProfileNode)
                 .build();
-        var userNode = new NodeBuilder()
+        var userNode = new StanzaBuilder()
                 .description("user")
                 .attribute("jid", botJid.toJid().toUserJid())
                 .content(userBotNode)
                 .build();
-        var listNode = new NodeBuilder()
+        var listNode = new StanzaBuilder()
                 .description("list")
                 .content(userNode)
                 .build();
 
-        var usyncNode = new NodeBuilder()
+        var usyncNode = new StanzaBuilder()
                 .description("usync")
                 .attribute("sid", RandomIdUtils.generateSid())
                 .attribute("mode", "query")
@@ -3081,7 +3075,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .attribute("context", "interactive")
                 .content(queryNode, listNode)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "usync")
                 .attribute("to", JidServer.user())
@@ -3104,24 +3098,24 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * into a {@link BotProfile}.
      *
      * @param botJid  the bot JID the response pertains to
-     * @param profile the profile node
+     * @param profile the profile stanza
      * @return the parsed bot profile
      */
-    private BotProfile parseBotProfile(Jid botJid, Node profile) {
+    private BotProfile parseBotProfile(Jid botJid, Stanza profile) {
         var name = profile.getChild("name")
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
         var attributes = profile.getChild("attributes")
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
         var description = profile.getChild("description")
-                .flatMap(Node::toContentString).orElse(null);
+                .flatMap(Stanza::toContentString).orElse(null);
         var category = profile.getChild("category")
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .map(BotProfileCategory::of)
                 .orElse(null);
         var isDefault = profile.getChild("default")
-                .flatMap(Node::toContentBool)
+                .flatMap(Stanza::toContentBool)
                 .orElse(false);
         var personaId = profile.getAttributeAsString("persona_id", null);
 
@@ -3132,7 +3126,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
         var commandsDescription = profile.getChild("commands")
                 .flatMap(commandsNode -> commandsNode.getChild("description"))
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
         var commands = profile.streamChild("commands")
                 .flatMap(commandsNode -> commandsNode.streamChildren("command"))
@@ -3140,15 +3134,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .toList();
 
         var isMetaCreated = profile.getChild("is_meta_created")
-                .flatMap(Node::toContentBool)
+                .flatMap(Stanza::toContentBool)
                 .orElse(false);
 
         var creatorNode = profile.getChild("creator").orElse(null);
         var creatorName = creatorNode != null
-                ? creatorNode.getChild("name").flatMap(Node::toContentString).orElse(null)
+                ? creatorNode.getChild("name").flatMap(Stanza::toContentString).orElse(null)
                 : null;
         var creatorProfileUrl = creatorNode != null
-                ? creatorNode.getChild("profile_url").flatMap(Node::toContentString).map(URI::create).orElse(null)
+                ? creatorNode.getChild("profile_url").flatMap(Stanza::toContentString).map(URI::create).orElse(null)
                 : null;
 
         var professionalStatus = profile.getChild("posing_as_professional")
@@ -3175,17 +3169,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     /**
-     * Parses a {@code command} node into a {@link BotProfileCommand}.
+     * Parses a {@code command} stanza into a {@link BotProfileCommand}.
      *
-     * @param command the command node from a bot profile
+     * @param command the command stanza from a bot profile
      * @return the parsed command descriptor
      */
-    private static BotProfileCommand parseBotCommand(Node command) {
+    private static BotProfileCommand parseBotCommand(Stanza command) {
         var commandName = command.getChild("name")
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse("");
         var commandDescription = command.getChild("description")
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
         return new BotProfileCommandBuilder()
                 .name(commandName)
@@ -3194,17 +3188,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     /**
-     * Parses a {@code prompt} node into a {@link BotProfilePrompt}.
+     * Parses a {@code prompt} stanza into a {@link BotProfilePrompt}.
      *
-     * @param prompt the prompt node from a bot profile
+     * @param prompt the prompt stanza from a bot profile
      * @return the parsed suggested-prompt descriptor
      */
-    private static BotProfilePrompt parseBotPrompt(Node prompt) {
+    private static BotProfilePrompt parseBotPrompt(Stanza prompt) {
         var emoji = prompt.getChild("emoji")
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
         var text = prompt.getChild("text")
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .orElse(null);
         return new BotProfilePromptBuilder()
                 .emoji(emoji)
@@ -3814,7 +3808,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         /**
          * The session is terminally closed (logged out, banned, or explicitly disconnected). While
          * set, the automatic reconnect entry points become no-ops and
-         * {@link LiveLinkedWhatsAppClient#sendNode(NodeBuilder, Function)} fails fast with
+         * {@link LiveLinkedWhatsAppClient#sendNode(StanzaBuilder, Function)} fails fast with
          * {@link WhatsAppSessionException.Closed}; only {@link LiveLinkedWhatsAppClient#connect()} or
          * {@link LiveLinkedWhatsAppClient#reconnect()} revive the client.
          */
@@ -3913,17 +3907,61 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxVoipLinkQueryRPC", exports = "sendLinkQueryRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public Optional<Call> joinCallLink(String token, CallLinkMedia media) {
-        Objects.requireNonNull(token, "token cannot be null");
-        Objects.requireNonNull(media, "media cannot be null");
-        var call = switch (media) {
-            case AUDIO -> calls2Service.joinCallLink(token, media,
-                    AudioOutput.buffered(), AudioInput.buffered(), null, null);
-            case VIDEO -> calls2Service.joinCallLink(token, media,
-                    AudioOutput.buffered(), AudioInput.buffered(),
-                    BufferedVideoOutput.buffered(), BufferedVideoInput.buffered());
-        };
-        return Optional.of(call);
+    public Call joinCallLink(URI link, AudioOutput audioOut, AudioInput audioIn,
+                             VideoOutput videoOut, VideoInput videoIn) {
+        requireWebClient();
+        Objects.requireNonNull(link, "link cannot be null");
+        Objects.requireNonNull(audioOut, "audioOut cannot be null");
+        Objects.requireNonNull(audioIn, "audioIn cannot be null");
+        var ref = parseCallLink(link);
+        return calls2Service.joinCallLink(ref.token(), ref.media(), audioOut, audioIn, videoOut, videoIn);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Call joinCallLink(URI link, AudioOutput audioOut, AudioInput audioIn) {
+        return joinCallLink(link, audioOut, audioIn, null, null);
+    }
+
+    /**
+     * The components of a {@code call.whatsapp.com} call-link URL needed to query and join the link.
+     *
+     * @param token the opaque trailing token path segment; never {@code null}
+     * @param media the link's configured media kind, derived from the {@code voice/} or {@code video/}
+     *              URL prefix; never {@code null}
+     */
+    private record CallLinkRef(String token, CallLinkMedia media) {}
+
+    /**
+     * Parses a {@code call.whatsapp.com} call-link URL into its token and media-kind components.
+     *
+     * <p>A well-formed link has path {@code /voice/<token>} or {@code /video/<token>}; the
+     * {@code voice}/{@code video} segment selects {@link CallLinkMedia#AUDIO}/{@link CallLinkMedia#VIDEO}
+     * respectively (mirroring {@link CallLink#url()}) and the adjacent non-empty segment supplies the
+     * token. The first such adjacent pair in the path wins.
+     *
+     * @param link the call-link URL to parse; never {@code null}
+     * @return the parsed token and media kind
+     * @throws IllegalArgumentException if {@code link} carries no path or no adjacent
+     *                                  {@code voice|video} plus non-empty token segment pair
+     */
+    private static CallLinkRef parseCallLink(URI link) {
+        var path = link.getPath();
+        if (path != null) {
+            var segments = path.split("/");
+            for (var i = 0; i < segments.length - 1; i++) {
+                var media = switch (segments[i]) {
+                    case "voice" -> CallLinkMedia.AUDIO;
+                    case "video" -> CallLinkMedia.VIDEO;
+                    default -> null;
+                };
+                if (media != null && !segments[i + 1].isEmpty()) {
+                    return new CallLinkRef(segments[i + 1], media);
+                }
+            }
+        }
+        throw new IllegalArgumentException(
+                "Malformed call link, expected https://call.whatsapp.com/{voice|video}/<token>: " + link);
     }
 
     /** {@inheritDoc} */
@@ -3962,14 +4000,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGroupQueryJob", exports = "queryAllGroups",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void refreshGroups() {
-        var participantsMarker = new NodeBuilder()
+        var participantsMarker = new StanzaBuilder()
                 .description("participants")
                 .build();
-        var participatingNode = new NodeBuilder()
+        var participatingNode = new StanzaBuilder()
                 .description("participating")
                 .content(participantsMarker)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", Jid.of(JidServer.groupOrCommunity()))
@@ -3999,8 +4037,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
+    @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInviteCodeJobQuery.graphql", exports = "params.id",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> queryGroupInviteCode(JidProvider groupProvider) {
-        return queryGroupInviteCode(groupProvider, null);
+        var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
+        var request = new FetchGroupInviteCodeMexRequest(group.toString(), MexGroupQueryContext.INVITE_CODE);
+        var response = sendNode(request);
+        return FetchGroupInviteCodeMexResponse.of(response)
+                .flatMap(FetchGroupInviteCodeMexResponse::inviteCode);
     }
 
     /** {@inheritDoc} */
@@ -4013,7 +4057,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
         var request = new IqResetGroupInviteCodeRequest(group);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqResetGroupInviteCodeResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqResetGroupInviteCodeResponse.Success success -> success.code();
@@ -4035,7 +4079,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         // parameter `t`). Cobalt infers the same condition from the response shape: a
         // approval, so the create-request metric applies.
         var request = new IqJoinGroupByInviteCodeRequest(inviteCode, false);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var start = Instant.now();
         var successful = true;
         Jid resolvedGroup = null;
@@ -4080,13 +4124,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebQueryGroupInviteProfilePicApi", exports = "queryGroupInviteLinkProfilePic",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public GroupInvitePicture queryGroupInvitePicture(JidProvider groupProvider, String inviteCode) {
-        return queryGroupInvitePictureImpl(groupProvider, inviteCode, "image", null);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public GroupInvitePicture queryGroupInvitePicture(JidProvider groupProvider, String inviteCode, String query) {
-        return queryGroupInvitePictureImpl(groupProvider, inviteCode, "image", query);
+        return queryGroupInvitePictureImpl(groupProvider, inviteCode, "image");
     }
 
     /** {@inheritDoc} */
@@ -4094,13 +4132,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebQueryGroupInviteProfilePicApi", exports = "queryGroupInviteLinkProfilePic",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public GroupInvitePicture queryGroupInvitePicturePreview(JidProvider groupProvider, String inviteCode) {
-        return queryGroupInvitePictureImpl(groupProvider, inviteCode, "preview", null);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public GroupInvitePicture queryGroupInvitePicturePreview(JidProvider groupProvider, String inviteCode, String query) {
-        return queryGroupInvitePictureImpl(groupProvider, inviteCode, "preview", query);
+        return queryGroupInvitePictureImpl(groupProvider, inviteCode, "preview");
     }
 
     /**
@@ -4110,15 +4142,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param groupProvider the group identifier
      * @param inviteCode    the invite code
      * @param type          {@code "image"} or {@code "preview"}
-     * @param query         the lookup hint, or {@code null}
      * @return the parsed picture entry
      */
-    private GroupInvitePicture queryGroupInvitePictureImpl(JidProvider groupProvider, String inviteCode, String type, String query) {
+    private GroupInvitePicture queryGroupInvitePictureImpl(JidProvider groupProvider, String inviteCode, String type) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         Objects.requireNonNull(inviteCode, "inviteCode cannot be null");
         var request = new IqQueryGroupInviteProfilePicRequest(IqQueryGroupInviteProfilePicMode.INVITE_LINK,
-                group, inviteCode, null, type, query, null, null);
-        var requestBuilder = request.toNode();
+                group, inviteCode, null, type, null, null, null);
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqQueryGroupInviteProfilePicResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryGroupInviteProfilePicResponse.Success success ->
@@ -4142,14 +4173,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var sender = invite.sender();
         var inviteTimestamp = invite.expiration();
         var inviteCode = invite.inviteCode();
-        var addRequestNode = new NodeBuilder()
+        var addRequestNode = new StanzaBuilder()
                 .description("add_request")
                 .attribute("code", inviteCode)
                 .attribute("expiration", inviteTimestamp.getEpochSecond())
                 .attribute("admin", sender)
                 .attribute("invitee", invitee)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", sender)
@@ -4174,13 +4205,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!group.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var acceptNode = new NodeBuilder()
+        var acceptNode = new StanzaBuilder()
                 .description("accept")
                 .attribute("code", "")
                 .attribute("expiration", inviteTimestamp.getEpochSecond())
                 .attribute("admin", target)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", group)
@@ -4199,10 +4230,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!group.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var membershipNode = new NodeBuilder()
+        var membershipNode = new StanzaBuilder()
                 .description("membership_approval_requests")
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", group)
@@ -4301,19 +4332,19 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!group.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var participantNode = new NodeBuilder()
+        var participantNode = new StanzaBuilder()
                 .description("participant")
                 .attribute("jid", applicant)
                 .build();
-        var actionNode = new NodeBuilder()
+        var actionNode = new StanzaBuilder()
                 .description(action)
                 .content(participantNode)
                 .build();
-        var membershipActionNode = new NodeBuilder()
+        var membershipActionNode = new StanzaBuilder()
                 .description("membership_requests_action")
                 .content(actionNode)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", group)
@@ -4697,8 +4728,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(create, "create cannot be null");
         var name = create.name();
         var description = create.description().orElse(null);
-        var picture = create.picture().orElse(null);
-        var request = new CreateNewsletterMexRequest(name, description, picture == null || picture.length == 0 ? null : Base64.getEncoder().encodeToString(picture));
+        var picture = create.picture().map(SizedInputStream::toBase64).orElse(null);
+        var request = new CreateNewsletterMexRequest(name, description, picture == null || picture.isEmpty() ? null : picture);
         var response = sendNode(request);
         var parsed = CreateNewsletterMexResponse.of(response)
                 .orElseThrow(() -> new NoSuchElementException("Missing create-newsletter response: %s".formatted(response)));
@@ -4718,7 +4749,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var newsletter = edit.newsletter();
         var name = edit.name().orElse(null);
         var description = edit.description().orElse(null);
-        var picture = edit.picture().orElse(null);
+        var picture = edit.picture().map(SizedInputStream::toBase64).orElse(null);
         var updates = new JSONObject();
         if (name != null) {
             updates.fluentPut("name", name);
@@ -4727,7 +4758,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             updates.fluentPut("description", description);
             }
         if (picture != null) {
-            updates.fluentPut("picture", picture.length == 0 ? "" : Base64.getEncoder().encodeToString(picture));
+            updates.fluentPut("picture", picture);
+        }
+        var reactionSetting = edit.reactionSetting().orElse(null);
+        if (reactionSetting != null) {
+            var reactionCodes = new JSONObject()
+                    .fluentPut("value", reactionSetting.value().name());
+            if (!reactionSetting.blockedCodes().isEmpty()) {
+                reactionCodes.fluentPut("blocked_codes", reactionSetting.blockedCodes());
+            }
+            updates.fluentPut("settings", new JSONObject().fluentPut("reaction_codes", reactionCodes));
         }
         var request = new UpdateNewsletterMexRequest(newsletter.toString(), updates);
         sendNodeWithNoResponse(request);
@@ -4833,26 +4873,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    @WhatsAppWebExport(moduleName = "WAWebNewsletterSendReactionAction", exports = "sendNewsletterReaction",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypeReactionMixin", exports = "applyMixin",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public void reactToNewsletterMessage(JidProvider newsletterProvider, String serverMessageId, String emoji) {
-        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        Objects.requireNonNull(serverMessageId, "serverMessageId cannot be null");
-        var reactionNode = (emoji == null || emoji.isEmpty())
-                ? new NodeBuilder().description("reaction_revoke").build()                : new NodeBuilder().description("reaction").attribute("code", emoji).build();
-                var stanza = new NodeBuilder()
-                .description("message")
-                .attribute("id", DataUtils.randomHex(5)) // 10 uppercase hex chars
-                .attribute("to", newsletter)
-                .attribute("server_id", serverMessageId)
-                .content(reactionNode);
-        sendNode(stanza);
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @WhatsAppWebExport(moduleName = "WAWebNewsletterRevokeStatusAction", exports = "revokeNewsletterStatusAction",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterRevokeMixin", exports = "applyMixin",
@@ -4860,10 +4880,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void revokeNewsletterMessage(JidProvider newsletterProvider, String serverMessageId) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         Objects.requireNonNull(serverMessageId, "serverMessageId cannot be null");
-        var adminRevokeNode = new NodeBuilder()
+        var adminRevokeNode = new StanzaBuilder()
                 .description("admin_revoke")
                 .build();
-        var stanza = new NodeBuilder()
+        var stanza = new StanzaBuilder()
                 .description("message")
                 .attribute("id", DataUtils.randomHex(5)) // 10 uppercase hex chars
                 .attribute("to", newsletter)
@@ -4896,37 +4916,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    @WhatsAppWebExport(moduleName = "WAWebDemoteNewsletterAdminAction", exports = "demoteNewsletterAdminAction",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public void demoteNewsletterAdmin(JidProvider newsletterProvider, JidProvider adminProvider) {
-        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        var admin = Objects.requireNonNull(adminProvider, "admin cannot be null").toJid();
-        var request = new DemoteNewsletterAdminMexRequest(newsletter.toString(), admin.toString());
-        sendNodeWithNoResponse(request);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WAWebMexUpdateNewsletterJob", exports = "mexUpdateNewsletter",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public void editNewsletterReactionSetting(JidProvider newsletterProvider, NewsletterReactionSettings setting) {
-        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        Objects.requireNonNull(setting, "setting cannot be null");
-        var reactionCodes = new JSONObject()
-                .fluentPut("value", setting.value().name());
-        if (!setting.blockedCodes().isEmpty()) {
-            reactionCodes.fluentPut("blocked_codes", setting.blockedCodes());
-        }
-        var settings = new JSONObject()
-                .fluentPut("reaction_codes", reactionCodes);
-        var updates = new JSONObject()
-                .fluentPut("settings", settings);
-        var request = new UpdateNewsletterMexRequest(newsletter.toString(), updates);
-        sendNodeWithNoResponse(request);
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterAdminCapabilitiesJob", exports = "mexFetchNewsletterAdminCapabilities",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<NewsletterCapability> queryNewsletterAdminCapabilities(JidProvider newsletterProvider) {
@@ -4945,7 +4934,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterAdminInfoJob", exports = "mexFetchNewsletterAdminInfo",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public OptionalLong queryNewsletterAdminInfo(JidProvider newsletterProvider) {
+    public OptionalLong queryNewsletterAdminsCount(JidProvider newsletterProvider) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new FetchNewsletterAdminInfoMexRequest(newsletter.toString());
         var response = sendNode(request);
@@ -5032,23 +5021,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListView view) {
-        return queryNewsletterDirectoryList(view, null, null, null, null, false);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListView view, String cursorToken) {
-        return queryNewsletterDirectoryList(view, null, null, null, cursorToken, false);
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterDirectoryListJob", exports = "mexFetchNewsletterDirectoryList",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListView view, List<String> countryCodes, List<String> categories, Long limit, String cursorToken, boolean fetchStatusMetadata) {
-        Objects.requireNonNull(view, "view cannot be null");
-        var request = new FetchNewsletterDirectoryListMexRequest(view, countryCodes, categories, limit, cursorToken, fetchStatusMetadata);
+    public NewsletterDirectoryPage queryNewsletterDirectoryList(NewsletterDirectoryListQuery query) {
+        Objects.requireNonNull(query, "query cannot be null");
+        Long limit = query.limit().isPresent() ? query.limit().getAsLong() : null;
+        var countryCodes = query.countryCodes().isEmpty() ? null : query.countryCodes();
+        var categories = query.categories().isEmpty() ? null : query.categories();
+        var request = new FetchNewsletterDirectoryListMexRequest(query.view(), countryCodes, categories, limit, query.cursorToken().orElse(null), query.fetchStatusMetadata());
         var response = sendNode(request);
         var parsed = FetchNewsletterDirectoryListMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing newsletter directory list response: %s".formatted(response)));
@@ -5286,16 +5266,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public NewsletterDirectoryPage queryRecommendedNewsletters() {
-        return queryRecommendedNewsletters(null, null, false);
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @WhatsAppWebExport(moduleName = "WAWebMexFetchRecommendedNewslettersJob", exports = "mexFetchRecommendedNewsletters",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public NewsletterDirectoryPage queryRecommendedNewsletters(Long limit, List<String> countryCodes, boolean fetchStatusMetadata) {
-        var request = new FetchRecommendedNewslettersMexRequest(limit, countryCodes, fetchStatusMetadata);
+    public NewsletterDirectoryPage queryRecommendedNewsletters(RecommendedNewslettersQuery query) {
+        Objects.requireNonNull(query, "query cannot be null");
+        Long limit = query.limit().isPresent() ? query.limit().getAsLong() : null;
+        var countryCodes = query.countryCodes().isEmpty() ? null : query.countryCodes();
+        var request = new FetchRecommendedNewslettersMexRequest(limit, countryCodes, query.fetchStatusMetadata());
         var response = sendNode(request);
         var parsed = FetchRecommendedNewslettersMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing recommended newsletters response: %s".formatted(response)));
@@ -5361,9 +5338,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMexFetchSimilarNewslettersJob", exports = "mexFetchSimilarNewsletters",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public List<NewsletterDirectoryEntry> querySimilarNewsletters(JidProvider newsletterProvider, Long limit, List<String> countryCodes, boolean fetchStatusMetadata) {
-        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        var request = new FetchSimilarNewslettersMexRequest(newsletter.toString(), limit, countryCodes, fetchStatusMetadata);
+    public List<NewsletterDirectoryEntry> querySimilarNewsletters(SimilarNewslettersQuery query) {
+        Objects.requireNonNull(query, "query cannot be null");
+        Long limit = query.limit().isPresent() ? query.limit().getAsLong() : null;
+        var countryCodes = query.countryCodes().isEmpty() ? null : query.countryCodes();
+        var request = new FetchSimilarNewslettersMexRequest(query.newsletter().toString(), limit, countryCodes, query.fetchStatusMetadata());
         var response = sendNode(request);
         var parsed = FetchSimilarNewslettersMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing similar newsletters response: %s".formatted(response)));
@@ -5372,12 +5351,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .map(this::toNewsletterDirectoryEntryFromSimilar)
                 .filter(Objects::nonNull)
                 .toList();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public List<NewsletterDirectoryEntry> querySimilarNewsletters(JidProvider newsletter) {
-        return querySimilarNewsletters(newsletter, null, null, false);
     }
 
     /**
@@ -5482,13 +5455,27 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .anyMatch(FetchNewsletterIsDomainPreviewableMexResponse.UrlPreviews::isPreviewable);
     }
 
+    /**
+     * Resolves the hosting newsletter JID from a newsletter message.
+     *
+     * @param message the newsletter message; never {@code null}
+     * @return the newsletter JID that hosts the message
+     * @throws NullPointerException   if {@code message} is {@code null}
+     * @throws NoSuchElementException if the message key carries no newsletter JID
+     */
+    private static Jid newsletterJid(NewsletterMessageInfo message) {
+        Objects.requireNonNull(message, "message cannot be null");
+        return message.key().parentJid()
+                .orElseThrow(() -> new NoSuchElementException("Newsletter message has no newsletter JID"));
+    }
+
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterMessageReactionSenderListJob", exports = "mexFetchNewsletterMessageReactionSenderList",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public List<NewsletterReactor> queryNewsletterMessageReactionSenders(JidProvider newsletterProvider, long serverMessageId) {
-        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        var request = new FetchNewsletterMessageReactionSenderListMexRequest(newsletter.toString(), serverMessageId);
+    public List<NewsletterReactor> queryNewsletterMessageReactionSenders(NewsletterMessageInfo message) {
+        var newsletter = newsletterJid(message);
+        var request = new FetchNewsletterMessageReactionSenderListMexRequest(newsletter.toString(), message.serverId());
         var response = sendNode(request);
         var parsed = FetchNewsletterMessageReactionSenderListMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing newsletter reaction senders response: %s".formatted(response)));
@@ -5525,9 +5512,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterPollVotersJob", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public List<NewsletterPollVoter> queryNewsletterPollVoters(JidProvider newsletterProvider, long serverMessageId, long limit, String voteHash) {
-        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        var request = new FetchNewsletterPollVotersMexRequest(newsletter.toString(), limit, serverMessageId, voteHash);
+    public List<NewsletterPollVoter> queryNewsletterPollVoters(NewsletterMessageInfo message, long limit, String voteHash) {
+        var newsletter = newsletterJid(message);
+        var request = new FetchNewsletterPollVotersMexRequest(newsletter.toString(), limit, message.serverId(), voteHash);
         var response = sendNode(request);
         var parsed = FetchNewsletterPollVotersMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing newsletter poll voters response: %s".formatted(response)));
@@ -5554,8 +5541,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public List<NewsletterPollVoter> queryNewsletterPollVoters(JidProvider newsletter, long serverMessageId, long limit) {
-        return queryNewsletterPollVoters(newsletter, serverMessageId, limit, null);
+    public List<NewsletterPollVoter> queryNewsletterPollVoters(NewsletterMessageInfo message, long limit) {
+        return queryNewsletterPollVoters(message, limit, null);
     }
 
     /** {@inheritDoc} */
@@ -5592,10 +5579,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMexNewsletterAddPaidPartnershipLabelJob", exports = "mexNewsletterAddPaidPartnershipLabelJob",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public void addNewsletterPaidPartnershipLabel(JidProvider newsletterProvider, String serverMessageId) {
-        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        Objects.requireNonNull(serverMessageId, "serverMessageId cannot be null");
-        var request = new NewsletterAddPaidPartnershipLabelMexRequest(newsletter.toString(), serverMessageId);
+    public void addNewsletterPaidPartnershipLabel(NewsletterMessageInfo message) {
+        var newsletter = newsletterJid(message);
+        var request = new NewsletterAddPaidPartnershipLabelMexRequest(newsletter.toString(), String.valueOf(message.serverId()));
         var response = sendNode(request);
         NewsletterAddPaidPartnershipLabelMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing newsletter paid-partnership label response: %s".formatted(response)));
@@ -5976,15 +5962,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      */
     @SuppressWarnings("unused")
     private Optional<String> queryAboutViaStatusIq(Jid jid) {
-        var userNode = new NodeBuilder()
+        var userNode = new StanzaBuilder()
                 .description("user")
                 .attribute("jid", jid)
                 .build();
-        var statusQuery = new NodeBuilder()
+        var statusQuery = new StanzaBuilder()
                 .description("status")
                 .content(userNode)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "status")
                 .attribute("to", JidServer.user())
@@ -5994,7 +5980,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         return response.getChild("status")
                 .flatMap(statusNode -> statusNode.getChild("user"))
                 .flatMap(userResp -> userResp.getChild("status"))
-                .flatMap(Node::toContentString)
+                .flatMap(Stanza::toContentString)
                 .filter(s -> !s.isEmpty());
     }
 
@@ -6226,7 +6212,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (limit <= 0) {
             throw new IllegalArgumentException("limit must be positive");
         }
-        var request = new QueryCatalogWhatsAppWebGraphQlRequest(
+        var request = new QueryCatalogWhatsAppGraphQlRequest(
                 businessJid,
                 false,
                 DEFAULT_CATALOG_IMAGE_WIDTH,
@@ -6241,8 +6227,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         );
         var response = sendGraphQl(request);
         logGraphqlCatalogRequest(GraphqlCatalogEndpoint.GET_CATALOG);
-        return QueryCatalogWhatsAppWebGraphQlResponse.of(response)
-                .map(QueryCatalogWhatsAppWebGraphQlResponse::products)
+        return QueryCatalogWhatsAppGraphQlResponse.of(response)
+                .map(QueryCatalogWhatsAppGraphQlResponse::products)
                 .orElseGet(List::of);
     }
 
@@ -6275,7 +6261,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (itemLimit <= 0) {
             throw new IllegalArgumentException("itemLimit must be positive");
         }
-        var request = new QueryProductCollectionsWhatsAppWebGraphQlRequest(
+        var request = new QueryProductCollectionsWhatsAppGraphQlRequest(
                 businessJid,
                 limit,
                 itemLimit,
@@ -6289,8 +6275,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         );
         var response = sendGraphQl(request);
         logGraphqlCatalogRequest(GraphqlCatalogEndpoint.GET_COLLECTIONS);
-        return QueryProductCollectionsWhatsAppWebGraphQlResponse.of(response)
-                .map(QueryProductCollectionsWhatsAppWebGraphQlResponse::collections)
+        return QueryProductCollectionsWhatsAppGraphQlResponse.of(response)
+                .map(QueryProductCollectionsWhatsAppGraphQlResponse::collections)
                 .orElseGet(List::of);
     }
 
@@ -6302,7 +6288,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var businessJid = Objects.requireNonNull(businessJidProvider, "businessJid cannot be null").toJid();
         Objects.requireNonNull(directConnectionEncryptedInfo, "directConnectionEncryptedInfo cannot be null");
         var request = new IqVerifyPostcodeRequest(businessJid, directConnectionEncryptedInfo);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqVerifyPostcodeResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqVerifyPostcodeResponse.Success success -> new BusinessPostcodeVerificationBuilder()
@@ -6353,7 +6339,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var height = refresh.height();
         var directConnectionEncryptedInfo = refresh.directConnectionEncryptedInfo().orElse(null);
         var request = new IqBizRefreshCartRequest(bizJid, productIds, width, height, directConnectionEncryptedInfo);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqBizRefreshCartResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqBizRefreshCartResponse.Success success -> new BusinessRefreshedCartBuilder()
@@ -6439,7 +6425,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(inviteCode, "inviteCode cannot be null");
         Objects.requireNonNull(expectedSourceUrl, "expectedSourceUrl cannot be null");
         var request = new IqQueryCtwaContextRequest(businessJid.toString(), inviteCode, expectedSourceUrl);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqQueryCtwaContextResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryCtwaContextResponse.Success success -> new BusinessCtwaContextBuilder()
@@ -6565,7 +6551,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
 
         var request = new SmaxGetBlockListRequest(store.contactStore().blocklistHash().orElse(null));
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetBlockListResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -6795,13 +6781,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * Issues an {@code <iq xmlns="blocklist" type="set">} stanza
      * mirroring WA Web's {@code sendUpdateBlockListRPC}: builds the
      * outbound stanza via
-     * {@link SmaxUpdateBlockListRequest#toNode()}, dispatches it via
-     * {@link #sendNode(NodeBuilder)} (Cobalt's analogue of
+     * {@link SmaxUpdateBlockListRequest#toStanza()}, dispatches it via
+     * {@link #sendNode(StanzaBuilder)} (Cobalt's analogue of
      * {@code WAComms.sendSmaxStanza}), then walks the variant priority
      * chain ({@code SuccessWithMatch -> SuccessWithMismatch ->
      * MigratedSuccessWithMismatch -> CAPISuccessWithMismatch ->
      * InvalidRequest -> InternalServerError}) inside
-     * {@link SmaxUpdateBlockListResponse#of(Node, Node)}.
+     * {@link SmaxUpdateBlockListResponse#of(Stanza, Stanza)}.
      *
      * <p>WA Web's {@code blockUnblockUser} only inspects the response
      * for {@code InvalidRequest} or {@code InternalServerError} and
@@ -6822,7 +6808,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(contact, "contact cannot be null");
         var action = block ? SmaxUpdateBlockListAction.BLOCK : SmaxUpdateBlockListAction.UNBLOCK;
         var request = new SmaxUpdateBlockListRequest(action, contact.toUserJid(), null, null);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         // Variant priority chain: see SmaxUpdateBlockListResponse.of
         var parsed = SmaxUpdateBlockListResponse.of(response, requestNode.build()).orElse(null);
@@ -6852,7 +6838,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(category, "category cannot be null");
         var cachedHash = store.settingsStore().optOutListHash(category).orElse(null);
         var request = new SmaxGetOptOutListRequest(cachedHash, category);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetOptOutListResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -6936,7 +6922,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case LID -> SmaxGetContactBlacklistAddressingMode.LID;
         };
         var request = new SmaxGetContactBlacklistRequest(category, wireMode);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetContactBlacklistResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -6994,7 +6980,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var itemDuration = update.itemDuration().isPresent() ? update.itemDuration().getAsInt() : null;
         var request = new SmaxUpdateOptOutListRequest(itemJid, itemCategory, itemAction, itemDhash,
                 itemReason, itemEntryPoint, itemSignupId, itemDuration);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxUpdateOptOutListResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -7070,7 +7056,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(jidProvider, "jid cannot be null").toJid();
         var request = new SmaxProfilePictureGetRequest(jid, "image", null, "url",
                 null, null, null, null, null, null);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         var parsed = SmaxProfilePictureGetResponse.of(response, requestBuilder.build()).orElse(null);
         return switch (parsed) {
@@ -7112,7 +7098,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var mutation = pushNameSettingMutationFactory.getPushnameMutation(Instant.now(), newPushName);
         webAppStateService.pushPatches(PushNameSetting.COLLECTION_NAME, List.of(mutation));
         var request = new SmaxAvailabilityRequest(null, newPushName);
-        sendNodeWithNoResponse(request.toNode().build());
+        sendNodeWithNoResponse(request.toStanza().build());
     }
 
     /** {@inheritDoc} */
@@ -7122,7 +7108,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void editAbout(String aboutText) {
         Objects.requireNonNull(aboutText, "aboutText cannot be null");
         var request = new IqSetAboutRequest(aboutText);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         var parsed = IqSetAboutResponse.of(response, requestBuilder.build()).orElse(null);
         switch (parsed) {
@@ -7145,23 +7131,29 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebContactProfilePicThumbBridge", exports = "sendSetPicture",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void editProfilePicture(byte[] jpegBytes) {
-        Objects.requireNonNull(jpegBytes, "jpegBytes cannot be null");
+    public void editProfilePicture(SizedInputStream jpeg) {
+        Objects.requireNonNull(jpeg, "jpeg cannot be null");
+        byte[] jpegBytes;
+        try (var stream = Objects.requireNonNull(jpeg.openStream(), "jpeg supplied a null stream")) {
+            jpegBytes = stream.readAllBytes();
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Failed to read profile picture stream", exception);
+        }
         var selfJid = store.accountStore().jid()
                 .map(Jid::withoutData)
                 .orElseThrow(() -> new IllegalStateException("Missing self JID"));
         var thumbBytes = generatePreviewThumbnail(jpegBytes);
-        var fullPicture = new NodeBuilder()
+        var fullPicture = new StanzaBuilder()
                 .description("picture")
                 .attribute("type", "image")
                 .content(jpegBytes)
                 .build();
-        var previewPicture = new NodeBuilder()
+        var previewPicture = new StanzaBuilder()
                 .description("picture")
                 .attribute("type", "preview")
                 .content(thumbBytes)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:profile:picture")
                 .attribute("to", JidServer.user()) // S_WHATSAPP_NET
@@ -7182,7 +7174,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .map(Jid::withoutData)
                 .orElseThrow(() -> new IllegalStateException("Missing self JID"));
         var request = new IqSendProfilePictureRequest(selfJid, null);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         var parsed = IqSendProfilePictureResponse.of(response, requestBuilder.build()).orElse(null);
         switch (parsed) {
@@ -7259,7 +7251,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new IllegalArgumentException("status must be AVAILABLE or UNAVAILABLE, got " + status);
         }
         var request = new SmaxAvailabilityRequest(status.toString(), presenceName);
-        sendNodeWithNoResponse(request.toNode().build());
+        sendNodeWithNoResponse(request.toStanza().build());
     }
 
     /** {@inheritDoc} */
@@ -7284,7 +7276,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             default -> throw new IllegalArgumentException("state must be COMPOSING, RECORDING or UNAVAILABLE, got " + state);
         };
         var request = new SmaxClientNotificationRequest(chat, stateType);
-        sendNodeWithNoResponse(request.toNode().build());
+        sendNodeWithNoResponse(request.toStanza().build());
     }
 
     /** {@inheritDoc} */
@@ -7304,14 +7296,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var presenceTo = Objects.requireNonNull(presenceToProvider, "presenceTo cannot be null").toJid();
         var presenceContext = Objects.requireNonNull(presenceContextProvider, "presenceContext cannot be null").toJid();
         var request = new SmaxSubscribeRequest(presenceTo, presenceName, presenceContext);
-        sendNodeWithNoResponse(request.toNode().build());
+        sendNodeWithNoResponse(request.toStanza().build());
     }
 
     /** {@inheritDoc} */
     @Override
     public void unsubscribeFromPresence(JidProvider targetProvider) {
         var target = Objects.requireNonNull(targetProvider, "target cannot be null").toJid();
-        var presence = new NodeBuilder()
+        var presence = new StanzaBuilder()
                 .description("presence")
                 .attribute("type", "unsubscribe")
                 .attribute("to", target)
@@ -7729,7 +7721,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (me == null) {
             return;
         }
-        var receipt = new NodeBuilder()
+        var receipt = new StanzaBuilder()
         .description("receipt")
                 .attribute("id", statusId)
                 .attribute("type", "read")
@@ -7744,10 +7736,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebUserPrefsStatus", exports = "getStatusPrivacySetting",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void refreshStatusPrivacy() {
-        var privacyQuery = new NodeBuilder()
+        var privacyQuery = new StanzaBuilder()
                 .description("privacy")
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "status") // task spec: xmlns="status"
                 .attribute("to", JidServer.user()) // task spec: to="s.whatsapp.net"
@@ -7794,22 +7786,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case WHITELIST -> "contact_whitelist";
             case CONTACTS_EXCEPT -> "contact_blacklist";
         };
-        var userChildren = new ArrayList<Node>(jidList.size());
+        var userChildren = new ArrayList<Stanza>(jidList.size());
         for (var jid : jidList) {
             if (jid == null) {
                 continue;
             }
-            userChildren.add(new NodeBuilder()
+            userChildren.add(new StanzaBuilder()
                     .description("user")
                     .attribute("jid", jid)
                     .build());
         }
-        var privacyNode = new NodeBuilder()
+        var privacyNode = new StanzaBuilder()
                 .description("privacy")
                 .attribute("list", listAttr)
                 .content(userChildren)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "status") // task spec: xmlns="status"
                 .attribute("to", JidServer.user()) // task spec: to="s.whatsapp.net"
@@ -7904,6 +7896,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(emoji, "emoji cannot be null");
         var parentJid = messageKey.parentJid()
         .orElseThrow(() -> new IllegalArgumentException("messageKey must carry a parentJid"));
+        if (parentJid.hasNewsletterServer()) {
+            reactToNewsletterMessage(parentJid, messageKey, emoji);
+            return;
+        }
         var reaction = new ReactionMessageBuilder()
         .key(messageKey)
         .text(emoji)
@@ -7911,6 +7907,42 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         .build();
         // The preparer auto converts to EncReactionMessage for CAG groups.
         messageService.send(parentJid, MessageContainer.of(reaction));
+    }
+
+    /**
+     * Posts, updates or revokes an emoji reaction on a newsletter message.
+     *
+     * <p>Resolves the target's server id from the cached
+     * {@link NewsletterMessageInfo} keyed by {@code messageKey}, then sends a
+     * {@code <message server_id=...>} stanza carrying a {@code <reaction>}
+     * child for a non-empty {@code emoji} or a {@code <reaction_revoke>} child
+     * to clear the existing reaction.
+     *
+     * @param newsletter the newsletter JID hosting the message; never {@code null}
+     * @param messageKey the key of the newsletter message being reacted to; never {@code null}
+     * @param emoji      the reaction emoji to set, or {@code null}/empty to revoke
+     * @throws NoSuchElementException if no cached newsletter message matches {@code messageKey}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterSendReactionAction", exports = "sendNewsletterReaction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypeReactionMixin", exports = "applyMixin",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void reactToNewsletterMessage(Jid newsletter, MessageKey messageKey, String emoji) {
+        var serverId = store.chatStore().findMessageByKey(messageKey)
+                .filter(NewsletterMessageInfo.class::isInstance)
+                .map(NewsletterMessageInfo.class::cast)
+                .map(NewsletterMessageInfo::serverId)
+                .orElseThrow(() -> new NoSuchElementException("No cached newsletter message for key " + messageKey));
+        var reactionNode = (emoji == null || emoji.isEmpty())
+                ? new StanzaBuilder().description("reaction_revoke").build()
+                : new StanzaBuilder().description("reaction").attribute("code", emoji).build();
+        var stanza = new StanzaBuilder()
+                .description("message")
+                .attribute("id", DataUtils.randomHex(5)) // 10 uppercase hex chars
+                .attribute("to", newsletter)
+                .attribute("server_id", serverId)
+                .content(reactionNode);
+        sendNode(stanza);
     }
 
     /** {@inheritDoc} */
@@ -8524,8 +8556,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBizLabelEditingAction", exports = "labelAddAction",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public String createLabel(String name, int colorIndex) {
-        Objects.requireNonNull(name, "name cannot be null");
+    public String createLabel(LabelCreate create) {
+        Objects.requireNonNull(create, "create cannot be null");
+        var name = create.name();
+        var colorIndex = create.colorIndex();
         var timestamp = Instant.now();
         var nextId = store.settingsStore().labels().stream()
                 .map(Label::id)
@@ -8573,9 +8607,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBizLabelEditingAction", exports = "labelEditAction",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public Optional<Label> editLabel(String labelId, String name, int colorIndex) {
-        Objects.requireNonNull(labelId, "labelId cannot be null");
-        Objects.requireNonNull(name, "name cannot be null");
+    public Optional<Label> editLabel(LabelEdit edit) {
+        Objects.requireNonNull(edit, "edit cannot be null");
+        var labelId = edit.labelId();
+        var name = edit.name();
+        var colorIndex = edit.colorIndex();
         var existing = store.settingsStore().findLabel(labelId).orElse(null);
         if (existing == null) {
             return Optional.empty();
@@ -8995,7 +9031,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      *   <li>{@code chatAssignmentAgentId} is the target agent id (empty on
      *       unassign).</li>
      *   <li>{@code chatAssignmentMdId} is the device id of the target agent
-     *       looked up in {@link com.github.auties00.cobalt.store.BusinessStore#agentStates()}, defaulting to
+     *       looked up in {@link LinkedWhatsAppBusinessStore#agentStates()}, defaulting to
      *       {@code -1} when the agent is unknown (matches WA Web's
      *       {@code c?.deviceId ?? -1} fallback).</li>
      *   <li>{@code assignerAgentId} is the current device's own agent id
@@ -9003,7 +9039,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      *       empty string (matches WA Web's
      *       {@code u = AgentCollection.getModelsArray().find(t => t.deviceId === meDeviceId); assignerAgentId = u?.id ?? ""}).</li>
      *   <li>{@code assignerMdId} is the caller's device id from
-     *       {@link com.github.auties00.cobalt.store.AccountStore#jid()}.</li>
+     *       {@link LinkedWhatsAppAccountStore#jid()}.</li>
      *   <li>{@code chatAssignmentBrowserId} is empty and
      *       {@code assignerBrowserId} is empty because Cobalt does not
      *       emulate WA Web's {@code persistentExpiringId()} browser cookie.</li>
@@ -9126,7 +9162,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.DIRECT)
     public void refreshDisappearingMode() {
         var request = new IqQueryDisappearingModeRequest();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = IqQueryDisappearingModeResponse.of(response, requestNode.build()).orElse(null);
         var mode = switch (parsed) {
@@ -9180,7 +9216,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     false,
                     false
             );
-            var requestNode = request.toNode();
+            var requestNode = request.toStanza();
             var response = sendNode(requestNode);
             var parsed = SmaxGroupsSetPropertyResponse.of(response, requestNode.build()).orElse(null);
             switch (parsed) {
@@ -9201,11 +9237,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             // (global default), so we build the chat-addressed IQ inline and
             // validate the relay reply by checking for the canonical <error>
             // child.
-            var disappearing = new NodeBuilder()
+            var disappearing = new StanzaBuilder()
                     .description("disappearing_mode")
                     .attribute("duration", seconds)
                     .build();
-            var iqNode = new NodeBuilder()
+            var iqNode = new StanzaBuilder()
                     .description("iq")
                     .attribute("xmlns", "disappearing_mode")
                     .attribute("to", chat)
@@ -9291,7 +9327,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public TosNotices refreshTosNotices(Collection<String> noticeIds) {
         Objects.requireNonNull(noticeIds, "noticeIds cannot be null");
         var request = new IqQueryTosRequest(List.copyOf(noticeIds));
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         var parsed = IqQueryTosResponse.of(response, requestBuilder.build()).orElse(null);
         return switch (parsed) {
@@ -9331,13 +9367,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.DIRECT)
     public void cancelGdprRequest(GdprReportType reportType) {
         Objects.requireNonNull(reportType, "reportType cannot be null");
-        // Maps the public model enum onto the node-layer wire enum so the typed request can build the {gdpr, action="delete", report_type?} node tree
+        // Maps the public model enum onto the stanza-layer wire enum so the typed request can build the {gdpr, action="delete", report_type?} stanza tree
         var wireReportType = switch (reportType) {
             case ACCOUNT -> IqDebugGdprReportType.ACCOUNT;
             case NEWSLETTERS -> IqDebugGdprReportType.NEWSLETTERS;
         };
         var request = new IqDebugGdprRequest(wireReportType);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         var parsed = IqDebugGdprResponse.of(response, requestBuilder.build()).orElse(null);
         switch (parsed) {
@@ -9359,7 +9395,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> queryPushServerKey() {
         var request = new IqGetPushServerSettingsRequest();
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         var parsed = IqGetPushServerSettingsResponse.of(response, requestBuilder.build()).orElse(null);
         return switch (parsed) {
@@ -9375,10 +9411,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebQueryPrivacySettingsJob", exports = "getPrivacySettings",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Map<PrivacySettingType, PrivacySettingValue> refreshPrivacySettings() {
-        var privacyQuery = new NodeBuilder()
+        var privacyQuery = new StanzaBuilder()
                 .description("privacy")
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "privacy")
                 .attribute("to", JidServer.user())
@@ -9441,83 +9477,83 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             default -> false;
         };
 
-        Node privacyNode;
+        Stanza privacyStanza;
         if (!hasList) {
-            var category = new NodeBuilder()
+            var category = new StanzaBuilder()
                     .description("category")
                     .attribute("name", type.data())
                     .attribute("value", value.data())
                     .build();
-            privacyNode = new NodeBuilder()
+            privacyStanza = new StanzaBuilder()
                     .description("privacy")
                     .content(category)
                     .build();
         } else if (lidAware) {
-            List<Node> userChildren;
+            List<Stanza> userChildren;
             try {
                 userChildren = buildLidPrivacyUsers(excludedOrIncluded, action);
             } catch (Throwable throwable) {
                 userChildren = buildPnPrivacyUsers(excludedOrIncluded, action);
-                var category = new NodeBuilder()
+                var category = new StanzaBuilder()
                         .description("category")
                         .attribute("name", type.data())
                         .attribute("value", value.data())
                         .attribute("dhash", "none")
                         .content(userChildren)
                         .build();
-                privacyNode = new NodeBuilder()
+                privacyStanza = new StanzaBuilder()
                         .description("privacy")
                         .content(category)
                         .build();
-                dispatchPrivacyIq(privacyNode, type, value, excludedOrIncluded);
+                dispatchPrivacyIq(privacyStanza, type, value, excludedOrIncluded);
                 return;
             }
-            var category = new NodeBuilder()
+            var category = new StanzaBuilder()
                     .description("category")
                     .attribute("name", type.data())
                     .attribute("value", value.data())
                     .attribute("dhash", "none")
                     .content(userChildren)
                     .build();
-            privacyNode = new NodeBuilder()
+            privacyStanza = new StanzaBuilder()
                     .description("privacy")
                     .attribute("addressing_mode", "lid")
                     .content(category)
                     .build();
         } else {
             var userChildren = buildPnPrivacyUsers(excludedOrIncluded, action);
-            var category = new NodeBuilder()
+            var category = new StanzaBuilder()
                     .description("category")
                     .attribute("name", type.data())
                     .attribute("value", value.data())
                     .attribute("dhash", "none")
                     .content(userChildren)
                     .build();
-            privacyNode = new NodeBuilder()
+            privacyStanza = new StanzaBuilder()
                     .description("privacy")
                     .content(category)
                     .build();
         }
 
-        dispatchPrivacyIq(privacyNode, type, value, excludedOrIncluded);
+        dispatchPrivacyIq(privacyStanza, type, value, excludedOrIncluded);
     }
 
     /**
      * Sends the privacy IQ and refreshes the local store entry on success.
      *
-     * @param privacyNode        the already-built {@code <privacy>} content node
+     * @param privacyStanza        the already-built {@code <privacy>} content stanza
      * @param type               the setting being changed
      * @param value              the newly selected audience
      * @param excludedOrIncluded the refinement list applied to the setting,
      *                           may be {@code null} or empty
      */
-    private void dispatchPrivacyIq(Node privacyNode, PrivacySettingType type, PrivacySettingValue value, Collection<Jid> excludedOrIncluded) {
-        var iqNode = new NodeBuilder()
+    private void dispatchPrivacyIq(Stanza privacyStanza, PrivacySettingType type, PrivacySettingValue value, Collection<Jid> excludedOrIncluded) {
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "privacy")
                 .attribute("to", JidServer.user())
                 .attribute("type", "set")
-                .content(privacyNode);
+                .content(privacyStanza);
         sendNode(iqNode);
 
         var excludedSnapshot = excludedOrIncluded == null
@@ -9546,8 +9582,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      *                               which case WA Web falls back to the
      *                               non-LID branch
      */
-    private List<Node> buildLidPrivacyUsers(Collection<Jid> users, String action) {
-        var result = new ArrayList<Node>(users.size());
+    private List<Stanza> buildLidPrivacyUsers(Collection<Jid> users, String action) {
+        var result = new ArrayList<Stanza>(users.size());
         for (var raw : users) {
             if (raw == null) {
                 continue;
@@ -9560,7 +9596,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             if (pn == null) {
                 throw new IllegalStateException("createLidUserNode: unknown-username-and-pn-for-privacy-list-contact " + raw);
             }
-            result.add(new NodeBuilder()
+            result.add(new StanzaBuilder()
                     .description("user")
                     .attribute("action", action)
                     .attribute("jid", lid)
@@ -9582,13 +9618,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param action {@code "add"} or {@code "remove"}
      * @return the list of {@code <user>} nodes, never {@code null}
      */
-    private List<Node> buildPnPrivacyUsers(Collection<Jid> users, String action) {
-        var result = new ArrayList<Node>(users.size());
+    private List<Stanza> buildPnPrivacyUsers(Collection<Jid> users, String action) {
+        var result = new ArrayList<Stanza>(users.size());
         for (var raw : users) {
             if (raw == null) {
                 continue;
             }
-            result.add(new NodeBuilder()
+            result.add(new StanzaBuilder()
                     .description("user")
                     .attribute("action", action)
                     .attribute("jid", raw)
@@ -9624,22 +9660,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (tokenTypes.isEmpty()) {
             throw new IllegalArgumentException("tokenTypes must not be empty");
         }
-        var tokenNodes = new ArrayList<Node>(tokenTypes.size());
+        var tokenNodes = new ArrayList<Stanza>(tokenTypes.size());
         var timestampValue = Long.toString(timestamp.getEpochSecond());
         for (var tokenType : tokenTypes) {
             Objects.requireNonNull(tokenType, "tokenTypes element cannot be null");
-            tokenNodes.add(new NodeBuilder()
+            tokenNodes.add(new StanzaBuilder()
                     .description("token")
                     .attribute("jid", userJid)
                     .attribute("t", timestampValue)
                     .attribute("type", tokenType.wireValue())
                     .build());
         }
-        var tokensContainer = new NodeBuilder()
+        var tokensContainer = new StanzaBuilder()
                 .description("tokens")
                 .content(tokenNodes)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "privacy")
                 .attribute("to", JidServer.user())
@@ -9923,11 +9959,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void editDefaultDisappearingMode(ChatEphemeralTimer timer) {
         Objects.requireNonNull(timer, "timer cannot be null");
         var seconds = timer.periodSeconds(); // ChatEphemeralTimer.periodSeconds: duration in seconds
-        var disappearing = new NodeBuilder()
+        var disappearing = new StanzaBuilder()
                 .description("disappearing_mode")
                 .attribute("duration", seconds)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "disappearing_mode")
                 .attribute("to", JidServer.user())
@@ -9957,26 +9993,26 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (participants.isEmpty()) {
             throw new IllegalArgumentException("At least one participant is required");
         }
-        var createChildren = new ArrayList<Node>(participants.size() + 1);
+        var createChildren = new ArrayList<Stanza>(participants.size() + 1);
         for (var participant : participants) {
-            createChildren.add(new NodeBuilder()
+            createChildren.add(new StanzaBuilder()
                     .description("participant")
                     .attribute("jid", participant)
                     .build());
         }
         var ephemeralSeconds = ephemeralTimer.periodSeconds();
         if (ephemeralSeconds != 0) {
-            createChildren.add(new NodeBuilder()
+            createChildren.add(new StanzaBuilder()
                     .description("ephemeral")
                     .attribute("expiration", ephemeralSeconds)
                     .build());
         }
-        var createNode = new NodeBuilder()
+        var createNode = new StanzaBuilder()
                 .description("create")
                 .attribute("subject", subject)
                 .content(createChildren)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", Jid.of(JidServer.groupOrCommunity()))
@@ -10034,7 +10070,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      */
     private void dispatchLeaveGroup(List<Jid> targets) {
         var request = new IqGroupExitRequest(targets, IqGroupExitRequest.Mode.GROUP);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqGroupExitResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqGroupExitResponse.Success _ -> { /* per-target codes are observational */ }
@@ -10064,9 +10100,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJob", exports = "mexGetGroupInfo",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<GroupMetadata> queryGroupInfo(JidProvider groupProvider, boolean includeUsername,
-                                                  String participantsPhash, String queryContext) {
+                                                  String participantsPhash) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
-        var request = new FetchGroupInfoMexRequest(group.toString(), includeUsername, participantsPhash, queryContext);
+        var request = new FetchGroupInfoMexRequest(group.toString(), includeUsername, participantsPhash, MexGroupQueryContext.UNKNOWN);
         var response = sendNode(request);
         return FetchGroupInfoMexResponse.of(response)
                 .map(this::mapFetchGroupInfoToMetadata);
@@ -10075,7 +10111,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /** {@inheritDoc} */
     @Override
     public Optional<GroupMetadata> queryGroupInfo(JidProvider group) {
-        return queryGroupInfo(group, false, null, null);
+        return queryGroupInfo(group, false, null);
     }
 
     /** {@inheritDoc} */
@@ -10083,12 +10119,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoIncludBotsJob", exports = "mexGetGroupInfoIncludBots",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<GroupMetadata> queryGroupInfoIncludingBots(JidProvider groupProvider, boolean includeUsername,
-                                                               String participantsPhash, String queryContext) {
+                                                               String participantsPhash) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
-        var request = new FetchGroupInfoIncludBotsMexRequest(group.toString(), includeUsername, participantsPhash, queryContext);
+        var request = new FetchGroupInfoIncludBotsMexRequest(group.toString(), includeUsername, participantsPhash, MexGroupQueryContext.UNKNOWN);
         var response = sendNode(request);
         return FetchGroupInfoIncludBotsMexResponse.of(response)
-                .map(this::mapFetchGroupInfoIncludBotsToMetadata);
+                .map(this::mapFetchGroupInfoIncludeBotsToMetadata);
     }
 
     /**
@@ -10144,9 +10180,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     }
                     var role = edge.role()
                             .map(String::toLowerCase)
-                            .filter(r -> !r.isEmpty() && !"member".equals(r))
-                            .map(GroupPartipantRole::of)
-                            .orElse(GroupPartipantRole.USER);
+                            .flatMap(GroupPartipantRole::of)
+                            .orElse(GroupPartipantRole.MEMBER);
                     return new GroupParticipantBuilder()
                             .userJid(participantJid)
                             .rank(role)
@@ -10227,7 +10262,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param response the non-{@code null} parsed MEX response
      * @return the domain-level {@link GroupMetadata}; never {@code null}
      */
-    private GroupMetadata mapFetchGroupInfoIncludBotsToMetadata(FetchGroupInfoIncludBotsMexResponse response) {
+    private GroupMetadata mapFetchGroupInfoIncludeBotsToMetadata(FetchGroupInfoIncludBotsMexResponse response) {
         var jid = response.id().map(Jid::of).orElseThrow(() -> new NoSuchElementException("Missing id in group info response"));
         var subject = response.subject().flatMap(FetchGroupInfoIncludBotsMexResponse.Subject::value).orElse("");
         var subjectAuthor = response.subject()
@@ -10264,9 +10299,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     }
                     var role = edge.role()
                             .map(String::toLowerCase)
-                            .filter(r -> !r.isEmpty() && !"member".equals(r))
-                            .map(GroupPartipantRole::of)
-                            .orElse(GroupPartipantRole.USER);
+                            .flatMap(GroupPartipantRole::of)
+                            .orElse(GroupPartipantRole.MEMBER);
                     return new GroupParticipantBuilder()
                             .userJid(participantJid)
                             .rank(role)
@@ -10338,18 +10372,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInviteCodeJobQuery.graphql", exports = "params.id",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public Optional<String> queryGroupInviteCode(JidProvider groupProvider, String queryContext) {
-        var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
-        var request = new FetchGroupInviteCodeMexRequest(group.toString(), queryContext);
-        var response = sendNode(request);
-        return FetchGroupInviteCodeMexResponse.of(response)
-                .flatMap(FetchGroupInviteCodeMexResponse::inviteCode);
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @WhatsAppWebExport(moduleName = "WAWebMexCreateInviteCodeJob", exports = "mexCreateInviteCode",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public String createGroupInviteCode(JidProvider receiverProvider, String entryPoint) {
@@ -10366,45 +10388,39 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebGroupCommunityJob", exports = "sendCreateCommunity",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public CommunityMetadata createCommunity(String name, String description) {
-        return createCommunity(name, description, ChatEphemeralTimer.OFF);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WAWebGroupCommunityJob", exports = "sendCreateCommunity",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public CommunityMetadata createCommunity(String name, String description, ChatEphemeralTimer ephemeralTimer) {
-        Objects.requireNonNull(name, "name cannot be null");
-        Objects.requireNonNull(ephemeralTimer, "ephemeralTimer cannot be null");
-        var createChildren = new ArrayList<Node>(4);
+    public CommunityMetadata createCommunity(CommunityCreate create) {
+        Objects.requireNonNull(create, "create cannot be null");
+        var name = create.name();
+        var description = create.description().orElse(null);
+        var ephemeralTimer = create.ephemeralTimer();
+        var createChildren = new ArrayList<Stanza>(4);
         if (description != null && !description.isEmpty()) {
-            createChildren.add(new NodeBuilder()
+            createChildren.add(new StanzaBuilder()
                     .description("description")
                     .attribute("id", RandomIdUtils.generateSid())
-                    .content(new NodeBuilder()
+                    .content(new StanzaBuilder()
                             .description("body")
                             .content(description.getBytes(StandardCharsets.UTF_8))
                             .build())
                     .build());
         }
-        createChildren.add(new NodeBuilder()
+        createChildren.add(new StanzaBuilder()
                 .description("parent")
                 .attribute("default_membership_approval_mode", "request_required")
                 .build());
         var ephemeralSeconds = ephemeralTimer.periodSeconds();
         if (ephemeralSeconds != 0) { // ephemeralArgs OPTIONAL_CHILD is only emitted when a non-zero timer is requested
-            createChildren.add(new NodeBuilder()
+            createChildren.add(new StanzaBuilder()
                     .description("ephemeral")
                     .attribute("expiration", ephemeralSeconds)
                     .build());
         }
-        var createNode = new NodeBuilder()
+        var createNode = new StanzaBuilder()
                 .description("create")
                 .attribute("subject", name)
                 .content(createChildren)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", Jid.of(JidServer.groupOrCommunity()))
@@ -10428,7 +10444,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
         var request = new SmaxGroupsDeleteParentGroupRequest(community);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         switch (SmaxGroupsDeleteParentGroupResponse.of(response, requestNode.build()).orElse(null)) {
             case SmaxGroupsDeleteParentGroupResponse.Success _ -> { /* deactivation accepted */ }
@@ -10450,7 +10466,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
         var request = new IqGroupExitRequest(List.of(community), IqGroupExitRequest.Mode.LINKED_GROUPS);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         switch (IqGroupExitResponse.of(response, requestNode.build()).orElse(null)) {
             case IqGroupExitResponse.Success _ -> { /* per-target codes are observational */ }
@@ -10491,7 +10507,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!community.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var request = new FetchSubgroupSuggestionsMexRequest(community.toString(), "INTERACTIVE", null);
+        var request = new FetchSubgroupSuggestionsMexRequest(community.toString(), MexGroupQueryContext.INTERACTIVE, null);
         var response = sendNode(request);
         return FetchSubgroupSuggestionsMexResponse.of(response)
                 .flatMap(FetchSubgroupSuggestionsMexResponse::subGroupSuggestions)
@@ -10510,22 +10526,18 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSubgroupSuggestionsActionJob", exports = "sendSubgroupSuggestionsAction",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void approveSubgroupSuggestion(JidProvider communityProvider, JidProvider suggestedSubgroupProvider, JidProvider suggestionCreatorProvider) {
-        var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
-        var suggestedSubgroup = Objects.requireNonNull(suggestedSubgroupProvider, "suggestedSubgroup cannot be null").toJid();
-        var suggestionCreator = Objects.requireNonNull(suggestionCreatorProvider, "suggestionCreator cannot be null").toJid();
-        subgroupSuggestionsAction(community, suggestedSubgroup, suggestionCreator, true);
+    public void approveSubgroupSuggestion(SubgroupSuggestion suggestion) {
+        Objects.requireNonNull(suggestion, "suggestion cannot be null");
+        subgroupSuggestionsAction(suggestion.community(), suggestion.suggestedSubgroup(), suggestion.suggestionCreator(), true);
     }
 
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSubgroupSuggestionsActionJob", exports = "sendSubgroupSuggestionsAction",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void rejectSubgroupSuggestion(JidProvider communityProvider, JidProvider suggestedSubgroupProvider, JidProvider suggestionCreatorProvider) {
-        var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
-        var suggestedSubgroup = Objects.requireNonNull(suggestedSubgroupProvider, "suggestedSubgroup cannot be null").toJid();
-        var suggestionCreator = Objects.requireNonNull(suggestionCreatorProvider, "suggestionCreator cannot be null").toJid();
-        subgroupSuggestionsAction(community, suggestedSubgroup, suggestionCreator, false);
+    public void rejectSubgroupSuggestion(SubgroupSuggestion suggestion) {
+        Objects.requireNonNull(suggestion, "suggestion cannot be null");
+        subgroupSuggestionsAction(suggestion.community(), suggestion.suggestedSubgroup(), suggestion.suggestionCreator(), false);
     }
 
     /**
@@ -10555,7 +10567,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 approve ? List.of(entry) : List.of(),
                 approve ? List.of() : List.of(entry),
                 List.of());
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         switch (SmaxGroupsSubGroupSuggestionsActionResponse.of(response, requestNode.build()).orElse(null)) {
             case SmaxGroupsSubGroupSuggestionsActionResponse.Success _ -> { /* per-suggestion outcomes are observational */ }
@@ -10602,7 +10614,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!community.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var request = new FetchAllSubgroupsMexRequest(community.toString(), "INTERACTIVE", null);
+        var request = new FetchAllSubgroupsMexRequest(community.toString(), MexGroupQueryContext.INTERACTIVE, null);
         var response = sendNode(request);
         var parsed = FetchAllSubgroupsMexResponse.of(response)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Fetch all subgroups response did not parse"));
@@ -10667,7 +10679,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new IllegalArgumentException("toRemove cannot be empty");
         }
         var request = new SmaxGroupsRemoveParticipantsRequest(group, List.copyOf(toRemove), removeLinkedGroups);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsRemoveParticipantsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -10703,9 +10715,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebGroupModifyParticipantsJob", exports = "demoteGroupParticipants",
             adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebDemoteNewsletterAdminAction", exports = "demoteNewsletterAdminAction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public void demoteGroupParticipants(JidProvider groupProvider, Collection<? extends JidProvider> toDemoteProvider) {
         var toDemote = Objects.requireNonNull(toDemoteProvider, "toDemote cannot be null").stream().map(JidProvider::toJid).toList();
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
+        if (group.hasNewsletterServer()) {
+            for (var admin : toDemote) {
+                sendNodeWithNoResponse(new DemoteNewsletterAdminMexRequest(group.toString(), admin.toString()));
+            }
+            return;
+        }
         modifyGroupParticipants(group, toDemote, "demote");
     }
 
@@ -10736,18 +10756,18 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (participants.isEmpty()) {
             throw new IllegalArgumentException("At least one participant is required");
         }
-        var participantNodes = new ArrayList<Node>(participants.size());
+        var participantNodes = new ArrayList<Stanza>(participants.size());
         for (var participant : participants) {
-            participantNodes.add(new NodeBuilder()
+            participantNodes.add(new StanzaBuilder()
                     .description("participant")
                     .attribute("jid", participant)
                     .build());
         }
-        var actionNode = new NodeBuilder()
+        var actionNode = new StanzaBuilder()
                 .description(action)
                 .content(participantNodes)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", group)
@@ -10766,10 +10786,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * {@code error} attribute (defaulted to {@code 200}) as the map
      * value.
      *
-     * @param response the server response node
+     * @param response the server response stanza
      * @return a map from participant JID to parsed status
      */
-    private Map<Jid, GroupParticipantStatus> parseParticipantStatus(Node response) {
+    private Map<Jid, GroupParticipantStatus> parseParticipantStatus(Stanza response) {
         var result = new LinkedHashMap<Jid, GroupParticipantStatus>();
         response.streamChildren()
                 .flatMap(entry -> entry.streamChildren("participant"))
@@ -10812,90 +10832,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(stickerHash, "stickerHash cannot be null");
         var mutation = removeRecentStickerMutationFactory.getRemoveRecentStickerMutation(stickerHash);
         webAppStateService.pushPatches(RemoveRecentStickerAction.COLLECTION_NAME, List.of(mutation));
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WAWebPollsSendPollCreationMsgAction", exports = "sendPollCreation",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    @WhatsAppWebExport(moduleName = "WAWebPollsSendPollCreationMsgAction", exports = "createPollCreationMsgData",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public ChatMessageInfo createPoll(PollCreate create) {
-        Objects.requireNonNull(create, "create cannot be null");
-        var chat = create.chat();
-        var question = create.question();
-        var options = create.options();
-        var selectableCount = create.selectableCount();
-        var selfJid = store.accountStore().jid()
-        .orElseThrow(() -> new IllegalArgumentException("Not logged in"));
-        var messageSecret = new byte[32];
-        ThreadLocalRandom.current().nextBytes(messageSecret);
-        var pollOptions = options.stream()
-        .map(name -> new PollCreationMessageOptionBuilder().optionName(name).build())
-                .toList();
-        var poll = new PollCreationMessageBuilder()
-        .name(question)
-                .options(pollOptions)
-                .selectableOptionsCount(selectableCount)
-                .encKey(messageSecret)
-                .build();
-        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, selfJid);
-        var key = new MessageKeyBuilder()
-        .id(messageId)
-                .parentJid(chat)
-                .fromMe(true)
-                .senderJid(selfJid)
-                .build();
-        var messageInfo = new ChatMessageInfoBuilder()
-                .status(MessageStatus.PENDING)
-                .senderJid(selfJid)
-                .key(key)
-                .message(MessageContainer.of(poll))
-                .timestamp(Instant.now())
-                .build();
-        messageService.send(messageInfo);
-        commitPollsActionsMetric(                chat,
-                PollActionType.CREATE_POLL,
-                messageInfo.timestamp().orElse(Instant.now()),
-                pollOptions.size()
-        );
-        return messageInfo;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WAWebPollsSendVoteMsgAction", exports = "sendVote",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public void votePoll(MessageKey pollKey, List<String> selectedOptions) {
-        Objects.requireNonNull(pollKey, "pollKey cannot be null");
-        Objects.requireNonNull(selectedOptions, "selectedOptions cannot be null");
-        var parentJid = pollKey.parentJid()
-                .orElseThrow(() -> new IllegalArgumentException("pollKey must carry a parentJid"));
-        var pollCreationMessage = store.chatStore().findMessageByKey(pollKey).orElse(null);
-        if (!(pollCreationMessage instanceof ChatMessageInfo chatPoll)) {
-            throw new IllegalArgumentException("Poll creation message not found in store for key " + pollKey);
-        }
-        var voterJid = store.accountStore().jid()
-                .orElseThrow(() -> new IllegalStateException("votePoll requires a connected user"));
-        var vote = EncMessageFactory.encryptPollVote(selectedOptions, chatPoll, voterJid);
-        var pollUpdate = new PollUpdateMessageBuilder()
-                .pollCreationMessageKey(pollKey)
-                .vote(vote)
-                .senderTimestampMs(Instant.now())
-                .build();
-        messageService.send(parentJid, MessageContainer.of(pollUpdate));
-        //   Cobalt does not maintain a PollVoteCollection keyed by parent+sender,
-        //   so the CHANGE_VOTE branch (previous-vote lookup) cannot be distinguished
-        //   here; we classify any non-empty selection as VOTE and empty as REMOVE_VOTE.
-        var pollAction = selectedOptions.isEmpty()
-                ? PollActionType.REMOVE_VOTE
-                : PollActionType.VOTE;
-        var pollCreationTimestamp = chatPoll.timestamp().orElse(Instant.now());
-        var pollOptionsCount = 0;
-        if (chatPoll.message().content() instanceof PollCreationMessage poll) {
-            pollOptionsCount = poll.options().size();
-        }
-        commitPollsActionsMetric(parentJid, pollAction, pollCreationTimestamp, pollOptionsCount);
     }
 
     /** {@inheritDoc} */
@@ -11583,7 +11519,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<CtwaAccessTokenSession> queryAccessTokenAndSessionCookies(String code, JidProvider fromUserJidProvider) {
         var fromUserJid = Objects.requireNonNull(fromUserJidProvider, "fromUserJid cannot be null").toJid();
         var request = new SmaxGetAccessTokenAndSessionCookiesRequest(code, fromUserJid);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetAccessTokenAndSessionCookiesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -11627,7 +11563,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendGetAccountNonceRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> queryAccountNonce(String identifierScope) {
         var request = new SmaxGetAccountNonceRequest(identifierScope);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetAccountNonceResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -11649,7 +11585,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 featuresMetaVerified ? "1" : "0",
                 featuresMarketingMessages ? "1" : "0",
                 featuresGenai ? "1" : "0");
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetBusinessEligibilityResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -11709,7 +11645,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendGetLinkedAccountsRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessLinkedAccounts> queryLinkedAccounts() {
         var request = new SmaxGetLinkedAccountsRequest();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetLinkedAccountsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -11795,7 +11731,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendGetPrivacySettingRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessDataSharingConsent> refreshBusinessPrivacySetting() {
         var request = new SmaxGetPrivacySettingRequest();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetPrivacySettingResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -11825,7 +11761,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendSetPrivacySettingRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public void editBusinessPrivacySetting(BusinessDataSharingConsent dataSharingConsent) {
         var request = new SmaxSetPrivacySettingRequest(dataSharingConsent == null ? null : dataSharingConsent.wireValue());
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxSetPrivacySettingResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -11856,7 +11792,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(jidProvider, "jid cannot be null").toJid();
         Objects.requireNonNull(action, "action cannot be null");
         var request = new SmaxUpdatePreferenceRequest(action.wireValue(), jid, feedback);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxUpdatePreferenceResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -11876,11 +11812,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutRPC",
             exports = "sendGetSMBMeteredMessagingCheckoutRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public Optional<BusinessMeteredMessagingCheckout> queryMeteredMessagingCheckout(List<? extends JidProvider> participantsProvider, boolean useAdAccount, boolean skipDedupe, String offerId, List<BusinessMeteredMessagingPendingCampaign> pendingCampaigns) {
-        var participants = Objects.requireNonNull(participantsProvider, "participants cannot be null").stream().map(JidProvider::toJid).toList();
+    public Optional<BusinessMeteredMessagingCheckout> queryMeteredMessagingCheckout(BusinessMeteredMessagingCheckoutRequest request) {
+        Objects.requireNonNull(request, "request cannot be null");
+        var participants = request.participants();
         // Translate the public domain pending-campaign list onto the wire-format SmaxGetSMBMeteredMessagingCheckoutPendingCampaign carriers
         List<SmaxGetSMBMeteredMessagingCheckoutPendingCampaign> wireCampaigns = null;
-        if (pendingCampaigns != null) {
+        var pendingCampaigns = request.pendingCampaigns();
+        if (!pendingCampaigns.isEmpty()) {
             wireCampaigns = new ArrayList<>(pendingCampaigns.size());
             for (var campaign : pendingCampaigns) {
                 wireCampaigns.add(new SmaxGetSMBMeteredMessagingCheckoutPendingCampaign(
@@ -11888,8 +11826,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                         campaign.sendTimestamp().isPresent() ? campaign.sendTimestamp().getAsInt() : null));
             }
         }
-        var request = new SmaxGetSMBMeteredMessagingCheckoutRequest(participants, useAdAccount, skipDedupe, offerId, wireCampaigns);
-        var requestNode = request.toNode();
+        var smaxRequest = new SmaxGetSMBMeteredMessagingCheckoutRequest(participants, request.useAdAccount(), request.skipDedupe(), request.offerId().orElse(null), wireCampaigns);
+        var requestNode = smaxRequest.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGetSMBMeteredMessagingCheckoutResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -11905,7 +11843,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /** {@inheritDoc} */
     @Override
     public Optional<BusinessMeteredMessagingCheckout> queryMeteredMessagingCheckout(List<? extends JidProvider> participants) {
-        return queryMeteredMessagingCheckout(participants, false, false, null, null);
+        var resolved = Objects.requireNonNull(participants, "participants cannot be null")
+                .stream().map(JidProvider::toJid).toList();
+        return queryMeteredMessagingCheckout(new BusinessMeteredMessagingCheckoutRequestBuilder()
+                .participants(resolved)
+                .build());
     }
 
     /**
@@ -11959,7 +11901,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<CtwaSilentNonceResult> querySilentNonce(JidProvider fromUserJidProvider) {
         var fromUserJid = Objects.requireNonNull(fromUserJidProvider, "fromUserJid cannot be null").toJid();
         var request = new SmaxRequestSilentNonceRequest(fromUserJid);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxRequestSilentNonceResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -11983,7 +11925,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public boolean sendAccountRecoveryNonce(JidProvider fromUserJidProvider) {
         var fromUserJid = Objects.requireNonNull(fromUserJidProvider, "fromUserJid cannot be null").toJid();
         var request = new SmaxSendAccountRecoveryNonceRequest(fromUserJid);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxSendAccountRecoveryNonceResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -12009,7 +11951,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             wireList.add(toSmaxAdMediaEntry(entry));
         }
         var request = new SmaxUploadAdMediaRequest(wirePrimary, wireList);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxUploadAdMediaResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -12052,7 +11994,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     new SmaxAccountSetPaymentsTOSv3ConsumerVariant.UpiConsumer(upi.additionalNotices());
         };
         var request = new SmaxAccountSetPaymentsTOSv3Request(acceptPayTosVersion, wireVariant);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxAccountSetPaymentsTOSv3Response.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -12082,7 +12024,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                         (a, _) -> a,
                         LinkedHashMap::new));
         var request = new SmaxBrPaymentCreateCustomPaymentMethodRequest(accountDeviceId, customPaymentMethodType, customPaymentMethodUpdate, customPaymentMethodFlow, metadata);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxBrPaymentCreateCustomPaymentMethodResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -12118,16 +12060,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     request.stanzaId(), targetServerId, plaintext);
         } else {
             var originMarker = request.originTag()
-                    .map(tag -> new NodeBuilder().description("meta").attribute("origin", tag).build())
+                    .map(tag -> new StanzaBuilder().description("meta").attribute("origin", tag).build())
                     .orElse(null);
             var mediaSenderTag = request.mediaContentId()
-                    .map(id -> new NodeBuilder().description("plaintext").attribute("mediatype", "url").attribute("content_id", id).build())
+                    .map(id -> new StanzaBuilder().description("plaintext").attribute("mediatype", "url").attribute("content_id", id).build())
                     .orElse(null);
             payload = new SmaxMessagePublishNewsletterPayload.WithClientIdOnly(
                     request.stanzaId(), originMarker, mediaSenderTag, plaintext);
         }
         var smaxRequest = new SmaxMessagePublishNewsletterRequest(newsletterJid, payload);
-        var requestNode = smaxRequest.toNode();
+        var requestNode = smaxRequest.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxMessagePublishNewsletterResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -12156,7 +12098,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 ? new SmaxStatusPublishPostNewsletterStatusPayload.WithServerId(request.stanzaId(), targetServerId, plaintext)
                 : new SmaxStatusPublishPostNewsletterStatusPayload.WithClientIdOnly(request.stanzaId(), plaintext);
         var smaxRequest = new SmaxStatusPublishPostNewsletterStatusRequest(newsletterJid, payload);
-        var requestNode = smaxRequest.toNode();
+        var requestNode = smaxRequest.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxStatusPublishPostNewsletterStatusResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -12174,9 +12116,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    public Node sendNode(IqOperation.Request request) {
+    public Stanza sendNode(IqStanza.Request request) {
         Objects.requireNonNull(request, "request cannot be null");
-        return sendNode(request.toNode());
+        return sendNode(request.toStanza());
     }
 
     /** {@inheritDoc} */
@@ -12189,7 +12131,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                                                               String directConnectionEncryptedInfo) {
         var catalogJid = Objects.requireNonNull(catalogJidProvider, "catalogJid cannot be null").toJid();
         var request = new IqQueryProductListCatalogRequest(catalogJid, productIds, width, height, directConnectionEncryptedInfo);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqQueryProductListCatalogResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqQueryProductListCatalogResponse.Success success -> success.products()
@@ -12210,6 +12152,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     public List<BusinessProduct> queryBusinessCatalogProducts(JidProvider catalogJid, List<String> productIds, int width, int height) {
         return queryBusinessCatalogProducts(catalogJid, productIds, width, height, null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public List<BusinessProduct> queryBusinessCatalogProducts(JidProvider catalogJid, List<String> productIds) {
+        // 100x100 matches WhatsApp Web's default catalog image dimensions (WAWebQueryCatalogHasCategories)
+        return queryBusinessCatalogProducts(catalogJid, productIds, 100, 100, null);
     }
 
     /**
@@ -12322,7 +12271,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void editBusinessCoverPhoto(long id, Instant ts, byte[] token) {
         Objects.requireNonNull(ts, "ts cannot be null");
         var request = new IqSendCoverPhotoRequest(id, ts.getEpochSecond(), token);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqSendCoverPhotoResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqSendCoverPhotoResponse.Success _ -> {
@@ -12352,7 +12301,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             entries.add(new IqClearDirtyBitsRequest.DirtyEntry(entry.getKey(), entry.getValue()));
         }
         var request = new IqClearDirtyBitsRequest(entries);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqClearDirtyBitsResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqClearDirtyBitsResponse.Success _ -> {
@@ -12420,7 +12369,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void deleteTosNotice(String noticeId) {
         Objects.requireNonNull(noticeId, "noticeId cannot be null");
         var request = new IqDeleteTosRequest(noticeId);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqDeleteTosResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqDeleteTosResponse.Success _ -> {
@@ -12445,7 +12394,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void acknowledgeTosNotices(List<String> noticeIds) {
         Objects.requireNonNull(noticeIds, "noticeIds cannot be null");
         var request = new IqUpdateTosRequest(List.copyOf(noticeIds));
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqUpdateTosResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqUpdateTosResponse.Success _ -> {
@@ -12469,7 +12418,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "digestKey", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<IdentityKeyDigest> queryKeyDigest() {
         var request = new IqDigestKeyRequest();
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqDigestKeyResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqDigestKeyResponse.Success success -> Optional.of(toIdentityKeyDigest(success));
@@ -12510,7 +12459,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public List<IdentityKey> queryIdentityKeys(List<? extends JidProvider> deviceJidsProvider) {
         var deviceJids = Objects.requireNonNull(deviceJidsProvider, "deviceJids cannot be null").stream().map(JidProvider::toJid).toList();
         var request = new IqGetIdentityKeysRequest(deviceJids);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqGetIdentityKeysResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqGetIdentityKeysResponse.Success success -> {
@@ -12541,7 +12490,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void rotateSignedPreKey(SignalSignedPreKey signedPreKey) {
         Objects.requireNonNull(signedPreKey, "signedPreKey cannot be null");
         var request = new IqRotateKeyRequest(toIqUploadPreKeysSignedPreKey(signedPreKey));
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqRotateKeyResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqRotateKeyResponse.Success _ -> {
@@ -12571,7 +12520,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 bundle.identityPublicKey(),
                 toIqUploadPreKeysList(bundle.oneTimePreKeys()),
                 toIqUploadPreKeysSignedPreKey(bundle.signedPreKey()));
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqUploadPreKeysResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqUploadPreKeysResponse.Success _ -> {
@@ -12601,7 +12550,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 bundle.identityPublicKey(),
                 toIqUploadPreKeysList(bundle.oneTimePreKeys()),
                 toIqUploadPreKeysSignedPreKey(bundle.signedPreKey()));
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqUploadPrekeysForRegResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqUploadPrekeysForRegResponse.Success _ -> {
@@ -12627,7 +12576,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(blindedCredential, "blindedCredential cannot be null");
         Objects.requireNonNull(projectName, "projectName cannot be null");
         var request = new IqIssuePrivateStatsTokenRequest(blindedCredential, projectName);
-        var requestBuilder = request.toNode();
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         return switch (IqIssuePrivateStatsTokenResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqIssuePrivateStatsTokenResponse.Success success -> Optional.of(new PrivateStatsToken(
@@ -12646,76 +12595,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                             "Issue private stats token server error: code=" + serverError.errorCode()
                                     + ", text=" + serverError.errorText().orElse(null));
             case null -> Optional.empty();
-        };
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WAWebSyncdServerSync",
-            exports = "serverSync", adaptation = WhatsAppAdaptation.ADAPTED)
-    public AppStateSyncResult syncAppState(List<AppStateSyncCollection> collections) {
-        Objects.requireNonNull(collections, "collections cannot be null");
-        var wireCollections = new ArrayList<IqSyncdServerSyncRequestCollection>(collections.size());
-        for (var collection : collections) {
-            wireCollections.add(new IqSyncdServerSyncRequestCollection(
-                    collection.name(),
-                    collection.version().isPresent() ? collection.version().getAsLong() : null,
-                    collection.patch().orElse(null)));
-        }
-        var request = new IqSyncdServerSyncRequest(wireCollections);
-        var requestBuilder = request.toNode();
-        var response = sendNode(requestBuilder);
-        return switch (IqSyncdServerSyncResponse.of(response, requestBuilder.build()).orElse(null)) {
-            case IqSyncdServerSyncResponse.Success success -> toAppStateSyncResult(success);
-            case IqSyncdServerSyncResponse.ClientError clientError ->
-                    throw new WhatsAppServerRuntimeException(
-                            "Syncd server sync rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
-            case IqSyncdServerSyncResponse.ServerError serverError ->
-                    throw new WhatsAppServerRuntimeException(
-                            "Syncd server sync server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
-            case null -> throw new WhatsAppServerRuntimeException(
-                    "Syncd server sync: response did not match any documented variant");
-        };
-    }
-
-    /**
-     * Projects a wire-format {@link IqSyncdServerSyncResponse.Success}
-     * onto its public {@link AppStateSyncResult} domain projection.
-     *
-     * @param success the parsed wire-format success reply; never
-     *                {@code null}
-     * @return the populated domain projection; never {@code null}
-     */
-    private static AppStateSyncResult toAppStateSyncResult(IqSyncdServerSyncResponse.Success success) {
-        var collections = new ArrayList<AppStateSyncCollectionResult>();
-        for (var entry : success.collections()) {
-            collections.add(new AppStateSyncCollectionResult(
-                    entry.name(),
-                    toAppStateSyncStatus(entry.state()),
-                    entry.version().orElse(null),
-                    new ArrayList<>(entry.patches()),
-                    entry.snapshot().orElse(null)));
-        }
-        return new AppStateSyncResult(collections);
-    }
-
-    /**
-     * Projects a wire-side {@link IqSyncdServerSyncCollectionState}
-     * onto its public {@link AppStateSyncStatus} domain projection.
-     *
-     * @param state the wire-side state; never {@code null}
-     * @return the matching domain status; never {@code null}
-     */
-    private static AppStateSyncStatus toAppStateSyncStatus(IqSyncdServerSyncCollectionState state) {
-        return switch (state) {
-            case SUCCESS -> AppStateSyncStatus.SUCCESS;
-            case SUCCESS_HAS_MORE -> AppStateSyncStatus.SUCCESS_HAS_MORE;
-            case CONFLICT -> AppStateSyncStatus.CONFLICT;
-            case CONFLICT_HAS_MORE -> AppStateSyncStatus.CONFLICT_HAS_MORE;
-            case ERROR_FATAL -> AppStateSyncStatus.ERROR_FATAL;
-            case ERROR_RETRY -> AppStateSyncStatus.ERROR_RETRY;
         };
     }
 
@@ -12902,12 +12781,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     public LinkedWhatsAppClient addNewStatusListener(LinkedNewStatusListener listener) {
-        Objects.requireNonNull(listener, "listener cannot be null");
-        addListener(listener);
-        return this;
-    }
-
-    public LinkedWhatsAppClient addAccountTypeChangedListener(LinkedAccountTypeChangedListener listener) {
         Objects.requireNonNull(listener, "listener cannot be null");
         addListener(listener);
         return this;
@@ -13200,7 +13073,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             };
     }
 
-    // node/smax/groups/ or node/smax/newsletters/, blocks for the
+    // stanza/smax/groups/ or stanza/smax/newsletters/, blocks for the
     // relay's reply, and unwraps the Smax<Op>Response chain into the
     // Success projection. ClientError / ServerError variants are
     // surfaced through WhatsAppServerRuntimeException with the relay's
@@ -13213,7 +13086,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void acknowledgeGroup(JidProvider groupProvider) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var request = new SmaxGroupsAcknowledgeGroupRequest(group);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsAcknowledgeGroupResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -13239,7 +13112,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var acceptCode = accept.acceptCode();
         var acceptExpiration = accept.acceptExpiration();
         var request = new SmaxGroupsAcceptGroupAddRequest(group, acceptCode, acceptExpiration, acceptAdmin);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsAcceptGroupAddResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13255,12 +13128,19 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
+    public List<GroupMetadata> queryGroupMetadata(JidProvider... groups) {
+        Objects.requireNonNull(groups, "groups cannot be null");
+        return queryGroupMetadata(List.of(groups));
+    }
+
+    /** {@inheritDoc} */
+    @Override
     @WhatsAppWebExport(moduleName = "WASmaxGroupsBatchGetGroupInfoRPC", exports = "sendBatchGetGroupInfoRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public List<GroupMetadata> batchQueryGroupInfo(Collection<? extends JidProvider> groupsProvider) {
+    public List<GroupMetadata> queryGroupMetadata(Collection<? extends JidProvider> groupsProvider) {
         var groups = Objects.requireNonNull(groupsProvider, "groups cannot be null").stream().map(JidProvider::toJid).toList();
         var request = new SmaxGroupsBatchGetGroupInfoRequest(List.copyOf(groups));
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsBatchGetGroupInfoResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13293,7 +13173,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var applicants = Objects.requireNonNull(applicantsProvider, "applicants cannot be null").stream().map(JidProvider::toJid).toList();
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var request = new SmaxGroupsCancelGroupMembershipRequestsRequest(group, List.copyOf(applicants));
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsCancelGroupMembershipRequestsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13375,7 +13255,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     private SubgroupSuggestionResult dispatchSubgroupSuggestion(Jid community,
                                                                  SmaxGroupsCreateSubGroupSuggestionSuggestion suggestion) {
         var request = new SmaxGroupsCreateSubGroupSuggestionRequest(community, suggestion);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsCreateSubGroupSuggestionResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13427,7 +13307,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             return Optional.empty();
         }
         var request = new SmaxGroupsDeleteParentGroupRequest(community);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsDeleteParentGroupResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -13453,7 +13333,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .map(jid -> new SmaxGroupsGetGroupProfilePicturesRequest.PictureRequest(jid, null, null, null, null))
                 .toList();
         var request = new SmaxGroupsGetGroupProfilePicturesRequest(null, null, pictures);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsGetGroupProfilePicturesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13490,7 +13370,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<GroupMetadata> queryInviteGroupInfo(String inviteCode) {
         Objects.requireNonNull(inviteCode, "inviteCode cannot be null");
         var request = new SmaxGroupsGetInviteGroupInfoRequest(inviteCode);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsGetInviteGroupInfoResponse.of(response).orElse(null);
         return switch (parsed) {
@@ -13512,12 +13392,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxGroupsGetLinkedGroupRPC", exports = "sendGetLinkedGroupRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public Optional<ChatMetadata> queryLinkedGroup(JidProvider communityProvider, String queryLinkedType, JidProvider queryLinkedJidProvider) {
+    public Optional<ChatMetadata> queryLinkedGroup(JidProvider communityProvider, LinkedGroupType queryLinkedType, JidProvider queryLinkedJidProvider) {
         var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
         var queryLinkedJid = Objects.requireNonNull(queryLinkedJidProvider, "queryLinkedJid cannot be null").toJid();
         Objects.requireNonNull(queryLinkedType, "queryLinkedType cannot be null");
-        var request = new SmaxGroupsGetLinkedGroupRequest(community, queryLinkedType, queryLinkedJid);
-        var requestNode = request.toNode();
+        var request = new SmaxGroupsGetLinkedGroupRequest(community, queryLinkedType.wireValue(), queryLinkedJid);
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsGetLinkedGroupResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13537,7 +13417,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Map<Jid, Jid> queryLinkedGroupsParticipants(JidProvider communityProvider) {
         var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
         var request = new SmaxGroupsGetLinkedGroupsParticipantsRequest(community);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsGetLinkedGroupsParticipantsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13563,7 +13443,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public List<GroupMembershipApprovalRequest> queryGroupMembershipApprovalRequests(JidProvider groupProvider) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var request = new SmaxGroupsGetMembershipApprovalRequestsRequest(group);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsGetMembershipApprovalRequestsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13619,7 +13499,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<GroupMetadata> queryParticipatingGroups(boolean includeParticipants, boolean includeDescription) {
         var request = new SmaxGroupsGetParticipatingGroupsRequest(includeParticipants, includeDescription);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsGetParticipatingGroupsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13650,7 +13530,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public List<GroupMessageReport> queryReportedMessages(JidProvider groupProvider) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var request = new SmaxGroupsGetReportedMessagesRequest(group);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsGetReportedMessagesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13683,12 +13563,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxGroupsJoinLinkedGroupRPC", exports = "sendJoinLinkedGroupRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public boolean joinLinkedGroup(JidProvider communityProvider, JidProvider subgroupProvider, String joinLinkedGroupType) {
+    public boolean joinLinkedGroup(JidProvider communityProvider, JidProvider subgroupProvider, LinkedGroupType linkedGroupType) {
         var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
         var subgroup = Objects.requireNonNull(subgroupProvider, "subgroup cannot be null").toJid();
-        Objects.requireNonNull(joinLinkedGroupType, "joinLinkedGroupType cannot be null");
-        var request = new SmaxGroupsJoinLinkedGroupRequest(community, subgroup, joinLinkedGroupType);
-        var requestNode = request.toNode();
+        Objects.requireNonNull(linkedGroupType, "linkedGroupType cannot be null");
+        var request = new SmaxGroupsJoinLinkedGroupRequest(community, subgroup, linkedGroupType.wireValue());
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsJoinLinkedGroupResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13713,7 +13593,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .map(jid -> new SmaxGroupsLinkSubGroupsRequest.RequestedGroup(jid, false))
                 .toList();
         var request = new SmaxGroupsLinkSubGroupsRequest(community, groups);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsLinkSubGroupsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13748,7 +13628,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         Objects.requireNonNull(messageId, "messageId cannot be null");
         var request = new SmaxGroupsReportMessagesRequest(group, messageId);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsReportMessagesResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -13771,7 +13651,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var participants = Objects.requireNonNull(participantsProvider, "participants cannot be null").stream().map(JidProvider::toJid).toList();
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var request = new SmaxGroupsRevokeRequestCodeRequest(group, participants);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsRevokeRequestCodeResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -13841,7 +13721,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         });
         edit.picture().ifPresent(intent -> {
             switch (intent) {
-                case GroupPicture.Set set -> sendGroupPictureIq(group, set.bytes());
+                case GroupPicture.Set set -> sendGroupPictureIq(group, set.stream());
                 case GroupPicture.Clear ignored -> sendGroupPictureIq(group, null);
             }
         });
@@ -13932,11 +13812,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param newSubject the new subject text; never {@code null}
      */
     private void sendGroupSubjectIq(Jid group, String newSubject) {
-        var subjectNode = new NodeBuilder()
+        var subjectNode = new StanzaBuilder()
                 .description("subject")
                 .content(newSubject)
                 .build();
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", group)
@@ -13958,10 +13838,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param delete {@code true} to clear the description
      */
     private void sendGroupDescriptionIq(Jid group, String body, boolean delete) {
-        var descriptionBuilder = new NodeBuilder()
+        var descriptionBuilder = new StanzaBuilder()
                 .description("description");
         if (!delete) {
-            var bodyNode = new NodeBuilder()
+            var bodyNode = new StanzaBuilder()
                     .description("body")
                     .content(body)
                     .build();
@@ -13969,7 +13849,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         } else {
             descriptionBuilder.attribute("delete", "true");
             }
-        var iqNode = new NodeBuilder()
+        var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:g2")
                 .attribute("to", group)
@@ -13987,12 +13867,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * response) is discarded because {@link #editGroupMetadata} has no
      * return slot for it.
      *
-     * @param group      the target group JID; never {@code null}
-     * @param imageBytes the new picture bytes, or {@code null} to remove
+     * @param group   the target group JID; never {@code null}
+     * @param picture the new picture stream, or {@code null} to remove
      */
-    private void sendGroupPictureIq(Jid group, byte[] imageBytes) {
-        if (imageBytes == null) {
-            var iqBuilder = new NodeBuilder()
+    private void sendGroupPictureIq(Jid group, SizedInputStream picture) {
+        if (picture == null) {
+            var iqBuilder = new StanzaBuilder()
                     .description("iq")
                     .attribute("xmlns", "w:profile:picture")
                     .attribute("to", JidServer.user())
@@ -14001,8 +13881,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             sendNode(iqBuilder);
             return;
         }
-        var request = new IqSendProfilePictureRequest(group, imageBytes);
-        var requestBuilder = request.toNode();
+        var request = new IqSendProfilePictureRequest(group, picture);
+        var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
         switch (IqSendProfilePictureResponse.of(response, requestBuilder.build()).orElse(null)) {
             case IqSendProfilePictureResponse.Success _ -> {
@@ -14057,7 +13937,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 false,
                 Boolean.TRUE.equals(groupHistory),
                 Boolean.FALSE.equals(groupHistory));
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsSetPropertyResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -14184,7 +14064,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .map(jid -> new SmaxGroupsUnlinkGroupsRequest.RequestedGroup(jid, false))
                 .toList();
         var request = new SmaxGroupsUnlinkGroupsRequest(community, groups);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupsUnlinkGroupsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14214,10 +14094,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxNewslettersGetNewsletterMessageUpdatesRPC", exports = "sendGetNewsletterMessageUpdatesRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public NewsletterMessageHistory queryNewsletterMessageUpdates(JidProvider newsletterProvider, int count, Long since, NewsletterHistoryDirection direction) {
+    public NewsletterMessageHistory queryNewsletterMessageUpdates(JidProvider newsletterProvider, int count, Instant since, NewsletterHistoryDirection direction) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        var request = new SmaxNewslettersGetNewsletterMessageUpdatesRequest(newsletter, count, since, toWireMessageUpdatesDirection(direction));
-        var requestNode = request.toNode();
+        var request = new SmaxNewslettersGetNewsletterMessageUpdatesRequest(newsletter, count, since == null ? null : since.getEpochSecond(), toWireMessageUpdatesDirection(direction));
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewslettersGetNewsletterMessageUpdatesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14289,7 +14169,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                                                                      SmaxNewslettersGetNewsletterMessagesQueryParams queryParams,
                                                                      NewsletterHistoryDirection direction) {
         var request = new SmaxNewslettersGetNewsletterMessagesRequest(count, queryParams, toWireMessagesDirection(direction));
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewslettersGetNewsletterMessagesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14339,7 +14219,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new SmaxNewslettersGetNewsletterResponsesRequest(newsletter, questionResponsesServerId,
                 questionResponsesCount, questionResponsesBefore, toWireResponsesFilter(filter), searchText);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewslettersGetNewsletterResponsesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14373,10 +14253,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxNewslettersGetNewsletterStatusUpdatesRPC", exports = "sendGetNewsletterStatusUpdatesRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public NewsletterStatusHistory queryNewsletterStatusUpdates(JidProvider newsletterProvider, int count, Long since, NewsletterHistoryDirection direction) {
+    public NewsletterStatusHistory queryNewsletterStatusUpdates(JidProvider newsletterProvider, int count, Instant since, NewsletterHistoryDirection direction) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
-        var request = new SmaxNewslettersGetNewsletterStatusUpdatesRequest(newsletter, count, since, toWireStatusUpdatesDirection(direction));
-        var requestNode = request.toNode();
+        var request = new SmaxNewslettersGetNewsletterStatusUpdatesRequest(newsletter, count, since == null ? null : since.getEpochSecond(), toWireStatusUpdatesDirection(direction));
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewslettersGetNewsletterStatusUpdatesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14448,7 +14328,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                                                                     SmaxNewslettersGetNewsletterMessagesQueryParams queryParams,
                                                                     NewsletterHistoryDirection direction) {
         var request = new SmaxNewslettersGetNewsletterStatusesRequest(count, queryParams, toWireStatusesDirection(direction));
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewslettersGetNewsletterStatusesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14516,7 +14396,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /**
      * Adapts a wire-level status-history success projection into the
      * domain {@link NewsletterStatusHistory}, projecting the envelope
-     * fields out of each status node.
+     * fields out of each status stanza.
      *
      * @param highWaterMark the relay-supplied "as of" unix-second
      *                      timestamp; may be {@code null}
@@ -14555,7 +14435,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Map<Jid, List<NewsletterMyAddOn>> queryNewsletterMyAddOns(int limit, JidProvider newsletterProvider) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new SmaxNewslettersMyAddOnsRequest(limit, newsletter);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewslettersMyAddOnsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14622,7 +14502,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Duration subscribeToNewsletterLiveUpdates(JidProvider newsletterProvider) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new SmaxNewslettersSubscribeToLiveUpdatesRequest(newsletter);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewslettersSubscribeToLiveUpdatesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14643,7 +14523,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<AbPropsBundle> queryExperimentConfig(String propsHash,
                                                           Integer propsRefreshId) {
         var request = new SmaxAbPropsGetExperimentConfigRequest(propsHash, propsRefreshId);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxAbPropsGetExperimentConfigResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14680,14 +14560,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      *                       {@code null}
      * @param abKey          the relay-returned ab-key; may be
      *                       {@code null}
-     * @param propsNode      the raw {@code <props/>} subtree; never
+     * @param propsStanza      the raw {@code <props/>} subtree; never
      *                       {@code null}
      * @return the projected {@link AbPropsBundle}
      */
     private static AbPropsBundle toAbPropsBundle(Jid groupJid, String hash, Integer refresh,
-                                                 Integer refreshId, String abKey, Node propsNode) {
+                                                 Integer refreshId, String abKey, Stanza propsStanza) {
         var experiments = new LinkedHashMap<Integer, String>();
-        for (var propNode : propsNode.getChildren("prop")) {
+        for (var propNode : propsStanza.getChildren("prop")) {
             var configCode = propNode.getAttributeAsInt("config_code");
             var configValue = propNode.getAttributeAsString("config_value");
             if (configCode.isPresent() && configValue.isPresent()) {
@@ -14705,7 +14585,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                                                                String propsHash) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var request = new SmaxAbPropsGetGroupExperimentConfigRequest(group, propsHash);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxAbPropsGetGroupExperimentConfigResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14728,7 +14608,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BotDirectory> queryBotList(String botV, String botBhash, List<? extends JidProvider> botArgsProvider) {
         var botArgs = Objects.requireNonNull(botArgsProvider, "botArgs cannot be null").stream().map(JidProvider::toJid).toList();
         var request = new SmaxBotBotListRequest(botV, botBhash, botArgs);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxBotBotListResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14812,7 +14692,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var reproducibility = report.reproducibility().orElse(null);
         var request = new SmaxBugReportingReportBugRequest(from, description, debugInformationJson,
                 deviceLogHandle, mediaUploads, title, category, clientServerJoinKey, reproducibility);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
 
         var parsed = SmaxBugReportingReportBugResponse.of(response, requestNode.build()).orElse(null);
@@ -14835,7 +14715,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var eventTimestampSec = event.eventTimestampSec();
         var eventLogdata = event.eventLogdata().orElse(null);
         var request = new SmaxInAppCommsEventRequest(eventPromotionId, eventType, eventTimestampSec, eventLogdata);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxInAppCommsEventResponse.of(response, requestNode.build()).orElse(null);
         if (parsed instanceof SmaxInAppCommsEventResponse.Error error) {
@@ -14849,7 +14729,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "castOfflineBatchRPC", adaptation = WhatsAppAdaptation.DIRECT)
     public void acknowledgeOfflineBatch(int offlineBatchCount) {
         var request = new SmaxOfflineBatchRequest(offlineBatchCount);
-        sendNodeWithNoResponse(request.toNode().build());
+        sendNodeWithNoResponse(request.toStanza().build());
     }
 
     /** {@inheritDoc} */
@@ -14858,7 +14738,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendActiveIQRPC", adaptation = WhatsAppAdaptation.DIRECT)
     public void enableActiveMode() {
         var request = new SmaxPassiveModeActiveIQRequest();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         SmaxPassiveModeActiveIQResponse.of(response, requestNode.build());
     }
@@ -14869,7 +14749,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendPassiveIQRPC", adaptation = WhatsAppAdaptation.DIRECT)
     public void enablePassiveMode() {
         var request = new SmaxPassiveModePassiveIQRequest();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         SmaxPassiveModePassiveIQResponse.of(response, requestNode.build());
     }
@@ -14886,7 +14766,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     user.userJid(), user.includeIdentityAttestation()));
         }
         var request = new SmaxPreKeysFetchKeyBundlesRequest(wireUsers);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxPreKeysFetchKeyBundlesResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -14967,7 +14847,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     user.userJid(), user.includeIdentityAttestation(), wireDevices));
         }
         var request = new SmaxPreKeysFetchMissingPreKeysRequest(wireUsers);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxPreKeysFetchMissingPreKeysResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15031,7 +14911,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(blindedCredentialElementValue, "blindedCredentialElementValue cannot be null");
         Objects.requireNonNull(projectNameElementValue, "projectNameElementValue cannot be null");
         var request = new SmaxPrivatestatsSignCredentialRequest(blindedCredentialElementValue, projectNameElementValue);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxPrivatestatsSignCredentialResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15058,7 +14938,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendChatBlockGetRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean queryPublicAnnouncementBlocked() {
         var request = new SmaxPsaChatBlockGetRequest();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxPsaChatBlockGetResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15077,7 +14957,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void editPublicAnnouncementBlocked(PsaChatBlockAction blockingAction) {
         Objects.requireNonNull(blockingAction, "blockingAction cannot be null");
         var request = new SmaxPsaChatBlockSetRequest(blockingAction.wireValue());
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxPsaChatBlockSetResponse.of(response, requestNode.build()).orElse(null);
         if (parsed instanceof SmaxPsaChatBlockSetResponse.ServerError serverError) {
@@ -15093,7 +14973,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(config, "config cannot be null");
         var variant = toPushConfigWireVariant(config);
         var request = new SmaxPushConfigSetRequest(variant);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxPushConfigSetResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -15159,42 +15039,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    @WhatsAppWebExport(moduleName = "WASmaxReceiptPublishViewRPC",
-            exports = "sendReceiptPublishViewRPC", adaptation = WhatsAppAdaptation.DIRECT)
-    public void publishViewReceipt(ViewReceipt receipt) {
-        Objects.requireNonNull(receipt, "receipt cannot be null");
-        var receiptId = receipt.receiptId();
-        var to = receipt.to();
-        var hasStatusClass = receipt.hasStatusClass();
-        var itemServerIds = receipt.itemServerIds();
-        var request = new SmaxReceiptPublishViewRequest(receiptId, to, hasStatusClass, itemServerIds);
-        var requestNode = request.toNode();
-        var response = sendNode(requestNode);
-        SmaxReceiptPublishViewResponse.of(response, requestNode.build());
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WASmaxStatsSendBufferRPC",
-            exports = "sendStatsSendBufferRPC", adaptation = WhatsAppAdaptation.ADAPTED)
-    public void sendStatsBuffer(Instant addT, byte[] addElementValue) {
-        Objects.requireNonNull(addT, "addT cannot be null");
-        Objects.requireNonNull(addElementValue, "addElementValue cannot be null");
-        var request = new SmaxStatsSendBufferRequest(addT.getEpochSecond(), addElementValue);
-        var requestNode = request.toNode();
-        var response = sendNode(requestNode);
-        var parsed = SmaxStatsSendBufferResponse.of(response, requestNode.build()).orElse(null);
-        switch (parsed) {
-            case SmaxStatsSendBufferResponse.Success _ -> {}
-            case SmaxStatsSendBufferResponse.ErrorNoRetry clientError ->
-                    throw new WhatsAppServerRuntimeException("Stats-buffer rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
-            case SmaxStatsSendBufferResponse.ErrorRetry serverError ->
-                    throw new WhatsAppServerRuntimeException("Stats-buffer server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText());
-        }
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @WhatsAppWebExport(moduleName = "WASmaxSupportMessageFeedbackSendFeedbackRPC",
             exports = "sendSendFeedbackRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public void sendSupportFeedback(JidProvider fromProvider, String messageId,
@@ -15203,7 +15047,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(messageId, "messageId cannot be null");
         Objects.requireNonNull(feedbackKinds, "feedbackKinds cannot be null");
         var request = new SmaxSendFeedbackRequest(from, messageId, feedbackKinds);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxSendFeedbackResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
@@ -15230,7 +15074,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var additionalAttributesContextFlow = form.additionalAttributesContextFlow().orElse(null);
         var request = new SmaxContactFormRequest(from, description, topic, topicId, debugInformationJson,
                 uploadedLogsId, additionalAttributesContextFlow);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxContactFormResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15269,13 +15113,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
         for (var messageId : reportedMessageIds) {
             Objects.requireNonNull(messageId, "reportedMessageIds entries cannot be null");
-            builder.addMessageChild(new NodeBuilder()
+            builder.addMessageChild(new StanzaBuilder()
                     .description("message")
                     .attribute("id", messageId)
                     .build());
         }
         var request = builder.build();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxIndividualReportResponse.of(response, requestNode.build()).orElse(null);
         if (parsed instanceof SmaxIndividualReportResponse.Error error) {
@@ -15309,13 +15153,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
         for (var messageId : reportedMessageIds) {
             Objects.requireNonNull(messageId, "reportedMessageIds entries cannot be null");
-            builder.addMessageChild(new NodeBuilder()
+            builder.addMessageChild(new StanzaBuilder()
                     .description("message")
                     .attribute("id", messageId)
                     .build());
         }
         var request = builder.build();
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxGroupReportResponse.of(response, requestNode.build()).orElse(null);
         if (parsed instanceof SmaxGroupReportResponse.Error error) {
@@ -15339,7 +15183,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                         e.messageId().orElse(null)))
                 .toList();
         var request = new SmaxNewsletterReportRequest(spamListJid, spamListSpamFlow, spamListSubject, messages);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxNewsletterReportResponse.of(response, requestNode.build()).orElse(null);
         if (parsed instanceof SmaxNewsletterReportResponse.Error error) {
@@ -15377,7 +15221,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                         .messageTimestamp(timestamp)
                         .messageId(messageId)
                         .build();
-                var requestNode = request.toNode();
+                var requestNode = request.toStanza();
                 var response = sendNode(requestNode);
                 var parsed = SmaxStatusReportResponse.of(response, requestNode.build()).orElse(null);
                 if (parsed instanceof SmaxStatusReportResponse.Error error) {
@@ -15389,7 +15233,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                         .orElseThrow(() -> new IllegalArgumentException("status has no newsletter jid"));
                 var request = new SmaxStatusReportV2Request(newsletterJid, reason,
                         newsletter.serverId(), timestamp, subject, null);
-                var requestNode = request.toNode();
+                var requestNode = request.toStanza();
                 var response = sendNode(requestNode);
                 var parsed = SmaxStatusReportV2Response.of(response, requestNode.build()).orElse(null);
                 if (parsed instanceof SmaxStatusReportV2Response.Error error) {
@@ -15406,7 +15250,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void joinUnifiedSession(String unifiedSessionId) {
         Objects.requireNonNull(unifiedSessionId, "unifiedSessionId cannot be null");
         var request = new SmaxUnifiedSessionShareRequest(unifiedSessionId);
-        sendNodeWithNoResponse(request.toNode().build());
+        sendNodeWithNoResponse(request.toStanza().build());
     }
 
     /** {@inheritDoc} */
@@ -15416,7 +15260,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<UserNoticeBundle> queryPendingUserNotices(Instant getUserDisclosuresT) {
         Objects.requireNonNull(getUserDisclosuresT, "getUserDisclosuresT cannot be null");
         var request = new SmaxUserNoticeGetDisclosuresRequest(getUserDisclosuresT.getEpochSecond());
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxUserNoticeGetDisclosuresResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15448,7 +15292,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     query.disclosureId(), query.timestampSeconds()));
         }
         var request = new SmaxUserNoticeGetDisclosureStageByIdsRequest(wireQueries);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxUserNoticeGetDisclosureStageByIdsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15485,7 +15329,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var eventStartTime = create.eventStartTime().orElse(null);
         var request = new SmaxLinkCreateRequest(media.wireValue(), callCreator, callId,
                 creatorUsername, waitingRoomEnabled, eventStartTime);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxLinkCreateResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15517,7 +15361,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(media, "media cannot be null");
         Objects.requireNonNull(action, "action cannot be null");
         var request = new SmaxLinkQueryRequest(token, media.wireValue(), action);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxLinkQueryResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15551,8 +15395,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendToggleCallLinkRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebVoipWaitingRoomToggleJob",
             exports = "toggleWaitingRoomForCallLink", adaptation = WhatsAppAdaptation.ADAPTED)
-    public void enableCallLinkWaitingRoom(String linkToken, CallLinkMedia media) {
-        setCallLinkWaitingRoom(true, linkToken, media);
+    public void enableCallLinkWaitingRoom(URI link) {
+        setCallLinkWaitingRoom(true, link);
     }
 
     /** {@inheritDoc} */
@@ -15561,27 +15405,29 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             exports = "sendToggleCallLinkRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebVoipWaitingRoomToggleJob",
             exports = "toggleWaitingRoomForCallLink", adaptation = WhatsAppAdaptation.ADAPTED)
-    public void disableCallLinkWaitingRoom(String linkToken, CallLinkMedia media) {
-        setCallLinkWaitingRoom(false, linkToken, media);
+    public void disableCallLinkWaitingRoom(URI link) {
+        setCallLinkWaitingRoom(false, link);
     }
 
     /**
      * Applies the given waiting-room state to an existing call link via the
      * SMAX toggle RPC and surfaces any relay rejection as an exception.
      *
-     * @param enabled   {@code true} to enable the gate, {@code false} to disable it
-     * @param linkToken the non-{@code null} link token
-     * @param media     the non-{@code null} link media kind
-     * @throws NullPointerException            if any reference argument is {@code null}
+     * <p>The link token and media kind are derived from the call-link URL by {@link #parseCallLink(URI)}.
+     *
+     * @param enabled {@code true} to enable the gate, {@code false} to disable it
+     * @param link    the non-{@code null} {@code call.whatsapp.com} call-link URL
+     * @throws NullPointerException            if {@code link} is {@code null}
+     * @throws IllegalArgumentException        if {@code link} is not a well-formed call-link URL
      * @throws WhatsAppServerRuntimeException  if the relay rejected the request
      * @throws WhatsAppSessionException.Closed if the socket is closed
      */
-    private void setCallLinkWaitingRoom(boolean enabled, String linkToken, CallLinkMedia media) {
-        Objects.requireNonNull(linkToken, "linkToken cannot be null");
-        Objects.requireNonNull(media, "media cannot be null");
+    private void setCallLinkWaitingRoom(boolean enabled, URI link) {
+        Objects.requireNonNull(link, "link cannot be null");
+        var ref = parseCallLink(link);
         var request = new SmaxWaitingRoomToggleCallLinkRequest(enabled ? "1" : "0",
-                linkToken, media.wireValue());
-        var requestNode = request.toNode();
+                ref.token(), ref.media().wireValue());
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxWaitingRoomToggleCallLinkResponse.of(response, requestNode.build()).orElse(null);
         if (parsed instanceof SmaxWaitingRoomToggleCallLinkResponse.ClientError clientError) {
@@ -15632,7 +15478,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<FederatedIdentityState> checkFederatedIdentityExists(Instant timestamp) {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         var request = new SmaxWaffleStateExistsRequest(timestamp.getEpochSecond());
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxWaffleStateExistsResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15659,7 +15505,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         Objects.requireNonNull(fbid, "fbid cannot be null");
         var request = new SmaxWaffleWFPingRequest(toSmaxEncryption(encryption), timestamp.getEpochSecond(), fbid);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxWaffleWFPingResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15683,7 +15529,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                                                                                      boolean hasPasswordPem) {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         var request = new SmaxWaffleGetCertificateRequest(timestamp.getEpochSecond(), hasPayloadEncCertificates, hasPasswordPem);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxWaffleGetCertificateResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15726,7 +15572,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         Objects.requireNonNull(fbid, "fbid cannot be null");
         var request = new SmaxWaffleRefreshAccessTokensRequest(toSmaxEncryption(encryption), timestamp.getEpochSecond(), fbid);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxWaffleRefreshAccessTokensResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15752,7 +15598,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(fbid, "fbid cannot be null");
         Objects.requireNonNull(action, "action cannot be null");
         var request = new SmaxWaffleEncryptedPayloadRequestRequest(toSmaxEncryption(encryption), timestamp.getEpochSecond(), fbid, action);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxWaffleEncryptedPayloadRequestResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15782,7 +15628,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var disclosureLc = create.disclosureLc();
         var request = new SmaxWaffleGenerateWAEntACUserRequest(toSmaxEncryption(encryption), timestamp.getEpochSecond(), disclosureId,
                 disclosureVersion, disclosureLg, disclosureLc);
-        var requestNode = request.toNode();
+        var requestNode = request.toStanza();
         var response = sendNode(requestNode);
         var parsed = SmaxWaffleGenerateWAEntACUserResponse.of(response, requestNode.build()).orElse(null);
         return switch (parsed) {
@@ -15856,8 +15702,18 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @throws WhatsAppSessionException.Closed if the socket is closed
      */
     private void setWebBetaEnrollment(boolean enrolled) {
+        var releaseChannel = store.accountStore().releaseChannel();
+        var alreadyEnrolled = enrolled
+                ? releaseChannel == ClientPayload.ClientReleaseChannel.BETA
+                : releaseChannel == ClientPayload.ClientReleaseChannel.RELEASE;
+        if(alreadyEnrolled) {
+            return;
+        }
+
         var mutation = externalWebBetaMutationFactory.getExternalWebBetaMutation(enrolled);
         webAppStateService.pushPatches(ExternalWebBetaAction.COLLECTION_NAME, List.of(mutation));
+        store.accountStore().setReleaseChannel(enrolled ? ClientPayload.ClientReleaseChannel.BETA : ClientPayload.ClientReleaseChannel.RELEASE);
+        disconnect(WhatsAppClientDisconnectReason.RECONNECTING);
     }
 
     /** {@inheritDoc} */
@@ -16122,13 +15978,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessProduct> addCatalogProduct(BusinessCatalogProductCreate input) {
         Objects.requireNonNull(input, "input cannot be null");
-        var request = new BizCatalogManagementAddProductWhatsAppWebGraphQlRequest(input.businessJid(),
+        var request = new BizCatalogManagementAddProductWhatsAppGraphQlRequest(input.businessJid(),
                 input.thumbnailWidth().isPresent() ? input.thumbnailWidth().getAsInt() : null,
                 input.thumbnailHeight().isPresent() ? input.thumbnailHeight().getAsInt() : null,
                 input.productInfoJson().orElse(null));
         var response = sendGraphQl(request);
-        return BizCatalogManagementAddProductWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementAddProductWhatsAppWebGraphQlResponse::product);
+        return BizCatalogManagementAddProductWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementAddProductWhatsAppGraphQlResponse::product);
     }
 
     /** {@inheritDoc} */
@@ -16143,13 +15999,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessProduct> editCatalogProduct(BusinessCatalogProductEdit input) {
         Objects.requireNonNull(input, "input cannot be null");
-        var request = new BizCatalogManagementEditProductWhatsAppWebGraphQlRequest(input.businessJid(), input.productId(),
+        var request = new BizCatalogManagementEditProductWhatsAppGraphQlRequest(input.businessJid(), input.productId(),
                 input.thumbnailWidth().isPresent() ? input.thumbnailWidth().getAsInt() : null,
                 input.thumbnailHeight().isPresent() ? input.thumbnailHeight().getAsInt() : null,
                 input.productInfoJson().orElse(null));
         var response = sendGraphQl(request);
-        return BizCatalogManagementEditProductWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementEditProductWhatsAppWebGraphQlResponse::product);
+        return BizCatalogManagementEditProductWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementEditProductWhatsAppGraphQlResponse::product);
     }
 
     /** {@inheritDoc} */
@@ -16159,10 +16015,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BusinessCatalogMutationResult> deleteCatalogProduct(JidProvider bizJid, List<String> productIds) {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
         Objects.requireNonNull(productIds, "productIds cannot be null");
-        var request = new BizCatalogManagementDeleteProductWhatsAppWebGraphQlRequest(jid, productIds);
+        var request = new BizCatalogManagementDeleteProductWhatsAppGraphQlRequest(jid, productIds);
         var response = sendGraphQl(request);
-        return BizCatalogManagementDeleteProductWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementDeleteProductWhatsAppWebGraphQlResponse::result);
+        return BizCatalogManagementDeleteProductWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementDeleteProductWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16177,10 +16033,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessCatalogMutationResult> createCatalog(JidProvider bizJid, String platform) {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
-        var request = new BizCatalogManagementCreateCatalogWhatsAppWebGraphQlRequest(jid, platform);
+        var request = new BizCatalogManagementCreateCatalogWhatsAppGraphQlRequest(jid, platform);
         var response = sendGraphQl(request);
-        return BizCatalogManagementCreateCatalogWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementCreateCatalogWhatsAppWebGraphQlResponse::result);
+        return BizCatalogManagementCreateCatalogWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementCreateCatalogWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16195,11 +16051,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessProductCollection> createCatalogCollection(BusinessCatalogCollectionCreate input) {
         Objects.requireNonNull(input, "input cannot be null");
-        var request = new BizCatalogManagementCreateCollectionWhatsAppWebGraphQlRequest(input.name(), input.productIds(),
+        var request = new BizCatalogManagementCreateCollectionWhatsAppGraphQlRequest(input.name(), input.productIds(),
                 input.businessJid(), input.catalogSessionId().orElse(null));
         var response = sendGraphQl(request);
-        return BizCatalogManagementCreateCollectionWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementCreateCollectionWhatsAppWebGraphQlResponse::collection);
+        return BizCatalogManagementCreateCollectionWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementCreateCollectionWhatsAppGraphQlResponse::collection);
     }
 
     /** {@inheritDoc} */
@@ -16209,10 +16065,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BusinessCatalogMutationResult> deleteCatalogCollections(List<String> collectionIds, JidProvider bizJid, String catalogSessionId) {
         Objects.requireNonNull(collectionIds, "collectionIds cannot be null");
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
-        var request = new BizCatalogManagementDeleteCollectionsWhatsAppWebGraphQlRequest(collectionIds, jid, catalogSessionId);
+        var request = new BizCatalogManagementDeleteCollectionsWhatsAppGraphQlRequest(collectionIds, jid, catalogSessionId);
         var response = sendGraphQl(request);
-        return BizCatalogManagementDeleteCollectionsWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementDeleteCollectionsWhatsAppWebGraphQlResponse::result);
+        return BizCatalogManagementDeleteCollectionsWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementDeleteCollectionsWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16221,12 +16077,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessProductCollection> updateCatalogCollection(BusinessCatalogCollectionEdit input) {
         Objects.requireNonNull(input, "input cannot be null");
-        var request = new BizCatalogManagementUpdateCollectionWhatsAppWebGraphQlRequest(input.collectionId(),
+        var request = new BizCatalogManagementUpdateCollectionWhatsAppGraphQlRequest(input.collectionId(),
                 input.businessJid(), input.catalogSessionId().orElse(null),
                 input.name().orElse(null), input.productsToAdd(), input.productsToRemove());
         var response = sendGraphQl(request);
-        return BizCatalogManagementUpdateCollectionWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementUpdateCollectionWhatsAppWebGraphQlResponse::collection);
+        return BizCatalogManagementUpdateCollectionWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementUpdateCollectionWhatsAppGraphQlResponse::collection);
     }
 
     /** {@inheritDoc} */
@@ -16237,12 +16093,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
         Objects.requireNonNull(moves, "moves cannot be null");
         var wireMoves = moves.stream()
-                .map(move -> new BizCatalogManagementUpdateCollectionListWhatsAppWebGraphQlRequest.Move(move.collectionId(), move.fromIndex(), move.toIndex()))
+                .map(move -> new BizCatalogManagementUpdateCollectionListWhatsAppGraphQlRequest.Move(move.collectionId(), move.fromIndex(), move.toIndex()))
                 .toList();
-        var request = new BizCatalogManagementUpdateCollectionListWhatsAppWebGraphQlRequest(jid, wireMoves);
+        var request = new BizCatalogManagementUpdateCollectionListWhatsAppGraphQlRequest(jid, wireMoves);
         var response = sendGraphQl(request);
-        return BizCatalogManagementUpdateCollectionListWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementUpdateCollectionListWhatsAppWebGraphQlResponse::result);
+        return BizCatalogManagementUpdateCollectionListWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementUpdateCollectionListWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16253,10 +16109,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var bizJid = Objects.requireNonNull(jid, "jid cannot be null").toJid();
         Objects.requireNonNull(productId, "productId cannot be null");
         Objects.requireNonNull(reason, "reason cannot be null");
-        var request = new BizCatalogManagementAppealProductWhatsAppWebGraphQlRequest(bizJid, productId, reason);
+        var request = new BizCatalogManagementAppealProductWhatsAppGraphQlRequest(bizJid, productId, reason);
         var response = sendGraphQl(request);
-        return BizCatalogManagementAppealProductWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementAppealProductWhatsAppWebGraphQlResponse::result);
+        return BizCatalogManagementAppealProductWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementAppealProductWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16267,10 +16123,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(productSetId, "productSetId cannot be null");
         var bizJid = Objects.requireNonNull(jid, "jid cannot be null").toJid();
         Objects.requireNonNull(reason, "reason cannot be null");
-        var request = new BizCatalogManagementAppealCollectionWhatsAppWebGraphQlRequest(productSetId, bizJid, reason);
+        var request = new BizCatalogManagementAppealCollectionWhatsAppGraphQlRequest(productSetId, bizJid, reason);
         var response = sendGraphQl(request);
-        return BizCatalogManagementAppealCollectionWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementAppealCollectionWhatsAppWebGraphQlResponse::result);
+        return BizCatalogManagementAppealCollectionWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementAppealCollectionWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16279,10 +16135,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean updateCatalogCommerceSettings(JidProvider bizJid, boolean cartEnabled) {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
-        var request = new BizCatalogManagementUpdateCommerceSettingsWhatsAppWebGraphQlRequest(jid, cartEnabled);
+        var request = new BizCatalogManagementUpdateCommerceSettingsWhatsAppGraphQlRequest(jid, cartEnabled);
         var response = sendGraphQl(request);
-        return BizCatalogManagementUpdateCommerceSettingsWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementUpdateCommerceSettingsWhatsAppWebGraphQlResponse::cartEnabled)
+        return BizCatalogManagementUpdateCommerceSettingsWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementUpdateCommerceSettingsWhatsAppGraphQlResponse::cartEnabled)
                 .orElse(false);
     }
 
@@ -16294,12 +16150,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var bizJid = Objects.requireNonNull(jid, "jid cannot be null").toJid();
         Objects.requireNonNull(products, "products cannot be null");
         var wireProducts = products.stream()
-                .map(product -> new BizCatalogManagementUpdateProductVisibilityWhatsAppWebGraphQlRequest.Product(product.productId(), product.hidden()))
+                .map(product -> new BizCatalogManagementUpdateProductVisibilityWhatsAppGraphQlRequest.Product(product.productId(), product.hidden()))
                 .toList();
-        var request = new BizCatalogManagementUpdateProductVisibilityWhatsAppWebGraphQlRequest(bizJid, wireProducts);
+        var request = new BizCatalogManagementUpdateProductVisibilityWhatsAppGraphQlRequest(bizJid, wireProducts);
         var response = sendGraphQl(request);
-        return BizCatalogManagementUpdateProductVisibilityWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementUpdateProductVisibilityWhatsAppWebGraphQlResponse::result);
+        return BizCatalogManagementUpdateProductVisibilityWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementUpdateProductVisibilityWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16315,7 +16171,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BusinessCatalogPage> fetchCatalog(JidProvider jid, CatalogFetchOptions options) {
         var bizJid = Objects.requireNonNull(jid, "jid cannot be null").toJid();
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new BizCatalogManagementFetchCatalogWhatsAppWebGraphQlRequest(
+        var request = new BizCatalogManagementFetchCatalogWhatsAppGraphQlRequest(
                 bizJid,
                 options.afterCursor().orElse(null),
                 stringDimension(options.limit()),
@@ -16329,8 +16185,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 stringDimension(options.variantThumbnailWidth()),
                 options.platform().orElse(null));
         var response = sendGraphQl(request);
-        return BizCatalogManagementFetchCatalogWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementFetchCatalogWhatsAppWebGraphQlResponse::catalog);
+        return BizCatalogManagementFetchCatalogWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementFetchCatalogWhatsAppGraphQlResponse::catalog);
     }
 
     /** {@inheritDoc} */
@@ -16346,7 +16202,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BusinessCatalogCollections> fetchCatalogCollections(JidProvider bizJid, CatalogFetchOptions options) {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new BizCatalogManagementFetchCollectionsWhatsAppWebGraphQlRequest(
+        var request = new BizCatalogManagementFetchCollectionsWhatsAppGraphQlRequest(
                 jid,
                 options.afterCursor().orElse(null),
                 stringDimension(options.limit()),
@@ -16358,8 +16214,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 stringDimension(options.variantThumbnailHeight()),
                 stringDimension(options.variantThumbnailWidth()));
         var response = sendGraphQl(request);
-        return BizCatalogManagementFetchCollectionsWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementFetchCollectionsWhatsAppWebGraphQlResponse::collections);
+        return BizCatalogManagementFetchCollectionsWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementFetchCollectionsWhatsAppGraphQlResponse::collections);
     }
 
     /** {@inheritDoc} */
@@ -16376,7 +16232,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var bizJid = Objects.requireNonNull(jid, "jid cannot be null").toJid();
         Objects.requireNonNull(productId, "productId cannot be null");
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new BizCatalogManagementFetchProductWhatsAppWebGraphQlRequest(
+        var request = new BizCatalogManagementFetchProductWhatsAppGraphQlRequest(
                 bizJid,
                 productId,
                 stringDimension(options.imageWidth()),
@@ -16387,8 +16243,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 stringDimension(options.variantThumbnailHeight()),
                 stringDimension(options.variantThumbnailWidth()));
         var response = sendGraphQl(request);
-        return BizCatalogManagementFetchProductWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementFetchProductWhatsAppWebGraphQlResponse::product);
+        return BizCatalogManagementFetchProductWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementFetchProductWhatsAppGraphQlResponse::product);
     }
 
     /** {@inheritDoc} */
@@ -16405,15 +16261,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var bizJid = Objects.requireNonNull(jid, "jid cannot be null").toJid();
         Objects.requireNonNull(productIds, "productIds cannot be null");
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new BizCatalogManagementFetchProductListWhatsAppWebGraphQlRequest(
+        var request = new BizCatalogManagementFetchProductListWhatsAppGraphQlRequest(
                 bizJid,
                 productIds,
                 stringDimension(options.imageWidth()),
                 stringDimension(options.imageHeight()),
                 options.directConnectionEncryptedInfo().orElse(null));
         var response = sendGraphQl(request);
-        return BizCatalogManagementFetchProductListWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementFetchProductListWhatsAppWebGraphQlResponse::products)
+        return BizCatalogManagementFetchProductListWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementFetchProductListWhatsAppGraphQlResponse::products)
                 .orElseGet(List::of);
     }
 
@@ -16431,7 +16287,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
         Objects.requireNonNull(id, "id cannot be null");
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new BizCatalogManagementFetchSingleCollectionWhatsAppWebGraphQlRequest(
+        var request = new BizCatalogManagementFetchSingleCollectionWhatsAppGraphQlRequest(
                 jid,
                 id,
                 stringDimension(options.limit()),
@@ -16443,8 +16299,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 stringDimension(options.variantThumbnailHeight()),
                 stringDimension(options.variantThumbnailWidth()));
         var response = sendGraphQl(request);
-        return BizCatalogManagementFetchSingleCollectionWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCatalogManagementFetchSingleCollectionWhatsAppWebGraphQlResponse::collection);
+        return BizCatalogManagementFetchSingleCollectionWhatsAppGraphQlResponse.of(response)
+                .map(BizCatalogManagementFetchSingleCollectionWhatsAppGraphQlResponse::collection);
     }
 
     /** {@inheritDoc} */
@@ -16460,15 +16316,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public boolean queryCatalogHasCategories(JidProvider bizJid, CatalogFetchOptions options) {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new QueryCatalogHasCategoriesWhatsAppWebGraphQlRequest(
+        var request = new QueryCatalogHasCategoriesWhatsAppGraphQlRequest(
                 jid,
                 options.directConnectionEncryptedInfo().orElse(null),
                 options.imageWidth().isPresent() ? options.imageWidth().getAsInt() : null,
                 options.imageHeight().isPresent() ? options.imageHeight().getAsInt() : null,
                 options.catalogSessionId().orElse(null));
         var response = sendGraphQl(request);
-        return QueryCatalogHasCategoriesWhatsAppWebGraphQlResponse.of(response)
-                .map(QueryCatalogHasCategoriesWhatsAppWebGraphQlResponse::hasCategories)
+        return QueryCatalogHasCategoriesWhatsAppGraphQlResponse.of(response)
+                .map(QueryCatalogHasCategoriesWhatsAppGraphQlResponse::hasCategories)
                 .orElse(false);
     }
 
@@ -16486,15 +16342,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(catalogJid, "catalogJid cannot be null").toJid();
         Objects.requireNonNull(productIds, "productIds cannot be null");
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new QueryProductListCatalogJobWhatsAppWebGraphQlRequest(
+        var request = new QueryProductListCatalogJobWhatsAppGraphQlRequest(
                 jid,
                 productIds,
                 options.imageWidth().isPresent() ? options.imageWidth().getAsInt() : null,
                 options.imageHeight().isPresent() ? options.imageHeight().getAsInt() : null,
                 options.directConnectionEncryptedInfo().orElse(null));
         var response = sendGraphQl(request);
-        return QueryProductListCatalogJobWhatsAppWebGraphQlResponse.of(response)
-                .map(QueryProductListCatalogJobWhatsAppWebGraphQlResponse::products)
+        return QueryProductListCatalogJobWhatsAppGraphQlResponse.of(response)
+                .map(QueryProductListCatalogJobWhatsAppGraphQlResponse::products)
                 .orElseGet(List::of);
     }
 
@@ -16512,7 +16368,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(catalogJid, "catalogJid cannot be null").toJid();
         Objects.requireNonNull(collectionId, "collectionId cannot be null");
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new QueryProductSingleCollectionWhatsAppWebGraphQlRequest(
+        var request = new QueryProductSingleCollectionWhatsAppGraphQlRequest(
                 jid,
                 collectionId,
                 options.limit().isPresent() ? options.limit().getAsInt() : null,
@@ -16524,8 +16380,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 options.variantThumbnailHeight().isPresent() ? options.variantThumbnailHeight().getAsInt() : null,
                 options.variantThumbnailWidth().isPresent() ? options.variantThumbnailWidth().getAsInt() : null);
         var response = sendGraphQl(request);
-        return QueryProductSingleCollectionWhatsAppWebGraphQlResponse.of(response)
-                .map(QueryProductSingleCollectionWhatsAppWebGraphQlResponse::collection);
+        return QueryProductSingleCollectionWhatsAppGraphQlResponse.of(response)
+                .map(QueryProductSingleCollectionWhatsAppGraphQlResponse::collection);
     }
 
     /**
@@ -16548,10 +16404,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiAbilitiesQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiAgentHome> queryAiAbilities() {
-        var request = new BizAiAbilitiesWhatsAppWebGraphQlRequest();
+        var request = new BizAiAbilitiesWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return BizAiAbilitiesWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiAbilitiesWhatsAppWebGraphQlResponse::agentHome);
+        return BizAiAbilitiesWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiAbilitiesWhatsAppGraphQlResponse::agentHome);
     }
 
     /**
@@ -16565,10 +16421,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiChatHistoryCreateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> createAiChatHistory(String inputJson) {
-        var request = new BizAiChatHistoryCreateWhatsAppWebGraphQlRequest(inputJson);
+        var request = new BizAiChatHistoryCreateWhatsAppGraphQlRequest(inputJson);
         var response = sendGraphQl(request);
-        return BizAiChatHistoryCreateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiChatHistoryCreateWhatsAppWebGraphQlResponse::result);
+        return BizAiChatHistoryCreateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiChatHistoryCreateWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16582,10 +16438,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiExampleResponseDeleteMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> deleteAiExampleResponses(List<String> knowledgeTypesToDelete, List<String> faqIds) {
-        var request = new BizAiExampleResponseDeleteWhatsAppWebGraphQlRequest(knowledgeTypesToDelete, faqIds);
+        var request = new BizAiExampleResponseDeleteWhatsAppGraphQlRequest(knowledgeTypesToDelete, faqIds);
         var response = sendGraphQl(request);
-        return BizAiExampleResponseDeleteWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiExampleResponseDeleteWhatsAppWebGraphQlResponse::result);
+        return BizAiExampleResponseDeleteWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiExampleResponseDeleteWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16593,10 +16449,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiExampleResponsesQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiAgentHome> queryAiExampleResponses() {
-        var request = new BizAiExampleResponsesWhatsAppWebGraphQlRequest();
+        var request = new BizAiExampleResponsesWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return BizAiExampleResponsesWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiExampleResponsesWhatsAppWebGraphQlResponse::agentHome);
+        return BizAiExampleResponsesWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiExampleResponsesWhatsAppGraphQlResponse::agentHome);
     }
 
     /** {@inheritDoc} */
@@ -16604,10 +16460,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiExampleResponseUpdateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> updateAiExampleResponses(String faqJson) {
-        var request = new BizAiExampleResponseUpdateWhatsAppWebGraphQlRequest(faqJson);
+        var request = new BizAiExampleResponseUpdateWhatsAppGraphQlRequest(faqJson);
         var response = sendGraphQl(request);
-        return BizAiExampleResponseUpdateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiExampleResponseUpdateWhatsAppWebGraphQlResponse::result);
+        return BizAiExampleResponseUpdateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiExampleResponseUpdateWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16621,10 +16477,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeReviewQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiKnowledgeReview> queryAiKnowledgeReview(Instant timestamp) {
-        var request = new BizAiKnowledgeReviewWhatsAppWebGraphQlRequest(timestamp);
+        var request = new BizAiKnowledgeReviewWhatsAppGraphQlRequest(timestamp);
         var response = sendGraphQl(request);
-        return BizAiKnowledgeReviewWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeReviewWhatsAppWebGraphQlResponse::knowledgeReview);
+        return BizAiKnowledgeReviewWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeReviewWhatsAppGraphQlResponse::knowledgeReview);
     }
 
     /** {@inheritDoc} */
@@ -16632,10 +16488,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeReviewCommitMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> commitAiKnowledgeReview(List<String> ids) {
-        var request = new BizAiKnowledgeReviewCommitWhatsAppWebGraphQlRequest(ids);
+        var request = new BizAiKnowledgeReviewCommitWhatsAppGraphQlRequest(ids);
         var response = sendGraphQl(request);
-        return BizAiKnowledgeReviewCommitWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeReviewCommitWhatsAppWebGraphQlResponse::result);
+        return BizAiKnowledgeReviewCommitWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeReviewCommitWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16643,10 +16499,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeReviewDeleteMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> deleteAiPendingKnowledge(String id) {
-        var request = new BizAiKnowledgeReviewDeleteWhatsAppWebGraphQlRequest(id);
+        var request = new BizAiKnowledgeReviewDeleteWhatsAppGraphQlRequest(id);
         var response = sendGraphQl(request);
-        return BizAiKnowledgeReviewDeleteWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeReviewDeleteWhatsAppWebGraphQlResponse::result);
+        return BizAiKnowledgeReviewDeleteWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeReviewDeleteWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16654,10 +16510,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeSourceDeleteMutationChatHistoryMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> deleteAiChatHistorySource() {
-        var request = new BizAiKnowledgeSourceDeleteMutationChatHistoryWhatsAppWebGraphQlRequest();
+        var request = new BizAiKnowledgeSourceDeleteMutationChatHistoryWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return BizAiKnowledgeSourceDeleteMutationChatHistoryWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeSourceDeleteMutationChatHistoryWhatsAppWebGraphQlResponse::result);
+        return BizAiKnowledgeSourceDeleteMutationChatHistoryWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeSourceDeleteMutationChatHistoryWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16665,10 +16521,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeSourceDeleteMutationWebsiteMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> deleteAiWebsiteSource(String websiteDataSourceId) {
-        var request = new BizAiKnowledgeSourceDeleteMutationWebsiteWhatsAppWebGraphQlRequest(websiteDataSourceId);
+        var request = new BizAiKnowledgeSourceDeleteMutationWebsiteWhatsAppGraphQlRequest(websiteDataSourceId);
         var response = sendGraphQl(request);
-        return BizAiKnowledgeSourceDeleteMutationWebsiteWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeSourceDeleteMutationWebsiteWhatsAppWebGraphQlResponse::result);
+        return BizAiKnowledgeSourceDeleteMutationWebsiteWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeSourceDeleteMutationWebsiteWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16676,10 +16532,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeSourceDeleteMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> deleteAiFileSource(String uploadedFileDataSourceId) {
-        var request = new BizAiKnowledgeSourceDeleteWhatsAppWebGraphQlRequest(uploadedFileDataSourceId);
+        var request = new BizAiKnowledgeSourceDeleteWhatsAppGraphQlRequest(uploadedFileDataSourceId);
         var response = sendGraphQl(request);
-        return BizAiKnowledgeSourceDeleteWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeSourceDeleteWhatsAppWebGraphQlResponse::result);
+        return BizAiKnowledgeSourceDeleteWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeSourceDeleteWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16687,10 +16543,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeSourcesQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiAgentHome> queryAiKnowledgeSources() {
-        var request = new BizAiKnowledgeSourcesWhatsAppWebGraphQlRequest();
+        var request = new BizAiKnowledgeSourcesWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return BizAiKnowledgeSourcesWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeSourcesWhatsAppWebGraphQlResponse::agentHome);
+        return BizAiKnowledgeSourcesWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeSourcesWhatsAppGraphQlResponse::agentHome);
     }
 
     /** {@inheritDoc} */
@@ -16698,10 +16554,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiKnowledgeSourceUploadMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> uploadAiKnowledgeSource(String manifoldFilePath, String userProvidedFileName) {
-        var request = new BizAiKnowledgeSourceUploadWhatsAppWebGraphQlRequest(manifoldFilePath, userProvidedFileName);
+        var request = new BizAiKnowledgeSourceUploadWhatsAppGraphQlRequest(manifoldFilePath, userProvidedFileName);
         var response = sendGraphQl(request);
-        return BizAiKnowledgeSourceUploadWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiKnowledgeSourceUploadWhatsAppWebGraphQlResponse::result);
+        return BizAiKnowledgeSourceUploadWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiKnowledgeSourceUploadWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16709,10 +16565,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiLeadGenCreateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiLeadGenForm> createAiLeadGenFlow(String requestJson) {
-        var request = new BizAiLeadGenCreateWhatsAppWebGraphQlRequest(requestJson);
+        var request = new BizAiLeadGenCreateWhatsAppGraphQlRequest(requestJson);
         var response = sendGraphQl(request);
-        return BizAiLeadGenCreateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiLeadGenCreateWhatsAppWebGraphQlResponse::form);
+        return BizAiLeadGenCreateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiLeadGenCreateWhatsAppGraphQlResponse::form);
     }
 
     /** {@inheritDoc} */
@@ -16720,10 +16576,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiLeadGenUpdateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiLeadGenForm> updateAiLeadGenFlow(String requestJson) {
-        var request = new BizAiLeadGenUpdateWhatsAppWebGraphQlRequest(requestJson);
+        var request = new BizAiLeadGenUpdateWhatsAppGraphQlRequest(requestJson);
         var response = sendGraphQl(request);
-        return BizAiLeadGenUpdateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiLeadGenUpdateWhatsAppWebGraphQlResponse::form);
+        return BizAiLeadGenUpdateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiLeadGenUpdateWhatsAppGraphQlResponse::form);
     }
 
     /** {@inheritDoc} */
@@ -16731,10 +16587,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiLeadGenDeleteMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> deleteAiLeadGenFlow(String flowId) {
-        var request = new BizAiLeadGenDeleteWhatsAppWebGraphQlRequest(flowId);
+        var request = new BizAiLeadGenDeleteWhatsAppGraphQlRequest(flowId);
         var response = sendGraphQl(request);
-        return BizAiLeadGenDeleteWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiLeadGenDeleteWhatsAppWebGraphQlResponse::result);
+        return BizAiLeadGenDeleteWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiLeadGenDeleteWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16742,10 +16598,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiLeadGenFormsQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BusinessAiLeadGenForm> queryAiLeadGenForms() {
-        var request = new BizAiLeadGenFormsWhatsAppWebGraphQlRequest();
+        var request = new BizAiLeadGenFormsWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return BizAiLeadGenFormsWhatsAppWebGraphQlResponse.of(response)
-                .map(BizAiLeadGenFormsWhatsAppWebGraphQlResponse::forms)
+        return BizAiLeadGenFormsWhatsAppGraphQlResponse.of(response)
+                .map(BizAiLeadGenFormsWhatsAppGraphQlResponse::forms)
                 .orElseGet(List::of);
     }
 
@@ -16754,10 +16610,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiLeadGenMarkAllSeenMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> markAiLeadGenAllSeen(String flowId) {
-        var request = new BizAiLeadGenMarkAllSeenWhatsAppWebGraphQlRequest(flowId);
+        var request = new BizAiLeadGenMarkAllSeenWhatsAppGraphQlRequest(flowId);
         var response = sendGraphQl(request);
-        return BizAiLeadGenMarkAllSeenWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiLeadGenMarkAllSeenWhatsAppWebGraphQlResponse::result);
+        return BizAiLeadGenMarkAllSeenWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiLeadGenMarkAllSeenWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16773,13 +16629,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiProductInfo> createAiProductInfo(BusinessAiProductInfoCreate input) {
         Objects.requireNonNull(input, "input cannot be null");
-        var request = new BizAiProductInfoWhatsAppWebGraphQlRequest(input.name(),
+        var request = new BizAiProductInfoWhatsAppGraphQlRequest(input.name(),
                 input.priceJson().orElse(null), input.description().orElse(null),
                 input.localImageFilePaths(), input.existingImageReferencesJson().orElse(null),
                 input.thumbnailHeightPx().orElse(null), input.thumbnailWidthPx().orElse(null));
         var response = sendGraphQl(request);
-        return BizAiProductInfoWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiProductInfoWhatsAppWebGraphQlResponse::productInfo);
+        return BizAiProductInfoWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiProductInfoWhatsAppGraphQlResponse::productInfo);
     }
 
     /** {@inheritDoc} */
@@ -16788,13 +16644,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiProductInfo> updateAiProductInfo(BusinessAiProductInfoEdit input) {
         Objects.requireNonNull(input, "input cannot be null");
-        var request = new BizAiProductInfoMutationUpdateWhatsAppWebGraphQlRequest(input.productInfoId(),
+        var request = new BizAiProductInfoMutationUpdateWhatsAppGraphQlRequest(input.productInfoId(),
                 input.name().orElse(null), input.priceJson().orElse(null),
                 input.description().orElse(null), input.localImageFilePaths(),
                 input.imageReferences());
         var response = sendGraphQl(request);
-        return BizAiProductInfoMutationUpdateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiProductInfoMutationUpdateWhatsAppWebGraphQlResponse::productInfo);
+        return BizAiProductInfoMutationUpdateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiProductInfoMutationUpdateWhatsAppGraphQlResponse::productInfo);
     }
 
     /** {@inheritDoc} */
@@ -16802,10 +16658,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiProductInfoMutationDeleteMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BusinessAiMutationResult> deleteAiProductInfo(List<String> ids) {
-        var request = new BizAiProductInfoMutationDeleteWhatsAppWebGraphQlRequest(ids);
+        var request = new BizAiProductInfoMutationDeleteWhatsAppGraphQlRequest(ids);
         var response = sendGraphQl(request);
-        return BizAiProductInfoMutationDeleteWhatsAppWebGraphQlResponse.of(response)
-                .map(BizAiProductInfoMutationDeleteWhatsAppWebGraphQlResponse::results)
+        return BizAiProductInfoMutationDeleteWhatsAppGraphQlResponse.of(response)
+                .map(BizAiProductInfoMutationDeleteWhatsAppGraphQlResponse::results)
                 .orElseGet(List::of);
     }
 
@@ -16814,10 +16670,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiReengagementUpdateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> updateAiReengagement(Boolean enabled, Long amount) {
-        var request = new BizAiReengagementUpdateWhatsAppWebGraphQlRequest(enabled, amount);
+        var request = new BizAiReengagementUpdateWhatsAppGraphQlRequest(enabled, amount);
         var response = sendGraphQl(request);
-        return BizAiReengagementUpdateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiReengagementUpdateWhatsAppWebGraphQlResponse::result);
+        return BizAiReengagementUpdateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiReengagementUpdateWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16833,11 +16689,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> updateAiReplyBotEnabledTime(BusinessAiReplyBotSchedule schedule) {
         Objects.requireNonNull(schedule, "schedule cannot be null");
-        var request = new BizAiReplyBotEnabledTimeUpdateWhatsAppWebGraphQlRequest(schedule.enabled(),
+        var request = new BizAiReplyBotEnabledTimeUpdateWhatsAppGraphQlRequest(schedule.enabled(),
                 schedule.zoneIdString(), schedule.startSecondOfDay(), schedule.endSecondOfDay());
         var response = sendGraphQl(request);
-        return BizAiReplyBotEnabledTimeUpdateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiReplyBotEnabledTimeUpdateWhatsAppWebGraphQlResponse::result);
+        return BizAiReplyBotEnabledTimeUpdateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiReplyBotEnabledTimeUpdateWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16845,10 +16701,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiReplyChatTriggerUpdateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> updateAiReplyChatTrigger(String triggerChatType) {
-        var request = new BizAiReplyChatTriggerUpdateWhatsAppWebGraphQlRequest(triggerChatType);
+        var request = new BizAiReplyChatTriggerUpdateWhatsAppGraphQlRequest(triggerChatType);
         var response = sendGraphQl(request);
-        return BizAiReplyChatTriggerUpdateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiReplyChatTriggerUpdateWhatsAppWebGraphQlResponse::result);
+        return BizAiReplyChatTriggerUpdateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiReplyChatTriggerUpdateWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16856,10 +16712,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiReplySettingsQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiReplySettings> queryAiReplySettings() {
-        var request = new BizAiReplySettingsWhatsAppWebGraphQlRequest();
+        var request = new BizAiReplySettingsWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return BizAiReplySettingsWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiReplySettingsWhatsAppWebGraphQlResponse::replySettings);
+        return BizAiReplySettingsWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiReplySettingsWhatsAppGraphQlResponse::replySettings);
     }
 
     /** {@inheritDoc} */
@@ -16867,10 +16723,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiRuleCreateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiRule> createAiRule(String requestJson) {
-        var request = new BizAiRuleCreateWhatsAppWebGraphQlRequest(requestJson);
+        var request = new BizAiRuleCreateWhatsAppGraphQlRequest(requestJson);
         var response = sendGraphQl(request);
-        return BizAiRuleCreateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiRuleCreateWhatsAppWebGraphQlResponse::rule);
+        return BizAiRuleCreateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiRuleCreateWhatsAppGraphQlResponse::rule);
     }
 
     /** {@inheritDoc} */
@@ -16878,10 +16734,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiRuleUpdateMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiRule> updateAiRule(String requestJson) {
-        var request = new BizAiRuleUpdateWhatsAppWebGraphQlRequest(requestJson);
+        var request = new BizAiRuleUpdateWhatsAppGraphQlRequest(requestJson);
         var response = sendGraphQl(request);
-        return BizAiRuleUpdateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiRuleUpdateWhatsAppWebGraphQlResponse::rule);
+        return BizAiRuleUpdateWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiRuleUpdateWhatsAppGraphQlResponse::rule);
     }
 
     /** {@inheritDoc} */
@@ -16889,10 +16745,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiRuleDeleteMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAiMutationResult> deleteAiRule(String ruleId) {
-        var request = new BizAiRuleDeleteWhatsAppWebGraphQlRequest(ruleId);
+        var request = new BizAiRuleDeleteWhatsAppGraphQlRequest(ruleId);
         var response = sendGraphQl(request);
-        return BizAiRuleDeleteWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizAiRuleDeleteWhatsAppWebGraphQlResponse::result);
+        return BizAiRuleDeleteWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizAiRuleDeleteWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -16900,10 +16756,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizAiRulesGenMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BusinessAiRule> generateAiRules() {
-        var request = new BizAiRulesGenWhatsAppWebGraphQlRequest();
+        var request = new BizAiRulesGenWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return BizAiRulesGenWhatsAppWebGraphQlResponse.of(response)
-                .map(BizAiRulesGenWhatsAppWebGraphQlResponse::rules)
+        return BizAiRulesGenWhatsAppGraphQlResponse.of(response)
+                .map(BizAiRulesGenWhatsAppGraphQlResponse::rules)
                 .orElseGet(List::of);
     }
 
@@ -16914,20 +16770,20 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BusinessOrder> createBusinessOrder(JidProvider seller, List<BusinessOrderItem> products, String directConnectionEncryptedInfo) {
         var sellerJid = seller == null ? null : seller.toJid();
         var wireProducts = products == null ? null : products.stream()
-                .map(product -> new BizCreateOrderJobWhatsAppWebGraphQlRequest.Product(
+                .map(product -> new BizCreateOrderJobWhatsAppGraphQlRequest.Product(
                         product.id(),
                         product.name(),
                         product.quantity().orElse(0),
                         product.currency().orElse(null),
                         product.price().orElse(null),
                         product.properties().stream()
-                                .map(property -> new BizCreateOrderJobWhatsAppWebGraphQlRequest.VariantProperty(property.name(), property.value()))
+                                .map(property -> new BizCreateOrderJobWhatsAppGraphQlRequest.VariantProperty(property.name(), property.value()))
                                 .toList()))
                 .toList();
-        var request = new BizCreateOrderJobWhatsAppWebGraphQlRequest(sellerJid, wireProducts, directConnectionEncryptedInfo);
+        var request = new BizCreateOrderJobWhatsAppGraphQlRequest(sellerJid, wireProducts, directConnectionEncryptedInfo);
         var response = sendGraphQl(request);
-        return BizCreateOrderJobWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCreateOrderJobWhatsAppWebGraphQlResponse::order);
+        return BizCreateOrderJobWhatsAppGraphQlResponse.of(response)
+                .map(BizCreateOrderJobWhatsAppGraphQlResponse::order);
     }
 
     /** {@inheritDoc} */
@@ -16935,10 +16791,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizCustomUrlGetUserGraphqlQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessCustomUrlIdentity> queryCustomUrlUser(String path) {
-        var request = new BizCustomUrlGetUserGraphqlWhatsAppWebGraphQlRequest(path);
+        var request = new BizCustomUrlGetUserGraphqlWhatsAppGraphQlRequest(path);
         var response = sendGraphQl(request);
-        return BizCustomUrlGetUserGraphqlWhatsAppWebGraphQlResponse.of(response)
-                .map(BizCustomUrlGetUserGraphqlWhatsAppWebGraphQlResponse::identity);
+        return BizCustomUrlGetUserGraphqlWhatsAppGraphQlResponse.of(response)
+                .map(BizCustomUrlGetUserGraphqlWhatsAppGraphQlResponse::identity);
     }
 
     /** {@inheritDoc} */
@@ -16946,10 +16802,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizGetCustomUrlUserGraphqlQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessCustomUrlIdentity> queryCustomUrlUserProfile(String path) {
-        var request = new BizGetCustomUrlUserGraphqlWhatsAppWebGraphQlRequest(path);
+        var request = new BizGetCustomUrlUserGraphqlWhatsAppGraphQlRequest(path);
         var response = sendGraphQl(request);
-        return BizGetCustomUrlUserGraphqlWhatsAppWebGraphQlResponse.of(response)
-                .map(BizGetCustomUrlUserGraphqlWhatsAppWebGraphQlResponse::identity);
+        return BizGetCustomUrlUserGraphqlWhatsAppGraphQlResponse.of(response)
+                .map(BizGetCustomUrlUserGraphqlWhatsAppGraphQlResponse::identity);
     }
 
     /** {@inheritDoc} */
@@ -16957,10 +16813,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizGetCategoriesQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BusinessCategory> queryBusinessProfileCategories(String query, String locale) {
-        var request = new BizGetCategoriesWhatsAppWebGraphQlRequest(query, locale);
+        var request = new BizGetCategoriesWhatsAppGraphQlRequest(query, locale);
         var response = sendGraphQl(request);
-        return BizGetCategoriesWhatsAppWebGraphQlResponse.of(response)
-                .map(BizGetCategoriesWhatsAppWebGraphQlResponse::categories)
+        return BizGetCategoriesWhatsAppGraphQlResponse.of(response)
+                .map(BizGetCategoriesWhatsAppGraphQlResponse::categories)
                 .orElseGet(List::of);
     }
 
@@ -16969,10 +16825,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizGetCategoriesV2Query", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BusinessCategoryNode> queryBusinessProfileCategoryTree(String query, String locale) {
-        var request = new BizGetCategoriesV2WhatsAppWebGraphQlRequest(query, locale);
+        var request = new BizGetCategoriesV2WhatsAppGraphQlRequest(query, locale);
         var response = sendGraphQl(request);
-        return BizGetCategoriesV2WhatsAppWebGraphQlResponse.of(response)
-                .map(BizGetCategoriesV2WhatsAppWebGraphQlResponse::categories)
+        return BizGetCategoriesV2WhatsAppGraphQlResponse.of(response)
+                .map(BizGetCategoriesV2WhatsAppGraphQlResponse::categories)
                 .orElseGet(List::of);
     }
 
@@ -16981,10 +16837,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBizGetPriceTiersQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BusinessPriceTier> queryBusinessPriceTiers(String locale) {
-        var request = new BizGetPriceTiersWhatsAppWebGraphQlRequest(locale);
+        var request = new BizGetPriceTiersWhatsAppGraphQlRequest(locale);
         var response = sendGraphQl(request);
-        return BizGetPriceTiersWhatsAppWebGraphQlResponse.of(response)
-                .map(BizGetPriceTiersWhatsAppWebGraphQlResponse::priceTiers)
+        return BizGetPriceTiersWhatsAppGraphQlResponse.of(response)
+                .map(BizGetPriceTiersWhatsAppGraphQlResponse::priceTiers)
                 .orElseGet(List::of);
     }
 
@@ -16994,10 +16850,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BusinessWebsiteLink> queryBusinessProfileShimlinks(JidProvider biz) {
         var jid = Objects.requireNonNull(biz, "biz cannot be null").toJid();
-        var request = new BizGetProfileShimlinksWhatsAppWebGraphQlRequest(jid);
+        var request = new BizGetProfileShimlinksWhatsAppGraphQlRequest(jid);
         var response = sendGraphQl(request);
-        return BizGetProfileShimlinksWhatsAppWebGraphQlResponse.of(response)
-                .map(BizGetProfileShimlinksWhatsAppWebGraphQlResponse::websites)
+        return BizGetProfileShimlinksWhatsAppGraphQlResponse.of(response)
+                .map(BizGetProfileShimlinksWhatsAppGraphQlResponse::websites)
                 .orElseGet(List::of);
     }
 
@@ -17013,14 +16869,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessRefreshedCart> refreshBusinessCart(BusinessCartRefreshOptions options) {
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new BizGraphQlRefreshCartJobWhatsAppWebGraphQlRequest(options.businessJid(), options.productIds(),
+        var request = new BizGraphQlRefreshCartJobWhatsAppGraphQlRequest(options.businessJid(), options.productIds(),
                 options.imageWidth().isPresent() ? options.imageWidth().getAsInt() : null,
                 options.imageHeight().isPresent() ? options.imageHeight().getAsInt() : null,
                 options.directConnectionEncryptedInfo().orElse(null),
                 options.variantInfoFields().orElse(null));
         var response = sendGraphQl(request);
-        return BizGraphQlRefreshCartJobWhatsAppWebGraphQlResponse.of(response)
-                .map(BizGraphQlRefreshCartJobWhatsAppWebGraphQlResponse::cart);
+        return BizGraphQlRefreshCartJobWhatsAppGraphQlResponse.of(response)
+                .map(BizGraphQlRefreshCartJobWhatsAppGraphQlResponse::cart);
     }
 
     /** {@inheritDoc} */
@@ -17030,10 +16886,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public List<BusinessAddressSuggestion> queryBusinessAddressAutocomplete(BusinessAddressAutocompleteQuery query) {
         Objects.requireNonNull(query, "query cannot be null");
         var inputJson = buildAddressAutocompleteInputJson(query);
-        var request = new BizProfileAddressAutocompleteWhatsAppWebGraphQlRequest(inputJson);
+        var request = new BizProfileAddressAutocompleteWhatsAppGraphQlRequest(inputJson);
         var response = sendGraphQl(request);
-        return BizProfileAddressAutocompleteWhatsAppWebGraphQlResponse.of(response)
-                .map(BizProfileAddressAutocompleteWhatsAppWebGraphQlResponse::suggestions)
+        return BizProfileAddressAutocompleteWhatsAppGraphQlResponse.of(response)
+                .map(BizProfileAddressAutocompleteWhatsAppGraphQlResponse::suggestions)
                 .orElseGet(List::of);
     }
 
@@ -17077,10 +16933,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessMerchantCompliance> setMerchantCompliance(MerchantComplianceEdit edit) {
         Objects.requireNonNull(edit, "edit cannot be null");
-        var request = new BizSetMerchantComplianceWhatsAppWebGraphQlRequest(edit);
+        var request = new BizSetMerchantComplianceWhatsAppGraphQlRequest(edit);
         var response = sendGraphQl(request);
-        return BizSetMerchantComplianceWhatsAppWebGraphQlResponse.of(response)
-                .map(BizSetMerchantComplianceWhatsAppWebGraphQlResponse::merchantInfo);
+        return BizSetMerchantComplianceWhatsAppGraphQlResponse.of(response)
+                .map(BizSetMerchantComplianceWhatsAppGraphQlResponse::merchantInfo);
     }
 
     /** {@inheritDoc} */
@@ -17089,10 +16945,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessCatalogPublicKey> queryCatalogPublicKey(JidProvider biz) {
         var jid = Objects.requireNonNull(biz, "biz cannot be null").toJid();
-        var request = new GraphQlProductCatalogGetPublicKeyJobWhatsAppWebGraphQlRequest(jid);
+        var request = new GraphQlProductCatalogGetPublicKeyJobWhatsAppGraphQlRequest(jid);
         var response = sendGraphQl(request);
-        return GraphQlProductCatalogGetPublicKeyJobWhatsAppWebGraphQlResponse.of(response)
-                .map(GraphQlProductCatalogGetPublicKeyJobWhatsAppWebGraphQlResponse::publicKey);
+        return GraphQlProductCatalogGetPublicKeyJobWhatsAppGraphQlResponse.of(response)
+                .map(GraphQlProductCatalogGetPublicKeyJobWhatsAppGraphQlResponse::publicKey);
     }
 
     /** {@inheritDoc} */
@@ -17101,10 +16957,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean reportCatalogProduct(JidProvider catalog, String productId, String reason) {
         var catalogJid = catalog == null ? null : catalog.toJid();
-        var request = new ReportProductJobWhatsAppWebGraphQlRequest(catalogJid, productId, reason);
+        var request = new ReportProductJobWhatsAppGraphQlRequest(catalogJid, productId, reason);
         var response = sendGraphQl(request);
-        return ReportProductJobWhatsAppWebGraphQlResponse.of(response)
-                .map(ReportProductJobWhatsAppWebGraphQlResponse::accepted)
+        return ReportProductJobWhatsAppGraphQlResponse.of(response)
+                .map(ReportProductJobWhatsAppGraphQlResponse::accepted)
                 .orElse(false);
     }
 
@@ -17113,10 +16969,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "useWAWebBizBroadcastBillingInfoQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessBroadcastBillingAccount> queryBroadcastBillingInfo(String assetId, Long budget, String entrypoint) {
-        var request = new BizBroadcastBillingInfoWhatsAppWebGraphQlRequest(assetId, budget, entrypoint);
+        var request = new BizBroadcastBillingInfoWhatsAppGraphQlRequest(assetId, budget, entrypoint);
         var response = sendGraphQl(request);
-        return BizBroadcastBillingInfoWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizBroadcastBillingInfoWhatsAppWebGraphQlResponse::billableAccount);
+        return BizBroadcastBillingInfoWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizBroadcastBillingInfoWhatsAppGraphQlResponse::billableAccount);
     }
 
     /**
@@ -17130,10 +16986,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "useWAWebBizBroadcastBusinessInfoMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessBroadcastTargetInfo> queryBroadcastBusinessInfo(String inputJson) {
-        var request = new BizBroadcastBusinessInfoWhatsAppWebGraphQlRequest(inputJson);
+        var request = new BizBroadcastBusinessInfoWhatsAppGraphQlRequest(inputJson);
         var response = sendGraphQl(request);
-        return BizBroadcastBusinessInfoWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizBroadcastBusinessInfoWhatsAppWebGraphQlResponse::businessInfo);
+        return BizBroadcastBusinessInfoWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizBroadcastBusinessInfoWhatsAppGraphQlResponse::businessInfo);
     }
 
     /** {@inheritDoc} */
@@ -17142,15 +16998,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessBroadcastGenAiRecommendation> queryBroadcastGenAiRecommendation(BusinessBroadcastGenAiRecommendationQuery query) {
         Objects.requireNonNull(query, "query cannot be null");
-        var request = new BizBroadcastGenAiRecommendationJobWhatsAppWebGraphQlRequest(
+        var request = new BizBroadcastGenAiRecommendationJobWhatsAppGraphQlRequest(
                 query.actorId().orElse(null),
                 query.modelId().orElse(null),
                 query.userInfo().orElse(null),
                 query.userMessageDraft().orElse(null),
                 query.userPrompt().orElse(null));
         var response = sendGraphQl(request);
-        return BizBroadcastGenAiRecommendationJobWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizBroadcastGenAiRecommendationJobWhatsAppWebGraphQlResponse::recommendation);
+        return BizBroadcastGenAiRecommendationJobWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizBroadcastGenAiRecommendationJobWhatsAppGraphQlResponse::recommendation);
     }
 
     /** {@inheritDoc} */
@@ -17158,10 +17014,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "useWAWebBizBroadcastQuotaQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessBroadcastQuota> queryBroadcastQuota(String dataJson) {
-        var request = new BizBroadcastQuotaWhatsAppWebGraphQlRequest(dataJson);
+        var request = new BizBroadcastQuotaWhatsAppGraphQlRequest(dataJson);
         var response = sendGraphQl(request);
-        return BizBroadcastQuotaWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(BizBroadcastQuotaWhatsAppWebGraphQlResponse::quota);
+        return BizBroadcastQuotaWhatsAppGraphQlResponse.of(response)
+                .flatMap(BizBroadcastQuotaWhatsAppGraphQlResponse::quota);
     }
 
     /** {@inheritDoc} */
@@ -17172,11 +17028,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(consumerLid, "consumerLid cannot be null").toJid();
         var relayStatus = threadStatus == null
                 ? null
-                : AiAgentAutoReplyControlWhatsAppWebGraphQlRequest.ThreadStatus.of(threadStatus.wireValue()).orElse(null);
-        var request = new AiAgentAutoReplyControlWhatsAppWebGraphQlRequest(jid, phoneNumber, relayStatus);
+                : AiAgentAutoReplyControlWhatsAppGraphQlRequest.ThreadStatus.of(threadStatus.wireValue()).orElse(null);
+        var request = new AiAgentAutoReplyControlWhatsAppGraphQlRequest(jid, phoneNumber, relayStatus);
         var response = sendGraphQl(request);
-        return AiAgentAutoReplyControlWhatsAppWebGraphQlResponse.of(response)
-                .map(AiAgentAutoReplyControlWhatsAppWebGraphQlResponse::result);
+        return AiAgentAutoReplyControlWhatsAppGraphQlResponse.of(response)
+                .map(AiAgentAutoReplyControlWhatsAppGraphQlResponse::result);
     }
 
     /** {@inheritDoc} */
@@ -17185,15 +17041,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessMarketingCampaign> createMarketingCampaign(BusinessMarketingCampaignCreate campaign) {
         Objects.requireNonNull(campaign, "campaign cannot be null");
-        var request = new CreateMarketingCampaignActionWhatsAppWebGraphQlRequest(
+        var request = new CreateMarketingCampaignActionWhatsAppGraphQlRequest(
                 campaign.adAccountId().orElse(null),
                 campaign.campaignName().orElse(null),
                 campaign.lifetimeBudget().orElse(null),
                 campaign.pageId().orElse(null),
                 campaign.whatsAppBusinessAccountId().orElse(null));
         var response = sendGraphQl(request);
-        return CreateMarketingCampaignActionWhatsAppWebGraphQlResponse.of(response)
-                .map(CreateMarketingCampaignActionWhatsAppWebGraphQlResponse::campaign);
+        return CreateMarketingCampaignActionWhatsAppGraphQlResponse.of(response)
+                .map(CreateMarketingCampaignActionWhatsAppGraphQlResponse::campaign);
     }
 
     /** {@inheritDoc} */
@@ -17201,10 +17057,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebCustomLabel3pdEventQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<CtwaConversionEvent> query3pdEventsByCustomLabels(List<String> customLabels, String exptGroup) {
-        var request = new CustomLabel3pdEventWhatsAppWebGraphQlRequest(customLabels, exptGroup);
+        var request = new CustomLabel3PdEventWhatsAppGraphQlRequest(customLabels, exptGroup);
         var response = sendGraphQl(request);
-        return CustomLabel3pdEventWhatsAppWebGraphQlResponse.of(response)
-                .map(CustomLabel3pdEventWhatsAppWebGraphQlResponse::events)
+        return CustomLabel3PdEventWhatsAppGraphQlResponse.of(response)
+                .map(CustomLabel3PdEventWhatsAppGraphQlResponse::events)
                 .orElseGet(List::of);
     }
 
@@ -17213,10 +17069,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchAdEntryPointsConfigurationQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<AdEntryPointEntitlement> queryClickToWhatsAppAdEntryPoints() {
-        var request = new FetchAdEntryPointsConfigurationWhatsAppWebGraphQlRequest();
+        var request = new FetchAdEntryPointsConfigurationWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return FetchAdEntryPointsConfigurationWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchAdEntryPointsConfigurationWhatsAppWebGraphQlResponse::entitlements)
+        return FetchAdEntryPointsConfigurationWhatsAppGraphQlResponse.of(response)
+                .map(FetchAdEntryPointsConfigurationWhatsAppGraphQlResponse::entitlements)
                 .orElseGet(List::of);
     }
 
@@ -17225,10 +17081,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchAdEntryPointsConfigurationM1Query", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<AdEntryPointEntitlement> queryClickToWhatsAppAdEntryPointsWithCopy() {
-        var request = new FetchAdEntryPointsConfigurationM1WhatsAppWebGraphQlRequest();
+        var request = new FetchAdEntryPointsConfigurationM1WhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return FetchAdEntryPointsConfigurationM1WhatsAppWebGraphQlResponse.of(response)
-                .map(FetchAdEntryPointsConfigurationM1WhatsAppWebGraphQlResponse::entitlements)
+        return FetchAdEntryPointsConfigurationM1WhatsAppGraphQlResponse.of(response)
+                .map(FetchAdEntryPointsConfigurationM1WhatsAppGraphQlResponse::entitlements)
                 .orElseGet(List::of);
     }
 
@@ -17237,10 +17093,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchDynamicAIModesQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<MetaAiMode> queryDynamicAiModes() {
-        var request = new FetchDynamicAiModesWhatsAppWebGraphQlRequest();
+        var request = new FetchDynamicAiModesWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return FetchDynamicAiModesWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchDynamicAiModesWhatsAppWebGraphQlResponse::modes)
+        return FetchDynamicAiModesWhatsAppGraphQlResponse.of(response)
+                .map(FetchDynamicAiModesWhatsAppGraphQlResponse::modes)
                 .orElseGet(List::of);
     }
 
@@ -17249,10 +17105,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchMetaAISearchNullStateSuggestionsQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<MetaAiSearchSuggestions> queryMetaAiSearchNullStateSuggestions(String locale, String nullStateSource, List<Integer> expConfig) {
-        var request = new FetchMetaAiSearchNullStateSuggestionsWhatsAppWebGraphQlRequest(locale, nullStateSource, expConfig);
+        var request = new FetchMetaAiSearchNullStateSuggestionsWhatsAppGraphQlRequest(locale, nullStateSource, expConfig);
         var response = sendGraphQl(request);
-        return FetchMetaAiSearchNullStateSuggestionsWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchMetaAiSearchNullStateSuggestionsWhatsAppWebGraphQlResponse::suggestions);
+        return FetchMetaAiSearchNullStateSuggestionsWhatsAppGraphQlResponse.of(response)
+                .map(FetchMetaAiSearchNullStateSuggestionsWhatsAppGraphQlResponse::suggestions);
     }
 
     /** {@inheritDoc} */
@@ -17260,10 +17116,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchOIDCStateQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> queryOidcState() {
-        var request = new FetchOidcStateWhatsAppWebGraphQlRequest();
+        var request = new FetchOidcStateWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return FetchOidcStateWhatsAppWebGraphQlResponse.of(response)
-                .flatMap(FetchOidcStateWhatsAppWebGraphQlResponse::oidcState);
+        return FetchOidcStateWhatsAppGraphQlResponse.of(response)
+                .flatMap(FetchOidcStateWhatsAppGraphQlResponse::oidcState);
     }
 
     /** {@inheritDoc} */
@@ -17271,10 +17127,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchSubscriptionEntryPointsQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessSubscriptionEntryPoints> querySubscriptionEntryPoints() {
-        var request = new FetchSubscriptionEntryPointsWhatsAppWebGraphQlRequest();
+        var request = new FetchSubscriptionEntryPointsWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return FetchSubscriptionEntryPointsWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchSubscriptionEntryPointsWhatsAppWebGraphQlResponse::entryPoints);
+        return FetchSubscriptionEntryPointsWhatsAppGraphQlResponse.of(response)
+                .map(FetchSubscriptionEntryPointsWhatsAppGraphQlResponse::entryPoints);
     }
 
     /** {@inheritDoc} */
@@ -17282,10 +17138,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchSubscriptionsQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessSubscriptions> queryBusinessSubscriptions(String platform) {
-        var request = new FetchSubscriptionsWhatsAppWebGraphQlRequest(platform);
+        var request = new FetchSubscriptionsWhatsAppGraphQlRequest(platform);
         var response = sendGraphQl(request);
-        return FetchSubscriptionsWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchSubscriptionsWhatsAppWebGraphQlResponse::subscriptions);
+        return FetchSubscriptionsWhatsAppGraphQlResponse.of(response)
+                .map(FetchSubscriptionsWhatsAppGraphQlResponse::subscriptions);
     }
 
     /** {@inheritDoc} */
@@ -17294,10 +17150,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessFlowMetadata> queryFlowMetadata(JidProvider bizJid, String flowId) {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
-        var request = new GalaxyFlowsDrawerGetFlowDataWhatsAppWebGraphQlRequest(jid, flowId);
+        var request = new GalaxyFlowsDrawerGetFlowDataWhatsAppGraphQlRequest(jid, flowId);
         var response = sendGraphQl(request);
-        return GalaxyFlowsDrawerGetFlowDataWhatsAppWebGraphQlResponse.of(response)
-                .map(GalaxyFlowsDrawerGetFlowDataWhatsAppWebGraphQlResponse::metadata);
+        return GalaxyFlowsDrawerGetFlowDataWhatsAppGraphQlResponse.of(response)
+                .map(GalaxyFlowsDrawerGetFlowDataWhatsAppGraphQlResponse::metadata);
     }
 
     /** {@inheritDoc} */
@@ -17305,10 +17161,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGetFBAccountPagesQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<FacebookPage> queryPromotableFacebookPages(String userId) {
-        var request = new GetFbAccountPagesWhatsAppWebGraphQlRequest(userId);
+        var request = new GetFbAccountPagesWhatsAppGraphQlRequest(userId);
         var response = sendGraphQl(request);
-        return GetFbAccountPagesWhatsAppWebGraphQlResponse.of(response)
-                .map(GetFbAccountPagesWhatsAppWebGraphQlResponse::pages)
+        return GetFbAccountPagesWhatsAppGraphQlResponse.of(response)
+                .map(GetFbAccountPagesWhatsAppGraphQlResponse::pages)
                 .orElseGet(List::of);
     }
 
@@ -17317,10 +17173,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGetNumbersForBrandIdsJobQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BrandPhoneNumberMapping> queryPhoneNumbersForBrandIds(List<String> brandIds, Boolean lidBasedResponse) {
-        var request = new GetNumbersForBrandIdsJobWhatsAppWebGraphQlRequest(brandIds, lidBasedResponse);
+        var request = new GetNumbersForBrandIdsJobWhatsAppGraphQlRequest(brandIds, lidBasedResponse);
         var response = sendGraphQl(request);
-        return GetNumbersForBrandIdsJobWhatsAppWebGraphQlResponse.of(response)
-                .map(GetNumbersForBrandIdsJobWhatsAppWebGraphQlResponse::mappings)
+        return GetNumbersForBrandIdsJobWhatsAppGraphQlResponse.of(response)
+                .map(GetNumbersForBrandIdsJobWhatsAppGraphQlResponse::mappings)
                 .orElseGet(List::of);
     }
 
@@ -17329,10 +17185,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGetWAAEligibilityQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<WhatsAppAdsEligibility> queryWaaEligibility(String flowId, Instant requestId) {
-        var request = new GetWaaEligibilityWhatsAppWebGraphQlRequest(flowId, requestId);
+        var request = new GetWaaEligibilityWhatsAppGraphQlRequest(flowId, requestId);
         var response = sendGraphQl(request);
-        return GetWaaEligibilityWhatsAppWebGraphQlResponse.of(response)
-                .map(GetWaaEligibilityWhatsAppWebGraphQlResponse::eligibility);
+        return GetWaaEligibilityWhatsAppGraphQlResponse.of(response)
+                .map(GetWaaEligibilityWhatsAppGraphQlResponse::eligibility);
     }
 
     /** {@inheritDoc} */
@@ -17341,10 +17197,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessPostcodeVerification> verifyCatalogPostcode(JidProvider bizJid, String directConnectionEncryptedInfo) {
         var jid = Objects.requireNonNull(bizJid, "bizJid cannot be null").toJid();
-        var request = new GraphQlVerifyPostcodeJobWhatsAppWebGraphQlRequest(jid, directConnectionEncryptedInfo);
+        var request = new GraphQlVerifyPostcodeJobWhatsAppGraphQlRequest(jid, directConnectionEncryptedInfo);
         var response = sendGraphQl(request);
-        return GraphQlVerifyPostcodeJobWhatsAppWebGraphQlResponse.of(response)
-                .map(GraphQlVerifyPostcodeJobWhatsAppWebGraphQlResponse::verification);
+        return GraphQlVerifyPostcodeJobWhatsAppGraphQlResponse.of(response)
+                .map(GraphQlVerifyPostcodeJobWhatsAppGraphQlResponse::verification);
     }
 
     /** {@inheritDoc} */
@@ -17352,10 +17208,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebNativeMLModelQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<NativeMachineLearningModelManifest> queryNativeMlModelManifest(String modelRequestMetadatasJson, String clientCapabilityMetadataJson) {
-        var request = new NativeMlModelWhatsAppWebGraphQlRequest(modelRequestMetadatasJson, clientCapabilityMetadataJson);
+        var request = new NativeMlModelWhatsAppGraphQlRequest(modelRequestMetadatasJson, clientCapabilityMetadataJson);
         var response = sendGraphQl(request);
-        return NativeMlModelWhatsAppWebGraphQlResponse.of(response)
-                .map(NativeMlModelWhatsAppWebGraphQlResponse::manifest);
+        return NativeMlModelWhatsAppGraphQlResponse.of(response)
+                .map(NativeMlModelWhatsAppGraphQlResponse::manifest);
     }
 
     /** {@inheritDoc} */
@@ -17363,10 +17219,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebResolveAccountTypeAndAdPageMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<WhatsAppAdsAccountTypeReset> queryAccountTypeAndAdPage() {
-        var request = new ResolveAccountTypeAndAdPageMutationWhatsAppWebGraphQlRequest();
+        var request = new ResolveAccountTypeAndAdPageMutationWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return ResolveAccountTypeAndAdPageMutationWhatsAppWebGraphQlResponse.of(response)
-                .map(ResolveAccountTypeAndAdPageMutationWhatsAppWebGraphQlResponse::reset);
+        return ResolveAccountTypeAndAdPageMutationWhatsAppGraphQlResponse.of(response)
+                .map(ResolveAccountTypeAndAdPageMutationWhatsAppGraphQlResponse::reset);
     }
 
     /** {@inheritDoc} */
@@ -17374,10 +17230,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebResolveAccountTypeAndAdPageQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<WhatsAppAdsPageEligibility> queryPageEligibility(String pageId) {
-        var request = new ResolveAccountTypeAndAdPageQueryWhatsAppWebGraphQlRequest(pageId);
+        var request = new ResolveAccountTypeAndAdPageQueryWhatsAppGraphQlRequest(pageId);
         var response = sendGraphQl(request);
-        return ResolveAccountTypeAndAdPageQueryWhatsAppWebGraphQlResponse.of(response)
-                .map(ResolveAccountTypeAndAdPageQueryWhatsAppWebGraphQlResponse::eligibility);
+        return ResolveAccountTypeAndAdPageQueryWhatsAppGraphQlResponse.of(response)
+                .map(ResolveAccountTypeAndAdPageQueryWhatsAppGraphQlResponse::eligibility);
     }
 
     /** {@inheritDoc} */
@@ -17387,10 +17243,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<SupportBugReportSubmission> submitSupportBugReport(SupportBugReportSubmissionRequest request) {
         Objects.requireNonNull(request, "request cannot be null");
         var inputJson = buildBugReportInputJson(request);
-        var relayRequest = new SupportBugReportSubmitWhatsAppWebGraphQlRequest(inputJson);
+        var relayRequest = new SupportBugReportSubmitWhatsAppGraphQlRequest(inputJson);
         var response = sendGraphQl(relayRequest);
-        return SupportBugReportSubmitWhatsAppWebGraphQlResponse.of(response)
-                .map(SupportBugReportSubmitWhatsAppWebGraphQlResponse::submission);
+        return SupportBugReportSubmitWhatsAppGraphQlResponse.of(response)
+                .map(SupportBugReportSubmitWhatsAppGraphQlResponse::submission);
     }
 
     /**
@@ -17427,12 +17283,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 : feedbackTypes.stream()
                         .map(kind -> kind == null
                                 ? null
-                                : SupportMessageFeedbackSubmitWhatsAppWebGraphQlRequest.FeedbackType.of(kind.wireValue()).orElse(null))
+                                : SupportMessageFeedbackSubmitWhatsAppGraphQlRequest.FeedbackType.of(kind.wireValue()).orElse(null))
                         .toList();
-        var request = new SupportMessageFeedbackSubmitWhatsAppWebGraphQlRequest(messageId, relayTypes);
+        var request = new SupportMessageFeedbackSubmitWhatsAppGraphQlRequest(messageId, relayTypes);
         var response = sendGraphQl(request);
-        return SupportMessageFeedbackSubmitWhatsAppWebGraphQlResponse.of(response)
-                .map(SupportMessageFeedbackSubmitWhatsAppWebGraphQlResponse::submission);
+        return SupportMessageFeedbackSubmitWhatsAppGraphQlResponse.of(response)
+                .map(SupportMessageFeedbackSubmitWhatsAppGraphQlResponse::submission);
     }
 
     /** {@inheritDoc} */
@@ -17440,10 +17296,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebWAAOnboardingMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<WhatsAppAdsAdAccount> onboardWaaAccount(String flowId, Instant requestId) {
-        var request = new WaaOnboardingWhatsAppWebGraphQlRequest(flowId, requestId);
+        var request = new WaaOnboardingWhatsAppGraphQlRequest(flowId, requestId);
         var response = sendGraphQl(request);
-        return WaaOnboardingWhatsAppWebGraphQlResponse.of(response)
-                .map(WaaOnboardingWhatsAppWebGraphQlResponse::adAccount);
+        return WaaOnboardingWhatsAppGraphQlResponse.of(response)
+                .map(WaaOnboardingWhatsAppGraphQlResponse::adAccount);
     }
 
     /** {@inheritDoc} */
@@ -17451,10 +17307,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebWaffleFXServiceDataQueryV2Mutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<CrossPostingServiceData> queryCrossPostingServiceData() {
-        var request = new WaffleFxServiceDataQueryV2WhatsAppWebGraphQlRequest();
+        var request = new WaffleFxServiceDataQueryV2WhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return WaffleFxServiceDataQueryV2WhatsAppWebGraphQlResponse.of(response)
-                .map(WaffleFxServiceDataQueryV2WhatsAppWebGraphQlResponse::serviceData);
+        return WaffleFxServiceDataQueryV2WhatsAppGraphQlResponse.of(response)
+                .map(WaffleFxServiceDataQueryV2WhatsAppGraphQlResponse::serviceData);
     }
 
     /** {@inheritDoc} */
@@ -17462,10 +17318,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebWaffleFXWAMOUpdateUOOMMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean updateGlobalPrivacyControlOptOut() {
-        var request = new WaffleFxwamoUpdateUoomWhatsAppWebGraphQlRequest();
+        var request = new WaffleFxwamoUpdateUoomWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return WaffleFxwamoUpdateUoomWhatsAppWebGraphQlResponse.of(response)
-                .map(WaffleFxwamoUpdateUoomWhatsAppWebGraphQlResponse::updated)
+        return WaffleFxwamoUpdateUoomWhatsAppGraphQlResponse.of(response)
+                .map(WaffleFxwamoUpdateUoomWhatsAppGraphQlResponse::updated)
                 .orElse(false);
     }
 
@@ -17478,21 +17334,21 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var relayDestinations = query.destinations().stream()
                 .map(dest -> dest == null
                         ? null
-                        : new WaffleXeWhatsAppWebGraphQlRequest.WaffleXas(
+                        : new WaffleXeWhatsAppGraphQlRequest.WaffleXas(
                                 dest.application()
-                                        .flatMap(app -> WaffleXeWhatsAppWebGraphQlRequest.WaffleXan.of(app.wireValue()))
+                                        .flatMap(app -> WaffleXeWhatsAppGraphQlRequest.WaffleXan.of(app.wireValue()))
                                         .orElse(null),
                                 dest.surface().orElse(null)))
                 .toList();
-        var request = new WaffleXeWhatsAppWebGraphQlRequest(
+        var request = new WaffleXeWhatsAppGraphQlRequest(
                 query.expirationTimes(),
                 query.purposeClientPublicKey().orElse(null),
                 query.uniqueIds(),
                 relayDestinations,
                 query.sessionId().orElse(null));
         var response = sendGraphQl(request);
-        return WaffleXeWhatsAppWebGraphQlResponse.of(response)
-                .map(WaffleXeWhatsAppWebGraphQlResponse::eligibility);
+        return WaffleXeWhatsAppGraphQlResponse.of(response)
+                .map(WaffleXeWhatsAppGraphQlResponse::eligibility);
     }
 
     /** {@inheritDoc} */
@@ -17500,10 +17356,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGetAccountNonceMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessAccountNonce> queryBusinessAccountNonce(String scope) {
-        var request = new GetAccountNonceWhatsAppWebGraphQlRequest(scope);
+        var request = new GetAccountNonceWhatsAppGraphQlRequest(scope);
         var response = sendGraphQl(request);
-        return GetAccountNonceWhatsAppWebGraphQlResponse.of(response)
-                .map(GetAccountNonceWhatsAppWebGraphQlResponse::nonce);
+        return GetAccountNonceWhatsAppGraphQlResponse.of(response)
+                .map(GetAccountNonceWhatsAppGraphQlResponse::nonce);
     }
 
     /** {@inheritDoc} */
@@ -17511,10 +17367,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebLinkedAccountsGQLQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessLinkedAdAccounts> queryRelayLinkedAccounts() {
-        var request = new LinkedAccountsGqlWhatsAppWebGraphQlRequest();
+        var request = new LinkedAccountsGqlWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return LinkedAccountsGqlWhatsAppWebGraphQlResponse.of(response)
-                .map(LinkedAccountsGqlWhatsAppWebGraphQlResponse::accounts);
+        return LinkedAccountsGqlWhatsAppGraphQlResponse.of(response)
+                .map(LinkedAccountsGqlWhatsAppGraphQlResponse::accounts);
     }
 
     /** {@inheritDoc} */
@@ -17522,10 +17378,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebAuthAgentFeaturePolicyQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<AuthorizedAgentFeaturePolicy> queryAgentFeaturePolicy() {
-        var request = new AuthAgentFeaturePolicyWhatsAppWebGraphQlRequest();
+        var request = new AuthAgentFeaturePolicyWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return AuthAgentFeaturePolicyWhatsAppWebGraphQlResponse.of(response)
-                .map(AuthAgentFeaturePolicyWhatsAppWebGraphQlResponse::policy);
+        return AuthAgentFeaturePolicyWhatsAppGraphQlResponse.of(response)
+                .map(AuthAgentFeaturePolicyWhatsAppGraphQlResponse::policy);
     }
 
     /** {@inheritDoc} */
@@ -17533,10 +17389,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBPAccessTokenAndSessionCookiesMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessPlatformAuthToken> exchangeBusinessPlatformAuthCode(long applicationId, String code) {
-        var request = new BpAccessTokenAndSessionCookiesWhatsAppWebGraphQlRequest(applicationId, code);
+        var request = new BpAccessTokenAndSessionCookiesWhatsAppGraphQlRequest(applicationId, code);
         var response = sendGraphQl(request);
-        return BpAccessTokenAndSessionCookiesWhatsAppWebGraphQlResponse.of(response)
-                .map(BpAccessTokenAndSessionCookiesWhatsAppWebGraphQlResponse::token);
+        return BpAccessTokenAndSessionCookiesWhatsAppGraphQlResponse.of(response)
+                .map(BpAccessTokenAndSessionCookiesWhatsAppGraphQlResponse::token);
     }
 
     /** {@inheritDoc} */
@@ -17544,10 +17400,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebCanonicalUserValidQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean queryWebSessionUserValidity() {
-        var request = new CanonicalUserValidWhatsAppWebGraphQlRequest();
+        var request = new CanonicalUserValidWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return CanonicalUserValidWhatsAppWebGraphQlResponse.of(response)
-                .map(CanonicalUserValidWhatsAppWebGraphQlResponse::valid)
+        return CanonicalUserValidWhatsAppGraphQlResponse.of(response)
+                .map(CanonicalUserValidWhatsAppGraphQlResponse::valid)
                 .orElse(false);
     }
 
@@ -17556,10 +17412,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebCanonicalHatchAgentStatusGetQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<AiChannelAgentStatus> queryAiChannelAgentStatus() {
-        var request = new CanonicalHatchAgentStatusGetWhatsAppWebGraphQlRequest();
+        var request = new CanonicalHatchAgentStatusGetWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return CanonicalHatchAgentStatusGetWhatsAppWebGraphQlResponse.of(response)
-                .map(CanonicalHatchAgentStatusGetWhatsAppWebGraphQlResponse::status);
+        return CanonicalHatchAgentStatusGetWhatsAppGraphQlResponse.of(response)
+                .map(CanonicalHatchAgentStatusGetWhatsAppGraphQlResponse::status);
     }
 
     /** {@inheritDoc} */
@@ -17567,10 +17423,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebCanonicalHatchCommandGetQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<AiChannelCommand> queryAiChannelCommands() {
-        var request = new CanonicalHatchCommandGetWhatsAppWebGraphQlRequest();
+        var request = new CanonicalHatchCommandGetWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return CanonicalHatchCommandGetWhatsAppWebGraphQlResponse.of(response)
-                .map(CanonicalHatchCommandGetWhatsAppWebGraphQlResponse::commands)
+        return CanonicalHatchCommandGetWhatsAppGraphQlResponse.of(response)
+                .map(CanonicalHatchCommandGetWhatsAppGraphQlResponse::commands)
                 .orElseGet(List::of);
     }
 
@@ -17579,10 +17435,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebCanonicalHatchIdentityGetQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<AiChannelIdentity> queryAiChannelIdentity() {
-        var request = new CanonicalHatchIdentityGetWhatsAppWebGraphQlRequest();
+        var request = new CanonicalHatchIdentityGetWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return CanonicalHatchIdentityGetWhatsAppWebGraphQlResponse.of(response)
-                .map(CanonicalHatchIdentityGetWhatsAppWebGraphQlResponse::identity);
+        return CanonicalHatchIdentityGetWhatsAppGraphQlResponse.of(response)
+                .map(CanonicalHatchIdentityGetWhatsAppGraphQlResponse::identity);
     }
 
     /** {@inheritDoc} */
@@ -17590,10 +17446,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebCanonicalHatchLinkedStatusGetQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<AiChannelLinkedStatus> queryAiChannelLinkedStatus() {
-        var request = new CanonicalHatchLinkedStatusGetWhatsAppWebGraphQlRequest();
+        var request = new CanonicalHatchLinkedStatusGetWhatsAppGraphQlRequest();
         var response = sendGraphQl(request);
-        return CanonicalHatchLinkedStatusGetWhatsAppWebGraphQlResponse.of(response)
-                .map(CanonicalHatchLinkedStatusGetWhatsAppWebGraphQlResponse::status);
+        return CanonicalHatchLinkedStatusGetWhatsAppGraphQlResponse.of(response)
+                .map(CanonicalHatchLinkedStatusGetWhatsAppGraphQlResponse::status);
     }
 
     /** {@inheritDoc} */
@@ -17602,14 +17458,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<ExternalChatDeepLinkAuthorization> authorizeExternalChatDeepLink(ExternalChatDeepLinkAuthorizationOptions options) {
         Objects.requireNonNull(options, "options cannot be null");
-        var request = new ExternalCtxAuthoriseWaChatWhatsAppWebGraphQlRequest(
+        var request = new ExternalCtxAuthoriseWaChatWhatsAppGraphQlRequest(
                 options.recipient().orElse(null),
                 options.deeplinkType().orElse(null),
                 options.fromExternalApp().orElse(null),
                 options.partnerToken().orElse(null));
         var response = sendGraphQl(request);
-        return ExternalCtxAuthoriseWaChatWhatsAppWebGraphQlResponse.of(response)
-                .map(ExternalCtxAuthoriseWaChatWhatsAppWebGraphQlResponse::authorization);
+        return ExternalCtxAuthoriseWaChatWhatsAppGraphQlResponse.of(response)
+                .map(ExternalCtxAuthoriseWaChatWhatsAppGraphQlResponse::authorization);
     }
 
     /** {@inheritDoc} */
@@ -17617,10 +17473,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGetAccessTokenFromOIDCCodeMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<FacebookOidcAccessToken> exchangeOidcCodeForAccessToken(String code, String state) {
-        var request = new GetAccessTokenFromOidcCodeWhatsAppWebGraphQlRequest(code, state);
+        var request = new GetAccessTokenFromOidcCodeWhatsAppGraphQlRequest(code, state);
         var response = sendGraphQl(request);
-        return GetAccessTokenFromOidcCodeWhatsAppWebGraphQlResponse.of(response)
-                .map(GetAccessTokenFromOidcCodeWhatsAppWebGraphQlResponse::token);
+        return GetAccessTokenFromOidcCodeWhatsAppGraphQlResponse.of(response)
+                .map(GetAccessTokenFromOidcCodeWhatsAppGraphQlResponse::token);
     }
 
     /** {@inheritDoc} */
@@ -17628,10 +17484,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebSignupMetadataQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<BusinessSignupMetadata> querySignupMetadata(String signupId, String phoneNumber) {
-        var request = new SignupMetadataWhatsAppWebGraphQlRequest(signupId, phoneNumber);
+        var request = new SignupMetadataWhatsAppGraphQlRequest(signupId, phoneNumber);
         var response = sendGraphQl(request);
-        return SignupMetadataWhatsAppWebGraphQlResponse.of(response)
-                .map(SignupMetadataWhatsAppWebGraphQlResponse::metadata);
+        return SignupMetadataWhatsAppGraphQlResponse.of(response)
+                .map(SignupMetadataWhatsAppGraphQlResponse::metadata);
     }
 
     /** {@inheritDoc} */
@@ -17639,10 +17495,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebCreateWhatsAppAdsIdentityMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<WhatsAppAdsIdentityPage> createWhatsAppAdsIdentity(String phoneNumber, String code) {
-        var request = new CreateWhatsAppAdsIdentityWhatsAppWebGraphQlRequest(phoneNumber, code);
+        var request = new CreateWhatsAppAdsIdentityWhatsAppGraphQlRequest(phoneNumber, code);
         var response = sendGraphQl(request);
-        return CreateWhatsAppAdsIdentityWhatsAppWebGraphQlResponse.of(response)
-                .map(CreateWhatsAppAdsIdentityWhatsAppWebGraphQlResponse::page);
+        return CreateWhatsAppAdsIdentityWhatsAppGraphQlResponse.of(response)
+                .map(CreateWhatsAppAdsIdentityWhatsAppGraphQlResponse::page);
     }
 
     /** {@inheritDoc} */
@@ -17651,16 +17507,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<AdMediaRegistration> linkMediaToNativeAd(List<AdMediaLink> mediaList) {
         var wireEntries = mediaList == null ? null : mediaList.stream()
-                .map(entry -> new BizAdCreationLinkWaMediaToStatusWhatsAppWebGraphQlRequest.MediaEntry(
+                .map(entry -> new BizAdCreationLinkWaMediaToStatusWhatsAppGraphQlRequest.MediaEntry(
                         entry.id().orElse(null),
                         entry.type()
-                                .map(type -> BizAdCreationLinkWaMediaToStatusWhatsAppWebGraphQlRequest.MediaType.ofWireValue(type.wireValue()).orElse(null))
+                                .map(type -> BizAdCreationLinkWaMediaToStatusWhatsAppGraphQlRequest.MediaType.ofWireValue(type.wireValue()).orElse(null))
                                 .orElse(null)))
                 .toList();
-        var request = new BizAdCreationLinkWaMediaToStatusWhatsAppWebGraphQlRequest(wireEntries);
+        var request = new BizAdCreationLinkWaMediaToStatusWhatsAppGraphQlRequest(wireEntries);
         var response = sendGraphQl(request);
-        return BizAdCreationLinkWaMediaToStatusWhatsAppWebGraphQlResponse.of(response)
-                .map(BizAdCreationLinkWaMediaToStatusWhatsAppWebGraphQlResponse::registrations)
+        return BizAdCreationLinkWaMediaToStatusWhatsAppGraphQlResponse.of(response)
+                .map(BizAdCreationLinkWaMediaToStatusWhatsAppGraphQlResponse::registrations)
                 .orElseGet(List::of);
     }
 
@@ -17671,14 +17527,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public List<AdMediaUpload> uploadAdMedia(AdMediaUploadOptions options) {
         Objects.requireNonNull(options, "options cannot be null");
         var mediaIds = options.mediaIds();
-        var request = new BizAdCreationLwiMediaUploadWhatsAppWebGraphQlRequest(
+        var request = new BizAdCreationLwiMediaUploadWhatsAppGraphQlRequest(
                 options.adAccountId().orElse(null),
                 options.pageId().orElse(null),
                 mediaIds.isEmpty() ? null : mediaIds,
                 options.facebookAccessToken().orElse(null));
         var response = sendGraphQl(request);
-        return BizAdCreationLwiMediaUploadWhatsAppWebGraphQlResponse.of(response)
-                .map(BizAdCreationLwiMediaUploadWhatsAppWebGraphQlResponse::uploads)
+        return BizAdCreationLwiMediaUploadWhatsAppGraphQlResponse.of(response)
+                .map(BizAdCreationLwiMediaUploadWhatsAppGraphQlResponse::uploads)
                 .orElseGet(List::of);
     }
 
@@ -17690,14 +17546,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(query, "query cannot be null");
         var expConfig = query.experimentConfig();
         var capabilities = query.capabilities();
-        var request = new FetchMetaAiSearchTypeAheadSuggestionsWhatsAppWebGraphQlRequest(
+        var request = new FetchMetaAiSearchTypeAheadSuggestionsWhatsAppGraphQlRequest(
                 query.query().orElse(null),
                 query.locale().orElse(null),
                 expConfig.isEmpty() ? null : expConfig,
                 capabilities.isEmpty() ? null : capabilities);
         var response = sendGraphQl(request);
-        return FetchMetaAiSearchTypeAheadSuggestionsWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchMetaAiSearchTypeAheadSuggestionsWhatsAppWebGraphQlResponse::suggestions);
+        return FetchMetaAiSearchTypeAheadSuggestionsWhatsAppGraphQlResponse.of(response)
+                .map(FetchMetaAiSearchTypeAheadSuggestionsWhatsAppGraphQlResponse::suggestions);
     }
 
     /** {@inheritDoc} */
@@ -17705,10 +17561,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchNativeAdsMvpEligibilityQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<NativeAdsEligibility> queryNativeAdsEligibility(String phoneNumber) {
-        var request = new FetchNativeAdsMvpEligibilityWhatsAppWebGraphQlRequest(phoneNumber);
+        var request = new FetchNativeAdsMvpEligibilityWhatsAppGraphQlRequest(phoneNumber);
         var response = sendGraphQl(request);
-        return FetchNativeAdsMvpEligibilityWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchNativeAdsMvpEligibilityWhatsAppWebGraphQlResponse::eligibility);
+        return FetchNativeAdsMvpEligibilityWhatsAppGraphQlResponse.of(response)
+                .map(FetchNativeAdsMvpEligibilityWhatsAppGraphQlResponse::eligibility);
     }
 
     /** {@inheritDoc} */
@@ -17718,15 +17574,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public List<QuickPromotionSurfaceBatch> queryQuickPromotions(List<String> surfaceIds, QuickPromotionTriggerContext triggerContext) {
         var relayContext = triggerContext == null
                 ? null
-                : new FetchQuickPromotionsWhatsAppWebGraphQlRequest.TriggerContext(
+                : new FetchQuickPromotionsWhatsAppGraphQlRequest.TriggerContext(
                         triggerContext.fromBusinessApp().orElse(null),
                         triggerContext.appVersion().orElse(null),
                         triggerContext.country().orElse(null),
                         triggerContext.locale().orElse(null));
-        var request = new FetchQuickPromotionsWhatsAppWebGraphQlRequest(surfaceIds, relayContext);
+        var request = new FetchQuickPromotionsWhatsAppGraphQlRequest(surfaceIds, relayContext);
         var response = sendGraphQl(request);
-        return FetchQuickPromotionsWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchQuickPromotionsWhatsAppWebGraphQlResponse::batches)
+        return FetchQuickPromotionsWhatsAppGraphQlResponse.of(response)
+                .map(FetchQuickPromotionsWhatsAppGraphQlResponse::batches)
                 .orElseGet(List::of);
     }
 
@@ -17737,15 +17593,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public List<QuickPromotionSurfaceBatch> queryConsumerQuickPromotions(List<String> surfaceIds, QuickPromotionTriggerContext triggerContext) {
         var relayContext = triggerContext == null
                 ? null
-                : new ConsumerFetchQuickPromotionsWhatsAppWebGraphQlRequest.TriggerContext(
+                : new ConsumerFetchQuickPromotionsWhatsAppGraphQlRequest.TriggerContext(
                         triggerContext.fromBusinessApp().orElse(null),
                         triggerContext.appVersion().orElse(null),
                         triggerContext.country().orElse(null),
                         triggerContext.locale().orElse(null));
-        var request = new ConsumerFetchQuickPromotionsWhatsAppWebGraphQlRequest(surfaceIds, relayContext);
+        var request = new ConsumerFetchQuickPromotionsWhatsAppGraphQlRequest(surfaceIds, relayContext);
         var response = sendGraphQl(request);
-        return ConsumerFetchQuickPromotionsWhatsAppWebGraphQlResponse.of(response)
-                .map(ConsumerFetchQuickPromotionsWhatsAppWebGraphQlResponse::batches)
+        return ConsumerFetchQuickPromotionsWhatsAppGraphQlResponse.of(response)
+                .map(ConsumerFetchQuickPromotionsWhatsAppGraphQlResponse::batches)
                 .orElseGet(List::of);
     }
 
@@ -17755,7 +17611,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<QuickPromotionLogAcknowledgement> logPromotionAction(QuickPromotionActionLog log) {
         Objects.requireNonNull(log, "log cannot be null");
-        var request = new QuickPromotionActionWhatsAppWebGraphQlRequest(
+        var request = new QuickPromotionActionWhatsAppGraphQlRequest(
                 log.event().orElse(null),
                 log.action().orElse(null),
                 log.promotionId().orElse(null),
@@ -17763,8 +17619,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 log.loggingBlob().orElse(null),
                 log.clientTime().orElse(null));
         var response = sendGraphQl(request);
-        return QuickPromotionActionWhatsAppWebGraphQlResponse.of(response)
-                .map(QuickPromotionActionWhatsAppWebGraphQlResponse::acknowledgement);
+        return QuickPromotionActionWhatsAppGraphQlResponse.of(response)
+                .map(QuickPromotionActionWhatsAppGraphQlResponse::acknowledgement);
     }
 
     /** {@inheritDoc} */
@@ -17773,7 +17629,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<QuickPromotionLogAcknowledgement> logConsumerPromotionAction(QuickPromotionActionLog log) {
         Objects.requireNonNull(log, "log cannot be null");
-        var request = new ConsumerQuickPromotionActionGraphQlWhatsAppWebGraphQlRequest(
+        var request = new ConsumerQuickPromotionActionGraphQlWhatsAppGraphQlRequest(
                 log.event().orElse(null),
                 log.action().orElse(null),
                 log.promotionId().orElse(null),
@@ -17781,8 +17637,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 log.loggingBlob().orElse(null),
                 log.clientTime().orElse(null));
         var response = sendGraphQl(request);
-        return ConsumerQuickPromotionActionGraphQlWhatsAppWebGraphQlResponse.of(response)
-                .map(ConsumerQuickPromotionActionGraphQlWhatsAppWebGraphQlResponse::acknowledgement);
+        return ConsumerQuickPromotionActionGraphQlWhatsAppGraphQlResponse.of(response)
+                .map(ConsumerQuickPromotionActionGraphQlWhatsAppGraphQlResponse::acknowledgement);
     }
 
     /** {@inheritDoc} */
@@ -17790,10 +17646,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebACSServerProviderConfigQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<AnonymousCredentialServiceConfig> queryAnonymousCredentialServiceConfig(String projectName) {
-        var request = new AcsServerProviderConfigWhatsAppWebGraphQlRequest(projectName);
+        var request = new AcsServerProviderConfigWhatsAppGraphQlRequest(projectName);
         var response = sendGraphQl(request);
-        return AcsServerProviderConfigWhatsAppWebGraphQlResponse.of(response)
-                .map(AcsServerProviderConfigWhatsAppWebGraphQlResponse::config);
+        return AcsServerProviderConfigWhatsAppGraphQlResponse.of(response)
+                .map(AcsServerProviderConfigWhatsAppGraphQlResponse::config);
     }
 
     /** {@inheritDoc} */
@@ -17803,14 +17659,14 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<AnonymousCredentialIssuance> issueAnonymousCredentials(AnonymousCredentialIssuanceRequest request) {
         Objects.requireNonNull(request, "request cannot be null");
         var blindedTokens = request.blindedTokens();
-        var relayRequest = new AcsServerProviderIssuanceWhatsAppWebGraphQlRequest(
+        var relayRequest = new AcsServerProviderIssuanceWhatsAppGraphQlRequest(
                 request.projectName().orElse(null),
                 request.configurationId().orElse(null),
                 blindedTokens.isEmpty() ? null : blindedTokens,
                 request.requestProof().orElse(null));
         var response = sendGraphQl(relayRequest);
-        return AcsServerProviderIssuanceWhatsAppWebGraphQlResponse.of(response)
-                .map(AcsServerProviderIssuanceWhatsAppWebGraphQlResponse::issuance);
+        return AcsServerProviderIssuanceWhatsAppGraphQlResponse.of(response)
+                .map(AcsServerProviderIssuanceWhatsAppGraphQlResponse::issuance);
     }
 
     /** {@inheritDoc} */
@@ -17818,10 +17674,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebFetchBotProfilesGQLQuery", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<BotProfile> queryBotProfiles(List<String> personaIds) {
-        var request = new FetchBotProfilesGqlWhatsAppWebGraphQlRequest(personaIds);
+        var request = new FetchBotProfilesGqlWhatsAppGraphQlRequest(personaIds);
         var response = sendGraphQl(request);
-        return FetchBotProfilesGqlWhatsAppWebGraphQlResponse.of(response)
-                .map(FetchBotProfilesGqlWhatsAppWebGraphQlResponse::profiles)
+        return FetchBotProfilesGqlWhatsAppGraphQlResponse.of(response)
+                .map(FetchBotProfilesGqlWhatsAppGraphQlResponse::profiles)
                 .orElseGet(List::of);
     }
 
@@ -17830,10 +17686,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebSupportContactFormSubmitMutation", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<SupportContactFormSubmission> submitSupportContactForm(String description, String diagnosticsJson, String contextFlow) {
-        var request = new SupportContactFormSubmitWhatsAppWebGraphQlRequest(description, diagnosticsJson, contextFlow);
+        var request = new SupportContactFormSubmitWhatsAppGraphQlRequest(description, diagnosticsJson, contextFlow);
         var response = sendGraphQl(request);
-        return SupportContactFormSubmitWhatsAppWebGraphQlResponse.of(response)
-                .map(SupportContactFormSubmitWhatsAppWebGraphQlResponse::submission);
+        return SupportContactFormSubmitWhatsAppGraphQlResponse.of(response)
+                .map(SupportContactFormSubmitWhatsAppGraphQlResponse::submission);
     }
 
     /** {@inheritDoc} */
@@ -17842,10 +17698,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<GroupSuspensionAppeal> appealGroupSuspension(JidProvider groupJid, String appealReason, String clientDebugBundle) {
         var jid = groupJid == null ? null : groupJid.toJid();
-        var request = new GroupSuspensionAppealWhatsAppWebGraphQlRequest(jid, appealReason, clientDebugBundle);
+        var request = new GroupSuspensionAppealWhatsAppGraphQlRequest(jid, appealReason, clientDebugBundle);
         var response = sendGraphQl(request);
-        return GroupSuspensionAppealWhatsAppWebGraphQlResponse.of(response)
-                .map(GroupSuspensionAppealWhatsAppWebGraphQlResponse::appeal);
+        return GroupSuspensionAppealWhatsAppGraphQlResponse.of(response)
+                .map(GroupSuspensionAppealWhatsAppGraphQlResponse::appeal);
     }
 
     /**

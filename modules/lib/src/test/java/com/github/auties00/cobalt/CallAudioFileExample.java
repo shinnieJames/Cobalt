@@ -1,12 +1,14 @@
 import com.github.auties00.cobalt.calls2.stream.AudioInput;
 import com.github.auties00.cobalt.calls2.stream.AudioOutput;
+import com.github.auties00.cobalt.calls2.stream.VideoInput;
+import com.github.auties00.cobalt.calls2.stream.VideoOutput;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 
 /**
  * Runnable example that places an audio call and streams a local MP3 file as the outbound audio.
@@ -21,23 +23,24 @@ import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
  * Run it as a single-file program through the launcher protocol.
  */
 void main() throws IOException {
-    var peer = Jid.of("19254863482@s.whatsapp.net");
-    var track = Path.of("C:\\Users\\Alessandro Autiero\\Downloads\\Brazy girls.mp3");
+    var peer = Jid.of("19153544650@s.whatsapp.net");
+    var audio = Path.of("C:\\Users\\Alessandro Autiero\\Downloads\\Brazy girls.mp3");
+    var video = Path.of("C:\\Users\\Alessandro Autiero\\Downloads\\file_example_MP4_1920_18MG.mp4");
     LinkedWhatsAppClient.builder()
-            .webClient(WhatsAppStoreFactory.persistent(Path.of(".temp/cobalt-em1-desktop1")))
+            .webClient(LinkedWhatsAppStoreFactory.persistent(Path.of(".temp/cobalt-em1-desktop1")))
             .loadLatestOrCreateConnection()
             .device(LinkedWhatsAppClientDevice.web())
             .releaseChannel(ClientPayload.ClientReleaseChannel.BETA)
             .historySetting(WhatsAppWebClientHistory.standard(false))
             .unregistered(LinkedWhatsAppClientVerificationHandler.Web.QrCode.toTerminal())
             .addLoggedInListener(client -> {
-                System.out.printf("Calling %s, streaming %s%n", peer, track.getFileName());
+                System.out.printf("Calling %s, streaming %s%n", peer, audio.getFileName());
                 var call = client.startCall(peer,
-                        AudioOutput.file(track), AudioInput.buffered());
+                        AudioOutput.file(audio), AudioInput.buffered(), VideoOutput.file(video), VideoInput.buffered());
                 System.out.printf("Called %s: %s%n", peer, call.callId());
             })
-            .addNodeReceivedListener((_, incoming) -> System.out.printf("Received node %s%n", incoming))
-            .addNodeSentListener((_, outgoing) -> System.out.printf("Sent node %s%n", outgoing))
+            .addNodeReceivedListener((_, incoming) -> System.out.printf("Received stanza %s%n", incoming))
+            .addNodeSentListener((_, outgoing) -> System.out.printf("Sent stanza %s%n", outgoing))
             .addCallEndedListener((_, callId, from, reason) ->
                     System.out.printf("Call ended: %s from %s reason=%s%n", callId, from, reason))
             .addDisconnectedListener((_, reason) -> System.out.printf("Disconnected: %s%n", reason))

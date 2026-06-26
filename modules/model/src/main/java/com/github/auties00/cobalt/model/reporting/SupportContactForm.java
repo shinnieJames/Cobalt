@@ -55,11 +55,11 @@ public final class SupportContactForm {
     final String uploadedLogsId;
 
     /**
-     * Optional structured-attributes context-flow string used by the
+     * Optional structured-attributes context-flow discriminator used by the
      * support-tooling pipeline to route the ticket.
      */
-    @ProtobufProperty(index = 7, type = ProtobufType.STRING)
-    final String additionalAttributesContextFlow;
+    @ProtobufProperty(index = 7, type = ProtobufType.ENUM)
+    final SupportContactFormContextFlow additionalAttributesContextFlow;
 
     /**
      * Constructs a new {@code SupportContactForm}.
@@ -76,7 +76,7 @@ public final class SupportContactForm {
      */
     SupportContactForm(Jid from, String description, String topic, String topicId,
                        String debugInformationJson, String uploadedLogsId,
-                       String additionalAttributesContextFlow) {
+                       SupportContactFormContextFlow additionalAttributesContextFlow) {
         this.from = Objects.requireNonNull(from, "from cannot be null");
         this.description = Objects.requireNonNull(description, "description cannot be null");
         this.topic = Objects.requireNonNull(topic, "topic cannot be null");
@@ -145,7 +145,7 @@ public final class SupportContactForm {
      *
      * @return an {@link Optional} carrying the tag, or empty when unset
      */
-    public Optional<String> additionalAttributesContextFlow() {
+    public Optional<SupportContactFormContextFlow> additionalAttributesContextFlow() {
         return Optional.ofNullable(additionalAttributesContextFlow);
     }
 

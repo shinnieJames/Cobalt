@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 /**
  * Single entry point for every inbound {@code <message>} stanza, turning each one into the
@@ -38,13 +38,13 @@ public interface MessageReceivingService {
      * other address class to the decryption path, and must return {@code null} for both
      * unavailable fanout placeholders and duplicate in-flight deliveries.
      *
-     * @param node the raw incoming {@code <message>} node; must be non-{@code null}
+     * @param stanza the raw incoming {@code <message>} stanza; must be non-{@code null}
      * @return the processed message info, or {@code null} when the stanza is dropped
-     * @throws NullPointerException             if {@code node} is {@code null}
+     * @throws NullPointerException             if {@code stanza} is {@code null}
      * @throws WhatsAppMessageException.Receive if decryption or validation fails for
      *                                          an E2E message
      */
-    MessageInfo process(Node node);
+    MessageInfo process(Stanza stanza);
 
     /**
      * Clears the pending-message dedup cache.

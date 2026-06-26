@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -75,32 +75,32 @@ public record WaitingRoomDenyStanza(String callId, Jid callCreator, List<Waiting
 
     /**
      * Builds the {@code <waiting_room_deny call-id call-creator><user/>*</waiting_room_deny>} action
-     * node.
+     * stanza.
      *
      * <p>The element carries one {@code <user>} child per denied participant.
      *
-     * @return the waiting-room deny action node
+     * @return the waiting-room deny action stanza
      */
     @Override
-    public Node toNode() {
+    public Stanza toStanza() {
         return WaitingRoomStanzas.build(type().wireTag().orElseThrow(), callId, callCreator,
                 Optional.empty(), Optional.empty(), Optional.empty(), users);
     }
 
     /**
-     * Decodes a {@code <waiting_room_deny>} action node into a {@link WaitingRoomDenyStanza}.
+     * Decodes a {@code <waiting_room_deny>} action stanza into a {@link WaitingRoomDenyStanza}.
      *
-     * @param node the {@code <waiting_room_deny>} node
+     * @param stanza the {@code <waiting_room_deny>} stanza
      * @return the decoded waiting-room deny signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static WaitingRoomDenyStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var users = WaitingRoomStanzas.users(node);
+    public static WaitingRoomDenyStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var users = WaitingRoomStanzas.users(stanza);
         return new WaitingRoomDenyStanza(callId, callCreator, users);
     }
 }

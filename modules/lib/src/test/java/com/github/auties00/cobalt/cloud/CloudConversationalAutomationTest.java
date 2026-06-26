@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
 import com.github.auties00.cobalt.model.cloud.CloudConversationalAutomation;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -25,8 +26,8 @@ class CloudConversationalAutomationTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .httpClient(http)
@@ -39,7 +40,7 @@ class CloudConversationalAutomationTest {
 
     @Test
     @DisplayName("set posts enable_welcome_message, prompts and commands to the conversational_automation edge")
-    void setFull() {
+    void setFull() throws Exception {
         var http = http();
         http.respondWith("{\"success\":true}");
         var automation = new CloudConversationalAutomation(true, List.of("How can we help?"),
@@ -56,7 +57,7 @@ class CloudConversationalAutomationTest {
 
     @Test
     @DisplayName("set omits prompts and commands when empty and welcome flag when unspecified")
-    void setMinimal() {
+    void setMinimal() throws Exception {
         var http = http();
         http.respondWith("{\"success\":true}");
         client(http).editConversationalAutomation(new CloudConversationalAutomation(null, List.of(), List.of()));
@@ -68,7 +69,7 @@ class CloudConversationalAutomationTest {
 
     @Test
     @DisplayName("get parses the conversational_automation wrapper")
-    void getPresent() {
+    void getPresent() throws Exception {
         var http = http();
         http.respondWith("{\"conversational_automation\":{\"id\":\"123\",\"enable_welcome_message\":true,"
                 + "\"prompts\":[\"Hi!\"],\"commands\":[{\"command_name\":\"help\","
@@ -83,7 +84,7 @@ class CloudConversationalAutomationTest {
 
     @Test
     @DisplayName("get returns empty when no conversational_automation key is present")
-    void getEmpty() {
+    void getEmpty() throws Exception {
         var http = http();
         http.respondWith("{\"id\":\"123\"}");
         assertTrue(client(http).queryConversationalAutomation().isEmpty());

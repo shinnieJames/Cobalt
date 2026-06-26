@@ -5,10 +5,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.call.CallLogAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -21,10 +22,10 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * device, and the dispatcher routes the decoded mutation here. A {@link SyncdOperation#SET} carries a
  * {@link CallLogAction} whose {@link CallLogAction#log()} record is mirrored into the runtime call-history
  * table through
- * {@link com.github.auties00.cobalt.store.ChatStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)},
+ * {@link LinkedWhatsAppChatStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)},
  * keyed by the record's own {@link com.github.auties00.cobalt.model.call.CallLog#callId()}; a
  * {@link SyncdOperation#REMOVE} drops the record named by the {@code callId} in index slot two through
- * {@link com.github.auties00.cobalt.store.ChatStore#removeCallLog(String)}.
+ * {@link LinkedWhatsAppChatStore#removeCallLog(String)}.
  *
  * <p>The four-element mutation index is {@code ["call_log", callerJid, callId, fromMe]}; this handler
  * revalidates that the index carries at least the four segments and that the {@link CallLogAction#log()}
@@ -114,10 +115,10 @@ public final class Calls2CallLogHandler implements WebAppStateActionHandler {
      * {@link com.github.auties00.cobalt.model.call.CallLog#callId()}, validates that the index carries at
      * least the four segments {@code ["call_log", callerJid, callId, fromMe]}, and mirrors the record into
      * the runtime call-history table through
-     * {@link com.github.auties00.cobalt.store.ChatStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)}.
+     * {@link LinkedWhatsAppChatStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)}.
      * For a {@link SyncdOperation#REMOVE} mutation, reads the call id from index slot
      * {@value #CALL_ID_INDEX} and drops the matching record through
-     * {@link com.github.auties00.cobalt.store.ChatStore#removeCallLog(String)}. Any other operation
+     * {@link LinkedWhatsAppChatStore#removeCallLog(String)}. Any other operation
      * reports {@link MutationApplicationResult#unsupported()}, a structurally invalid SET reports
      * {@link MutationApplicationResult#malformed()}, and a thrown exception is contained as
      * {@link MutationApplicationResult#failed()} so a single bad call-log mutation never aborts the patch.

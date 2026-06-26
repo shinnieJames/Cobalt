@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.model.device.identity;
 
-import com.github.auties00.cobalt.model.device.DevicePlatformType;
+import com.github.auties00.cobalt.model.device.pairing.DevicePlatformType;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;

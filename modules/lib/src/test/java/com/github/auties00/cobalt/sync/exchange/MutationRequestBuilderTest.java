@@ -6,7 +6,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.MutationLTHash;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import org.junit.jupiter.api.Assertions;
@@ -286,7 +286,7 @@ class MutationRequestBuilderTest {
     @DisplayName("SyncRequest record contract")
     class SyncRequestRecord {
         @Test
-        @DisplayName("SyncRequest carries the built node and (optional) upload info")
+        @DisplayName("SyncRequest carries the built stanza and (optional) upload info")
         void recordCarriesNodeAndUploadInfo() {
             var h = build();
             var request = h.builder.buildSyncRequest(SyncPatchType.REGULAR, List.of());

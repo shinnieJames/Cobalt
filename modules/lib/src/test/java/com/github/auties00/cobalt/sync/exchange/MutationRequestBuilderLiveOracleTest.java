@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdPatchSpec;
 import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The fixtures under {@code src/test/resources/fixtures/sync/exchange/} are JSONL
  * stanza dumps captured via the {@code web_live_stanza_dump_to_file} MCP tool and
- * reconstructed into {@link com.github.auties00.cobalt.node.Node} instances by
+ * reconstructed into {@link Stanza} instances by
  * {@link SyncFixtures}. Every assertion is gated on {@link SyncFixtures#isAvailable(String)}
  * so the suite stays green before the captured fixtures land. Byte-equality on the
  * encrypted patch payload is not exercised: the patch is encrypted with a fresh random IV

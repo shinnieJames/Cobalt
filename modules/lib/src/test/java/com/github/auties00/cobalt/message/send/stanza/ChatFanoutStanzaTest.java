@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.message.send.stanza;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -214,7 +214,7 @@ class ChatFanoutStanzaTest {
     }
 
     // Fills every optional argument with null/false so each test supplies only what it exercises.
-    private static Node build(
+    private static Stanza build(
             Jid chatJid,
             String type,
             List<MessageEncryptedPayload> payloads,

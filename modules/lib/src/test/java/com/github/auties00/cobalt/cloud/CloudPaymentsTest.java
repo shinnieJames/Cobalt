@@ -14,6 +14,7 @@ import com.github.auties00.cobalt.model.cloud.commerce.CloudOrderPaymentSetting;
 import com.github.auties00.cobalt.model.cloud.commerce.CloudOrderStatus;
 import com.github.auties00.cobalt.model.cloud.commerce.CloudOrderStatusMessage;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -37,8 +38,8 @@ class CloudPaymentsTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .httpClient(http)
@@ -65,7 +66,7 @@ class CloudPaymentsTest {
     class OrderDetails {
         @Test
         @DisplayName("builds the review_and_pay interactive with order and total")
-        void send() {
+        void send() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.ORDER\"}]}");
             var key = client(http).sendOrderDetails(RECIPIENT, sampleOrder());
@@ -88,7 +89,7 @@ class CloudPaymentsTest {
 
         @Test
         @DisplayName("serializes items, subtotal, and a described tax")
-        void orderBreakdown() {
+        void orderBreakdown() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.X\"}]}");
             client(http).sendOrderDetails(RECIPIENT, sampleOrder());
@@ -110,7 +111,7 @@ class CloudPaymentsTest {
 
         @Test
         @DisplayName("serializes the payment gateway setting under its type")
-        void paymentSettings() {
+        void paymentSettings() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.X\"}]}");
             client(http).sendOrderDetails(RECIPIENT, sampleOrder());
@@ -124,7 +125,7 @@ class CloudPaymentsTest {
 
         @Test
         @DisplayName("the India variant carries payment_type and payment_configuration without settings")
-        void indiaVariant() {
+        void indiaVariant() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.X\"}]}");
             var items = List.of(new CloudOrderItem("retail-1", "Widget", new CloudOrderAmount(20000, 100), 1, null));
@@ -146,7 +147,7 @@ class CloudPaymentsTest {
     class OrderStatus {
         @Test
         @DisplayName("builds the review_order interactive with status and reference")
-        void send() {
+        void send() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.STATUS\"}]}");
             var key = client(http).sendOrderStatus(RECIPIENT,
@@ -168,7 +169,7 @@ class CloudPaymentsTest {
 
         @Test
         @DisplayName("omits the description when absent and includes the footer when present")
-        void minimal() {
+        void minimal() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.X\"}]}");
             client(http).sendOrderStatus(RECIPIENT,

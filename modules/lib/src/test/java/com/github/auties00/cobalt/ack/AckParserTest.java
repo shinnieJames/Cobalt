@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.ack;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,11 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Synthetic-input cells for {@link AckParser}: each cell builds an {@code <ack ... />} node with a
+ * Synthetic-input cells for {@link AckParser}: each cell builds an {@code <ack ... />} stanza with a
  * specific attribute combination and asserts that the resulting {@link AckResult} subtype extracts
  * the matching slots, covering success, the notable nack codes (421/478/479), {@code phash}
  * presence, {@code refresh_lid="true"}, the {@code sync}, {@code count}, and
- * {@code addressing_mode} attributes, and the failure cases (wrong tag, null node).
+ * {@code addressing_mode} attributes, and the failure cases (wrong tag, null stanza).
  *
  * <p>Pairs with {@link AckParserLiveOracleTest}, which feeds captured live wire acks through the
  * same parser to assert parity on the success shape.
@@ -26,14 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @DisplayName("AckParser")
 class AckParserTest {
 
-    private static MessageAck parseMessage(Node ack) {
+    private static MessageAck parseMessage(Stanza ack) {
         return assertInstanceOf(MessageAck.class, AckParser.parse(ack));
     }
 
     @Test
     @DisplayName("success ack: only timestamp; error is empty")
     void successAck() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .build();
@@ -49,7 +49,7 @@ class AckParserTest {
     @Test
     @DisplayName("error 421 (no-route) surfaces on result.error()")
     void error421() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("error", "421")
@@ -63,7 +63,7 @@ class AckParserTest {
     @Test
     @DisplayName("error 478 (phash mismatch) parses error and signals resend")
     void error478() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("error", "478")
@@ -82,7 +82,7 @@ class AckParserTest {
     @Test
     @DisplayName("error 479 (recipient_addressing_mismatch) surfaces on result.error()")
     void error479() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("error", "479")
@@ -96,7 +96,7 @@ class AckParserTest {
     @Test
     @DisplayName("refresh_lid=\"true\" flips the boolean")
     void refreshLidTrue() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("refresh_lid", "true")
@@ -109,7 +109,7 @@ class AckParserTest {
     @Test
     @DisplayName("refresh_lid attribute absent defaults to false")
     void refreshLidAbsent() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .build();
@@ -121,7 +121,7 @@ class AckParserTest {
     @Test
     @DisplayName("sync attribute is passed through verbatim")
     void syncAttribute() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("sync", "regular_low")
@@ -134,7 +134,7 @@ class AckParserTest {
     @Test
     @DisplayName("addressing_mode is passed through verbatim")
     void addressingMode() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("addressing_mode", "lid")
@@ -147,7 +147,7 @@ class AckParserTest {
     @Test
     @DisplayName("count attribute parses as int")
     void countAttribute() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("count", "42")
@@ -160,7 +160,7 @@ class AckParserTest {
     @Test
     @DisplayName("all-fields ack populates every result slot")
     void allFieldsPresent() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("t", "1700000000")
                 .attribute("sync", "regular")
@@ -184,7 +184,7 @@ class AckParserTest {
     @Test
     @DisplayName("missing timestamp leaves result.timestamp() empty")
     void missingTimestamp() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .build();
 
@@ -196,7 +196,7 @@ class AckParserTest {
     @Test
     @DisplayName("class=\"message\" parses as MessageAck")
     void messageClassDispatch() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("class", "message")
                 .attribute("t", "1700000000")
@@ -207,7 +207,7 @@ class AckParserTest {
     @Test
     @DisplayName("class=\"receipt\" parses as ReceiptAck")
     void receiptClassDispatch() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("class", "receipt")
                 .attribute("t", "1700000000")
@@ -218,7 +218,7 @@ class AckParserTest {
     @Test
     @DisplayName("class=\"notification\" parses as NotificationAck")
     void notificationClassDispatch() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("class", "notification")
                 .attribute("t", "1700000000")
@@ -229,7 +229,7 @@ class AckParserTest {
     @Test
     @DisplayName("class=\"call\" without <relay> parses as CallAck with empty relay")
     void callClassDispatchNoRelay() {
-        var ack = new NodeBuilder()
+        var ack = new StanzaBuilder()
                 .description("ack")
                 .attribute("class", "call")
                 .attribute("t", "1700000000")
@@ -241,7 +241,7 @@ class AckParserTest {
     @Test
     @DisplayName("non-<ack> tag throws IllegalArgumentException")
     void wrongTagThrows() {
-        var bogus = new NodeBuilder()
+        var bogus = new StanzaBuilder()
                 .description("message")
                 .attribute("t", "1700000000")
                 .build();
@@ -250,7 +250,7 @@ class AckParserTest {
     }
 
     @Test
-    @DisplayName("null node throws NullPointerException")
+    @DisplayName("null stanza throws NullPointerException")
     void nullNodeThrows() {
         assertThrows(NullPointerException.class, () -> AckParser.parse(null));
     }

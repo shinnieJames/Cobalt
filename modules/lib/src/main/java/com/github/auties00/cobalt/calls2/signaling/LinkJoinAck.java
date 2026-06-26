@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -12,7 +12,7 @@ import java.util.Optional;
  * Represents the acknowledgement of a {@link LinkJoinStanza}: the relay's reply admitting a join.
  *
  * <p>A link-join ack is delivered inside the host stanza layer's shared {@code <ack>} envelope, whose
- * body echoes a {@code <link_join>} node. It names the {@link #callId() call} the joined device entered,
+ * body echoes a {@code <link_join>} stanza. It names the {@link #callId() call} the joined device entered,
  * the {@link #callCreator() call creator} it must address, and echoes the {@link #token() link token}
  * (the join handler rejects a reply whose token does not match the request). It carries the call's
  * {@link #groupInfo() membership roster} and {@link #voipSettings() tuning block}, an optional
@@ -23,7 +23,7 @@ import java.util.Optional;
  * {@code <link_join token="..." call-id="..." call-creator="..." event="0|1"><group_info .../>
  * <voip_settings .../>[<link_info .../>][<user .../>*]</link_join>}. The {@code <group_info>} roster is
  * given a typed projection through {@link GroupInfoStanza}; the {@code <voip_settings>} and
- * {@code <link_info>} blocks are forwarded as opaque {@link Node} trees because their typed parse is
+ * {@code <link_info>} blocks are forwarded as opaque {@link Stanza} trees because their typed parse is
  * owned by the configuration and call-link subsystems, the same split {@link GroupUpdateStanza} uses.
  *
  * <p>The ack carries no relay candidates. A joiner's relay endpoints reach the media plane through the
@@ -46,7 +46,7 @@ import java.util.Optional;
  * {@code 11635}, reads a within-block required {@code link_creator} and an optional {@code link_creator_pn}),
  * and the waiting-room participants copied through {@code handle_waiting_room} (function index {@code 11477})
  * with each {@code <user>} entry filled by function index {@code 11614} and decoded here by
- * {@link WaitingRoomUser#of(Node)} ({@code "%s: cannot parse waiting_room node in link_join ack"}, vaddr
+ * {@link WaitingRoomUser#of(Stanza)} ({@code "%s: cannot parse waiting_room stanza in link_join ack"}, vaddr
  * {@code 410205}). The function references neither {@code fill_relay_info} (function index {@code 11630}),
  * the {@code <relay>} element, nor {@code auth_token}: a cross-reference sweep of {@code ff-tScznZ8P}
  * places every relay parser and the {@code auth_token} attribute exclusively in the offer and transport
@@ -77,7 +77,7 @@ import java.util.Optional;
  * @see RelayInfo
  */
 public record LinkJoinAck(String token, String callId, Jid callCreator, GroupInfoStanza groupInfo,
-                          Node voipSettings, boolean event, Node linkInfo,
+                          Stanza voipSettings, boolean event, Stanza linkInfo,
                           List<WaitingRoomUser> waitingRoomUsers) {
     /**
      * The wire attribute naming the echoed call-link token.
@@ -117,7 +117,7 @@ public record LinkJoinAck(String token, String callId, Jid callCreator, GroupInf
     }
 
     /**
-     * Decodes a {@code <link_join>} ack node into a {@link LinkJoinAck}.
+     * Decodes a {@code <link_join>} ack stanza into a {@link LinkJoinAck}.
      *
      * <p>The required {@code token}, {@code call-id}, and {@code call-creator} attributes and the
      * required {@code <group_info>} and {@code <voip_settings>} children are read first; an absent
@@ -128,26 +128,26 @@ public record LinkJoinAck(String token, String callId, Jid callCreator, GroupInf
      * decoded into a {@link WaitingRoomUser} forming the lobby participant list, empty when the ack
      * carries no participants.
      *
-     * @param node the echoed {@code <link_join>} node from the {@code <ack>} body
+     * @param stanza the echoed {@code <link_join>} stanza from the {@code <ack>} body
      * @return the decoded link-join ack
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code token}, {@code call-id}, or
      *                                {@code call-creator} attribute, or the required {@code <group_info>}
      *                                or {@code <voip_settings>} child, is absent
      */
-    public static LinkJoinAck of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var token = node.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var groupInfo = node.getChild(GroupInfoStanza.ELEMENT)
+    public static LinkJoinAck of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var token = stanza.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var groupInfo = stanza.getChild(GroupInfoStanza.ELEMENT)
                 .flatMap(GroupInfoStanza::of)
                 .orElseThrow(() -> new NoSuchElementException("link_join ack is missing a required <group_info> roster"));
-        var voipSettings = node.getChild(VOIP_SETTINGS_ELEMENT)
+        var voipSettings = stanza.getChild(VOIP_SETTINGS_ELEMENT)
                 .orElseThrow(() -> new NoSuchElementException("link_join ack is missing a required <voip_settings> block"));
-        var event = "1".equals(node.getAttributeAsString(EVENT_ATTRIBUTE).orElse("0"));
-        var linkInfo = node.getChild(LINK_INFO_ELEMENT).orElse(null);
-        var waitingRoomUsers = node.streamChildren(WaitingRoomUser.ELEMENT)
+        var event = "1".equals(stanza.getAttributeAsString(EVENT_ATTRIBUTE).orElse("0"));
+        var linkInfo = stanza.getChild(LINK_INFO_ELEMENT).orElse(null);
+        var waitingRoomUsers = stanza.streamChildren(WaitingRoomUser.ELEMENT)
                 .map(WaitingRoomUser::of)
                 .toList();
         return new LinkJoinAck(token, callId, callCreator, groupInfo, voipSettings, event, linkInfo, waitingRoomUsers);
@@ -156,9 +156,9 @@ public record LinkJoinAck(String token, String callId, Jid callCreator, GroupInf
     /**
      * Returns the raw {@code <link_info>} block, if the ack carried one.
      *
-     * @return an {@link Optional} holding the {@code <link_info>} node, or empty when absent
+     * @return an {@link Optional} holding the {@code <link_info>} stanza, or empty when absent
      */
-    public Optional<Node> linkInfoValue() {
+    public Optional<Stanza> linkInfoValue() {
         return Optional.ofNullable(linkInfo);
     }
 }

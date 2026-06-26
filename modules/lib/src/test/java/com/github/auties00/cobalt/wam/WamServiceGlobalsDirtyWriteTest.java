@@ -4,8 +4,8 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.wam.event.PsIdUpdateEventBuilder;
@@ -91,8 +91,8 @@ class WamServiceGlobalsDirtyWriteTest {
                 .build();
     }
 
-    private static Node successResponse() {
-        return new NodeBuilder()
+    private static Stanza successResponse() {
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("type", "result")
                 .build();
@@ -101,11 +101,11 @@ class WamServiceGlobalsDirtyWriteTest {
     // The buffer lives in the binary content of the inner <add> child of the
     // WAM upload <iq>; an AssertionError on a shape mismatch surfaces an encoder
     // pipeline regression immediately.
-    private static byte[] extractBuffer(NodeBuilder builder) {
+    private static byte[] extractBuffer(StanzaBuilder builder) {
         var built = builder.build();
         var add = built.getChild("add").orElseThrow(
                 () -> new AssertionError("captured iq has no <add> child"));
-        if (add instanceof Node.BytesNode bytesNode) {
+        if (add instanceof Stanza.BytesStanza bytesNode) {
             return bytesNode.content();
         }
         throw new AssertionError("captured <add> child has no binary content");

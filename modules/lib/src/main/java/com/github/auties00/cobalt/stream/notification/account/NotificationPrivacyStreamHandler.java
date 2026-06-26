@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -8,7 +9,6 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.listener.linked.internal.LinkedTrustedContactTokenListener;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -63,23 +63,23 @@ final class NotificationPrivacyStreamHandler extends SocketStreamHandler.Concurr
      * {@code privacy_token} are dropped without ACK; valid stanzas are always ACKed even when handling
      * throws.</p>
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "privacy_token")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "privacy_token")) {
             return;
         }
 
         try {
-            handleNotification(node);
+            handleNotification(stanza);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Cannot handle privacy_token notification {0}: {1}",
-                    node.getAttributeAsString("id", "<missing>"),
+                    stanza.getAttributeAsString("id", "<missing>"),
                     throwable.getMessage());
         } finally {
-            sendNotificationAck(node);
+            sendNotificationAck(stanza);
         }
     }
 
@@ -94,18 +94,18 @@ final class NotificationPrivacyStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation only knows the {@code trusted_contact} token type; any other type is
      * debug-logged and dropped, matching WA Web which logs and ignores unknown types.
      *
-     * @param node the {@code <notification>} stanza
+     * @param stanza the {@code <notification>} stanza
      */
-    private void handleNotification(Node node) {
-        var senderPn = getUserJid(node, "from");
-        var senderLid = node.getAttributeAsJid("sender_lid")
+    private void handleNotification(Stanza stanza) {
+        var senderPn = getUserJid(stanza, "from");
+        var senderLid = stanza.getAttributeAsJid("sender_lid")
                 .map(Jid::toUserJid)
                 .orElse(null);
         if (senderPn == null) {
             return;
         }
 
-        var tokensNode = node.getChild("tokens").orElse(null);
+        var tokensNode = stanza.getChild("tokens").orElse(null);
         if (tokensNode == null) {
             return;
         }
@@ -136,19 +136,19 @@ final class NotificationPrivacyStreamHandler extends SocketStreamHandler.Concurr
      *
      * @param senderPn  the sender's phone-number JID
      * @param senderLid the sender's LID JID, or {@code null} when absent
-     * @param tokenNode the {@code <token type="trusted_contact"/>} child carrying the token bytes and timestamp
+     * @param tokenStanza the {@code <token type="trusted_contact"/>} child carrying the token bytes and timestamp
      */
-    private void handleTrustedContactToken(Jid senderPn, Jid senderLid, Node tokenNode) {
+    private void handleTrustedContactToken(Jid senderPn, Jid senderLid, Stanza tokenStanza) {
         if (!LidMigrationService.isRegularUser(senderPn)) {
             return;
         }
 
-        var content = tokenNode.toContentBytes().orElse(null);
+        var content = tokenStanza.toContentBytes().orElse(null);
         if (content == null || content.length == 0) {
             return;
         }
 
-        var tokenTimestamp = getInstantAttribute(tokenNode, "t");
+        var tokenTimestamp = getInstantAttribute(tokenStanza, "t");
 
         updateChatTcToken(senderPn, senderLid, tokenTimestamp, content);
 
@@ -205,15 +205,15 @@ final class NotificationPrivacyStreamHandler extends SocketStreamHandler.Concurr
     /**
      * Reads a JID-valued attribute and reduces it to user form.
      *
-     * <p>Used by {@link #handleNotification(Node)} to extract the sender's PN from the stanza's
+     * <p>Used by {@link #handleNotification(Stanza)} to extract the sender's PN from the stanza's
      * {@code from} attribute.</p>
      *
-     * @param node the node to read from
+     * @param stanza the stanza to read from
      * @param key  the attribute name
      * @return the parsed user JID, or {@code null} if absent
      */
-    private Jid getUserJid(Node node, String key) {
-        return node.getAttributeAsJid(key)
+    private Jid getUserJid(Stanza stanza, String key) {
+        return stanza.getAttributeAsJid(key)
                 .map(Jid::toUserJid)
                 .orElse(null);
     }
@@ -224,12 +224,12 @@ final class NotificationPrivacyStreamHandler extends SocketStreamHandler.Concurr
      *
      * <p>Used by the {@code trusted_contact} branch to parse the token's {@code t} timestamp.</p>
      *
-     * @param node the node to read from
+     * @param stanza the stanza to read from
      * @param key  the attribute name
      * @return the parsed instant, or {@code null}
      */
-    private Instant getInstantAttribute(Node node, String key) {
-        var seconds = node.getAttributeAsLong(key, (Long) null);
+    private Instant getInstantAttribute(Stanza stanza, String key) {
+        var seconds = stanza.getAttributeAsLong(key, (Long) null);
         return seconds == null || seconds <= 0 ? null : Instant.ofEpochSecond(seconds);
     }
 
@@ -239,9 +239,9 @@ final class NotificationPrivacyStreamHandler extends SocketStreamHandler.Concurr
      *
      * <p>The ack is fire-and-forget.</p>
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("privacy_token").send();
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("privacy_token").send();
     }
 }

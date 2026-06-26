@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -73,36 +73,36 @@ public record WaitingRoomToggleStanza(String callId, Jid callCreator, boolean en
     }
 
     /**
-     * Builds the {@code <waiting_room_toggle call-id call-creator enabled link-token/>} action node.
+     * Builds the {@code <waiting_room_toggle call-id call-creator enabled link-token/>} action stanza.
      *
      * <p>The {@code enabled} attribute is always written as {@code '1'} or {@code '0'}; an absent link
      * token is omitted and the element carries no {@code <user>} children.
      *
-     * @return the waiting-room toggle action node
+     * @return the waiting-room toggle action stanza
      */
     @Override
-    public Node toNode() {
+    public Stanza toStanza() {
         return WaitingRoomStanzas.build(type().wireTag().orElseThrow(), callId, callCreator,
                 Optional.of(enabled), linkToken, Optional.empty(), List.of());
     }
 
     /**
-     * Decodes a {@code <waiting_room_toggle>} action node into a {@link WaitingRoomToggleStanza}.
+     * Decodes a {@code <waiting_room_toggle>} action stanza into a {@link WaitingRoomToggleStanza}.
      *
      * <p>An absent {@code enabled} attribute classifies to {@code false}.
      *
-     * @param node the {@code <waiting_room_toggle>} node
+     * @param stanza the {@code <waiting_room_toggle>} stanza
      * @return the decoded waiting-room toggle signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static WaitingRoomToggleStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var enabled = "1".equals(node.getAttributeAsString(WaitingRoomStanzas.ENABLED_ATTRIBUTE).orElse("0"));
-        var linkToken = WaitingRoomStanzas.linkToken(node);
+    public static WaitingRoomToggleStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var enabled = "1".equals(stanza.getAttributeAsString(WaitingRoomStanzas.ENABLED_ATTRIBUTE).orElse("0"));
+        var linkToken = WaitingRoomStanzas.linkToken(stanza);
         return new WaitingRoomToggleStanza(callId, callCreator, enabled, linkToken);
     }
 }

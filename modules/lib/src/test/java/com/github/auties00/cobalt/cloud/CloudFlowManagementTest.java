@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.model.cloud.flow.CloudFlowAssetType;
 import com.github.auties00.cobalt.model.cloud.flow.CloudFlowEndpointAvailability;
 import com.github.auties00.cobalt.model.cloud.flow.CloudFlowMetadataEditBuilder;
 import com.github.auties00.cobalt.model.cloud.flow.CloudFlowStatus;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -32,8 +33,8 @@ class CloudFlowManagementTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .whatsappBusinessAccountId(WABA_ID)
                 .apiVersion(CloudApiVersion.V25_0)
@@ -46,7 +47,7 @@ class CloudFlowManagementTest {
     class GetFlow {
         @Test
         @DisplayName("parses the rich flow read view")
-        void parsesDetails() {
+        void parsesDetails() throws Exception {
             var http = http();
             http.respondWith("""
                     {
@@ -86,7 +87,7 @@ class CloudFlowManagementTest {
     class UpdateMetadata {
         @Test
         @DisplayName("posts only the supplied fields")
-        void postsSuppliedFields() {
+        void postsSuppliedFields() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).editFlowMetadata(new CloudFlowMetadataEditBuilder()
@@ -105,7 +106,7 @@ class CloudFlowManagementTest {
 
         @Test
         @DisplayName("omits null and empty fields")
-        void omitsNullFields() {
+        void omitsNullFields() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).editFlowMetadata(new CloudFlowMetadataEditBuilder()
@@ -125,7 +126,7 @@ class CloudFlowManagementTest {
     class DeleteFlow {
         @Test
         @DisplayName("issues a DELETE on the flow id")
-        void issuesDelete() {
+        void issuesDelete() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).deleteFlow("123");
@@ -139,7 +140,7 @@ class CloudFlowManagementTest {
     class UploadAsset {
         @Test
         @DisplayName("returns a successful result with no errors when the document validates cleanly")
-        void cleanUpload() {
+        void cleanUpload() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true,\"validation_errors\":[]}");
             var result = client(http).uploadFlowJson("123", "{}".getBytes(StandardCharsets.UTF_8));
@@ -151,7 +152,7 @@ class CloudFlowManagementTest {
 
         @Test
         @DisplayName("parses the structured validation error entries")
-        void uploadWithErrors() {
+        void uploadWithErrors() throws Exception {
             var http = http();
             http.respondWith("""
                     {"success":true,"validation_errors":[{"error":"INVALID_PROPERTY","error_type":"FLOW_JSON_ERROR",
@@ -171,7 +172,7 @@ class CloudFlowManagementTest {
     class QueryAssets {
         @Test
         @DisplayName("parses the asset list")
-        void parsesAssets() {
+        void parsesAssets() throws Exception {
             var http = http();
             http.respondWith("""
                     {"data":[{"name":"flow.json","asset_type":"FLOW_JSON","download_url":"https://cdn/flow"}]}""");
@@ -184,7 +185,7 @@ class CloudFlowManagementTest {
 
         @Test
         @DisplayName("returns empty for an empty data array")
-        void emptyAssets() {
+        void emptyAssets() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[]}");
             assertTrue(client(http).queryFlowAssets("123").isEmpty());
@@ -196,7 +197,7 @@ class CloudFlowManagementTest {
     class Preview {
         @Test
         @DisplayName("reads the nested preview object")
-        void nestedPreview() {
+        void nestedPreview() throws Exception {
             var http = http();
             http.respondWith("""
                     {"preview":{"preview_url":"https://business.facebook.com/p","expires_at":"2026-05-07T19:56:10+0000"},"id":"123"}""");
@@ -207,7 +208,7 @@ class CloudFlowManagementTest {
 
         @Test
         @DisplayName("falls back to top-level preview fields")
-        void flatPreview() {
+        void flatPreview() throws Exception {
             var http = http();
             http.respondWith("""
                     {"preview_url":"https://p","expires_at":"2026-05-07T19:56:10+0000"}""");
@@ -221,7 +222,7 @@ class CloudFlowManagementTest {
     class Migrate {
         @Test
         @DisplayName("posts the source waba and parses both result buckets")
-        void migrates() {
+        void migrates() throws Exception {
             var http = http();
             http.respondWith("""
                     {"migrated_flows":[{"source_name":"flow_a","source_id":"111","migrated_id":"222"}],
@@ -241,7 +242,7 @@ class CloudFlowManagementTest {
 
         @Test
         @DisplayName("omits source_flow_names when an empty list is given")
-        void migratesAll() {
+        void migratesAll() throws Exception {
             var http = http();
             http.respondWith("{\"migrated_flows\":[],\"failed_flows\":[]}");
             client(http).migrateFlows("source-waba", List.of());

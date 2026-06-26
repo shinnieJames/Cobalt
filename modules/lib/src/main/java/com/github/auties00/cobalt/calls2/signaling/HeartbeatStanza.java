@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -60,29 +60,29 @@ public record HeartbeatStanza(String callId, Jid callCreator) implements CallMes
     }
 
     /**
-     * Builds the {@code <heartbeat call-id call-creator/>} action node.
+     * Builds the {@code <heartbeat call-id call-creator/>} action stanza.
      *
-     * @return the heartbeat action node
+     * @return the heartbeat action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .build();
     }
 
     /**
-     * Decodes a {@code <heartbeat>} action node into a {@link HeartbeatStanza}.
+     * Decodes a {@code <heartbeat>} action stanza into a {@link HeartbeatStanza}.
      *
-     * @param node the {@code <heartbeat>} node
+     * @param stanza the {@code <heartbeat>} stanza
      * @return the decoded heartbeat signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static HeartbeatStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+    public static HeartbeatStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
         return new HeartbeatStanza(callId, callCreator);
     }
 }

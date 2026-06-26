@@ -2,10 +2,11 @@ package com.github.auties00.cobalt.calls2.core;
 
 import com.github.auties00.cobalt.calls2.core.participant.CallMembership;
 import com.github.auties00.cobalt.calls2.net.transport.AppDataController;
+import com.github.auties00.cobalt.calls2.net.transport.RelayLatencyState;
 import com.github.auties00.cobalt.calls2.signaling.OfferStanza;
 import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.List;
 import java.util.Objects;
@@ -90,13 +91,26 @@ final class Calls2OrchestratedCall {
      * bring-up the accept triggers can feed them to the call's voip-param manager. The callee side reads its
      * bundles from the inbound offer instead ({@link OfferStanza#voipSettings()}) and leaves this empty.
      */
-    private volatile List<Node> offerAckVoipSettings = List.of();
+    private volatile List<Stanza> offerAckVoipSettings = List.of();
 
     /**
      * The call's {@code <relay>} block subtree once it is learned (from the offer ack on the caller side,
      * the inbound offer or a group update on the callee side), or {@code null} until then.
      */
-    private volatile Node relay;
+    private volatile Stanza relay;
+
+    /**
+     * The call's peer-aware relay-election state once the relay block is learned and the latency exchange
+     * begins, or {@code null} until then.
+     *
+     * <p>Built lazily from the offered relay endpoints the first time the call holds its {@code <relay>} block
+     * and knows the peer, then fed the peer's {@code <relaylatency>} reports as they arrive; the media-plane
+     * bring-up reads its {@linkplain RelayLatencyState#electBestRelayName(com.github.auties00.cobalt.calls2.net.transport.RelayElection.Mode)
+     * election} to bind the relay both ends share rather than the locally fastest one. A call whose relay block
+     * or peer is not yet known leaves this {@code null}, and the bring-up falls back to its local lowest-latency
+     * pick.
+     */
+    private volatile RelayLatencyState relayLatencyState;
 
     /**
      * The live media-plane session once the media plane is brought up, or {@code null} until then.
@@ -324,7 +338,7 @@ final class Calls2OrchestratedCall {
      * @return an unmodifiable list of the offer-ack engine parameter bundles, in wire order; empty when no
      *         ack carried any and on the callee side
      */
-    List<Node> offerAckVoipSettings() {
+    List<Stanza> offerAckVoipSettings() {
         return offerAckVoipSettings;
     }
 
@@ -335,26 +349,46 @@ final class Calls2OrchestratedCall {
      * @throws NullPointerException if {@code offerAckVoipSettings} is {@code null} or contains a
      *                              {@code null} element
      */
-    void offerAckVoipSettings(List<Node> offerAckVoipSettings) {
+    void offerAckVoipSettings(List<Stanza> offerAckVoipSettings) {
         this.offerAckVoipSettings = List.copyOf(offerAckVoipSettings);
     }
 
     /**
      * Returns the call's relay block subtree, if it has been learned.
      *
-     * @return an {@link Optional} holding the relay node, or empty until it is learned
+     * @return an {@link Optional} holding the relay stanza, or empty until it is learned
      */
-    Optional<Node> relay() {
+    Optional<Stanza> relay() {
         return Optional.ofNullable(relay);
     }
 
     /**
      * Records the call's relay block subtree.
      *
-     * @param relay the {@code <relay>} node
+     * @param relay the {@code <relay>} stanza
      */
-    void relay(Node relay) {
+    void relay(Stanza relay) {
         this.relay = relay;
+    }
+
+    /**
+     * Returns the call's peer-aware relay-election state, if the latency exchange has begun.
+     *
+     * @return an {@link Optional} holding the relay-latency state, or empty until it is built
+     */
+    Optional<RelayLatencyState> relayLatencyState() {
+        return Optional.ofNullable(relayLatencyState);
+    }
+
+    /**
+     * Records the call's peer-aware relay-election state, built once when the relay block and peer are first
+     * known.
+     *
+     * @param relayLatencyState the relay-latency state seeded from the offered relay endpoints
+     * @throws NullPointerException if {@code relayLatencyState} is {@code null}
+     */
+    void relayLatencyState(RelayLatencyState relayLatencyState) {
+        this.relayLatencyState = Objects.requireNonNull(relayLatencyState, "relayLatencyState cannot be null");
     }
 
     /**

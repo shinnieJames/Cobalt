@@ -96,7 +96,7 @@ class ParticipantsStanzaTest {
 
         var to = participants.getChild("to").orElseThrow();
         assertFalse(to.getChild("content_binding").isPresent(),
-                "RCAT for a different user must not bleed onto the <to> node");
+                "RCAT for a different user must not bleed onto the <to> stanza");
     }
 
     @Test
@@ -116,7 +116,7 @@ class ParticipantsStanzaTest {
     void contentBindingOnlyNullWhenNoMatch() {
         var bindings = Map.of(Jid.of("19255550000@s.whatsapp.net"), RCAT_TAG);
         var result = ParticipantsStanza.buildContentBindingOnly(List.of(DEVICE_A), bindings);
-        assertNull(result, "no matching user JID -> entire <participants> node is null");
+        assertNull(result, "no matching user JID -> entire <participants> stanza is null");
     }
 
     @Test

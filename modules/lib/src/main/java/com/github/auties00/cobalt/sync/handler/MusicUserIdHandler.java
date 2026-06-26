@@ -1,10 +1,12 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.MusicUserIdAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -12,7 +14,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * per-provider music account identifiers.
  *
  * <p>This handler persists the user's resolved music identifiers on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so per-provider music
+ * {@link LinkedWhatsAppStore} so per-provider music
  * accounts are visible across linked devices. Only {@link SyncdOperation#SET}
  * is accepted; non-{@code SET} operations and payloads where both
  * {@link MusicUserIdAction#musicUserId()} and
@@ -80,7 +82,7 @@ public final class MusicUserIdHandler implements WebAppStateActionHandler {
      * {@link MusicUserIdAction#musicUserIdMap()} empty is rejected as
      * {@link MutationApplicationResult#malformed()}; on success the resolved
      * action is written via
-     * {@link com.github.auties00.cobalt.store.BusinessStore#setMusicUserIdState(MusicUserIdAction)}.
+     * {@link LinkedWhatsAppBusinessStore#setMusicUserIdState(MusicUserIdAction)}.
      *
      * @implNote
      * This implementation rejects the all-empty payload so a

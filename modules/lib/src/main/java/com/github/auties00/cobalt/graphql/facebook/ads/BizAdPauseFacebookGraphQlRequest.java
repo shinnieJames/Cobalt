@@ -15,7 +15,7 @@ import java.io.UncheckedIOException;
  *
  * <p>The single {@code boostID} GraphQL variable is the Facebook boost object identifier of the
  * boosted component to pause; the compiled document maps it onto the {@code wa_pause_boosted_component}
- * root mutation. The {@code boostID} is a numeric Facebook node id rather than a WhatsApp address, so
+ * root mutation. The {@code boostID} is a numeric Facebook stanza id rather than a WhatsApp address, so
  * it is kept as a {@link String}. The mutation echoes the affected component's id; the reply is
  * consumed through {@link BizAdPauseFacebookGraphQlResponse}.
  *

@@ -4,8 +4,7 @@ import it.auties.protobuf.annotation.ProtobufEnum;
 import it.auties.protobuf.annotation.ProtobufEnumIndex;
 
 import java.util.Arrays;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Represents the administrative role a participant can hold in a WhatsApp
@@ -14,7 +13,7 @@ import java.util.Objects;
  * <p>Each participant in a group has one of three roles that determine their
  * permissions:
  * <ul>
- *   <li>{@link #USER} - a regular member with no administrative privileges</li>
+ *   <li>{@link #MEMBER} - a regular member with no administrative privileges</li>
  *   <li>{@link #ADMIN} - an administrator who can manage group settings and
  *       participants</li>
  *   <li>{@link #FOUNDER} - the original creator of the group (also called
@@ -34,7 +33,7 @@ public enum GroupPartipantRole {
      * A regular group participant with no administrative privileges.
      * This is the default role for newly added members.
      */
-    USER(0, null),
+    MEMBER(0, "member"),
 
     /**
      * A group administrator who can modify group settings, add and remove
@@ -76,19 +75,13 @@ public enum GroupPartipantRole {
      * Returns the {@code GroupPartipantRole} matching the given protocol-level
      * string identifier.
      *
-     * <p>Valid inputs are {@code "admin"}, {@code "superadmin"}, and
-     * {@code null} (for regular users). The match is performed by comparing
-     * each constant's {@link #data()} value.
-     *
      * @param input the protocol-level role identifier
      * @return the matching role constant
-     * @throws NoSuchElementException if no constant matches the input
      */
-    public static GroupPartipantRole of(String input) {
+    public static Optional<GroupPartipantRole> of(String input) {
         return Arrays.stream(values())
-                .filter(entry -> Objects.equals(entry.data(), input))
-                .findFirst()
-                .orElseThrow(() -> new NoSuchElementException("Cannot find GroupRole for %s".formatted(input)));
+                .filter(entry -> entry.data().equals(input))
+                .findFirst();
     }
 
     /**
@@ -104,7 +97,7 @@ public enum GroupPartipantRole {
      * Returns the protocol-level string identifier for this role.
      *
      * <p>Returns {@code "admin"} for {@link #ADMIN}, {@code "superadmin"} for
-     * {@link #FOUNDER}, and {@code null} for {@link #USER}.
+     * {@link #FOUNDER}, and {@code null} for {@link #MEMBER}.
      *
      * @return the protocol identifier, or {@code null} for regular users
      */

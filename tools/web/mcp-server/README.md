@@ -68,7 +68,7 @@ Attach to a running WhatsApp instance for real-time inspection and control:
 Inspect and inject protocol-level traffic in real time:
 
 - **Stanza capture** — query inbound/outbound XML stanzas with filters on tag, id, from, to, attributes, or free-text
-- **Stanza injection** — send custom stanza nodes for targeted protocol experiments
+- **Stanza injection** — send custom stanza stanzas for targeted protocol experiments
 - **WAM telemetry** — capture, query, and inject WAM (WhatsApp Analytics/Metrics) events
 - **WAM schema discovery** — inspect event constructor definitions and field schemas before crafting events
 - **Network capture** — record and query WebSocket frames and HTTP requests with direction/URL/content filters
@@ -128,7 +128,7 @@ The plugin is optional: every other WASM tool (and `format=wat`) works without i
 claude mcp add --transport stdio \
   --env WEB_MCP_PLATFORM=auto \
   --env WEB_MCP_LOG_LEVEL=info \
-  cobalt-mcp -- node tools/web/mcp-server/dist/index.js
+  cobalt-mcp -- stanza tools/web/mcp-server/dist/index.js
 ```
 
 Add `--scope user` for global (all projects) or `--scope project` to commit it in `.mcp.json`.
@@ -140,7 +140,7 @@ Add `--scope user` for global (all projects) or `--scope project` to commit it i
   "mcpServers": {
     "cobalt-mcp": {
       "type": "stdio",
-      "command": "node",
+      "command": "stanza",
       "args": ["tools/web/mcp-server/dist/index.js"],
       "env": {
         "WEB_MCP_PLATFORM": "auto",
@@ -159,7 +159,7 @@ Add `--scope user` for global (all projects) or `--scope project` to commit it i
 codex mcp add cobalt-mcp \
   --env WEB_MCP_PLATFORM=auto \
   --env WEB_MCP_LOG_LEVEL=info \
-  -- node tools/web/mcp-server/dist/index.js
+  -- stanza tools/web/mcp-server/dist/index.js
 ```
 
 **JSON** — add to `.codex/config.toml` or `codex.json`:
@@ -169,7 +169,7 @@ codex mcp add cobalt-mcp \
   "mcpServers": {
     "cobalt-mcp": {
       "type": "stdio",
-      "command": "node",
+      "command": "stanza",
       "args": ["tools/web/mcp-server/dist/index.js"],
       "env": {
         "WEB_MCP_PLATFORM": "auto",
@@ -188,7 +188,7 @@ codex mcp add cobalt-mcp \
 gemini mcp add \
   -e WEB_MCP_PLATFORM=auto \
   -e WEB_MCP_LOG_LEVEL=info \
-  cobalt-mcp node tools/web/mcp-server/dist/index.js
+  cobalt-mcp stanza tools/web/mcp-server/dist/index.js
 ```
 
 Add `--scope user` for global configuration.
@@ -199,7 +199,7 @@ Add `--scope user` for global configuration.
 {
   "mcpServers": {
     "cobalt-mcp": {
-      "command": "node",
+      "command": "stanza",
       "args": ["tools/web/mcp-server/dist/index.js"],
       "env": {
         "WEB_MCP_PLATFORM": "auto",
@@ -219,7 +219,7 @@ Add `--scope user` for global configuration.
   "mcp": {
     "cobalt-mcp": {
       "type": "local",
-      "command": ["node", "tools/web/mcp-server/dist/index.js"],
+      "command": ["stanza", "tools/web/mcp-server/dist/index.js"],
       "environment": {
         "WEB_MCP_PLATFORM": "auto",
         "WEB_MCP_LOG_LEVEL": "info"
@@ -306,7 +306,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | Tool                                 | Description                                                           |
 |--------------------------------------|-----------------------------------------------------------------------|
 | `web_live_stanza_query_nodes`        | Query captured stanza traffic with direction/tag/id/attr/text filters |
-| `web_live_stanza_send_node`          | Send a custom stanza node into the live runtime                       |
+| `web_live_stanza_send_node`          | Send a custom stanza stanza into the live runtime                       |
 | `web_live_wam_get_events`            | Query captured WAM telemetry events                                   |
 | `web_live_wam_send_event`            | Send a custom WAM event with optional props                           |
 | `web_live_wam_get_event_definitions` | Inspect WAM event constructor schemas                                 |

@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.stream;
 
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
@@ -12,8 +12,8 @@ import java.util.concurrent.Executors;
 /**
  * Defines the contract for every per-tag stanza handler registered on a {@link NodeStreamService}.
  *
- * <p>A handler is selected by the inbound stanza's tag and scheduled by {@link NodeStreamService#handle(Node)}
- * through {@link #handleAsync(Node)}. The two permitted shapes own that scheduling: a {@link Concurrent}
+ * <p>A handler is selected by the inbound stanza's tag and scheduled by {@link NodeStreamService#handle(Stanza)}
+ * through {@link #handleAsync(Stanza)}. The two permitted shapes own that scheduling: a {@link Concurrent}
  * runs each of its stanzas on its own fresh virtual thread, whereas an {@link Ordered} serialises its
  * stanzas per ordering key so a handler whose correctness depends on stanza arrival order is never raced.
  * Both shapes invoke the subclass's {@code handle} work method off the socket-reader thread and absorb any
@@ -31,13 +31,13 @@ public sealed interface SocketStreamHandler permits SocketStreamHandler.Concurre
     /**
      * Schedules handling of the given inbound stanza off the socket-reader thread.
      *
-     * <p>Called by {@link NodeStreamService#handle(Node)} for the handler registered under the stanza's tag.
+     * <p>Called by {@link NodeStreamService#handle(Stanza)} for the handler registered under the stanza's tag.
      * The two shapes differ only in how they schedule the work: {@link Concurrent} on a fresh virtual
      * thread, {@link Ordered} on a per-key serial chain.
      *
-     * @param node the inbound stanza
+     * @param stanza the inbound stanza
      */
-    void handleAsync(Node node);
+    void handleAsync(Stanza stanza);
 
     /**
      * Clears any per-connection state so the handler is safe to reuse after a reconnection.
@@ -62,19 +62,19 @@ public sealed interface SocketStreamHandler permits SocketStreamHandler.Concurre
      * <p>Shared by both shapes so the failure-logging policy lives in one place.
      *
      * @param handler the handler whose {@code handle} method runs
-     * @param node    the stanza to pass to the work method
+     * @param stanza    the stanza to pass to the work method
      */
-    private static void runHandle(SocketStreamHandler handler, Node node) {
+    private static void runHandle(SocketStreamHandler handler, Stanza stanza) {
         try {
             switch (handler) {
-                case Concurrent concurrent -> concurrent.handle(node);
-                case Ordered ordered -> ordered.handle(node);
+                case Concurrent concurrent -> concurrent.handle(stanza);
+                case Ordered ordered -> ordered.handle(stanza);
             }
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Handler {0} failed for stanza {1}: {2}",
                     handler.getClass().getSimpleName(),
-                    node.description(),
+                    stanza.description(),
                     throwable.getMessage());
         }
     }
@@ -91,12 +91,12 @@ public sealed interface SocketStreamHandler permits SocketStreamHandler.Concurre
          * {@inheritDoc}
          *
          * @implNote
-         * This implementation starts a fresh virtual thread that invokes {@link #handle(Node)} through
-         * {@link SocketStreamHandler#runHandle(SocketStreamHandler, Node)}.
+         * This implementation starts a fresh virtual thread that invokes {@link #handle(Stanza)} through
+         * {@link SocketStreamHandler#runHandle(SocketStreamHandler, Stanza)}.
          */
         @Override
-        public final void handleAsync(Node node) {
-            Thread.startVirtualThread(() -> runHandle(this, node));
+        public final void handleAsync(Stanza stanza) {
+            Thread.startVirtualThread(() -> runHandle(this, stanza));
         }
 
         /**
@@ -104,17 +104,17 @@ public sealed interface SocketStreamHandler permits SocketStreamHandler.Concurre
          *
          * <p>Public so a composing dispatcher in another package can invoke a sub-handler's work method
          * directly (synchronously, on the dispatcher's own thread) instead of scheduling a second
-         * virtual thread through {@link #handleAsync(Node)}.
+         * virtual thread through {@link #handleAsync(Stanza)}.
          *
          * @implSpec
          * Implementations complete on the calling virtual thread; any required asynchrony uses plain
          * blocking calls. Implementations may throw {@link IOException} to signal a blocking I/O failure;
-         * any other {@link Throwable} is also caught and logged by {@link #handleAsync(Node)}.
+         * any other {@link Throwable} is also caught and logged by {@link #handleAsync(Stanza)}.
          *
-         * @param node the inbound stanza
+         * @param stanza the inbound stanza
          * @throws IOException if a blocking I/O operation fails
          */
-        public abstract void handle(Node node) throws IOException;
+        public abstract void handle(Stanza stanza) throws IOException;
     }
 
     /**
@@ -147,16 +147,16 @@ public sealed interface SocketStreamHandler permits SocketStreamHandler.Concurre
          * This implementation chains the stanza onto its key's tail through
          * {@link CompletableFuture#handleAsync}; {@code handleAsync} (rather than {@code thenRunAsync})
          * keeps the chain alive when a work invocation fails. Enqueueing runs on the single socket-reader
-         * thread that calls {@link NodeStreamService#handle(Node)}, so the chain order matches wire arrival
+         * thread that calls {@link NodeStreamService#handle(Stanza)}, so the chain order matches wire arrival
          * order.
          */
         @Override
-        public final void handleAsync(Node node) {
-            var key = orderingKey(node);
+        public final void handleAsync(Stanza stanza) {
+            var key = orderingKey(stanza);
             chains.compute(key, (ignoredKey, previous) -> {
                 var base = previous != null ? previous : CompletableFuture.<Void>completedFuture(null);
                 return base.handleAsync((ignoredResult, ignoredError) -> {
-                    runHandle(this, node);
+                    runHandle(this, stanza);
                     return null;
                 }, executor);
             });
@@ -178,13 +178,13 @@ public sealed interface SocketStreamHandler permits SocketStreamHandler.Concurre
          * Handles the given inbound stanza on its key's ordered chain.
          *
          * @implSpec
-         * Behaves as {@link Concurrent#handle(Node)} but is invoked in arrival order per
-         * {@link #orderingKey(Node)}.
+         * Behaves as {@link Concurrent#handle(Stanza)} but is invoked in arrival order per
+         * {@link #orderingKey(Stanza)}.
          *
-         * @param node the inbound stanza
+         * @param stanza the inbound stanza
          * @throws IOException if a blocking I/O operation fails
          */
-        public abstract void handle(Node node) throws IOException;
+        public abstract void handle(Stanza stanza) throws IOException;
 
         /**
          * Returns the key on which this handler's stanzas are serialised.
@@ -192,9 +192,9 @@ public sealed interface SocketStreamHandler permits SocketStreamHandler.Concurre
          * <p>Stanzas whose keys are equal are processed one at a time in arrival order; stanzas with
          * distinct keys run concurrently.
          *
-         * @param node the inbound stanza
+         * @param stanza the inbound stanza
          * @return the ordering key, never {@code null}
          */
-        protected abstract String orderingKey(Node node);
+        protected abstract String orderingKey(Stanza stanza);
     }
 }

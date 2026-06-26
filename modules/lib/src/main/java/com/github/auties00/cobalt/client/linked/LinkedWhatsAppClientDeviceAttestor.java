@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.client.linked;
 
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 /**
  * Bridge between Cobalt and an embedder-supplied real mobile device for

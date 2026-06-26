@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.exception.WhatsAppPrivateStatsTokenIssuerExcep
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -120,7 +120,7 @@ public final class WamPrivateStatsTokenIssuer {
      * <ul>
      *   <li>draws two 32-byte sequences from {@link #random},</li>
      *   <li>blinds via {@link WamPrivateStatsTokenBlinder#blind(byte[], byte[])},</li>
-     *   <li>dispatches the IQ via {@link LinkedWhatsAppClient#sendNode(NodeBuilder)},</li>
+     *   <li>dispatches the IQ via {@link LinkedWhatsAppClient#sendNode(StanzaBuilder)},</li>
      *   <li>parses {@code signed_credential} and {@code acs_public_key} under the {@code sign_credential}
      *       reply,</li>
      *   <li>unblinds via {@link WamPrivateStatsTokenBlinder#unblind(byte[], byte[], byte[])},</li>
@@ -152,15 +152,15 @@ public final class WamPrivateStatsTokenIssuer {
 
         var blindedCredential = WamPrivateStatsTokenBlinder.blind(token, blindingFactor);
 
-        var iq = new NodeBuilder()
+        var iq = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", XMLNS)
                 .attribute("type", "get")
                 .attribute("to", SERVER)
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("sign_credential")
                         .attribute("version", "1")
-                        .content(new NodeBuilder()
+                        .content(new StanzaBuilder()
                                 .description("blinded_credential")
                                 .content(blindedCredential)
                                 .build())

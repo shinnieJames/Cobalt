@@ -2,10 +2,12 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.WhatsAppLinkedClientErrorHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -14,7 +16,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * <p>This handler persists one of
  * {@link NotificationActivitySettingAction.NotificationActivitySetting}'s
- * values on {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so the
+ * values on {@link LinkedWhatsAppStore} so the
  * notification activity preference fans out across linked devices. Only
  * {@link SyncdOperation#SET} is accepted; any other operation is reported as
  * {@link MutationApplicationResult#unsupported()} and a missing or wrong-typed
@@ -83,7 +85,7 @@ public final class NotificationActivitySettingHandler implements WebAppStateActi
      * {@link NotificationActivitySettingAction#notificationActivitySetting()}
      * is rejected as {@link MutationApplicationResult#malformed()}; on success
      * the resolved enum is written via
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setNotificationActivitySetting(NotificationActivitySettingAction.NotificationActivitySetting)}.
+     * {@link LinkedWhatsAppSettingsStore#setNotificationActivitySetting(NotificationActivitySettingAction.NotificationActivitySetting)}.
      *
      * @implNote
      * This implementation lets exceptions propagate so the configured

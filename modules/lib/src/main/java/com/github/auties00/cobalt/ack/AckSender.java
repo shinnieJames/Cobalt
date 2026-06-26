@@ -4,7 +4,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.Objects;
 
@@ -13,8 +13,8 @@ import java.util.Objects;
  * and {@code <ack error=...>} nacks, in response to an inbound stanza.
  *
  * <p>Stream handlers receive this service via constructor injection. They call
- * {@link #sendAck(AckClass, Node)} or {@link #sendNack(AckClass, Node, NackReason)} for the common
- * shapes, and obtain an {@link AckBuilder} via {@link #ack(AckClass, Node)} for any call site that
+ * {@link #sendAck(AckClass, Stanza)} or {@link #sendNack(AckClass, Stanza, NackReason)} for the common
+ * shapes, and obtain an {@link AckBuilder} via {@link #ack(AckClass, Stanza)} for any call site that
  * needs to override attributes such as a custom {@code type}, an explicit {@code participant},
  * additional child nodes, or a custom {@code from}. The per-class default behaviour for the
  * {@code type} and {@code participant} attributes is handled by {@link AckBuilder}, with the
@@ -29,7 +29,7 @@ import java.util.Objects;
 public final class AckSender {
     /**
      * The {@link LinkedWhatsAppClient} that ships the assembled ack stanza fire-and-forget through
-     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Node)}.
+     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Stanza)}.
      */
     private final LinkedWhatsAppClient whatsapp;
 
@@ -60,7 +60,7 @@ public final class AckSender {
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendAck",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public boolean sendAck(AckClass cls, Node inbound) {
+    public boolean sendAck(AckClass cls, Stanza inbound) {
         return ack(cls, inbound).send();
     }
 
@@ -70,7 +70,7 @@ public final class AckSender {
      *
      * <p>The shortcut form for the common case where a handler classifies the inbound stanza as
      * unprocessable and the reason maps directly to a known {@link NackReason}. For
-     * {@link NackReason#INVALID_PROTOBUF} use {@link #ack(AckClass, Node)} instead and add the
+     * {@link NackReason#INVALID_PROTOBUF} use {@link #ack(AckClass, Stanza)} instead and add the
      * failure reason via {@link AckBuilder#failureReason(String)}.
      *
      * @param cls     the {@link AckClass} for the {@code class} attribute on the outbound ack
@@ -81,7 +81,7 @@ public final class AckSender {
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendNack",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public boolean sendNack(AckClass cls, Node inbound, NackReason reason) {
+    public boolean sendNack(AckClass cls, Stanza inbound, NackReason reason) {
         return ack(cls, inbound).error(reason).send();
     }
 
@@ -99,7 +99,7 @@ public final class AckSender {
      * @param inbound the inbound stanza being acknowledged
      * @return a fresh {@link AckBuilder}
      */
-    public AckBuilder ack(AckClass cls, Node inbound) {
+    public AckBuilder ack(AckClass cls, Stanza inbound) {
         return new AckBuilder(this, cls, inbound);
     }
 
@@ -125,7 +125,7 @@ public final class AckSender {
      */
     @WhatsAppWebExport(moduleName = "WAWebCreateNackFromStanza",
             exports = "createNackFromStanza", adaptation = WhatsAppAdaptation.DIRECT)
-    public boolean synthesiseNack(Node inbound, NackReason reason) {
+    public boolean synthesiseNack(Stanza inbound, NackReason reason) {
         var cls = switch (inbound.description()) {
             case "message" -> AckClass.MESSAGE;
             case "receipt" -> AckClass.RECEIPT;
@@ -145,14 +145,14 @@ public final class AckSender {
      * builder's id and from precondition.
      *
      * @implNote This implementation routes through
-     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Node)} so the ack is sent fire-and-forget; the
+     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Stanza)} so the ack is sent fire-and-forget; the
      * socket layer raises a
      * {@link com.github.auties00.cobalt.exception.WhatsAppSessionException.Closed} when the
      * connection is down at the time of the send.
      *
      * @param ack the assembled {@code <ack>} stanza
      */
-    void dispatch(Node ack) {
+    void dispatch(Stanza ack) {
         whatsapp.sendNodeWithNoResponse(ack);
     }
 }

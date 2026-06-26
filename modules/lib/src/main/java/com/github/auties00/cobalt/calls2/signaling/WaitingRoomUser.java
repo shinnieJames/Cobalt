@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.calls2.core.participant.CallParticipantAccountKind;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -16,7 +16,7 @@ import java.util.Optional;
  * and the participant list echoed on the {@code leave} and {@code toggle} acks) nests zero or more
  * {@code <user>} children describing the parties the operation targets. Each entry pins a participant by
  * its user {@link #jid() JID} and decorates it with the same optional vocabulary the group-call
- * {@code <user>} node uses: the participant's {@link #userPn() phone-number JID}, the
+ * {@code <user>} stanza uses: the participant's {@link #userPn() phone-number JID}, the
  * {@link #username() display username}, the {@link #admin() admin flag}, the {@link #guestName() guest
  * display name}, and the {@link #accountKind() account kind}. The JID is the only required component;
  * every decoration is optional and absent unless the relay supplied it.
@@ -118,16 +118,16 @@ public record WaitingRoomUser(Jid jid,
     }
 
     /**
-     * Builds the {@code <user jid user_pn username is_admin guest_name account_kind/>} node.
+     * Builds the {@code <user jid user_pn username is_admin guest_name account_kind/>} stanza.
      *
      * <p>Each optional attribute is omitted when its backing component is absent; the {@code is_admin}
      * flag is written only when {@link #admin()} is {@code true}, and {@code account_kind} is written
      * using the kind's wire token only when an account kind is present.
      *
-     * @return the user entry node
+     * @return the user entry stanza
      */
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toNode() {
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(JID_ATTRIBUTE, jid)
                 .attribute(USER_PN_ATTRIBUTE, userPn.orElse(null), userPn.isPresent())
@@ -140,26 +140,26 @@ public record WaitingRoomUser(Jid jid,
     }
 
     /**
-     * Decodes a waiting-room {@code <user>} node into a {@link WaitingRoomUser}.
+     * Decodes a waiting-room {@code <user>} stanza into a {@link WaitingRoomUser}.
      *
      * <p>An absent {@code is_admin} attribute classifies to {@code false}; an absent {@code account_kind}
      * attribute yields an empty {@link #accountKind()} rather than defaulting to
      * {@link CallParticipantAccountKind#REGULAR}, so a re-emitted entry omits the attribute exactly as
      * it arrived.
      *
-     * @param node the {@code <user>} node
+     * @param stanza the {@code <user>} stanza
      * @return the decoded user entry
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code jid} attribute is absent
      */
-    public static WaitingRoomUser of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var jid = node.getRequiredAttributeAsJid(JID_ATTRIBUTE);
-        var userPn = node.getAttributeAsJid(USER_PN_ATTRIBUTE);
-        var username = node.getAttributeAsString(USERNAME_ATTRIBUTE);
-        var admin = "1".equals(node.getAttributeAsString(IS_ADMIN_ATTRIBUTE).orElse("0"));
-        var guestName = node.getAttributeAsString(GUEST_NAME_ATTRIBUTE);
-        var accountKind = node.getAttributeAsString(ACCOUNT_KIND_ATTRIBUTE)
+    public static WaitingRoomUser of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var jid = stanza.getRequiredAttributeAsJid(JID_ATTRIBUTE);
+        var userPn = stanza.getAttributeAsJid(USER_PN_ATTRIBUTE);
+        var username = stanza.getAttributeAsString(USERNAME_ATTRIBUTE);
+        var admin = "1".equals(stanza.getAttributeAsString(IS_ADMIN_ATTRIBUTE).orElse("0"));
+        var guestName = stanza.getAttributeAsString(GUEST_NAME_ATTRIBUTE);
+        var accountKind = stanza.getAttributeAsString(ACCOUNT_KIND_ATTRIBUTE)
                 .map(CallParticipantAccountKind::ofToken);
         return new WaitingRoomUser(jid, userPn, username, admin, guestName, accountKind);
     }

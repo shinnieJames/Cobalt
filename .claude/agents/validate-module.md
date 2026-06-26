@@ -106,24 +106,27 @@ package com.github.auties00.cobalt.message.send;          // same package as the
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.store.*;
+
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Function;
 
-public final class <Module>Validate {
-    public static void main(String[] args) throws Exception {
+public final class
+
+<Module> Validate {
+    public static void main (String[]args) throws Exception {
         // 1) Read seed session + input.
         var seed = JSON.parseObject(Files.readString(
-            Path.of("validation/captures/<Module>/session.json")));
+                Path.of("validation/captures/<Module>/session.json")));
         var input = JSON.parseObject(Files.readString(
-            Path.of("validation/captures/<Module>/input.json")));
+                Path.of("validation/captures/<Module>/input.json")));
 
         // 2) Build an in-memory store seeded from the live session.
         var store = WhatsAppStoreFactory.inMemory()
-            .create(WhatsAppClientType.WEB, UUID.fromString(seed.getString("uuid")));
+                .create(WhatsAppClientType.WEB, UUID.fromString(seed.getString("uuid")));
         SeedHelper.applyTo(store, seed);   // fill identity / Noise / prekeys / device
 
         // 3) Build a capturing client. WhatsAppClient is no longer final — subclass it.
@@ -131,32 +134,34 @@ public final class <Module>Validate {
         var client = new WhatsAppClient(store, null, null, null) {
             @Override
             public Node sendNode(NodeBuilder b) {
-                var node = b.build();
-                captured.add(node);
-                return node;                         // no response
+                var stanza = b.build();
+                captured.add(stanza);
+                return stanza;                         // no response
             }
+
             @Override
             public Node sendNode(NodeBuilder b, Function<Node, Boolean> f) {
-                var node = b.build();
-                captured.add(node);
-                return node;
+                var stanza = b.build();
+                captured.add(stanza);
+                return stanza;
             }
+
             @Override
-            public void sendNodeWithNoResponse(Node node) {
-                captured.add(node);
+            public void sendNodeWithNoResponse(Node stanza) {
+                captured.add(stanza);
             }
         };
 
         // 4) Call the Cobalt owner directly (package-private constructor is fine here).
         var sender = new UserMessageSender(client, /* wire real collaborators */);
-        sender.send(<reconstruct input from input.json>);
+        sender.send( < reconstruct input from input.json >);
 
         // 5) Emit a canonical JSON of captured output.
         var out = new LinkedHashMap<String, Object>();
         out.put("input", input);
         out.put("stanzas", captured.stream().map(CaptureJson::canonical).toList());
         out.put("wamEvents", WamCapture.drain(client));   // if WAM is in scope
-        out.put("http",      HttpCapture.drain(client));  // if HTTP is in scope
+        out.put("http", HttpCapture.drain(client));  // if HTTP is in scope
         F
 ```
 
@@ -197,7 +202,7 @@ Exclude from diff (these are expected to differ per run):
 Everything else must match exactly:
 
 - Stanza `tag` and every non-excluded attribute.
-- Child node structure, ordering, descriptions, attributes.
+- Child stanza structure, ordering, descriptions, attributes.
 - For each `<enc>` child, its attributes (not its body bytes).
 - Full WAM event set (names + non-excluded props). Cobalt must emit a **superset** of live's WAM events — never fewer.
 - HTTP: method, URL (path + host), request body shape (keys + types), response handling.
@@ -281,7 +286,7 @@ Missing javadoc is `MISSING_IN_COBALT`.
 | In-memory store | `WhatsAppStoreFactory.inMemory().create(WhatsAppClientType.WEB, UUID.randomUUID())` |
 | Capture outgoing Nodes | Subclass `WhatsAppClient`, override `sendNode(NodeBuilder)`, `sendNode(NodeBuilder, Function)`, `sendNodeWithNoResponse(Node)`. `WhatsAppClient` is non-final. |
 | Build a Node | `new NodeBuilder().description(...).attribute(k, v).content(...).build()` |
-| Read a Node | `node.description()`, `node.getAttribute(k)`, `node.getAttributeAsString(k)`, `node.findFirstChild(desc)`, `node.streamChildren()` |
+| Read a Node | `stanza.description()`, `stanza.getAttribute(k)`, `stanza.getAttributeAsString(k)`, `stanza.findFirstChild(desc)`, `stanza.streamChildren()` |
 | Add a listener | `store.addListener(new WhatsAppClientListener() {...})` — fires on virtual threads |
 | WAM buffer | `WamService.commit(spec)` queues; drain for capture via a package-private accessor you add if missing |
 

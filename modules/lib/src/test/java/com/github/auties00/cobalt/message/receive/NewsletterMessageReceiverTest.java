@@ -6,7 +6,9 @@ import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -27,9 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * protobuf carried by the {@code <plaintext>} child, and stamping the resulting
  * {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo} with
  * {@link MessageStatus#DELIVERED}. Synthetic inbound {@code <message>} nodes are driven through
- * {@link NewsletterMessageReceiver#receive(com.github.auties00.cobalt.node.Node, Jid)} directly; the
+ * {@link NewsletterMessageReceiver#receive(Stanza, Jid)} directly; the
  * receiver reads only the local JID from its
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore}, so no signal-session installation is
+ * {@link LinkedWhatsAppStore}, so no signal-session installation is
  * required.
  */
 @DisplayName("NewsletterMessageReceiver")
@@ -44,14 +46,14 @@ class NewsletterMessageReceiverTest {
         var receiver = new NewsletterMessageReceiver(MessageFixtures.temporaryStore(SELF, null));
         var payload = MessageContainerSpec.encode(MessageContainer.of("newsletter body"));
 
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0NL0001")
                 .attribute("from", NEWSLETTER)
                 .attribute("t", 1700000000L)
                 .attribute("server_id", 42)
                 .attribute("type", "text")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("plaintext")
                         .content(payload)
                         .build())
@@ -82,7 +84,7 @@ class NewsletterMessageReceiverTest {
         var receiver = new NewsletterMessageReceiver(MessageFixtures.temporaryStore(SELF, null));
         var payload = MessageContainerSpec.encode(MessageContainer.of("self post"));
 
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0SELF001")
                 .attribute("from", NEWSLETTER)
@@ -90,7 +92,7 @@ class NewsletterMessageReceiverTest {
                 .attribute("server_id", 100)
                 .attribute("type", "text")
                 .attribute("is_sender", "true")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("plaintext")
                         .content(payload)
                         .build())
@@ -105,7 +107,7 @@ class NewsletterMessageReceiverTest {
     @DisplayName("receive: missing <plaintext> child returns null (no-op)")
     void missingPlaintextReturnsNull() {
         var receiver = new NewsletterMessageReceiver(MessageFixtures.temporaryStore(SELF, null));
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0NL0002")
                 .attribute("from", NEWSLETTER)
@@ -122,14 +124,14 @@ class NewsletterMessageReceiverTest {
     @DisplayName("receive: empty <plaintext> payload returns null")
     void emptyPlaintextReturnsNull() {
         var receiver = new NewsletterMessageReceiver(MessageFixtures.temporaryStore(SELF, null));
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0NL0003")
                 .attribute("from", NEWSLETTER)
                 .attribute("t", 1700000000L)
                 .attribute("server_id", 1)
                 .attribute("type", "text")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("plaintext")
                         .content(new byte[0])
                         .build())
@@ -142,13 +144,13 @@ class NewsletterMessageReceiverTest {
     @DisplayName("receive: missing required server_id throws NoSuchElementException")
     void missingServerIdThrows() {
         var receiver = new NewsletterMessageReceiver(MessageFixtures.temporaryStore(SELF, null));
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0NL0004")
                 .attribute("from", NEWSLETTER)
                 .attribute("t", 1700000000L)
                 .attribute("type", "text")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("plaintext")
                         .content(MessageContainerSpec.encode(MessageContainer.of("hi")))
                         .build())
@@ -162,13 +164,13 @@ class NewsletterMessageReceiverTest {
     @DisplayName("receive: missing required id throws NoSuchElementException")
     void missingIdThrows() {
         var receiver = new NewsletterMessageReceiver(MessageFixtures.temporaryStore(SELF, null));
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("from", NEWSLETTER)
                 .attribute("t", 1700000000L)
                 .attribute("server_id", 1)
                 .attribute("type", "text")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("plaintext")
                         .content(MessageContainerSpec.encode(MessageContainer.of("hi")))
                         .build())

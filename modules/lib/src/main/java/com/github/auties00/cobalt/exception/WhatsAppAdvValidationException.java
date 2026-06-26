@@ -133,7 +133,7 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
          * @param jid the JID of the device with empty identity
          */
         public EmptyDeviceIdentity(Jid jid) {
-            super("Empty device-identity node for " + jid, jid);
+            super("Empty device-identity stanza for " + jid, jid);
         }
     }
 

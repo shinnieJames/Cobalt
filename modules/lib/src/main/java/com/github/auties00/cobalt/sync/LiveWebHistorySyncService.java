@@ -11,6 +11,9 @@ import com.github.auties00.cobalt.listener.linked.LinkedWebHistorySyncProgressLi
 import com.github.auties00.cobalt.exception.WhatsAppHistorySyncException;
 import com.github.auties00.cobalt.exception.WhatsAppMediaException;
 import com.github.auties00.cobalt.media.MediaConnectionService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.util.BufferedProtobufInputStream;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -23,7 +26,7 @@ import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotifi
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
 import com.github.auties00.cobalt.model.preference.StickerBuilder;
 import com.github.auties00.cobalt.model.sync.history.HistorySync;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.*;
 import com.github.auties00.cobalt.wam.type.*;
@@ -786,12 +789,12 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      * {@link com.github.auties00.cobalt.model.contact.Contact} via
      * {@link com.github.auties00.cobalt.model.contact.Contact#setChosenName(String)};
      * every {@code statusV3Messages} entry is appended to
-     * {@link com.github.auties00.cobalt.store.ChatStore#status()}; every {@code callLogRecords}
+     * {@link LinkedWhatsAppChatStore#status()}; every {@code callLogRecords}
      * entry that carries a callId is registered through
-     * {@link com.github.auties00.cobalt.store.ChatStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)};
+     * {@link LinkedWhatsAppChatStore#addCallLog(com.github.auties00.cobalt.model.call.CallLog)};
      * every {@code recentStickers} entry that carries a {@code fileSha256}
      * is folded into a {@link com.github.auties00.cobalt.model.preference.Sticker}
-     * via {@link com.github.auties00.cobalt.store.SettingsStore#addRecentSticker(String, com.github.auties00.cobalt.model.preference.Sticker)},
+     * via {@link LinkedWhatsAppSettingsStore#addRecentSticker(String, com.github.auties00.cobalt.model.preference.Sticker)},
      * keyed by the base64-encoded plaintext hash to match WA Web's
      * {@code WAWebRecentStickerCollectionMd} row id; the
      * {@code companionMmsAuthNonce} (wire field {@code companionMetaNonce})
@@ -999,7 +1002,7 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      *
      * @implNote This implementation looks up the existing store chat keyed by
      * {@link Chat#jid()} and creates a fresh record via
-     * {@link com.github.auties00.cobalt.store.ChatStore#addNewChat(Jid)} only when none exists; the
+     * {@link LinkedWhatsAppChatStore#addNewChat(Jid)} only when none exists; the
      * wire-shape chat is never inserted directly because the store is typed
      * against its concrete chat subclasses, none of which is the history-sync
      * variant. Metadata fields are transcribed field-by-field through
@@ -1105,7 +1108,7 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      * @implNote This implementation parses the wire-string identifier through
      * {@link Jid#of(String)} and silently drops entries whose id is
      * unparseable. A new contact is created via
-     * {@link com.github.auties00.cobalt.store.ContactStore#addNewContact(Jid)} when no entry exists.
+     * {@link LinkedWhatsAppContactStore#addNewContact(Jid)} when no entry exists.
      * Empty-string push-names are skipped rather than written.
      *
      * @param pushname the wire-shape pushname record

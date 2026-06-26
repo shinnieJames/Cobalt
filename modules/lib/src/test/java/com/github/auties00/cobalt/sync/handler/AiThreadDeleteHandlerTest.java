@@ -3,16 +3,16 @@ package com.github.auties00.cobalt.sync.handler;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.bot.AiThreadTitleBuilder;
-import com.github.auties00.cobalt.model.device.DeviceCapabilities;
-import com.github.auties00.cobalt.model.device.DeviceCapabilitiesAiThreadBuilder;
-import com.github.auties00.cobalt.model.device.DeviceCapabilitiesBuilder;
+import com.github.auties00.cobalt.model.device.capabilities.DeviceCapabilities;
+import com.github.auties00.cobalt.model.device.capabilities.DeviceCapabilitiesAiThreadBuilder;
+import com.github.auties00.cobalt.model.device.capabilities.DeviceCapabilitiesBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.AiThreadDeleteMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -235,7 +235,7 @@ class AiThreadDeleteHandlerTest {
             var remoteValue = new SyncActionValueBuilder().timestamp(remoteTs).build();
             var remote = new DecryptedMutation.Trusted(index, remoteValue, SyncdOperation.SET, remoteTs, 7);
             var resolution = new AiThreadDeleteHandler().resolveConflicts(local, remote);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     resolution.state());
         }
     }

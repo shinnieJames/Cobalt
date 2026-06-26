@@ -19,15 +19,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BotStanzaTest {
 
     @Test
-    @DisplayName("buildMetadata(all-null): returns null (no <bot> node when no attributes apply)")
+    @DisplayName("buildMetadata(all-null): returns null (no <bot> stanza when no attributes apply)")
     void allNullReturnsNull() {
         assertNull(BotStanza.buildMetadata(null, null, null, null, null),
-                "no signals -> no <bot> node, not an empty one");
+                "no signals -> no <bot> stanza, not an empty one");
         assertNull(BotStanza.buildMetadata(null, null, null));
     }
 
     @Test
-    @DisplayName("buildMetadata: every supplied attribute propagates verbatim to the <bot> node")
+    @DisplayName("buildMetadata: every supplied attribute propagates verbatim to the <bot> stanza")
     void attributesPropagate() {
         var node = BotStanza.buildMetadata(
                 "feedback", "1p_partial", "abc123", "think_hard", "default");

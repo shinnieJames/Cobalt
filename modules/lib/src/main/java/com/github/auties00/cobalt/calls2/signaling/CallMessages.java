@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 /**
  * Holds the shared wire constants and common-header helpers the call-message payload records use.
@@ -51,7 +51,7 @@ final class CallMessages {
      * @param callCreator the call creator's device JID
      * @return the supplied builder, with the common header applied
      */
-    static NodeBuilder stampHeader(NodeBuilder builder, String callId, Jid callCreator) {
+    static StanzaBuilder stampHeader(StanzaBuilder builder, String callId, Jid callCreator) {
         return builder
                 .attribute(CALL_ID_ATTRIBUTE, callId)
                 .attribute(CALL_CREATOR_ATTRIBUTE, callCreator);

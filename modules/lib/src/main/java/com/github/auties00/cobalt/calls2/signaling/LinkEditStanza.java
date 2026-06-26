@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -96,17 +96,17 @@ public record LinkEditStanza(String token, Optional<String> action, Optional<Boo
     }
 
     /**
-     * Builds the {@code <link_edit token action waiting_room_enabled/>} action node.
+     * Builds the {@code <link_edit token action waiting_room_enabled/>} action stanza.
      *
      * <p>The {@code action} attribute is omitted when absent; the {@code waiting_room_enabled} attribute
      * is written as {@code '1'} or {@code '0'} only when the toggle is asserted, and omitted entirely
      * when {@link #waitingRoomEnabled()} is empty.
      *
-     * @return the link-edit action node
+     * @return the link-edit action stanza
      */
     @Override
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toStanza() {
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(TOKEN_ATTRIBUTE, token)
                 .attribute(ACTION_ATTRIBUTE, action.orElse(null), action.isPresent())
@@ -117,22 +117,22 @@ public record LinkEditStanza(String token, Optional<String> action, Optional<Boo
     }
 
     /**
-     * Decodes a {@code <link_edit>} action node into a {@link LinkEditStanza}.
+     * Decodes a {@code <link_edit>} action stanza into a {@link LinkEditStanza}.
      *
      * <p>An absent {@code waiting_room_enabled} attribute yields an empty {@link #waitingRoomEnabled()}
      * so a re-emitted edit omits the toggle exactly as it arrived; a present attribute classifies
      * through the {@code '1'}/{@code '0'} literal.
      *
-     * @param node the {@code <link_edit>} node
+     * @param stanza the {@code <link_edit>} stanza
      * @return the decoded link-edit signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code token} attribute is absent
      */
-    public static LinkEditStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var token = node.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
-        var action = node.getAttributeAsString(ACTION_ATTRIBUTE);
-        var waitingRoomEnabled = node.getAttributeAsString(WAITING_ROOM_ENABLED_ATTRIBUTE)
+    public static LinkEditStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var token = stanza.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
+        var action = stanza.getAttributeAsString(ACTION_ATTRIBUTE);
+        var waitingRoomEnabled = stanza.getAttributeAsString(WAITING_ROOM_ENABLED_ATTRIBUTE)
                 .map("1"::equals);
         return new LinkEditStanza(token, action, waitingRoomEnabled);
     }

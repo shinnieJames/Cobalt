@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.List;
 import java.util.Objects;
@@ -26,7 +26,7 @@ import java.util.OptionalInt;
  * {@code guest_name}, {@code account_kind}, {@code platform}, {@code type}, {@code state},
  * {@code error}, {@code pid}, {@code country_code}, and the nested {@code <device>}, {@code <privacy>},
  * {@code <dec>}, and {@code <rekey>} children). This record carries each entry as an opaque
- * {@link Node} so the participant subsystem owns the typed identity parse and this layer owns only the
+ * {@link Stanza} so the participant subsystem owns the typed identity parse and this layer owns only the
  * roster framing; {@link #childForm()} reports which form the entries take.
  *
  * <p>On the wire the element is {@code <group_info phash="..." connected-limit="N"> <user .../>* </group_info>}
@@ -43,7 +43,7 @@ import java.util.OptionalInt;
  * The mutual exclusivity is the engine invariant {@code "group_info should not contain both <user> and
  * <participant> nodes"} (rodata at address {@code 964784}); the {@code <user>} and
  * {@code <participant>} tokens are single-byte dictionary indices {@code 17}-adjacent and {@code 5}
- * respectively. This record carries the entries as raw {@link Node} trees rather than a typed
+ * respectively. This record carries the entries as raw {@link Stanza} trees rather than a typed
  * participant record because the identity parse ({@code fill_user_info_from_user_node}, fn10846,
  * including the device list, capability decode, and the seven-entry server-user-state table) is owned
  * by the participant subsystem, not the signaling roster framing.
@@ -59,7 +59,7 @@ import java.util.OptionalInt;
  * @see GroupUpdateStanza
  * @see Calls2SignalingType#GROUP_UPDATE
  */
-public record GroupInfoStanza(String phash, int connectedLimit, ChildForm childForm, List<Node> entries)
+public record GroupInfoStanza(String phash, int connectedLimit, ChildForm childForm, List<Stanza> entries)
         implements CallMessage {
     /**
      * The wire element tag for a group-info roster.
@@ -166,7 +166,7 @@ public record GroupInfoStanza(String phash, int connectedLimit, ChildForm childF
      * @throws IllegalArgumentException if an entry is not a {@code <user>} element, or there are more
      *                                  than {@value #MAX_PARTICIPANTS} entries
      */
-    public static GroupInfoStanza ofUsers(String phash, int connectedLimit, List<Node> users) {
+    public static GroupInfoStanza ofUsers(String phash, int connectedLimit, List<Stanza> users) {
         return new GroupInfoStanza(phash, connectedLimit, ChildForm.USER, users);
     }
 
@@ -182,7 +182,7 @@ public record GroupInfoStanza(String phash, int connectedLimit, ChildForm childF
      * @throws IllegalArgumentException if an entry is not a {@code <participant>} element, or there are
      *                                  more than {@value #MAX_PARTICIPANTS} entries
      */
-    public static GroupInfoStanza ofParticipants(String phash, int connectedLimit, List<Node> participants) {
+    public static GroupInfoStanza ofParticipants(String phash, int connectedLimit, List<Stanza> participants) {
         return new GroupInfoStanza(phash, connectedLimit, ChildForm.PARTICIPANT, participants);
     }
 
@@ -220,18 +220,18 @@ public record GroupInfoStanza(String phash, int connectedLimit, ChildForm childF
     }
 
     /**
-     * Builds the {@code <group_info>} roster node.
+     * Builds the {@code <group_info>} roster stanza.
      *
      * <p>The {@code phash} and {@code connected-limit} attributes are omitted when absent rather than
      * written as sentinels; the entries are emitted as children under their declared
      * {@link ChildForm#element() form tag}. A roster with no entries produces a {@code <group_info>}
      * element with only its attributes.
      *
-     * @return the group-info roster node
+     * @return the group-info roster stanza
      */
     @Override
-    public Node toNode() {
-        var builder = new NodeBuilder()
+    public Stanza toStanza() {
+        var builder = new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(PHASH_ATTRIBUTE, phash)
                 .attribute(CONNECTED_LIMIT_ATTRIBUTE, connectedLimit, connectedLimit >= 0);
@@ -242,31 +242,31 @@ public record GroupInfoStanza(String phash, int connectedLimit, ChildForm childF
     }
 
     /**
-     * Decodes a {@code <group_info>} node into a {@link GroupInfoStanza}.
+     * Decodes a {@code <group_info>} stanza into a {@link GroupInfoStanza}.
      *
      * <p>The child form is selected by the entries present: a roster with any {@code <participant>}
      * child decodes to the {@link ChildForm#PARTICIPANT participant} form and a roster with only
-     * {@code <user>} children (or no entries) decodes to the {@link ChildForm#USER user} form. A node
+     * {@code <user>} children (or no entries) decodes to the {@link ChildForm#USER user} form. A stanza
      * that carries both forms violates the engine invariant and yields an empty result rather than
-     * silently dropping one form. A node that is not a {@code <group_info>} element also yields an
+     * silently dropping one form. A stanza that is not a {@code <group_info>} element also yields an
      * empty result so callers iterating a mixed child list can skip it.
      *
-     * @param node the {@code <group_info>} node
-     * @return the decoded roster, or an empty result when the node is not a usable group-info element
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @param stanza the {@code <group_info>} stanza
+     * @return the decoded roster, or an empty result when the stanza is not a usable group-info element
+     * @throws NullPointerException if {@code stanza} is {@code null}
      */
-    public static Optional<GroupInfoStanza> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        if (!node.hasDescription(ELEMENT)) {
+    public static Optional<GroupInfoStanza> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        if (!stanza.hasDescription(ELEMENT)) {
             return Optional.empty();
         }
-        var users = node.getChildren(ChildForm.USER.element());
-        var participants = node.getChildren(ChildForm.PARTICIPANT.element());
+        var users = stanza.getChildren(ChildForm.USER.element());
+        var participants = stanza.getChildren(ChildForm.PARTICIPANT.element());
         if (!users.isEmpty() && !participants.isEmpty()) {
             return Optional.empty();
         }
-        var phash = node.getAttributeAsString(PHASH_ATTRIBUTE, null);
-        var connectedLimit = node.getAttributeAsInt(CONNECTED_LIMIT_ATTRIBUTE, -1);
+        var phash = stanza.getAttributeAsString(PHASH_ATTRIBUTE, null);
+        var connectedLimit = stanza.getAttributeAsInt(CONNECTED_LIMIT_ATTRIBUTE, -1);
         if (!participants.isEmpty()) {
             return Optional.of(new GroupInfoStanza(phash, connectedLimit, ChildForm.PARTICIPANT, List.copyOf(participants)));
         }

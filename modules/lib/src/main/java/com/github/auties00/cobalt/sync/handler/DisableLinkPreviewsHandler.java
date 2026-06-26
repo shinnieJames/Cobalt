@@ -4,10 +4,11 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.ArrayList;
 import java.util.List;
@@ -68,7 +69,7 @@ public final class DisableLinkPreviewsHandler implements WebAppStateActionHandle
      * <p>Walks the batch once classifying each mutation, tracks the last valid
      * {@link PrivacySettingDisableLinkPreviewsAction#isPreviewsDisabled()} flag
      * carried by a {@link SyncdOperation#SET}, and persists that single value
-     * via {@link com.github.auties00.cobalt.store.SettingsStore#setDisableLinkPreviews(boolean)}
+     * via {@link LinkedWhatsAppSettingsStore#setDisableLinkPreviews(boolean)}
      * after the loop. Non-{@code SET} operations yield
      * {@link MutationApplicationResult#unsupported()} and entries whose action
      * payload is not a {@link PrivacySettingDisableLinkPreviewsAction} yield
@@ -116,7 +117,7 @@ public final class DisableLinkPreviewsHandler implements WebAppStateActionHandle
      * {@link MutationApplicationResult#unsupported()} and action payloads that
      * are not a {@link PrivacySettingDisableLinkPreviewsAction} as
      * {@link MutationApplicationResult#malformed()}, then persists the value
-     * through {@link com.github.auties00.cobalt.store.SettingsStore#setDisableLinkPreviews(boolean)}.
+     * through {@link LinkedWhatsAppSettingsStore#setDisableLinkPreviews(boolean)}.
      *
      * @implNote
      * This implementation persists the value eagerly rather than folding it,

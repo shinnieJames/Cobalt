@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.call.CallEndReason;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -24,7 +24,7 @@ import java.util.OptionalInt;
  * transaction id is older than the newest one already seen. This buffer reproduces that two-part
  * mechanism: a bounded ring records, per call identifier, the latest transaction id (newest-wins),
  * the mapped terminate reason, and whether the call was answered or declined on another device of the
- * same account, while a per-call-id message list holds the not-yet-routable {@link Node} payloads in
+ * same account, while a per-call-id message list holds the not-yet-routable {@link Stanza} payloads in
  * arrival order for later replay.
  *
  * <p>The transaction-id ring is bounded to thirty slots keyed by call identifier; a call identifier
@@ -42,7 +42,7 @@ import java.util.OptionalInt;
  *
  * <p>This type is internally synchronized: the socket reader, the per-call ordered handler chain, and
  * the call-creation path all touch it, so every public method holds the instance monitor for the
- * duration of its ring or list mutation. Buffered {@link Node} payloads are immutable, so handing a
+ * duration of its ring or list mutation. Buffered {@link Stanza} payloads are immutable, so handing a
  * drained list to the caller leaks no mutable state.
  *
  * @implNote This implementation ports {@code message_buffer.cc} from the wa-voip WASM module
@@ -57,7 +57,7 @@ import java.util.OptionalInt;
  * (fn11490), and the buffered-message replay is {@code message_buffer_process_buffered_messages}
  * (fn11478) over the list filled by {@code message_buffer_add} (fn11489). The native list deep-clones
  * each message into a buffer pool to outlive the parse pool ({@code incoming_common_message_clone}
- * fn11505); Cobalt holds the immutable {@link Node} directly, so no clone is required.
+ * fn11505); Cobalt holds the immutable {@link Stanza} directly, so no clone is required.
  */
 public final class CallMessageBuffer {
     /**
@@ -145,7 +145,7 @@ public final class CallMessageBuffer {
     /**
      * Holds the buffered, not-yet-routable message payloads per call identifier in arrival order.
      */
-    private final Map<String, List<Node>> bufferedMessages;
+    private final Map<String, List<Stanza>> bufferedMessages;
 
     /**
      * Constructs an empty buffer with no recorded ring slots and no buffered messages.
@@ -287,13 +287,13 @@ public final class CallMessageBuffer {
      *
      * <p>Appends the payload to the call identifier's message list in arrival order; the list is
      * drained in the same order by {@link #drainBufferedMessages(String)} once the call object exists.
-     * The payload is the immutable {@code <call>} child {@link Node}, so no defensive copy is made.
+     * The payload is the immutable {@code <call>} child {@link Stanza}, so no defensive copy is made.
      *
      * @param callId  the call identifier the payload belongs to
-     * @param payload the {@code <call>} child node to buffer
+     * @param payload the {@code <call>} child stanza to buffer
      * @throws NullPointerException if {@code callId} or {@code payload} is {@code null}
      */
-    public synchronized void buffer(String callId, Node payload) {
+    public synchronized void buffer(String callId, Stanza payload) {
         Objects.requireNonNull(callId, "callId cannot be null");
         Objects.requireNonNull(payload, "payload cannot be null");
         bufferedMessages.computeIfAbsent(callId, ignored -> new ArrayList<>()).add(payload);
@@ -310,7 +310,7 @@ public final class CallMessageBuffer {
      * @return the buffered payloads in arrival order, or an empty list when none are buffered
      * @throws NullPointerException if {@code callId} is {@code null}
      */
-    public synchronized List<Node> drainBufferedMessages(String callId) {
+    public synchronized List<Stanza> drainBufferedMessages(String callId) {
         Objects.requireNonNull(callId, "callId cannot be null");
         var messages = bufferedMessages.remove(callId);
         return messages == null ? List.of() : List.copyOf(messages);

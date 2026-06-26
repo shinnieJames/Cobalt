@@ -15,9 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The production {@code LiveLinkedWhatsAppClient} constructor wires the whole session stack, including
  * native connectivity monitors, so instantiating it in a unit test is not viable. This suite instead reads
- * the client and node-stream source the way {@code CallKeySignalSeamTest} reads the calls2 tree, and pins
+ * the client and stanza-stream source the way {@code CallKeySignalSeamTest} reads the calls2 tree, and pins
  * the two structural P8 invariants that an instance test would otherwise prove: the {@link LiveCalls2Service}
- * is constructed before the node-stream service that registers the inbound receiver (a wrong order would
+ * is constructed before the stanza-stream service that registers the inbound receiver (a wrong order would
  * NPE on an inbound call), and the public call methods delegate to the calls2 service rather than the
  * legacy {@code call.CallService}.
  */
@@ -40,21 +40,21 @@ class Calls2ClientWiringSourceTest {
     }
 
     @Test
-    @DisplayName("the client holds a Calls2Service field and passes it into the node-stream service")
+    @DisplayName("the client holds a Calls2Service field and passes it into the stanza-stream service")
     void serviceFieldAndHandoff() {
         var src = read(CLIENT);
         assertTrue(src.contains("private final Calls2Service calls2Service;"),
                 "client must hold the call subsystem as a Calls2Service field");
         assertTrue(src.matches("(?s).*new LiveNodeStreamService\\(this, calls2Service,.*"),
-                "client must pass calls2Service into the node-stream service constructor");
+                "client must pass calls2Service into the stanza-stream service constructor");
     }
 
     @Test
-    @DisplayName("the node-stream service takes a Calls2Service and registers the calls2 receivers under call/terminate")
+    @DisplayName("the stanza-stream service takes a Calls2Service and registers the calls2 receivers under call/terminate")
     void streamServiceRegistersCalls2Receivers() {
         var src = read(STREAM);
         assertTrue(src.contains("Calls2Service calls2Service"),
-                "node-stream service constructor must take a Calls2Service, not a legacy CallService");
+                "stanza-stream service constructor must take a Calls2Service, not a legacy CallService");
         assertTrue(src.matches("(?s).*addHandler\\(result, \"call\", new Calls2CallReceiver\\(.*"),
                 "the \"call\" tag must be served by Calls2CallReceiver");
         assertTrue(src.matches("(?s).*addHandler\\(result, \"terminate\", new Calls2TerminateReceiver\\(.*"),
@@ -62,7 +62,7 @@ class Calls2ClientWiringSourceTest {
     }
 
     @Test
-    @DisplayName("neither the client nor the node-stream service references the legacy CallService")
+    @DisplayName("neither the client nor the stanza-stream service references the legacy CallService")
     void legacyCallServiceNotWired() {
         for (var file : new String[]{CLIENT, STREAM}) {
             var code = stripComments(read(file));

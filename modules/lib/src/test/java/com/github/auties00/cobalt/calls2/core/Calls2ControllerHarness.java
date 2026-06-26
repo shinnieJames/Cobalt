@@ -7,7 +7,8 @@ import com.github.auties00.cobalt.calls2.signaling.CallKeyDistribution;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -30,7 +31,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * host, timer scheduler, info updater, and event sink are deterministic recorders that capture what the
  * controller drives. The crypto fake records each offer and rekey fanout and returns deterministic
  * envelopes, the media plane records each bring-up and hands back a closeable session, the host records
- * every {@code sendSignaling} node, and the timer scheduler records every arm and cancel and exposes the
+ * every {@code sendSignaling} stanza, and the timer scheduler records every arm and cancel and exposes the
  * armed callbacks so a test can fire a timeout. None of this touches libopus, libsrtp, usrsctp, or a
  * socket.
  */
@@ -47,7 +48,7 @@ final class Calls2ControllerHarness {
     private final RecordingMediaPlane mediaPlane = new RecordingMediaPlane();
     private final RecordingTimers timers = new RecordingTimers();
     private final RecordingEvents events = new RecordingEvents();
-    private final java.util.List<Node> sentOfferEnvelopes = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final java.util.List<Stanza> sentOfferEnvelopes = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final Calls2LifecycleController controller;
 
     /**
@@ -59,18 +60,18 @@ final class Calls2ControllerHarness {
     }
 
     /**
-     * Builds a harness whose offer-ack is the supplied node, used by a group test that needs the ack to
+     * Builds a harness whose offer-ack is the supplied stanza, used by a group test that needs the ack to
      * echo a connected {@code <group_info>} roster so {@code reconcileFromAck} populates the membership.
      *
-     * @param ackNode the node the fake offer-ack sender returns for every offer
+     * @param ackStanza the stanza the fake offer-ack sender returns for every offer
      */
-    Calls2ControllerHarness(Node ackNode) {
+    Calls2ControllerHarness(Stanza ackStanza) {
         var stateMachine = new Calls2CallStateMachine(manager);
         var infoManager = new Calls2CallInfoManager();
         this.controller = new Calls2LifecycleController(
                 offerEnvelope -> {
                     sentOfferEnvelopes.add(offerEnvelope);
-                    return ackNode;
+                    return ackStanza;
                 },
                 crypto,
                 host,
@@ -83,18 +84,18 @@ final class Calls2ControllerHarness {
     }
 
     /**
-     * Builds an offer-ack node carrying a minimal relay block plus a {@code <group_info>} roster, so the
+     * Builds an offer-ack stanza carrying a minimal relay block plus a {@code <group_info>} roster, so the
      * controller records a relay (bringing up the recording media plane) and reconciles the call's
      * membership against the connected roster the ack echoes.
      *
      * @param roster the connected roster the ack echoes
-     * @return the roster-bearing offer-ack node
+     * @return the roster-bearing offer-ack stanza
      */
-    static Node ackNodeWithRoster(com.github.auties00.cobalt.calls2.signaling.GroupInfoStanza roster) {
-        return new com.github.auties00.cobalt.node.NodeBuilder()
+    static Stanza ackNodeWithRoster(com.github.auties00.cobalt.calls2.signaling.GroupInfoStanza roster) {
+        return new StanzaBuilder()
                 .description("ack")
                 .attribute("class", "call")
-                .content(List.of(relayNode(), roster.toNode()))
+                .content(List.of(relayNode(), roster.toStanza()))
                 .build();
     }
 
@@ -133,8 +134,8 @@ final class Calls2ControllerHarness {
      *
      * @return the sent offer action nodes
      */
-    List<Node> sentOffers() {
-        var offers = new java.util.ArrayList<Node>();
+    List<Stanza> sentOffers() {
+        var offers = new java.util.ArrayList<Stanza>();
         for (var envelope : sentOfferEnvelopes) {
             envelope.getChild("offer").ifPresent(offers::add);
         }
@@ -147,10 +148,10 @@ final class Calls2ControllerHarness {
      * {@code <relay>} block with an {@code <hbh_key>}, so the controller records a relay and brings up the
      * (recording) media plane on the group placement path.
      *
-     * @return the default offer-ack node
+     * @return the default offer-ack stanza
      */
-    static Node ackNode() {
-        return new com.github.auties00.cobalt.node.NodeBuilder()
+    static Stanza ackNode() {
+        return new StanzaBuilder()
                 .description("ack")
                 .attribute("class", "call")
                 .content(relayNode())
@@ -161,13 +162,13 @@ final class Calls2ControllerHarness {
      * Builds the minimal {@code <relay>} block (a {@code uuid} and a thirty-byte {@code <hbh_key>}) the
      * controller needs to record a relay and bring up the recording media plane.
      *
-     * @return the minimal relay block node
+     * @return the minimal relay block stanza
      */
-    private static Node relayNode() {
-        return new com.github.auties00.cobalt.node.NodeBuilder()
+    private static Stanza relayNode() {
+        return new StanzaBuilder()
                 .description("relay")
                 .attribute("uuid", "0123456789ABCDEF")
-                .content(new com.github.auties00.cobalt.node.NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("hbh_key")
                         .content("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                         .build())
@@ -185,21 +186,21 @@ final class Calls2ControllerHarness {
     // ---- recording seams --------------------------------------------------------------------------------
 
     /**
-     * Records every signaling node the controller ships and supplies deterministic call-id randomness.
+     * Records every signaling stanza the controller ships and supplies deterministic call-id randomness.
      */
     static final class RecordingHost implements VoipHostApi {
-        private final List<Node> signaling = new CopyOnWriteArrayList<>();
+        private final List<Stanza> signaling = new CopyOnWriteArrayList<>();
 
-        List<Node> signaling() {
+        List<Stanza> signaling() {
             return List.copyOf(signaling);
         }
 
         /**
-         * Returns every signaling node whose nested action element has the given tag, unwrapping the
+         * Returns every signaling stanza whose nested action element has the given tag, unwrapping the
          * {@code <call>} envelope.
          */
-        List<Node> actionsTagged(String tag) {
-            var matches = new ArrayList<Node>();
+        List<Stanza> actionsTagged(String tag) {
+            var matches = new ArrayList<Stanza>();
             for (var envelope : signaling) {
                 envelope.getChild(tag).ifPresent(matches::add);
             }
@@ -207,8 +208,8 @@ final class Calls2ControllerHarness {
         }
 
         @Override
-        public void sendSignaling(Node node) {
-            signaling.add(node);
+        public void sendSignaling(Stanza stanza) {
+            signaling.add(stanza);
         }
 
         @Override
@@ -361,11 +362,12 @@ final class Calls2ControllerHarness {
         }
 
         @Override
-        public Session bringUp(String callId, Node relay, List<Node> voipSettings, byte[] callKey, boolean isCaller,
+        public Session bringUp(String callId, Stanza relay, List<Stanza> voipSettings, byte[] callKey, boolean isCaller,
                                boolean video, int participantCount,
                                com.github.auties00.cobalt.calls2.core.participant.CallMembership membership,
                                Calls2MediaStreams streams,
-                               com.github.auties00.cobalt.model.jid.Jid peerDeviceJid) {
+                               com.github.auties00.cobalt.model.jid.Jid peerDeviceJid,
+                               Optional<String> electedRelayName) {
             var session = new RecordingSession(callId);
             bringUps.add(new BringUp(callId, isCaller, video, callKey.clone(), List.copyOf(voipSettings),
                     participantCount, streams, session));
@@ -375,7 +377,7 @@ final class Calls2ControllerHarness {
         /**
          * One recorded bring-up call, its media streams, and the session it produced.
          */
-        record BringUp(String callId, boolean isCaller, boolean video, byte[] callKey, List<Node> voipSettings,
+        record BringUp(String callId, boolean isCaller, boolean video, byte[] callKey, List<Stanza> voipSettings,
                        int participantCount, Calls2MediaStreams streams, RecordingSession session) {
         }
 

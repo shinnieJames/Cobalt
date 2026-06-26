@@ -1,6 +1,16 @@
 package com.github.auties00.cobalt.sync;
 
 import com.github.auties00.cobalt.client.linked.WhatsAppLinkedClientErrorHandler;
+import com.github.auties00.cobalt.model.sync.action.SyncActionEntry;
+import com.github.auties00.cobalt.model.sync.action.SyncActionEntryBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.OrphanMutationEntry;
+import com.github.auties00.cobalt.model.sync.mutation.OrphanMutationEntryBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
 import com.github.auties00.cobalt.sync.key.LiveMissingSyncKeyRequestService;
 import com.github.auties00.cobalt.sync.key.LiveSyncKeyRotationService;
 
@@ -35,7 +45,7 @@ import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadAction;
 import com.github.auties00.cobalt.model.sync.data.*;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.crypto.MutationIntegrityVerifier;
 import com.github.auties00.cobalt.sync.crypto.MutationKeys;
@@ -166,7 +176,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
     private static final Logger LOGGER = Logger.getLogger(LiveWebAppStateService.class.getName());
 
     /**
-     * The {@link LinkedWhatsAppClient} used for store access, node dispatch, and
+     * The {@link LinkedWhatsAppClient} used for store access, stanza dispatch, and
      * peer-message routing during snapshot recovery.
      */
     private final LinkedWhatsAppClient whatsapp;
@@ -552,7 +562,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * acknowledgements, and refetch follow-ups.
      *
      * <p>The single entry point for multi-collection pulls, called by
-     * {@link #pullPatches}. The batched IQ packs one {@code <sync>} node with
+     * {@link #pullPatches}. The batched IQ packs one {@code <sync>} stanza with
      * one {@code <collection>} child per collection, halving round-trips when
      * multiple dirty bits fire together. Collections that still need
      * pagination after the batched round (the response has more patches) fall
@@ -1231,7 +1241,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * collection, marking the collection in-flight for the duration.
      *
      * <p>The unit step of {@link #syncCollection}; runs synchronously on a
-     * virtual thread because {@link LinkedWhatsAppClient#sendNode(com.github.auties00.cobalt.node.NodeBuilder)}
+     * virtual thread because {@link LinkedWhatsAppClient#sendNode(StanzaBuilder)}
      * is a blocking call. Pending mutations are skipped (and signalled via
      * {@link SyncRoundResult#skippedPendingUpload()}) when the collection has
      * not yet been bootstrapped, so the snapshot lands first and the local
@@ -1831,7 +1841,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
      *
      * @implNote
      * This implementation stores REMOVE mutations implicitly via
-     * {@link com.github.auties00.cobalt.store.SyncStore#removeSyncActionEntry} rather than keeping a
+     * {@link LinkedWhatsAppSyncStore#removeSyncActionEntry} rather than keeping a
      * tombstone row, and omits the {@code SyncActionEntry} collection,
      * timestamp, and action fields because they are derived on demand from the
      * patch-type key, the action value's timestamp, and the action value
@@ -2021,7 +2031,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
      *
      * @implNote
      * This implementation reads a single in-memory lookup via
-     * {@link com.github.auties00.cobalt.store.SyncStore#findWebAppState}; callers that need a bulk view
+     * {@link LinkedWhatsAppSyncStore#findWebAppState}; callers that need a bulk view
      * (such as the resume path) iterate {@link SyncPatchType#values()}
      * themselves rather than going through a dedicated bulk API.
      *
@@ -3450,9 +3460,9 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * per-handler
      * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#resolveConflicts(DecryptedMutation.Trusted, DecryptedMutation.Trusted)}
      * verdict picks between
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL},
-     * {@link ConflictResolutionState#SKIP_REMOTE}, and
-     * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. After the
+     * {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL},
+     * {@link MutationConflictResolutionState#SKIP_REMOTE}, and
+     * {@link MutationConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. After the
      * per-index pass, a cross-index sweep delegates to
      * {@link com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler#dropMutationDueToCrossIndexConflict(DecryptedMutation.Trusted, java.util.Map)}
      * so handlers can drop remote mutations that conflict at a different index
@@ -3466,7 +3476,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * performed inline rather than returned to the caller; the net effect on
      * the pending-mutation table is identical. Mutations without a resolvable
      * handler default to
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} so the server
+     * {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} so the server
      * view wins.
      *
      * @param remoteMutations the trusted mutations decoded from the incoming
@@ -3497,7 +3507,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
             var handler = actionName != null ? handlerRegistry.findHandler(actionName).orElse(null) : null;
             var resolution = handler != null && remoteMutation.operation() == SyncdOperation.SET
                     ? handler.resolveConflicts(localMutation, remoteMutation)
-                    : ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+                    : ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
 
             switch (resolution.state()) {
                 case APPLY_REMOTE_DROP_LOCAL -> {
@@ -3624,8 +3634,8 @@ public final class LiveWebAppStateService implements WebAppStateService {
      *
      * @implNote
      * This implementation routes each update through either
-     * {@link com.github.auties00.cobalt.store.SyncStore#removeSyncActionEntry(SyncPatchType, byte[])} or
-     * {@link com.github.auties00.cobalt.store.SyncStore#putSyncActionEntry(SyncPatchType, byte[], SyncActionEntry)}
+     * {@link LinkedWhatsAppSyncStore#removeSyncActionEntry(SyncPatchType, byte[])} or
+     * {@link LinkedWhatsAppSyncStore#putSyncActionEntry(SyncPatchType, byte[], SyncActionEntry)}
      * based on the {@link SyncActionEntryUpdate#remove()} flag; no batching is
      * performed because the in-memory store maps are unsynchronised
      * per-collection.
@@ -3655,7 +3665,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
      *
      * @implNote
      * This implementation uses
-     * {@link com.github.auties00.cobalt.store.SyncStore#updateWebAppStateVersion(SyncPatchType, long, byte[])}
+     * {@link LinkedWhatsAppSyncStore#updateWebAppStateVersion(SyncPatchType, long, byte[])}
      * which updates the version map and the LT-Hash map in a single call;
      * there is no bulk variant because the per-collection state machine
      * commits one collection at a time.

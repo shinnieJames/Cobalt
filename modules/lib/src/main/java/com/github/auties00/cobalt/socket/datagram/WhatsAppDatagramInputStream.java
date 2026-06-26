@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.socket.datagram;
 
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.binary.StanzaReader;
 import com.github.auties00.cobalt.util.AesGcmStreamCipher;
 import com.github.auties00.cobalt.util.DataUtils;
 
@@ -26,8 +28,8 @@ import java.util.Objects;
  * a stream by starting a final datagram it never finishes and then closing the socket.
  *
  * <p>This continuous mode is the natural fit for the post-handshake reader thread, which decodes one
- * {@link com.github.auties00.cobalt.node.Node} per datagram via {@link com.github.auties00.cobalt.node.binary.NodeReader}:
- * each {@code readNode()} call consumes exactly one node's worth of bytes (the wire pairs one node body to one
+ * {@link Stanza} per datagram via {@link StanzaReader}:
+ * each {@code readNode()} call consumes exactly one stanza's worth of bytes (the wire pairs one stanza body to one
  * datagram), so the cursor naturally arrives at the next datagram boundary without the caller having to manage framing.
  *
  * <p>For the Noise XX handshake, where the consumer (a {@link it.auties.protobuf.stream.ProtobufInputStream}) needs an

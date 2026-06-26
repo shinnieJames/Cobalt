@@ -2,7 +2,8 @@ package com.github.auties00.cobalt.sync.factory;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.action.contact.PinAction;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -41,7 +42,7 @@ public final class PinChatMutationFactory {
      * Builds a pending mutation that pins or unpins a chat or newsletter.
      *
      * <p>Called from the public pin setter and from
-     * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, Jid, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
+     * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, Jid, SyncActionMessageRange)}.
      * Newsletters are supported on the same builder because WA Web routes them through the same
      * apply path after detecting a newsletter JID.
      *

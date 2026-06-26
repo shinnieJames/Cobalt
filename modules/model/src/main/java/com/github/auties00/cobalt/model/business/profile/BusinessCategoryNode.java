@@ -10,16 +10,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * One node in the hierarchical tree of business categories WhatsApp offers
+ * One stanza in the hierarchical tree of business categories WhatsApp offers
  * when an account picks the industry that best describes it.
  *
  * <p>When classifying a WhatsApp Business account, WhatsApp can present the
  * available verticals (for example "Food and Beverage" containing "Restaurant"
  * and "Bakery") as a nested tree rather than a flat list, so an app can let the
- * user drill from a broad area down to a specific category. Each node pairs a
+ * user drill from a broad area down to a specific category. Each stanza pairs a
  * stable {@link #id() identifier} with a localised {@link #displayName() display
  * name} and holds the {@link #children() child categories} nested directly
- * beneath it; a leaf node simply reports an empty child list.
+ * beneath it; a leaf stanza simply reports an empty child list.
  *
  * <p>The display name is localised to the request locale supplied when the tree
  * was fetched, while the identifier is locale-independent and is the value an
@@ -42,8 +42,8 @@ public final class BusinessCategoryNode {
     final String displayName;
 
     /**
-     * Child categories nested directly beneath this node, in server order.
-     * Empty for a leaf node. Never {@code null}.
+     * Child categories nested directly beneath this stanza, in server order.
+     * Empty for a leaf stanza. Never {@code null}.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
     final List<BusinessCategoryNode> children;
@@ -83,10 +83,10 @@ public final class BusinessCategoryNode {
     }
 
     /**
-     * Returns the child categories nested directly beneath this node.
+     * Returns the child categories nested directly beneath this stanza.
      *
      * @return an unmodifiable view of the children, in server order; never
-     *         {@code null}, empty for a leaf node
+     *         {@code null}, empty for a leaf stanza
      */
     public List<BusinessCategoryNode> children() {
         return Collections.unmodifiableList(children);

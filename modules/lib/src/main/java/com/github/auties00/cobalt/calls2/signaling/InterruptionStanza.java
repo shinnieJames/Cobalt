@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -85,40 +85,40 @@ public record InterruptionStanza(String callId, Jid callCreator, boolean began, 
     }
 
     /**
-     * Builds the {@code <interruption call-id call-creator state type/>} action node.
+     * Builds the {@code <interruption call-id call-creator state type/>} action stanza.
      *
      * <p>The {@code state} attribute serializes to {@code begin} when {@link #began()} is
      * {@code true} and {@code end} otherwise.
      *
-     * @return the interruption action node
+     * @return the interruption action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(STATE_ATTRIBUTE, began ? STATE_BEGIN : STATE_END)
                 .attribute(TYPE_ATTRIBUTE, interruptionType)
                 .build();
     }
 
     /**
-     * Decodes an {@code <interruption>} action node into an {@link InterruptionStanza}.
+     * Decodes an {@code <interruption>} action stanza into an {@link InterruptionStanza}.
      *
      * <p>The {@code state} attribute is interpreted as {@link #began()} {@code true} only when it
      * equals the literal {@code begin}; any other value, including an absent attribute, decodes as
      * {@code false}. An absent {@code type} decodes to {@code 0}.
      *
-     * @param node the {@code <interruption>} node
+     * @param stanza the {@code <interruption>} stanza
      * @return the decoded interruption action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static InterruptionStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var began = STATE_BEGIN.equals(node.getAttributeAsString(STATE_ATTRIBUTE, STATE_END));
-        var interruptionType = node.getAttributeAsInt(TYPE_ATTRIBUTE, 0);
+    public static InterruptionStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var began = STATE_BEGIN.equals(stanza.getAttributeAsString(STATE_ATTRIBUTE, STATE_END));
+        var interruptionType = stanza.getAttributeAsInt(TYPE_ATTRIBUTE, 0);
         return new InterruptionStanza(callId, callCreator, began, interruptionType);
     }
 }

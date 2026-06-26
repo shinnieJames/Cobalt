@@ -8,8 +8,6 @@ import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptions;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -434,20 +432,6 @@ public final class LiveRelayTransport implements MediaTransport {
     private volatile int checkSendFailures;
 
     /**
-     * Counts outbound media (RTP) packets shipped as SCTP DATA, for the media-flow diagnostic so a call that
-     * connects the transport but stalls in the lonely state can show whether the encode path is producing
-     * audio; the first packet is logged once.
-     */
-    private volatile int mediaSentCount;
-
-    /**
-     * Counts inbound media (RTP) data-channel messages, for the same diagnostic; a zero count while the
-     * channel is open means the relay never forwarded the peer's media, the usual cause of a connected call
-     * that never leaves the lonely state. The first packet is logged once.
-     */
-    private volatile int inboundMediaCount;
-
-    /**
      * Counts inbound media (RTP) messages that failed hop-by-hop SRTP authentication and were dropped, for the
      * media-flow diagnostic; a high count means inbound media arrives but cannot be decrypted (a key or ROC
      * mismatch), which presents to the call as lost media and trips the media-RX reconnect watchdog.
@@ -496,6 +480,12 @@ public final class LiveRelayTransport implements MediaTransport {
      * Holds the registered inbound-RTCP-feedback listener, or {@code null} until one is registered.
      */
     private Consumer<RtcpFeedback> rtcpFeedbackListener;
+
+    /**
+     * TEMP diagnostic counter gating a one-time log of the first inbound RTCP message's unprotect and parse
+     * outcome, to diagnose why the rate-control loop never receives feedback. Remove once confirmed.
+     */
+    private int inboundRtcpDiagCount;
 
     /**
      * Holds the registered inbound application-STUN handler, or {@code null} until one is registered.
@@ -773,7 +763,10 @@ public final class LiveRelayTransport implements MediaTransport {
         ensureSendable();
         Objects.requireNonNull(packet, "packet cannot be null");
         requireLength(length, packet.length);
-        if (length >= 12) {
+        // Only sniff the media SSRC and RTCP sender stats from a real RTP packet (version two, top two bits
+        // 10); a stray non-RTP datagram on this path would otherwise mis-key the outbound RTCP report's SSRC.
+        var isRtp = length >= 12 && (packet[0] & 0xC0) == 0x80;
+        if (isRtp) {
             localMediaSsrc = readUint32(packet, 8);
             localMediaSsrcKnown = true;
             lastRtpTimestamp = readUint32(packet, 4);
@@ -784,12 +777,15 @@ public final class LiveRelayTransport implements MediaTransport {
                 ? e2eSend.protectRtp(packet, length)
                 : hbhSrtp.protectRtp(packet, length);
         var accepted = dataChannel.send(slice(packet, protectedLength));
-        if (accepted) {
-            var count = ++mediaSentCount;
-            if (count == 1 || count == 50 || count == 200 || count == 500) {
+        if (isRtp) {
+            if (rtpPacketsSent == 1) {
                 LOGGER.log(System.Logger.Level.INFO,
-                        "calls2 relay outbound media (RTP) packet #{0} shipped as SCTP DATA ({1} bytes)",
-                        count, protectedLength);
+                        "calls2 relay first outbound RTP: ssrc=0x{0}, payloadLen={1}, onWireLen={2}, e2e={3}, accepted={4}",
+                        Integer.toHexString(localMediaSsrc), length, protectedLength, e2eSend != null, accepted);
+            } else if (rtpPacketsSent % 250 == 0) {
+                LOGGER.log(System.Logger.Level.INFO,
+                        "calls2 relay outbound RTP progress: {0} packets / {1} octets sent (last accepted={2})",
+                        rtpPacketsSent, rtpOctetsSent, accepted);
             }
         }
         return accepted ? length : 0;
@@ -1389,36 +1385,12 @@ public final class LiveRelayTransport implements MediaTransport {
             remoteMediaSsrc = readUint32(message, 8);
             remoteMediaSsrcKnown = true;
         }
-        var count = ++inboundMediaCount;
-        if (count == 1 || count == 50 || count == 200 || count == 500) {
-            LOGGER.log(System.Logger.Level.INFO,
-                    "calls2 relay inbound media (RTP) message #{0} from relay ({1} bytes), {2} decrypt failures so far",
-                    count, message.length, inboundMediaDecryptFailures);
-        }
-        if (count <= 3) {
-            var hex = new StringBuilder(message.length * 2);
-            for (var b : message) {
-                hex.append(String.format("%02x", b & 0xFF));
-            }
-            LOGGER.log(System.Logger.Level.INFO,
-                    "calls2 relay inbound media (RTP) #{0} raw protected bytes ({1}): {2}", count, message.length, hex);
-        }
         var buffer = new byte[Math.max(message.length, MAX_PACKET_SIZE)];
         System.arraycopy(message, 0, buffer, 0, message.length);
         try {
             var cleartextLength = e2eRecv != null
                     ? e2eRecv.unprotectRtp(buffer, message.length)
                     : hbhSrtp.unprotectRtp(buffer, message.length);
-            if (count <= 3) {
-                var inHeaderLen = (buffer[0] & 0x10) != 0 ? 16 : 12;
-                var opusHex = new StringBuilder();
-                for (var i = inHeaderLen; i < cleartextLength && i < inHeaderLen + 20; i++) {
-                    opusHex.append(String.format("%02x", buffer[i] & 0xFF));
-                }
-                LOGGER.log(System.Logger.Level.INFO,
-                        "calls2 relay inbound media (RTP) #{0} DECRYPTED opus ({1} payload bytes, first20 TOC): {2}",
-                        count, cleartextLength - inHeaderLen, opusHex);
-            }
             mediaSink.accept(slice(buffer, cleartextLength));
         } catch (WhatsAppCallException.Srtp | IllegalArgumentException _) {
             // A packet that fails authentication or does not parse is dropped, not surfaced: per the engine
@@ -1446,10 +1418,26 @@ public final class LiveRelayTransport implements MediaTransport {
         System.arraycopy(message, 0, buffer, 0, message.length);
         try {
             var cleartextLength = hbhSrtp.unprotectRtcp(buffer, message.length);
-            RtcpFeedbackParser.parse(buffer, cleartextLength).ifPresent(listener);
-        } catch (WhatsAppCallException.Srtp _) {
+            var feedback = RtcpFeedbackParser.parse(buffer, cleartextLength);
+            if (inboundRtcpDiagCount++ == 0) {
+                LOGGER.log(System.Logger.Level.INFO,
+                        "calls2 relay first inbound RTCP ({0} bytes, {1} cleartext): parsed feedback={2}",
+                        message.length, cleartextLength,
+                        feedback.map(f -> "loss=" + f.hasLoss() + " rtt=" + f.hasRtt()
+                                + " remoteBwe=" + f.hasRemoteBwe()).orElse("NONE"));
+            }
+            feedback.ifPresent(listener);
+        } catch (WhatsAppCallException.Srtp srtpFailure) {
             // A packet that fails hop-by-hop authentication is dropped, not surfaced: per the engine the
-            // leg silently discards an unverifiable RTCP packet.
+            // leg silently discards an unverifiable RTCP packet. The libsrtp status carried in the exception
+            // message distinguishes the cause on the first failure (7 auth_fail, 9/10 replay, 13 no_ctx,
+            // 2 bad_param), which tells whether the inbound SRTCP key/policy or the stream lookup is wrong.
+            if (inboundRtcpDiagCount++ == 0) {
+                LOGGER.log(System.Logger.Level.INFO,
+                        "calls2 relay first inbound RTCP ({0} bytes) FAILED hop-by-hop unprotect ({1}); dropping",
+                        message.length, srtpFailure.getMessage());
+                System.out.println("Test");
+            }
         }
     }
 

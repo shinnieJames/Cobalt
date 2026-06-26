@@ -5,7 +5,7 @@ package com.github.auties00.cobalt.calls2.core.participant;
  *
  * <p>Every participant carries a platform code that identifies the kind of WhatsApp
  * client the peer is running, surfaced as the {@code platform} attribute on its
- * membership node and exposed through the participant view. The seventeen recognized
+ * membership stanza and exposed through the participant view. The seventeen recognized
  * platforms span the mobile apps ({@link #ANDROID}, {@link #IPHONE}, {@link #IOS_TABLET},
  * {@link #IPAD}, {@link #KAIOS}, {@link #WP}, {@link #WEARM}), the desktop clients
  * ({@link #WINDOWS}, {@link #MACOS}, {@link #MAC_OS_ELECTRON}, {@link #WINDOWS_ELECTRON},

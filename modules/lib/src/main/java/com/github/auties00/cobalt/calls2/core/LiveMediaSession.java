@@ -36,7 +36,7 @@ import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptions;
 import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptionsBuilder;
 import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptionsEntryBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;
@@ -53,6 +53,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -180,42 +181,50 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
     private static final int MLOW_FRAMES_PER_PACKET = 3;
 
     /**
-     * The number of 20 ms PCM blocks aggregated into one Opus frame, giving WhatsApp's 40 ms Opus frame
+     * The number of 20 ms PCM blocks aggregated into one Opus frame, giving WhatsApp's 60 ms Opus frame
      * duration.
      *
-     * @implNote This implementation aggregates {@code 2} captured 20 ms blocks into one 40 ms Opus encode so
-     * the wire frame matches the {@code config 10} (SILK wideband 40 ms) Opus the live capture shows the peer
-     * sending (steady-state TOC {@code 0x50}), which the peer's pjmedia jitter buffer is framed for. The
-     * earlier per-20 ms-block encode produced {@code config 9} (SILK wideband 20 ms, TOC {@code 0x48}) frames
-     * the peer received and decrypted but did not render.
+     * @implNote This implementation aggregates {@code 3} captured 20 ms blocks into one 60 ms Opus encode
+     * ({@code config 11}, SILK wideband 60 ms) so the wire frame matches WhatsApp's 60 ms ptime, the frame
+     * length the peer's jitter buffer is sized for: the peer's call telemetry reports
+     * {@code frameLengthMs = 60} (also {@code avgRxFrameLengthMs}) and the reference WhatsApp caller paces one
+     * packet per {@code 960}-sample (60 ms at 16 kHz) span. An earlier {@code 2}-block (40 ms,
+     * {@code config 10}) encode delivered packets 1.5 times faster than the 60 ms playout consumed them, so
+     * the peer's jitter buffer discarded roughly half the frames and concealed the resulting gaps, which the
+     * caller heard as choppy audio.
      */
-    private static final int OPUS_FRAME_BLOCKS = 2;
+    private static final int OPUS_FRAME_BLOCKS = 3;
 
     /**
-     * The dotted path of the per-call voip parameter selecting the MLow audio codec over Opus.
+     * The {@code section.key} wire path of the per-call voip parameter selecting the MLow audio codec
+     * over Opus, the {@code encode} section field {@code use_mlow_codec_v1} (the engine's
+     * {@code p->use_mlow_codec} struct field).
      *
-     * <p>An integer tunable read through {@link VoipParams#getInteger(VoipParamKey)} and treated as a
-     * boolean: a non-zero value routes the call's audio encode and decode through the MLow low-bitrate
-     * speech codec ({@link MLowAudioCodec} and {@link MLowAudioDecoder}) instead of the default
-     * {@link OpusAudioCodec} and {@link OpusAudioDecoder}. Declared once here so the dotted path the
-     * codec selector resolves is not literal-duplicated across the decoder and encoder construction sites.
+     * <p>A boolean tunable resolved to its {@link VoipParamKey} through
+     * {@link VoipParamKey#ofWirePath(String)} and read through {@link VoipParams#getBoolean(VoipParamKey)}:
+     * a {@code "true"} (or {@code "1"}) value routes the call's audio encode and decode through the MLow
+     * low-bitrate speech codec ({@link MLowAudioCodec} and {@link MLowAudioDecoder}) instead of the
+     * {@link OpusAudioCodec} and {@link OpusAudioDecoder}. The server delivers it inside the {@code encode}
+     * section of the {@code <voip_settings>} document, so the catalogue addresses it by this area-sectioned
+     * wire path. Declared once here so the path the codec selector resolves is not literal-duplicated
+     * across the decoder and encoder construction sites.
      */
-    private static final String USE_MLOW_CODEC_PARAM = "p->use_mlow_codec";
+    private static final String USE_MLOW_CODEC_PARAM = "encode.use_mlow_codec_v1";
 
     /**
-     * The dotted path of the per-call MLow LPC-postfilter gate, the native
-     * {@code p->mlow_enable_lpc_postfilter}.
+     * The wire path of the per-call MLow LPC-postfilter gate, the {@code decode} section field
+     * {@code mlow_post_filter} (the native {@code p->mlow_enable_lpc_postfilter}).
      *
      * <p>The MLow decode postfilter chain always runs its harmonic and high-pass postfilters as the live
      * decoder's default level lift and harmonic shaping; this integer tunable gates only the additional LPC
      * postfilter, which the native {@code LPC_postfilter_mode} default and the live client both leave off, so
      * an absent, zero, or non-integer value leaves the LPC postfilter disabled.
      */
-    private static final String MLOW_ENABLE_LPC_POSTFILTER_PARAM = "p->mlow_enable_lpc_postfilter";
+    private static final String MLOW_ENABLE_LPC_POSTFILTER_PARAM = "decode.mlow_post_filter";
 
     /**
-     * The dotted path of the relay DTLS active-mode gate, the native
-     * {@code vp->enable_edgeray_dtls_active_mode}.
+     * The wire path of the relay DTLS active-mode gate, the {@code options} section field
+     * {@code enable_edgeray_dtls_active_mode} (the native {@code vp->enable_edgeray_dtls_active_mode}).
      *
      * <p>This integer voip-param, not a {@code <relay>} element field, flips the relay leg's DTLS roles: when
      * it is zero the relay is the DTLS server and the web client is the DTLS client (the common, only-observed
@@ -223,12 +232,30 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
      * delivered through the {@code <voip_settings>} channel, so it is read from the active voip-param set
      * rather than from the parsed relay block.
      */
-    private static final String ENABLE_EDGERAY_DTLS_ACTIVE_MODE_PARAM = "vp->enable_edgeray_dtls_active_mode";
+    private static final String ENABLE_EDGERAY_DTLS_ACTIVE_MODE_PARAM = "options.enable_edgeray_dtls_active_mode";
 
     /**
-     * The wire attribute on a {@code <voip_settings>} node naming the settings bucket it belongs under.
+     * The wire path of the audio rate-control maximum bandwidth estimate, the {@code rc} section field
+     * {@code maxbwe} (the native {@code p->max_bwe}).
+     *
+     * <p>The {@code rc} section is the audio rate-control area, so the audio sender bandwidth estimator reads
+     * its ceiling from here; the {@code vid_rc} section carries the separate video ceiling. An absent value
+     * leaves the audio loop on its compiled maximum-bitrate default.
+     */
+    private static final String RC_MAXBWE_PARAM = "rc.maxbwe";
+
+    /**
+     * The wire attribute on a {@code <voip_settings>} stanza naming the settings bucket it belongs under.
      */
     private static final String VOIP_SETTINGS_TYPE_ATTRIBUTE = "type";
+
+    /**
+     * The wire attribute on a {@code <voip_settings>} stanza naming the device the bundle applies to.
+     *
+     * <p>The offer acknowledgement delivers one {@code jid}-tagged bundle per callee device; the
+     * delivered offer carries a single bundle with no {@code jid} (the callee's own config).
+     */
+    private static final String VOIP_SETTINGS_JID_ATTRIBUTE = "jid";
 
     /**
      * The wire {@code type} value selecting the audio-call voip-settings overlay.
@@ -242,7 +269,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
 
     /**
      * The wire {@code type} value the default voip-settings bundle carries, and the fallback assumed when a
-     * {@code <voip_settings>} node omits the {@code type} attribute.
+     * {@code <voip_settings>} stanza omits the {@code type} attribute.
      *
      * <p>The default bundle maps onto {@link VoipSettingsType#NONE}, the mandatory baseline; the captured
      * offer-acknowledgement delivers its single bundle with no {@code type} attribute at all, which this
@@ -462,8 +489,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
      * Holds the audio codec backing the encode and decode seams, or {@code null} when the audio pipeline
      * could not be opened.
      *
-     * <p>Either an {@link OpusAudioCodec} (the default) or an {@link MLowAudioCodec}, selected per call by
-     * the {@code p->use_mlow_codec} voip parameter; both are permits of the sealed {@link AudioCodec}
+     * <p>Either an {@link OpusAudioCodec} or an {@link MLowAudioCodec}, selected per call by the
+     * {@code encode.use_mlow_codec_v1} voip parameter; both are permits of the sealed {@link AudioCodec}
      * interface, whose {@linkplain AudioCodec#modify(OpusCodecParams) modify} and
      * {@linkplain AudioCodec#close() close} are the only operations this session drives on it.
      */
@@ -1183,6 +1210,24 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private final AtomicReference<Jid> selfJid;
 
         /**
+         * The running wall-clock deadline, in nanos, the next media send is held until; advanced by each
+         * packet's own audio duration and resynced to the current time after a stall so the send cadence
+         * tracks the audio clock smoothly without bursting to catch up.
+         */
+        private long sendPacingDeadlineNanos;
+
+        /**
+         * The RTP timestamp of the previously paced media send, used to measure the audio duration by which
+         * each packet advances the deadline.
+         */
+        private long sendPacingLastTimestamp;
+
+        /**
+         * Whether the send-pacing deadline has been seeded by the first media send.
+         */
+        private boolean sendPacingStarted;
+
+        /**
          * Holds the sink notified with a call identifier when that call's media plane reaches its first
          * traffic, bound by the assembler to the controller's media-connected entry point.
          */
@@ -1255,9 +1300,10 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * {@link WhatsAppCallException.DataChannel}.
          */
         @Override
-        public Session bringUp(String callId, Node relay, List<Node> voipSettings, byte[] callKey,
+        public Session bringUp(String callId, Stanza relay, List<Stanza> voipSettings, byte[] callKey,
                                boolean isCaller, boolean video, int participantCount,
-                               CallMembership membership, Calls2MediaStreams streams, Jid peerDeviceJid) {
+                               CallMembership membership, Calls2MediaStreams streams, Jid peerDeviceJid,
+                               Optional<String> electedRelayName) {
             Objects.requireNonNull(callId, "callId cannot be null");
             Objects.requireNonNull(relay, "relay cannot be null");
             Objects.requireNonNull(voipSettings, "voipSettings cannot be null");
@@ -1268,14 +1314,16 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                             "relay block for call " + callId + " is not a <relay> element"));
 
             // Parse the negotiated <voip_settings> bundles and select the active set up front so the codec
-            // selector can read the per-call p->use_mlow_codec flag before the codec is opened, and so the
+            // selector can read the per-call encode.use_mlow_codec_v1 flag before the codec is opened, and so the
             // relay-connection selection can read the vp->enable_edgeray_dtls_active_mode DTLS-role flag (a
             // voip-param, not a <relay> element field); the same manager is threaded into assemble so it is
             // not rebuilt.
-            var voipParamManager = buildVoipParamManager(voipSettings, video, participantCount);
+            var voipParamManager = buildVoipParamManager(voipSettings, video, participantCount, isCaller,
+                    peerDeviceJid);
             var useMlowCodec = useMlowCodec(voipParamManager);
 
-            var relayConnection = selectRelayConnection(relayInfo, edgerayDtlsActiveMode(voipParamManager))
+            var relayConnection = selectRelayConnection(relayInfo, edgerayDtlsActiveMode(voipParamManager),
+                    electedRelayName)
                     .orElseThrow(() -> new WhatsAppCallException.DataChannel(
                             "relay block for call " + callId + " carries no usable endpoint"));
             var relayAddress = relayConnection.address();
@@ -1292,12 +1340,6 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 // left unconnected so the ICE checks and DTLS records can be sent to each candidate
                 // destination rather than to a single fixed relay address.
                 channel = DatagramChannel.open();
-                var hbhKeyHex = new StringBuilder(hopByHopKey.length * 2);
-                for (var b : hopByHopKey) {
-                    hbhKeyHex.append(String.format("%02x", b & 0xFF));
-                }
-                System.getLogger(LiveMediaSession.class.getName()).log(System.Logger.Level.INFO,
-                        "calls2 relay hop-by-hop <hbh_key> ({0} bytes): {1}", hopByHopKey.length, hbhKeyHex);
                 hbhSrtp = LiveHbhSrtpRelay.fromHopByHopKey(hopByHopKey, SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
 
                 // Hop-by-hop WARP message integrity (add_hbh_warp_mi_tag fn5156): the relay turns it on by
@@ -1370,7 +1412,10 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                         e2eRecv = new E2eMediaSrtp(
                                 CallE2eKeyDerivation.deriveSrtpMaster(callKey, CallDeviceJid.of(resolvedPeer)));
                         System.getLogger(LiveMediaSession.class.getName()).log(System.Logger.Level.INFO,
-                                "calls2 one-to-one E2E-SRTP engaged: self={0} peer={1}", localDeviceJid, resolvedPeer);
+                                "calls2 one-to-one E2E-SRTP engaged: self={0}(sendAudioSsrc=0x{2}) peer={1}(expectAudioSsrc=0x{3})",
+                                localDeviceJid, resolvedPeer,
+                                Integer.toHexString(CallSecureSsrcGenerator.audioMainSsrc(callId, CallDeviceJid.of(localDeviceJid))),
+                                Integer.toHexString(CallSecureSsrcGenerator.audioMainSsrc(callId, CallDeviceJid.of(resolvedPeer))));
                     } else {
                         System.getLogger(LiveMediaSession.class.getName()).log(System.Logger.Level.WARNING,
                                 "calls2 one-to-one E2E-SRTP NOT engaged (self={0} peer={1}); media stays hop-by-hop",
@@ -1864,19 +1909,23 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * Builds the call's voip-param manager from the negotiated {@code <voip_settings>} bundles and
          * selects the active set for the call's media mode.
          *
-         * <p>Each {@code <voip_settings>} node is parsed through
-         * {@link VoipSettings#of(Node, VoipParamJsonDeserializer)} and its non-empty parameter set is stored
-         * under the {@link VoipSettingsType} the node's {@code type} attribute names, so the manager holds
-         * the default, audio, and video bundles the server injected. The active set is then selected for the
-         * call's media mode ({@link VoipSettingsType#VIDEO} for a video call, otherwise
-         * {@link VoipSettingsType#AUDIO}), falling back to the mandatory {@link VoipSettingsType#NONE}
-         * default when the mode-specific bundle is absent. The lifecycle order is store then select then the
-         * participant-count override, matching the engine's
+         * <p>Each {@code <voip_settings>} stanza is parsed through
+         * {@link VoipSettings#of(Stanza, VoipParamJsonDeserializer)} and its non-empty parameter set is stored
+         * under its {@code (device JID, settings type)} key: the offer acknowledgement delivers one
+         * {@code jid}-tagged bundle per callee device, while the delivered offer carries a single un-tagged
+         * bundle (the callee's own config, stored under a {@code null} device key). The active set is then
+         * selected for the device whose codec this side encodes against: the caller selects the answering
+         * {@code peerDeviceJid}'s bundle (the offer acknowledgement carries a different
+         * {@value #USE_MLOW_CODEC_PARAM} per callee device), and the callee selects its own un-tagged bundle.
+         * Within the chosen device, selection picks the call's media mode ({@link VoipSettingsType#VIDEO} for a
+         * video call, otherwise {@link VoipSettingsType#AUDIO}), falling back to the mandatory
+         * {@link VoipSettingsType#NONE} default when the mode-specific bundle is absent. The lifecycle order is
+         * store then select then the participant-count override, matching the engine's
          * {@code EMPTY -> PARSED -> STORED -> ACTIVE -> OVERRIDDEN_BY_COUNT} sequence; the per-round dynamic
          * rate-control pass runs later, off the rate-control tick.
          *
          * @implNote This implementation maps the wire {@code type} attribute onto {@link VoipSettingsType}
-         * through {@link #voipSettingsType(Node)}: {@code audio} and {@code video} select the matching
+         * through {@link #voipSettingsType(Stanza)}: {@code audio} and {@code video} select the matching
          * overlay and every other value (the captured traffic carries {@code default}, or omits the
          * attribute entirely on the single bundle the offer acknowledgement delivers) selects
          * {@link VoipSettingsType#NONE}, the mandatory baseline. The count override is invoked with an empty
@@ -1888,18 +1937,28 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * @param voipSettings     the {@code <voip_settings>} bundle nodes, in wire order
          * @param video            whether the call carries video, selecting the video overlay
          * @param participantCount the call's current membership size, used for the count override
+         * @param isCaller         whether the local side placed the call, selecting the answering peer
+         *                         device's bundle rather than the local side's own bundle
+         * @param peerDeviceJid    the answering peer device whose bundle the caller selects, or {@code null};
+         *                         a callee selects its own un-tagged bundle and ignores this
          * @return the populated voip-param manager with its active set selected
          */
-        private LiveVoipParamManager buildVoipParamManager(List<Node> voipSettings, boolean video,
-                                                           int participantCount) {
+        private LiveVoipParamManager buildVoipParamManager(List<Stanza> voipSettings, boolean video,
+                                                           int participantCount, boolean isCaller,
+                                                           Jid peerDeviceJid) {
             var manager = new LiveVoipParamManager();
             var deserializer = new VoipParamJsonDeserializer();
             for (var node : voipSettings) {
                 var settings = VoipSettings.of(node, deserializer);
+                var deviceJid = node.getAttributeAsJid(VOIP_SETTINGS_JID_ATTRIBUTE).orElse(null);
                 settings.nonEmptyParams()
-                        .ifPresent(params -> manager.store(voipSettingsType(node), params));
+                        .ifPresent(params -> manager.store(deviceJid, voipSettingsType(node), params));
             }
-            manager.selectActive(video ? VoipSettingsType.VIDEO : VoipSettingsType.AUDIO);
+            // The caller encodes against the answering peer device, so it selects that device's bundle (the
+            // offer acknowledgement delivers a different use_mlow_codec_v1 per callee device); the callee
+            // encodes its own delivered config, the single un-tagged bundle stored under the null device key.
+            var selectionDevice = isCaller ? peerDeviceJid : null;
+            manager.selectActive(selectionDevice, video ? VoipSettingsType.VIDEO : VoipSettingsType.AUDIO);
             // TODO: pass the real participant-count override values once the rate-control reader reverses
             //  override_voip_params_based_on_participant_count (voip_param_internal.cc); the count-dependent
             //  parameter set keyed on the call size is BLOCKED on that reader, so the override runs empty for
@@ -1909,12 +1968,33 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         }
 
         /**
-         * Returns whether the call selected the MLow audio codec over the default Opus codec.
+         * Returns whether the call selected the MLow audio codec over the Opus codec.
          *
-         * <p>Reads the per-call {@value #USE_MLOW_CODEC_PARAM} integer tunable from the manager's active
-         * voip-param set and treats it as a boolean: a present, non-zero value selects MLow, and an absent,
-         * zero, or non-integer value leaves the call on Opus. A call that negotiated no active set (no
-         * {@code <voip_settings>} bundle, or a missing default bundle) is therefore Opus, the default.
+         * <p>Reads the {@value #USE_MLOW_CODEC_PARAM} flag from the active voip-param set, the {@code encode}
+         * section of the active device's server-pushed {@code <voip_settings>} bundle, and treats it as a
+         * boolean: {@code "true"} (or {@code "1"}) selects MLow and any other value selects Opus. When the
+         * flag is absent, including a call that negotiated no active set, the call defaults to Opus.
+         *
+         * @implNote This implementation reads the flag from the {@code <voip_settings>} the server injects per
+         * device into the delivered offer (the callee's own bundle) and the offer acknowledgement (one bundle
+         * per callee device); {@link #buildVoipParamManager(List, boolean, int, boolean, Jid)} selects the
+         * active device's bundle, so the flag read is the one that applies to the device this side encodes
+         * against. The absent case defaults to Opus because that is the engine's compiled default: the
+         * {@code use_mlow_codec} field is left zero by {@code wa_call_get_default_voip_params_internal}, so
+         * MLow is opt-in and the server sends {@code encode.use_mlow_codec_v1="true"} only for the devices
+         * that support it (the live offer acknowledgement carries the flag on some callee devices and omits it
+         * on others; re/calls2-spec/captures/EVIDENCE-VOIPSETTINGS.md). The flag is read by its
+         * {@code <voip_settings>} wire path {@value #USE_MLOW_CODEC_PARAM} through
+         * {@link VoipParamKey#ofWirePath(String)}, which resolves to the modelled key for the engine's
+         * {@code p->use_mlow_codec} field.
+         * <p>The session codec is selected once at bring-up from the active peer device's bundle and is not
+         * hot-swapped mid-call. This is faithful rather than a shortcut: a one-to-one call fixes the answering
+         * device at accept (a later accept from another of the peer's devices ends the call instead of
+         * re-selecting), and a group call forwards a single SFrame stream the server keeps codec-homogeneous,
+         * so the selected peer's flag does not change under the local encoder. The engine's per-stream
+         * recreate-on-change path ({@code "media.encoder.use_mlow_codec was changed, need to recreate audio
+         * stream"} in {@code update_voip_params_in_use}) is therefore intentionally not reproduced: Cobalt runs
+         * one session codec, not the engine's per-stream codecs.
          *
          * @param voipParamManager the call's voip-param manager whose active set carries the flag
          * @return {@code true} when the call routes its audio through {@link MLowAudioCodec} and
@@ -1922,12 +2002,13 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * {@link OpusAudioDecoder}
          */
         private static boolean useMlowCodec(LiveVoipParamManager voipParamManager) {
-            var key = VoipParamKey.ofDottedPath(USE_MLOW_CODEC_PARAM).orElse(null);
-            var params = voipParamManager.activeParams().orElse(null);
-            if (key == null || params == null) {
+            var key = VoipParamKey.ofWirePath(USE_MLOW_CODEC_PARAM).orElse(null);
+            if (key == null) {
                 return false;
             }
-            return params.getInteger(key).orElse(0L) != 0L;
+            return voipParamManager.activeParams()
+                    .flatMap(params -> params.getBoolean(key))
+                    .orElse(false);
         }
 
         /**
@@ -1943,7 +2024,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * otherwise
          */
         private static boolean mlowLpcPostfilterEnabled(LiveVoipParamManager voipParamManager) {
-            var key = VoipParamKey.ofDottedPath(MLOW_ENABLE_LPC_POSTFILTER_PARAM).orElse(null);
+            var key = VoipParamKey.ofWirePath(MLOW_ENABLE_LPC_POSTFILTER_PARAM).orElse(null);
             var params = voipParamManager.activeParams().orElse(null);
             if (key == null || params == null) {
                 return false;
@@ -1952,18 +2033,18 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         }
 
         /**
-         * Maps a {@code <voip_settings>} node's wire {@code type} attribute onto the settings bucket it
+         * Maps a {@code <voip_settings>} stanza's wire {@code type} attribute onto the settings bucket it
          * names.
          *
          * <p>A {@code type} of {@code audio} selects {@link VoipSettingsType#AUDIO} and {@code video}
          * selects {@link VoipSettingsType#VIDEO}; every other value, including the wire {@code default} and
          * an absent attribute, selects {@link VoipSettingsType#NONE}, the mandatory baseline bundle.
          *
-         * @param node the {@code <voip_settings>} node whose bucket is resolved
-         * @return the settings type the node belongs under
+         * @param stanza the {@code <voip_settings>} stanza whose bucket is resolved
+         * @return the settings type the stanza belongs under
          */
-        private VoipSettingsType voipSettingsType(Node node) {
-            var type = node.getAttributeAsString(VOIP_SETTINGS_TYPE_ATTRIBUTE, VOIP_SETTINGS_TYPE_DEFAULT);
+        private VoipSettingsType voipSettingsType(Stanza stanza) {
+            var type = stanza.getAttributeAsString(VOIP_SETTINGS_TYPE_ATTRIBUTE, VOIP_SETTINGS_TYPE_DEFAULT);
             return switch (type) {
                 case VOIP_SETTINGS_TYPE_AUDIO -> VoipSettingsType.AUDIO;
                 case VOIP_SETTINGS_TYPE_VIDEO -> VoipSettingsType.VIDEO;
@@ -2100,19 +2181,51 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             //  be emitted faithfully; until then the level is metered but not stamped, which affects only
             //  mixer/SFU level metering, not interop with the cleartext payload.
             try {
-                if (extendedSequence <= 2 || extendedSequence == 50 || extendedSequence == 200) {
-                    var opusHex = new StringBuilder();
-                    for (var i = 0; i < payload.length && i < 20; i++) {
-                        opusHex.append(String.format("%02x", payload[i] & 0xFF));
-                    }
-                    LOGGER.log(System.Logger.Level.INFO,
-                            "calls2 outbound audio cleartext opus seq={0} ({1} bytes, first20 TOC): {2}",
-                            extendedSequence, payload.length, opusHex);
-                }
                 var packet = packetizer.packetize(payload, extendedSequence);
+                var rtpTimestamp = ((packet[4] & 0xFFL) << 24) | ((packet[5] & 0xFFL) << 16)
+                        | ((packet[6] & 0xFFL) << 8) | (packet[7] & 0xFFL);
+                paceSend(rtpTimestamp);
                 transport.sendMedia(packet, RTP_HEADER_LENGTH + RTP_HEADER_EXTENSION_LENGTH + payload.length);
             } catch (RuntimeException exception) {
                 LOGGER.log(System.Logger.Level.DEBUG, "calls2 outbound audio send failed", exception);
+            }
+        }
+
+        /**
+         * Paces the outbound media send to wall-clock real time, using the packet's RTP timestamp to measure
+         * how much audio each packet carries so the wire cadence matches what a microphone source would
+         * deliver.
+         *
+         * <p>Holds each packet until a running deadline ({@link #sendPacingDeadlineNanos}) that advances by the
+         * packet's own audio duration, derived from how far the RTP timestamp moved at the
+         * {@code AUDIO_RTP_CLOCK_RATE} clock. The relay then receives one packet per packet-duration of
+         * wall-clock instead of as fast as the file decoder, capture ring, and encoder can produce them, which
+         * would otherwise burst a startup or post-stall backlog onto the wire and over-run the peer's jitter
+         * buffer. The deadline is an absolute schedule advanced one packet-span at a time: ordinary scheduling
+         * jitter within a single packet is absorbed by holding that schedule (a late send is followed by a
+         * shorter gap that returns to the grid), so the average cadence neither drifts slow and starves the
+         * peer nor bunches and over-runs it. Only a true stall, where the deadline has fallen more than one
+         * full packet behind real time, resyncs to the current time. This is the final cadence gate at the wire.
+         *
+         * @param rtpTimestamp the unsigned 32-bit RTP timestamp of the packet about to be sent
+         */
+        private void paceSend(long rtpTimestamp) {
+            var nowNanos = System.nanoTime();
+            if (!sendPacingStarted) {
+                sendPacingStarted = true;
+                sendPacingDeadlineNanos = nowNanos;
+                sendPacingLastTimestamp = rtpTimestamp;
+                return;
+            }
+            var packetAudioNanos = (rtpTimestamp - sendPacingLastTimestamp) * 1_000_000_000L / AUDIO_RTP_CLOCK_RATE;
+            sendPacingLastTimestamp = rtpTimestamp;
+            sendPacingDeadlineNanos += packetAudioNanos;
+            if (sendPacingDeadlineNanos < nowNanos - packetAudioNanos) {
+                sendPacingDeadlineNanos = nowNanos;
+            }
+            for (var remaining = sendPacingDeadlineNanos - System.nanoTime(); remaining > 0;
+                 remaining = sendPacingDeadlineNanos - System.nanoTime()) {
+                LockSupport.parkNanos(remaining);
             }
         }
 
@@ -2629,13 +2742,17 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * Selects the relay endpoint the call's transport brings up against, with its ICE credentials and
          * DTLS role.
          *
-         * <p>Only UDP endpoints ({@code protocol == 0}) are usable. When the relay block carries more than
-         * one, the lowest-round-trip-time endpoint wins (the relay-election outcome the {@code <relaylatency>}
-         * exchange computes), using each endpoint's {@code c2r_rtt} when present and its {@code xrtt_ms}
-         * estimate otherwise. The selected endpoint's transport address becomes the bootstrap destination,
-         * its referenced {@code <auth_token>} (or {@code <token>}) becomes the remote ICE ufrag, and the relay
-         * block's raw {@code <key>} becomes the remote ICE password; an empty result means the block carried
-         * no usable endpoint, key, or credential.
+         * <p>Only UDP endpoints ({@code protocol == 0}) are usable. When {@code electedRelayName} is present and
+         * the block carries an endpoint with that {@linkplain RelayEndpoint#relayName() name}, the selection is
+         * first restricted to the endpoints of that relay, so this side binds the relay the peer-aware
+         * {@code <relaylatency>} election chose and both ends converge on a shared relay rather than each
+         * picking its locally fastest one. An absent election, or one naming a relay this block does not carry,
+         * leaves every endpoint eligible. Among the eligible endpoints the lowest-round-trip-time one wins,
+         * using each endpoint's {@code c2r_rtt} when present and its {@code xrtt_ms} estimate otherwise. The
+         * selected endpoint's transport address becomes the bootstrap destination, its referenced
+         * {@code <auth_token>} (or {@code <token>}) becomes the remote ICE ufrag, and the relay block's raw
+         * {@code <key>} becomes the remote ICE password; an empty result means the block carried no usable
+         * endpoint, key, or credential.
          *
          * @implNote This implementation reproduces {@code createAnswerSdp} of
          * {@code WAWebVoipRelayConnectionUtils} restricted to the relay endpoint: the synthesized answer's
@@ -2652,20 +2769,32 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * negotiated voip-params do not set the flag selects {@code false} (the relay is the DTLS server, the
          * only mode the live captures exercised).
          *
-         * @param relayInfo  the parsed relay block
-         * @param activeMode whether the negotiated voip-params enabled DTLS active mode (the relay is then the
-         *                   DTLS client and this side is the DTLS server)
+         * @param relayInfo        the parsed relay block
+         * @param activeMode       whether the negotiated voip-params enabled DTLS active mode (the relay is then
+         *                         the DTLS client and this side is the DTLS server)
+         * @param electedRelayName the name of the relay the peer-aware election chose, restricting the
+         *                         selection to that relay's endpoints when the block carries one; an empty value
+         *                         or an unmatched name leaves every endpoint eligible
          * @return the selected relay connection, or empty when none can be formed
          */
-        private static Optional<RelayConnection> selectRelayConnection(RelayInfo relayInfo, boolean activeMode) {
+        private static Optional<RelayConnection> selectRelayConnection(RelayInfo relayInfo, boolean activeMode,
+                                                                       Optional<String> electedRelayName) {
             var key = relayInfo.key();
             if (key == null) {
                 return Optional.empty();
             }
+            // Restrict to the elected relay only when the block actually carries it, so a stale or unmatched
+            // election name never empties the candidate set and drops the call to no usable endpoint.
+            var elected = electedRelayName
+                    .filter(name -> relayInfo.endpoints().stream().anyMatch(e -> name.equals(e.relayName())))
+                    .orElse(null);
             RelayEndpoint best = null;
             var bestRtt = Integer.MAX_VALUE;
             for (var endpoint : relayInfo.endpoints()) {
                 if (endpoint.protocol() != 0) {
+                    continue;
+                }
+                if (elected != null && !elected.equals(endpoint.relayName())) {
                     continue;
                 }
                 if (endpoint.address().isEmpty() || endpoint.port().isEmpty()) {
@@ -2708,7 +2837,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * @return {@code true} when the relay leg runs DTLS active mode, {@code false} otherwise
          */
         private static boolean edgerayDtlsActiveMode(LiveVoipParamManager voipParamManager) {
-            var key = VoipParamKey.ofDottedPath(ENABLE_EDGERAY_DTLS_ACTIVE_MODE_PARAM).orElse(null);
+            var key = VoipParamKey.ofWirePath(ENABLE_EDGERAY_DTLS_ACTIVE_MODE_PARAM).orElse(null);
             var params = voipParamManager.activeParams().orElse(null);
             if (key == null || params == null) {
                 return false;
@@ -2872,9 +3001,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * @param relay the relay block subtree
          * @return the thirty-byte hop-by-hop key, or empty when none can be parsed
          */
-        private static Optional<byte[]> parseHopByHopKey(Node relay) {
+        private static Optional<byte[]> parseHopByHopKey(Stanza relay) {
             return relay.getChild("hbh_key")
-                    .flatMap(Node::toContentString)
+                    .flatMap(Stanza::toContentString)
                     .flatMap(LiveMediaPlane::decodeHopByHopKey);
         }
 
@@ -3129,7 +3258,14 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private final int samplesPerPacket;
 
         /**
-         * Constructs a packetizer stamping the given audio SSRC with a zeroed sequence and timestamp.
+         * Whether the RTP marker bit has been stamped, set once the first packet of the stream's single
+         * talkspurt has carried it.
+         */
+        private boolean markerStamped;
+
+        /**
+         * Constructs a packetizer stamping the given audio SSRC with the RTP sequence seeded at one (the value
+         * WhatsApp starts at, not zero) and the timestamp zeroed.
          *
          * <p>The SSRC is the self device's deterministic audio main SSRC
          * ({@link CallSecureSsrcGenerator#audioMainSsrc(String, CallDeviceJid)}, media-type {@code 0}), the
@@ -3141,7 +3277,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private OutboundRtpPacketizer(int ssrc, int samplesPerPacket) {
             this.ssrc = ssrc;
             this.samplesPerPacket = samplesPerPacket;
-            this.sequence = 0;
+            this.sequence = 1;
             this.timestamp = 0;
         }
 
@@ -3172,7 +3308,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             // The RTP marker bit flags the first packet of a talkspurt; the live capture sets it on the first
             // media packet of the stream (and the peer's jitter buffer keys playout start off it). The stream
             // starts one talkspurt here (a continuous file), so only the first packet carries the marker.
-            packet[1] = (byte) ((sequence == 0 ? 0x80 : 0x00) | (AUDIO_PAYLOAD_TYPE & 0x7F));
+            packet[1] = (byte) ((markerStamped ? 0x00 : 0x80) | (AUDIO_PAYLOAD_TYPE & 0x7F));
+            markerStamped = true;
             packet[2] = (byte) ((sequence >>> 8) & 0xFF);
             packet[3] = (byte) (sequence & 0xFF);
             packet[4] = (byte) ((timestamp >>> 24) & 0xFF);
@@ -4838,9 +4975,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * The audio codec the audio rate controller re-targets each round, an {@link OpusAudioCodec} or an
          * {@link MLowAudioCodec}.
          *
-         * <p>The loop re-targets it through {@link AudioCodec#modify(OpusCodecParams)}; on the
-         * {@link MLowAudioCodec} that call is a no-op, since MLow runs a locked bitrate profile and carries
-         * its own internal rate control.
+         * <p>The loop re-targets it through {@link AudioCodec#modify(OpusCodecParams)} each round; the
+         * {@link MLowAudioCodec} reads the live target bitrate and forwards it to its internal rate
+         * controller just as the {@link OpusAudioCodec} re-targets libopus.
          */
         private final AudioCodec audioCodec;
 
@@ -5009,8 +5146,14 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             this.lastRttNs = 0;
 
             var params = voipParamManager.activeParams();
-            var minBwe = resolveScalar(params, "p->min_bwe", MIN_BITRATE_BPS);
-            var maxBwe = resolveScalar(params, "p->max_bwe", MAX_BITRATE_BPS);
+            // The audio rate-control loop reads the audio (rc) section. rc.maxbwe is the audio ceiling;
+            // rc.minbwe is not read in this wa-voip revision (only vid_rc.minbwe exists, the video floor,
+            // which must not be substituted here), so the audio floor uses the compiled default.
+            // TODO: wire the audio minimum to rc.minbwe once a wa-voip revision that reads it is modelled.
+            var minBwe = MIN_BITRATE_BPS;
+            var maxBwe = VoipParamKey.ofWirePath(RC_MAXBWE_PARAM)
+                    .map(key -> resolveScalar(params, key, MAX_BITRATE_BPS))
+                    .orElse(MAX_BITRATE_BPS);
             this.maxBitrateBps = maxBwe;
             var seedBps = seedBitrateBps(isCaller);
             this.senderBwe = new LiveSenderBandwidthEstimator(
@@ -5068,25 +5211,20 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         /**
          * Resolves a negotiated integer voip-param scalar, or the compiled fallback when it is absent.
          *
-         * <p>Looks the dotted path up in the catalogue and reads it from the active negotiated set. An empty
-         * set (settings not yet selected), an unmodelled path, or a path the negotiation omits all yield the
-         * fallback, matching the engine taking its compiled default when the {@code voip_settings} document
-         * does not override the scalar.
+         * <p>Reads the key from the active negotiated set. An empty set (settings not yet selected) or a key
+         * the negotiation omits yields the fallback, matching the engine taking its compiled default when the
+         * {@code voip_settings} document does not override the scalar.
          *
-         * @param params     the active negotiated parameter set, possibly empty before settings arrive
-         * @param dottedPath the parameter's fully-qualified dotted path, such as {@code "p->min_bwe"}
-         * @param fallback   the compiled default applied when the parameter is not negotiated
+         * @param params   the active negotiated parameter set, possibly empty before settings arrive
+         * @param key      the parameter to read
+         * @param fallback the compiled default applied when the parameter is not negotiated
          * @return the negotiated value when present, otherwise {@code fallback}
          */
-        private static long resolveScalar(Optional<VoipParams> params, String dottedPath, long fallback) {
+        private static long resolveScalar(Optional<VoipParams> params, VoipParamKey key, long fallback) {
             if (params.isEmpty()) {
                 return fallback;
             }
-            var key = VoipParamKey.ofDottedPath(dottedPath);
-            if (key.isEmpty()) {
-                return fallback;
-            }
-            var value = params.get().getInteger(key.get());
+            var value = params.get().getInteger(key);
             return value.isPresent() ? value.getAsLong() : fallback;
         }
 

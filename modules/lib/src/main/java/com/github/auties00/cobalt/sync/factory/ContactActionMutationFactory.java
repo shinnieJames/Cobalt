@@ -4,7 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValue;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -81,7 +82,7 @@ public final class ContactActionMutationFactory {
      * Returns a SET or REMOVE mutation that syncs the given contact at a caller-supplied timestamp.
      *
      * <p>The pinned-timestamp seam exists so byte-parity tests can re-encode the
-     * same {@link com.github.auties00.cobalt.model.sync.SyncActionValue} that a
+     * same {@link SyncActionValue} that a
      * WA Web capture pinned at a known time; callers that just want the
      * production path should prefer the seven-arg overload.
      *

@@ -10,7 +10,7 @@ import java.util.Optional;
 
 /**
  * One entry of the broadcast-contact list parsed from a {@code <to>} child
- * inside the {@code <participants>} node of an inbound peer-broadcast or
+ * inside the {@code <participants>} stanza of an inbound peer-broadcast or
  * status-broadcast message stanza.
  *
  * <p>Populated for {@link MessageType#PEER_BROADCAST} and
@@ -27,7 +27,7 @@ import java.util.Optional;
 public final class MessageReceiveBroadcastParticipant {
     /**
      * The recipient's primary JID parsed from the {@code jid} attribute of the
-     * {@code <to>} node.
+     * {@code <to>} stanza.
      */
     private final Jid jid;
 

@@ -4,12 +4,15 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.device.pairing.ClientPayload;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValue;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.ExternalWebBetaAction;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -25,7 +28,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * @implNote
  * This implementation persists the bit through
- * {@link com.github.auties00.cobalt.store.SyncStore#setExternalWebBeta(boolean)}
+ * {@link LinkedWhatsAppSyncStore#setExternalWebBeta(boolean)}
  * and performs none of the backend restart, A/B-prop refresh or telemetry that
  * the build-channel negotiation would otherwise trigger, because a Cobalt
  * embedder does not negotiate its build channel through Meta's update service.
@@ -84,7 +87,7 @@ public final class ExternalWebBetaHandler implements WebAppStateActionHandler {
      * flag is off; non-{@link SyncdOperation#SET} operations are also reported
      * as unsupported and a missing or mistyped action payload yields a
      * malformed result. When the flag is on the value is persisted through
-     * {@link com.github.auties00.cobalt.store.SyncStore#setExternalWebBeta(boolean)}.
+     * {@link LinkedWhatsAppSyncStore#setExternalWebBeta(boolean)}.
      *
      * @implNote
      * This implementation re-reads the A/B prop on every mutation rather than
@@ -102,11 +105,12 @@ public final class ExternalWebBetaHandler implements WebAppStateActionHandler {
             return MutationApplicationResult.unsupported();
         }
 
-        if (!(mutation.value().flatMap(sav -> sav.action()).orElse(null) instanceof ExternalWebBetaAction action)) {
+        if (!(mutation.value().flatMap(SyncActionValue::action).orElse(null) instanceof ExternalWebBetaAction action)) {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
         client.store().syncStore().setExternalWebBeta(action.isOptIn());
+        client.store().accountStore().setReleaseChannel(action.isOptIn() ? ClientPayload.ClientReleaseChannel.BETA : ClientPayload.ClientReleaseChannel.RELEASE);
         return MutationApplicationResult.success();
     }
 }

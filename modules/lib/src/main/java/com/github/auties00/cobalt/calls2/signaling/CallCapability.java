@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -76,12 +76,12 @@ public record CallCapability(int version, byte[] mask) {
     }
 
     /**
-     * Builds the {@code <capability ver="N">MASK</capability>} node for this advertisement.
+     * Builds the {@code <capability ver="N">MASK</capability>} stanza for this advertisement.
      *
-     * @return the capability node
+     * @return the capability stanza
      */
-    public Node toNode() {
-        return new NodeBuilder()
+    public Stanza toStanza() {
+        return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(VERSION_ATTRIBUTE, version)
                 .content(mask)
@@ -89,27 +89,27 @@ public record CallCapability(int version, byte[] mask) {
     }
 
     /**
-     * Decodes a {@code <capability>} node into a {@link CallCapability}.
+     * Decodes a {@code <capability>} stanza into a {@link CallCapability}.
      *
      * <p>The {@code ver} attribute supplies the version and the element content supplies the mask. A
-     * node with no content, or a node that is not a {@code <capability>} element, yields an empty
+     * stanza with no content, or a stanza that is not a {@code <capability>} element, yields an empty
      * result rather than throwing so callers iterating a mixed child list can skip it.
      *
-     * @param node the {@code <capability>} node
-     * @return the decoded capability, or an empty result when the node is not a usable capability
+     * @param stanza the {@code <capability>} stanza
+     * @return the decoded capability, or an empty result when the stanza is not a usable capability
      *         element
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @throws NullPointerException if {@code stanza} is {@code null}
      */
-    public static Optional<CallCapability> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        if (!node.hasDescription(ELEMENT)) {
+    public static Optional<CallCapability> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        if (!stanza.hasDescription(ELEMENT)) {
             return Optional.empty();
         }
-        var mask = node.toContentBytes();
+        var mask = stanza.toContentBytes();
         if (mask.isEmpty()) {
             return Optional.empty();
         }
-        var version = node.getAttributeAsInt(VERSION_ATTRIBUTE, 1);
+        var version = stanza.getAttributeAsInt(VERSION_ATTRIBUTE, 1);
         return Optional.of(new CallCapability(version, mask.get()));
     }
 

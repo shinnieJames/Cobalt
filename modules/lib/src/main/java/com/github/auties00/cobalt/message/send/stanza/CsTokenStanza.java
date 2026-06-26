@@ -4,11 +4,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -87,21 +87,21 @@ public final class CsTokenStanza {
     }
 
     /**
-     * Builds the {@code <cstoken>} node for the recipient chat, or {@code null} when emission is gated off.
+     * Builds the {@code <cstoken>} stanza for the recipient chat, or {@code null} when emission is gated off.
      * <p>
      * Returns {@code null} when any of the four gates fails: {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} is disabled, the
      * recipient is not a regular user, the store has no NCT salt, or the chat has no {@code accountLid}. The returned
-     * node carries the raw HMAC-SHA-256 bytes as its content with no attributes.
+     * stanza carries the raw HMAC-SHA-256 bytes as its content with no attributes.
      *
      * @implNote This implementation computes {@code HMAC-SHA-256(salt, accountLid.toString())} over the salt held in the
      * store, which is already decoded so no base64 decode step is needed inside {@code build}.
      *
      * @param chatJid the recipient chat {@link Jid}
-     * @return the {@code <cstoken>} {@link Node}, or {@code null} when not applicable
+     * @return the {@code <cstoken>} {@link Stanza}, or {@code null} when not applicable
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "genCsTokenBody",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node build(Jid chatJid) {
+    public Stanza build(Jid chatJid) {
         if (!abPropsService.getBool(ABProp.WA_NCT_TOKEN_SEND_ENABLED)) {
             return null;
         }
@@ -133,7 +133,7 @@ public final class CsTokenStanza {
 
             var cached = hmacCache.get(lidString);
             if (cached != null) {
-                return new NodeBuilder()
+                return new StanzaBuilder()
                         .description("cstoken")
                         .content(cached)
                         .build();
@@ -151,7 +151,7 @@ public final class CsTokenStanza {
             }
             hmacCache.put(lidString, hmacResult);
 
-            return new NodeBuilder()
+            return new StanzaBuilder()
                     .description("cstoken")
                     .content(hmacResult)
                     .build();

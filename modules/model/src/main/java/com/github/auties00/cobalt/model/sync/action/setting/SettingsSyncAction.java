@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.setting;
 
 import com.github.auties00.cobalt.model.setting.AppTheme;
-import com.github.auties00.cobalt.model.sync.SyncAction;
+import com.github.auties00.cobalt.model.sync.action.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
 import it.auties.protobuf.annotation.*;

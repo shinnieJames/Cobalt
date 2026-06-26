@@ -7,10 +7,10 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientOfflineResum
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentityBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -28,7 +28,7 @@ import java.util.Optional;
  * Test helper that loads message-package fixtures captured from a live WhatsApp Web session
  * and exposes them to JUnit tests. The fixtures come in two flavours, both rooted under
  * {@code src/test/resources/fixtures/message/}: JSONL stanza captures re-hydrated into Cobalt
- * {@link Node} instances by {@link #loadEvents(String)} and {@link #buildNodeFromEvent(JSONObject)},
+ * {@link Stanza} instances by {@link #loadEvents(String)} and {@link #buildNodeFromEvent(JSONObject)},
  * and {@code .expected.json} oracle outputs returned as raw {@link JSONObject} so individual
  * tests can pull only the fields they care about. The class also builds in-memory temporary
  * stores via {@link #temporaryStore(Jid, Jid)} for any message-package class that needs a
@@ -109,34 +109,34 @@ public final class MessageFixtures {
     }
 
     /**
-     * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a captured event.
-     * The node tree is the recursive plain-JSON shape emitted by the MCP stanza-logger script:
+     * Reconstructs a Cobalt {@link Stanza} from the {@code stanza} sub-tree of a captured event.
+     * The stanza tree is the recursive plain-JSON shape emitted by the MCP stanza-logger script:
      * binary leaves are {@code {"kind": "binary", "base64": "..."}} objects and child arrays
      * are arrays of the same shape.
      *
      * @param event the event object from {@link #loadEvents(String)}
-     * @return the reconstructed {@link Node}
+     * @return the reconstructed {@link Stanza}
      * @throws NullPointerException     if {@code event} is {@code null}
      * @throws IllegalArgumentException if the tree is malformed
      */
-    public static Node buildNodeFromEvent(JSONObject event) {
+    public static Stanza buildNodeFromEvent(JSONObject event) {
         Objects.requireNonNull(event, "event");
-        var nodeTree = event.getJSONObject("node");
+        var nodeTree = event.getJSONObject("stanza");
         if (nodeTree == null) {
-            throw new IllegalArgumentException("event missing 'node' subtree");
+            throw new IllegalArgumentException("event missing 'stanza' subtree");
         }
         return buildNode(nodeTree);
     }
 
     /**
-     * Reconstructs a {@link Node} from a captured plain-JSON {@code {tag, attrs, content}}
+     * Reconstructs a {@link Stanza} from a captured plain-JSON {@code {tag, attrs, content}}
      * sub-object held directly, rather than from the outer event wrapper.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
+     * @return the reconstructed stanza
      * @throws IllegalArgumentException if {@code tree} has no tag
      */
-    public static Node buildNodeFromTree(JSONObject tree) {
+    public static Stanza buildNodeFromTree(JSONObject tree) {
         return buildNode(tree);
     }
 
@@ -225,7 +225,7 @@ public final class MessageFixtures {
      * message-package class. The store is preconfigured with offline-resume state COMPLETE so
      * tests that block on offline-delivery-end do not stall on the 5-minute latch, and with a
      * stub signed device identity so PKMSG-bearing fanouts ship a {@code <device-identity>}
-     * child node; the signature bytes are dummies because tests only assert presence and shape.
+     * child stanza; the signature bytes are dummies because tests only assert presence and shape.
      *
      * @param selfPn  the local user's PN-form bare JID
      * @param selfLid the local user's LID-form bare JID, or {@code null} for
@@ -238,7 +238,7 @@ public final class MessageFixtures {
     public static LinkedWhatsAppStore temporaryStore(Jid selfPn, Jid selfLid) {
         Objects.requireNonNull(selfPn, "selfPn");
         try {
-            var store = WhatsAppStoreFactory.temporary()
+            var store = LinkedWhatsAppStoreFactory.temporary()
                     .create(LinkedWhatsAppClientType.WEB, Long.parseLong(selfPn.user()));
             store.accountStore().setJid(selfPn);
             if (selfLid != null) {
@@ -275,7 +275,7 @@ public final class MessageFixtures {
 
     /**
      * Flattens a captured attribute value into the string form Cobalt's
-     * {@link NodeBuilder#attribute(String, String)} expects. The MCP stanza logger captures
+     * {@link StanzaBuilder#attribute(String, String)} expects. The MCP stanza logger captures
      * WAP's internal Jid wrappers in two shapes:
      * <ul>
      *   <li>Server JID:
@@ -291,7 +291,7 @@ public final class MessageFixtures {
      *       {@code :<device>} to the user (for example
      *       {@code 83116928594056:1@lid}); device 0 omits the suffix.</li>
      * </ul>
-     * Cobalt's {@link Node} carries those same JIDs as bare strings of the
+     * Cobalt's {@link Stanza} carries those same JIDs as bare strings of the
      * form {@code user@server} or {@code user:device@server}. Any other shape
      * is delegated to {@link String#valueOf(Object)}.
      *
@@ -340,18 +340,18 @@ public final class MessageFixtures {
     }
 
     /**
-     * Builds a {@link Node} from a plain-JSON tree.
+     * Builds a {@link Stanza} from a plain-JSON tree.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
+     * @return the reconstructed stanza
      */
-    private static Node buildNode(JSONObject tree) {
+    private static Stanza buildNode(JSONObject tree) {
         var tag = tree.getString("tag");
         if (tag == null || tag.isEmpty()) {
-            throw new IllegalArgumentException("node tree missing 'tag': " + tree);
+            throw new IllegalArgumentException("stanza tree missing 'tag': " + tree);
         }
 
-        var builder = new NodeBuilder().description(tag);
+        var builder = new StanzaBuilder().description(tag);
 
         var attrs = tree.getJSONObject("attrs");
         if (attrs != null) {
@@ -374,7 +374,7 @@ public final class MessageFixtures {
      * @param builder the target builder
      * @param content the JSON-shaped content value
      */
-    private static void applyContent(NodeBuilder builder, Object content) {
+    private static void applyContent(StanzaBuilder builder, Object content) {
         if (content == null) return;
 
         if (content instanceof JSONObject leaf) {
@@ -387,7 +387,7 @@ public final class MessageFixtures {
         }
 
         if (content instanceof JSONArray children) {
-            var built = new ArrayList<Node>(children.size());
+            var built = new ArrayList<Stanza>(children.size());
             byte[] inlineBytes = null;
             for (var entry : children) {
                 if (entry instanceof JSONObject obj) {
@@ -397,7 +397,7 @@ public final class MessageFixtures {
                     }
                     built.add(buildNode(obj));
                 } else if (entry != null) {
-                    built.add(new NodeBuilder().description("__text").content(String.valueOf(entry)).build());
+                    built.add(new StanzaBuilder().description("__text").content(String.valueOf(entry)).build());
                 }
             }
             if (!built.isEmpty()) {

@@ -14,7 +14,7 @@ package com.github.auties00.cobalt.calls2.signaling;
  * a {@link CallMessage} like any other action element, carried as one child of the {@code <call>}
  * envelope, decoded and encoded through {@link Calls2CallStanza}, and forwarded through the same
  * receiver sink. The separation is purely for exhaustive pattern matching over the in-call subset; the
- * {@link CallMessage#type()} and {@link CallMessage#toNode()} contract is inherited unchanged.
+ * {@link CallMessage#type()} and {@link CallMessage#toStanza()} contract is inherited unchanged.
  *
  * <p>Several in-call actions do not ride a dedicated {@code <call>} child of their own but are carried
  * inside a shared message container (the {@code 0x68}, {@code 0x6c}, {@code 0x70}, and {@code 0x74}

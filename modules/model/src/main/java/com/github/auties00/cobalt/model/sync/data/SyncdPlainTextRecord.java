@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.model.sync.data;
 
-import com.github.auties00.cobalt.model.sync.SyncActionData;
+import com.github.auties00.cobalt.model.sync.action.SyncActionData;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;

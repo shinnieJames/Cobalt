@@ -2,8 +2,7 @@ package com.github.auties00.cobalt.message.receive.stanza;
 
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Exercises {@link MessageReceiveStanzaParser#parse} against synthetic stanzas
- * built via {@link NodeBuilder} (so each invariant is isolated) and one
+ * built via {@link StanzaBuilder} (so each invariant is isolated) and one
  * captured live bot stanza pulled through end to end. Covers the required
  * attributes ({@code id}, {@code t}, {@code from}, {@code type}), optional
  * metadata ({@code notify}, {@code edit}, {@code count}), the absent-child
@@ -40,7 +39,7 @@ class MessageReceiveStanzaParserTest {
     @Test
     @DisplayName("parse: required attributes (id, t, from, type) populate the result")
     void parseRequiredAttrs() {
-        var msg = new NodeBuilder()
+        var msg = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0CAFEBABE")
                 .attribute("t", 1700000000L)
@@ -59,7 +58,7 @@ class MessageReceiveStanzaParserTest {
     @Test
     @DisplayName("parse: optional notify (pushName) propagates")
     void parseOptionalNotify() {
-        var msg = new NodeBuilder()
+        var msg = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0")
                 .attribute("t", 1700000000L)
@@ -74,7 +73,7 @@ class MessageReceiveStanzaParserTest {
     @Test
     @DisplayName("parse: edit attribute defaults to 0 when absent")
     void parseEditDefaultsToZero() {
-        var msg = new NodeBuilder()
+        var msg = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0")
                 .attribute("t", 1700000000L)
@@ -88,7 +87,7 @@ class MessageReceiveStanzaParserTest {
     @Test
     @DisplayName("parse: missing required id throws IllegalArgumentException")
     void parseMissingIdThrows() {
-        var msg = new NodeBuilder()
+        var msg = new StanzaBuilder()
                 .description("message")
                 .attribute("t", 1700000000L)
                 .attribute("from", PEER_PN)
@@ -101,7 +100,7 @@ class MessageReceiveStanzaParserTest {
     @Test
     @DisplayName("parse: missing required from throws IllegalArgumentException")
     void parseMissingFromThrows() {
-        var msg = new NodeBuilder()
+        var msg = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0")
                 .attribute("t", 1700000000L)
@@ -112,7 +111,7 @@ class MessageReceiveStanzaParserTest {
     }
 
     @Test
-    @DisplayName("parse: null node throws NullPointerException")
+    @DisplayName("parse: null stanza throws NullPointerException")
     void parseNullNodeThrows() {
         assertThrows(NullPointerException.class,
                 () -> MessageReceiveStanzaParser.parse(null, SELF_PN, SELF_LID));
@@ -145,7 +144,7 @@ class MessageReceiveStanzaParserTest {
     @Test
     @DisplayName("parse: count attribute (group ack-like) is preserved as Optional<Integer>")
     void parseCountAttribute() {
-        var msg = new NodeBuilder()
+        var msg = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0")
                 .attribute("t", 1700000000L)
@@ -161,7 +160,7 @@ class MessageReceiveStanzaParserTest {
     @Test
     @DisplayName("parse: stanza with no <hsm> child has isHsm=false")
     void parseHsmAbsent() {
-        var msg = new NodeBuilder()
+        var msg = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0")
                 .attribute("t", 1700000000L)

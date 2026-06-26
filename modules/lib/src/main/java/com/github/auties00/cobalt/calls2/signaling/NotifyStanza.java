@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -65,31 +65,31 @@ public record NotifyStanza(String callId, Jid callCreator, int batteryState)
     }
 
     /**
-     * Builds the {@code <notify call-id call-creator batterystate/>} action node.
+     * Builds the {@code <notify call-id call-creator batterystate/>} action stanza.
      *
-     * @return the notify action node
+     * @return the notify action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(BATTERY_STATE_ATTRIBUTE, batteryState)
                 .build();
     }
 
     /**
-     * Decodes a {@code <notify>} action node into a {@link NotifyStanza}.
+     * Decodes a {@code <notify>} action stanza into a {@link NotifyStanza}.
      *
-     * @param node the {@code <notify>} node
+     * @param stanza the {@code <notify>} stanza
      * @return the decoded notify action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id}, {@code call-creator}, or
      *                                {@code batterystate} attribute is absent
      */
-    public static NotifyStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var batteryState = node.getAttributeAsInt(BATTERY_STATE_ATTRIBUTE)
+    public static NotifyStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var batteryState = stanza.getAttributeAsInt(BATTERY_STATE_ATTRIBUTE)
                 .orElseThrow(() -> new NoSuchElementException("notify requires a batterystate attribute"));
         return new NotifyStanza(callId, callCreator, batteryState);
     }

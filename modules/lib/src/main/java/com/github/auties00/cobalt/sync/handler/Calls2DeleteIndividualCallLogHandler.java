@@ -1,15 +1,14 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
-import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.call.CallLog;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.call.CallLogAction;
 import com.github.auties00.cobalt.model.sync.action.call.DeleteIndividualCallLogAction;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.List;
@@ -27,7 +26,7 @@ import java.util.List;
  * path of {@link Calls2CallLogHandler}, which drops one record by call id: this action targets a whole
  * peer-plus-direction group at once.
  *
- * <p>Because the runtime table {@link com.github.auties00.cobalt.store.ChatStore#callLogStates()} is keyed
+ * <p>Because the runtime table {@link LinkedWhatsAppChatStore#callLogStates()} is keyed
  * by call id rather than by peer, the handler resolves the target set by scanning the table and removing
  * every {@link CallLog} whose {@linkplain CallLog#isIncoming() direction} equals the action's direction and
  * whose remote party (the {@linkplain CallLog#callCreatorJid() creator} for an incoming call, or any
@@ -134,12 +133,12 @@ public final class Calls2DeleteIndividualCallLogHandler implements WebAppStateAc
     /**
      * Removes every call-history entry whose direction and remote party match the deletion target.
      *
-     * <p>Snapshots the current {@link com.github.auties00.cobalt.store.ChatStore#callLogStates()} into a
+     * <p>Snapshots the current {@link LinkedWhatsAppChatStore#callLogStates()} into a
      * defensive copy, then for every entry whose {@linkplain CallLog#isIncoming() direction} equals
      * {@code isIncoming} and whose remote party matches {@code peer} (through
      * {@link #matchesPeer(CallLog, Jid)}) it drops the entry by its
      * {@linkplain CallLog#callId() call id} through
-     * {@link com.github.auties00.cobalt.store.ChatStore#removeCallLog(String)}. Iterating the copy keeps
+     * {@link LinkedWhatsAppChatStore#removeCallLog(String)}. Iterating the copy keeps
      * the scan independent of the concurrent removals against the live table.
      *
      * @param client     the {@link LinkedWhatsAppClient} whose store the deletion is applied to

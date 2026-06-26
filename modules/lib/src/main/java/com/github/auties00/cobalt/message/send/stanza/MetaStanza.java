@@ -4,7 +4,6 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.bot.metrics.BotMetricsEntryPoint;
-import com.github.auties00.cobalt.model.bot.metrics.BotMetricsMetadata;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -17,9 +16,9 @@ import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.security.SecretEncMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.history.MessageHistoryNotice;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.Objects;
 
@@ -29,7 +28,7 @@ import java.util.Objects;
  * privacy, and view-once handling.
  * <p>
  * Composed by {@link ChatFanoutStanza} and {@link GroupSkmsgFanoutStanza} once per outgoing message. The set of
- * attributes the node may carry is the union of every signal the sender writes onto {@code <meta>}: {@code origin}
+ * attributes the stanza may carry is the union of every signal the sender writes onto {@code <meta>}: {@code origin}
  * (LID-origin code or bot-entry-point name when the recipient is Meta AI), {@code destination_id} (the bot metrics
  * destination id), {@code sender_intent="hosted"} (when the recipient is a hosted business), {@code polltype}
  * ({@code "creation"} / {@code "vote"} / {@code "result_snapshot"}), {@code event_type} ({@code "creation"} /
@@ -79,11 +78,11 @@ public final class MetaStanza {
      * @param container        the outgoing {@link MessageContainer}
      * @param statusSetting    the status-privacy label, or {@code null} for non-status messages
      * @param hashedAiThreadId the HMAC-hashed AI thread id, or {@code null} when not in an AI thread
-     * @return the {@code <meta>} {@link Node}, or {@code null}
+     * @return the {@code <meta>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node buildChat(Jid chatJid, MessageContainer container, String statusSetting, String hashedAiThreadId) {
+    public Stanza buildChat(Jid chatJid, MessageContainer container, String statusSetting, String hashedAiThreadId) {
         var message = container.content();
 
         var polltype = resolvePollType(message);
@@ -142,7 +141,7 @@ public final class MetaStanza {
             return null;
         }
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("meta")
                 .attribute("origin", origin)
                 .attribute("destination_id", destinationId)
@@ -168,11 +167,11 @@ public final class MetaStanza {
      * @param chatJid       the recipient chat {@link Jid}
      * @param container     the outgoing {@link MessageContainer}
      * @param statusSetting the status-privacy label, or {@code null}
-     * @return the {@code <meta>} {@link Node}, or {@code null}
+     * @return the {@code <meta>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node buildChat(Jid chatJid, MessageContainer container, String statusSetting) {
+    public Stanza buildChat(Jid chatJid, MessageContainer container, String statusSetting) {
         return buildChat(chatJid, container, statusSetting, null);
     }
 
@@ -361,12 +360,12 @@ public final class MetaStanza {
      * <p>
      * Used by the newsletter publish pipeline alongside {@link NewsletterStanza#buildPlaintext(byte[])}.
      *
-     * @return the {@code <meta>} {@link Node}
+     * @return the {@code <meta>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishQuestionTypeQuestionMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildNewsletterQuestion() {
-        return new NodeBuilder()
+    public static Stanza buildNewsletterQuestion() {
+        return new StanzaBuilder()
                 .description("meta")
                 .attribute("questiontype", "question")
                 .build();
@@ -377,12 +376,12 @@ public final class MetaStanza {
      * <p>
      * Used by the newsletter publish pipeline for the reply-to-question subflow.
      *
-     * @return the {@code <meta>} {@link Node}
+     * @return the {@code <meta>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishQuestionTypeReplyMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildNewsletterQuestionReply() {
-        return new NodeBuilder()
+    public static Stanza buildNewsletterQuestionReply() {
+        return new StanzaBuilder()
                 .description("meta")
                 .attribute("questiontype", "reply")
                 .build();
@@ -393,12 +392,12 @@ public final class MetaStanza {
      * <p>
      * Used by the newsletter publish pipeline for the response-to-question subflow.
      *
-     * @return the {@code <meta>} {@link Node}
+     * @return the {@code <meta>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishQuestionTypeResponseMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildNewsletterQuestionResponse() {
-        return new NodeBuilder()
+    public static Stanza buildNewsletterQuestionResponse() {
+        return new StanzaBuilder()
                 .description("meta")
                 .attribute("questiontype", "response")
                 .build();

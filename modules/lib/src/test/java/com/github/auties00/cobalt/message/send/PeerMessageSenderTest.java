@@ -10,8 +10,8 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
@@ -51,14 +51,14 @@ class PeerMessageSenderTest {
         var recipientStore = MessageFixtures.temporaryStore(Jid.of("12025550100@s.whatsapp.net"), null);
         TestSignalSession.establishSession(senderStore, SELF_COMPANION, recipientStore);
 
-        var capturedStanza = new AtomicReference<Node>();
+        var capturedStanza = new AtomicReference<Stanza>();
         var client = TestWhatsAppClient.create()
                 .withStore(senderStore)
                 .withAbPropsService(TestABPropsService.builder().build())
                 .withSendNodeHandler(node -> {
                     capturedStanza.set(node.build());
                     // Return a success ack so the sender's AckParser is satisfied.
-                    return new NodeBuilder()
+                    return new StanzaBuilder()
                             .description("ack")
                             .attribute("t", 1700000000L)
                             .build();
@@ -111,7 +111,7 @@ class PeerMessageSenderTest {
         var client = TestWhatsAppClient.create()
                 .withStore(senderStore)
                 .withAbPropsService(TestABPropsService.builder().build())
-                .withSendNodeHandler(node -> new NodeBuilder()
+                .withSendNodeHandler(node -> new StanzaBuilder()
                         .description("ack")
                         .attribute("t", 1700000000L)
                         .build());
@@ -142,13 +142,13 @@ class PeerMessageSenderTest {
         var recipientStore = MessageFixtures.temporaryStore(Jid.of("12025550100@s.whatsapp.net"), null);
         TestSignalSession.establishSession(senderStore, SELF_COMPANION, recipientStore);
 
-        var capturedStanza = new AtomicReference<Node>();
+        var capturedStanza = new AtomicReference<Stanza>();
         var client = TestWhatsAppClient.create()
                 .withStore(senderStore)
                 .withAbPropsService(TestABPropsService.builder().build())
                 .withSendNodeHandler(node -> {
                     capturedStanza.set(node.build());
-                    return new NodeBuilder().description("ack").attribute("t", 1700000000L).build();
+                    return new StanzaBuilder().description("ack").attribute("t", 1700000000L).build();
                 });
         var wamService = new LiveWamService(client, client.abPropsService());
         var encryption = new MessageEncryption(senderStore,

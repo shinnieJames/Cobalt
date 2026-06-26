@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -41,19 +41,19 @@ public record WaitingRoomToggleAck(String callId, Jid callCreator, Optional<Bool
     }
 
     /**
-     * Decodes a waiting-room toggle ack node into a {@link WaitingRoomToggleAck}.
+     * Decodes a waiting-room toggle ack stanza into a {@link WaitingRoomToggleAck}.
      *
-     * @param node the echoed waiting-room toggle node from the {@code <receipt>} body
+     * @param stanza the echoed waiting-room toggle stanza from the {@code <receipt>} body
      * @return the decoded toggle ack
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static WaitingRoomToggleAck of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var enabled = WaitingRoomStanzas.enabled(node);
+    public static WaitingRoomToggleAck of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var enabled = WaitingRoomStanzas.enabled(stanza);
         return new WaitingRoomToggleAck(callId, callCreator, enabled);
     }
 }

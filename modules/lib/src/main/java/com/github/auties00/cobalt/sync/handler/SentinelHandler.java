@@ -5,10 +5,12 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.KeyExpirationAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
@@ -19,7 +21,7 @@ import java.util.logging.Logger;
  * <p>The sync dispatcher hands an incoming sentinel mutation here after the
  * primary device rotates its sync key so the companion drops the matching local
  * app-state-sync key from
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} and forces a re-keyed
+ * {@link LinkedWhatsAppStore} and forces a re-keyed
  * patch to be requested on the next sync.
  */
 @WhatsAppWebModule(moduleName = "WAWebSentinelMutationSync")
@@ -75,7 +77,7 @@ public final class SentinelHandler implements WebAppStateActionHandler {
      * decoded action is not a {@link KeyExpirationAction} or whose
      * {@code expiredKeyEpoch} is empty is reported as malformed; otherwise the
      * named epoch is expired on the local store via
-     * {@link com.github.auties00.cobalt.store.SyncStore#expireAppStateKeysByEpoch(int)}.
+     * {@link LinkedWhatsAppSyncStore#expireAppStateKeysByEpoch(int)}.
      *
      * @implNote
      * This implementation omits WA Web's {@code WALogger.ERROR}/{@code WARN}

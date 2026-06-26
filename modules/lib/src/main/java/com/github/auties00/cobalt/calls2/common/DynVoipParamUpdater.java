@@ -183,8 +183,9 @@ public final class DynVoipParamUpdater {
                 case INTEGER -> params.putInteger(key, integerValue);
                 case FLOAT -> params.putDouble(key, doubleValue);
                 case STRING -> params.putString(key, stringValue);
-                case ARRAY, ARRAY_COUNT -> {
-                    // Array parameters are not overridden through scalar dynamic rules.
+                case ARRAY, ARRAY_COUNT, UNKNOWN -> {
+                    // Array parameters carry no scalar dynamic override, and an unmodelled key has no
+                    // typed override to apply.
                 }
             }
         }

@@ -1,4 +1,4 @@
-import {execFile, type ExecFileException} from "node:child_process";
+import {execFile, type ExecFileException} from "stanza:child_process";
 import type {
   AdbDeviceInfo,
   AdbLinkOptions,
@@ -106,8 +106,8 @@ export class WebAdbController {
     ]);
   }
 
-  async emuTapNode(serial: string, node: UiNode): Promise<boolean> {
-    const bounds = parseBounds(node.bounds);
+  async emuTapNode(serial: string, stanza: UiNode): Promise<boolean> {
+    const bounds = parseBounds(stanza.bounds);
     if (!bounds) return false;
     const x = (bounds.left + bounds.right) / 2;
     const y = (bounds.top + bounds.bottom) / 2;
@@ -175,7 +175,7 @@ export class WebAdbController {
 
   private parseUiNodes(xml: string): UiNode[] {
     const nodes: UiNode[] = [];
-    const nodeMatches = xml.match(/<node\b[^>]*?\/?>/g) ?? [];
+    const nodeMatches = xml.match(/<stanza\b[^>]*?\/?>/g) ?? [];
     for (const nodeMatch of nodeMatches) {
       const attributes = new Map<string, string>();
       const attrRegex = /([A-Za-z_:][A-Za-z0-9_:.-]*)="([^"]*)"/g;
@@ -246,9 +246,9 @@ export class WebAdbController {
 
   private findNodeByResourceId(nodes: UiNode[], resourceIds: string[]): UiNode | null {
     for (const resourceId of resourceIds) {
-      const candidates = nodes.filter((node) => node.resourceId === resourceId);
+      const candidates = nodes.filter((stanza) => stanza.resourceId === resourceId);
       if (!candidates.length) continue;
-      const interactive = candidates.find((node) => isInteractive(node));
+      const interactive = candidates.find((stanza) => isInteractive(stanza));
       if (interactive) return interactive;
       return candidates[0];
     }
@@ -256,25 +256,25 @@ export class WebAdbController {
   }
 
   private isOverflowMenuVisible(nodes: UiNode[]): boolean {
-    const titleCount = nodes.filter((node) =>
-      OVERFLOW_MENU_TITLE_IDS.includes(node.resourceId)
+    const titleCount = nodes.filter((stanza) =>
+      OVERFLOW_MENU_TITLE_IDS.includes(stanza.resourceId)
     ).length;
     return titleCount >= 4;
   }
 
   private pickOverflowLinkedDevicesNode(nodes: UiNode[]): UiNode | null {
     const titles = nodes
-      .filter((node) => OVERFLOW_MENU_TITLE_IDS.includes(node.resourceId))
-      .map((node) => ({
-        node,
-        bounds: parseBounds(node.bounds),
+      .filter((stanza) => OVERFLOW_MENU_TITLE_IDS.includes(stanza.resourceId))
+      .map((stanza) => ({
+        stanza,
+        bounds: parseBounds(stanza.bounds),
       }))
-      .filter((entry): entry is { node: UiNode; bounds: ParsedBounds } => entry.bounds != null)
+      .filter((entry): entry is { stanza: UiNode; bounds: ParsedBounds } => entry.bounds != null)
       .sort((a, b) => a.bounds.top - b.bounds.top)
-      .map((entry) => entry.node);
+      .map((entry) => entry.stanza);
 
-    const byText = titles.find((node) =>
-      /linked\s*device/i.test(node.text ?? "")
+    const byText = titles.find((stanza) =>
+      /linked\s*device/i.test(stanza.text ?? "")
     );
     if (byText) return byText;
 
@@ -288,8 +288,8 @@ export class WebAdbController {
     await this.runAdb(this.withSerial(serial, ["shell", "input", "tap", `${x}`, `${y}`]));
   }
 
-  private async tapNode(serial: string, node: UiNode): Promise<boolean> {
-    const bounds = parseBounds(node.bounds);
+  private async tapNode(serial: string, stanza: UiNode): Promise<boolean> {
+    const bounds = parseBounds(stanza.bounds);
     if (!bounds) return false;
     await this.tapBounds(serial, bounds);
     return true;
@@ -320,8 +320,8 @@ export class WebAdbController {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() <= deadline) {
       const nodes = await this.dumpUiHierarchy(serial);
-      const node = this.findNodeByResourceId(nodes, resourceIds);
-      if (node && (await this.tapNode(serial, node))) {
+      const stanza = this.findNodeByResourceId(nodes, resourceIds);
+      if (stanza && (await this.tapNode(serial, stanza))) {
         return true;
       }
       await sleep(DEFAULT_POLL_INTERVAL_MS);
@@ -491,15 +491,15 @@ export class WebAdbController {
 
   private findDismissableInterstitialNode(nodes: UiNode[]): UiNode | null {
     let fallback: UiNode | null = null;
-    for (const node of nodes) {
-      const text = (node.text ?? "").trim();
+    for (const stanza of nodes) {
+      const text = (stanza.text ?? "").trim();
       if (!text) continue;
       if (!ONBOARDING_DISMISS_TEXT_PATTERNS.some((pattern) => pattern.test(text))) {
         continue;
       }
-      if (parseBounds(node.bounds) == null) continue;
-      if (isInteractive(node)) return node;
-      if (fallback == null) fallback = node;
+      if (parseBounds(stanza.bounds) == null) continue;
+      if (isInteractive(stanza)) return stanza;
+      if (fallback == null) fallback = stanza;
     }
     return fallback;
   }
@@ -516,9 +516,9 @@ export class WebAdbController {
   }
 
   private detectSecurityPrompt(nodes: UiNode[]): "biometric_required" | "pin_required" | null {
-    const biometricVisible = nodes.some((node) => {
-      const resourceId = node.resourceId.toLowerCase();
-      const packageName = node.packageName.toLowerCase();
+    const biometricVisible = nodes.some((stanza) => {
+      const resourceId = stanza.resourceId.toLowerCase();
+      const packageName = stanza.packageName.toLowerCase();
       return (
         BIOMETRIC_RESOURCE_ID_PREFIXES.some((prefix) =>
           resourceId.startsWith(prefix.toLowerCase())
@@ -528,15 +528,15 @@ export class WebAdbController {
     });
     if (biometricVisible) return "biometric_required";
 
-    const pinVisible = nodes.some((node) => {
+    const pinVisible = nodes.some((stanza) => {
       if (
-        node.packageName !== "com.whatsapp" &&
-        node.packageName !== "com.whatsapp.w4b"
+        stanza.packageName !== "com.whatsapp" &&
+        stanza.packageName !== "com.whatsapp.w4b"
       )
         return false;
-      if (node.password) return true;
+      if (stanza.password) return true;
 
-      const resourceId = node.resourceId.toLowerCase();
+      const resourceId = stanza.resourceId.toLowerCase();
       return resourceId.includes("pin");
     });
     if (pinVisible) return "pin_required";
@@ -556,8 +556,8 @@ export class WebAdbController {
   }
 
   private extractLinkedDeviceEntries(nodes: UiNode[]): LinkedDeviceEntry[] {
-    const statusNodes = nodes.filter((node) => DEVICE_STATUS_IDS.includes(node.resourceId));
-    const nameNodes = nodes.filter((node) => DEVICE_NAME_IDS.includes(node.resourceId));
+    const statusNodes = nodes.filter((stanza) => DEVICE_STATUS_IDS.includes(stanza.resourceId));
+    const nameNodes = nodes.filter((stanza) => DEVICE_NAME_IDS.includes(stanza.resourceId));
     const entries: LinkedDeviceEntry[] = [];
 
     for (const nameNode of nameNodes) {

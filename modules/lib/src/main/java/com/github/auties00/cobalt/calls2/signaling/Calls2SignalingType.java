@@ -29,7 +29,7 @@ import java.util.stream.Stream;
  * <p>Not every type names a {@code <call>} child element. The acknowledgement and receipt legs do not:
  * {@link Mechanism#ACK} legs ride a shared {@code <ack>} envelope and {@link Mechanism#RECEIPT} legs
  * ride a shared {@code <receipt>} envelope, both classified by the host stanza layer through the
- * envelope {@code type} attribute and the echoed request-node name rather than through a dedicated
+ * envelope {@code type} attribute and the echoed request-stanza name rather than through a dedicated
  * child tag. For these legs {@link #wireTag()} is empty by design and they are absent from the
  * {@link #ofWireTag(String)} index; their delivery is recovered from the engine's
  * {@code handle_incoming_xmpp_ack} (fn11546) and {@code handle_incoming_xmpp_receipt} (fn11551)
@@ -224,7 +224,7 @@ public enum Calls2SignalingType {
      *
      * <p>The inbound validator expects a fixed-header length of {@code 269696} bytes.
      */
-    VIDEO_STATE(15, Mechanism.CALL_CHILD, "video_state", 269696),
+    VIDEO_STATE(15, Mechanism.CALL_CHILD, "video", 269696),
 
     /**
      * Represents a generic in-call notification such as a battery-state notice.
@@ -339,7 +339,7 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #LINK_CREATE} request.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code link_create} request node and names no dedicated {@code <call>} child, so
+     * the {@code link_create} request stanza and names no dedicated {@code <call>} child, so
      * {@link #wireTag()} is empty. The inbound validator expects a fixed-header length of {@code 132}
      * bytes.
      */
@@ -375,7 +375,7 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #LINK_QUERY}.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code link_query} request node and names no dedicated {@code <call>} child, so
+     * the {@code link_query} request stanza and names no dedicated {@code <call>} child, so
      * {@link #wireTag()} is empty. The inbound validator expects a fixed-header length of {@code 43840}
      * bytes.
      */
@@ -393,7 +393,7 @@ public enum Calls2SignalingType {
      * token on success.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the join node and names no dedicated {@code <call>} child, so {@link #wireTag()} is empty. The
+     * the join stanza and names no dedicated {@code <call>} child, so {@link #wireTag()} is empty. The
      * inbound validator expects a fixed-header length of {@code 531808} bytes.
      */
     LINK_JOIN_ACK(34, Mechanism.ACK, null, 531808),
@@ -478,7 +478,7 @@ public enum Calls2SignalingType {
      *
      * <p>The child tag {@code bcall_start} (data offset {@code 0x193f6}) is confirmed from the inbound
      * acknowledgement dispatch chain in {@code handleIncomingSignalingAck} (fn844), which compares the
-     * echoed request-node tag against this literal in the same sequence as the confirmed {@code offer},
+     * echoed request-stanza tag against this literal in the same sequence as the confirmed {@code offer},
      * {@code accept}, {@code relaylatency}, and {@code link_*} child tags. The inbound validator has no
      * fixed-header case (its id routes to the {@code br_table} default), so {@link #fixedHeaderLength()}
      * is empty and the message is variable-length.
@@ -489,9 +489,9 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #BCALL_START}.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code bcall_start} request node, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
+     * the {@code bcall_start} request stanza, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
      * confirmed because {@code handleIncomingSignalingAck} (fn844), the inbound {@code <ack>} dispatcher,
-     * classifies the echoed node by comparing it against the {@code bcall_start} literal in the same chain
+     * classifies the echoed stanza by comparing it against the {@code bcall_start} literal in the same chain
      * as the other acknowledged request tags.
      */
     BCALL_START_ACK(46, Mechanism.ACK, null, -1),
@@ -511,8 +511,8 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #BCALL_JOIN}.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code bcall_join} request node, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
-     * confirmed because {@code handleIncomingSignalingAck} (fn844) classifies the echoed node against the
+     * the {@code bcall_join} request stanza, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
+     * confirmed because {@code handleIncomingSignalingAck} (fn844) classifies the echoed stanza against the
      * {@code bcall_join} literal in the inbound dispatch chain.
      */
     BCALL_JOIN_ACK(48, Mechanism.ACK, null, -1),
@@ -532,8 +532,8 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #BCALL_LEAVE}.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code bcall_leave} request node, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
-     * confirmed because {@code handleIncomingSignalingAck} (fn844) classifies the echoed node against the
+     * the {@code bcall_leave} request stanza, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
+     * confirmed because {@code handleIncomingSignalingAck} (fn844) classifies the echoed stanza against the
      * {@code bcall_leave} literal in the inbound dispatch chain.
      */
     BCALL_LEAVE_ACK(50, Mechanism.ACK, null, -1),
@@ -565,8 +565,8 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #BCALL_END}.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code bcall_end} request node, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
-     * confirmed because {@code handleIncomingSignalingAck} (fn844) classifies the echoed node against the
+     * the {@code bcall_end} request stanza, so {@link #wireTag()} is empty. The {@code <ack>} carriage is
+     * confirmed because {@code handleIncomingSignalingAck} (fn844) classifies the echoed stanza against the
      * {@code bcall_end} literal in the inbound dispatch chain.
      */
     BCALL_END_ACK(53, Mechanism.ACK, null, -1),
@@ -595,7 +595,7 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #LINK_EDIT}.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code link_edit} request node and names no dedicated {@code <call>} child, so
+     * the {@code link_edit} request stanza and names no dedicated {@code <call>} child, so
      * {@link #wireTag()} is empty. The inbound validator expects a fixed-header length of {@code 128}
      * bytes.
      */
@@ -624,7 +624,7 @@ public enum Calls2SignalingType {
      * Represents the acknowledgement of a {@link #PREACCEPT}.
      *
      * <p>This is a {@link Mechanism#ACK} leg: it rides a shared {@code <ack>} element whose body echoes
-     * the {@code preaccept} request node, so {@link #wireTag()} is empty. A connected group call observed
+     * the {@code preaccept} request stanza, so {@link #wireTag()} is empty. A connected group call observed
      * the acknowledgement as {@code <ack from="...@call" class="call" type="preaccept" id="..."/>}
      * (the synchronous return to the sent {@code <preaccept>}), confirming the {@code <ack>} carriage over
      * the {@code <receipt>} alternative.
@@ -889,7 +889,7 @@ public enum Calls2SignalingType {
          * Marks an acknowledgement leg delivered inside the host stanza layer's shared {@code <ack>}
          * envelope rather than a dedicated {@code <call>} child.
          *
-         * <p>The {@code <ack>} body echoes the named child node of the request it acknowledges; the engine
+         * <p>The {@code <ack>} body echoes the named child stanza of the request it acknowledges; the engine
          * reads the envelope {@code type} attribute in {@code handle_incoming_xmpp_ack} (fn11546). A type
          * with this mechanism has an empty {@link Calls2SignalingType#wireTag() wire tag}.
          */

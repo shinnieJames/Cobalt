@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.cloud;
 
 import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -27,8 +28,8 @@ class CloudResumableUploadTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .appId(APP_ID)
                 .apiVersion(CloudApiVersion.V25_0)
@@ -45,7 +46,7 @@ class CloudResumableUploadTest {
     class CreateSession {
         @Test
         @DisplayName("posts to the app uploads edge with file_length and file_type and returns the locator")
-        void createsSession() {
+        void createsSession() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"upload:MTphdHRhY2htZW50Ojhi\"}");
             var id = client(http).createResumableUploadSession(2048, "image/jpeg", "pic.jpg");
@@ -61,7 +62,7 @@ class CloudResumableUploadTest {
 
         @Test
         @DisplayName("omits file_name when null and sends no appsecret_proof")
-        void omitsFileNameAndProof() {
+        void omitsFileNameAndProof() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"upload:abc\"}");
             client(http).createResumableUploadSession(10, "application/pdf", null);
@@ -76,7 +77,7 @@ class CloudResumableUploadTest {
     class UploadBytes {
         @Test
         @DisplayName("uses Authorization OAuth and file_offset and returns the handle")
-        void uploadsBytes() {
+        void uploadsBytes() throws Exception {
             var http = http();
             http.respondWith("{\"h\":\"4::aW1hZ2UvanBlZw==:ARZ:e:1700000000\"}");
             var data = "hello".getBytes(StandardCharsets.UTF_8);
@@ -91,7 +92,7 @@ class CloudResumableUploadTest {
 
         @Test
         @DisplayName("resumes from the supplied offset")
-        void resumesFromOffset() {
+        void resumesFromOffset() throws Exception {
             var http = http();
             http.respondWith("{\"h\":\"handle\"}");
             client(http).uploadToResumableSession("upload:abc", 1048576, new byte[]{1, 2, 3});
@@ -104,7 +105,7 @@ class CloudResumableUploadTest {
     class QueryOffset {
         @Test
         @DisplayName("coerces a string file_offset to a long")
-        void coercesStringOffset() {
+        void coercesStringOffset() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"upload:abc\",\"file_offset\":\"1048576\"}");
             var offset = client(http).queryResumableUploadOffset("upload:abc");
@@ -115,7 +116,7 @@ class CloudResumableUploadTest {
 
         @Test
         @DisplayName("reads a numeric file_offset")
-        void numericOffset() {
+        void numericOffset() throws Exception {
             var http = http();
             http.respondWith("{\"file_offset\":42}");
             assertEquals(42L, client(http).queryResumableUploadOffset("upload:abc"));
@@ -127,7 +128,7 @@ class CloudResumableUploadTest {
     class HighLevel {
         @Test
         @DisplayName("creates a session then uploads the bytes and returns the handle")
-        void endToEnd() {
+        void endToEnd() throws Exception {
             var http = http();
             // RecordingHttpClient returns the same canned body for both the create and upload calls;
             // an envelope carrying both id and h satisfies the two-step flow.
@@ -144,9 +145,9 @@ class CloudResumableUploadTest {
     class MissingAppId {
         @Test
         @DisplayName("rejects session create when no app id is configured")
-        void requiresAppId() {
+        void requiresAppId() throws Exception {
             var http = http();
-            var client = CloudWhatsAppClient.builder()
+            var client = CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                     .loadConnection("token", PHONE_ID)
                     .httpClient(http)
                     .build();

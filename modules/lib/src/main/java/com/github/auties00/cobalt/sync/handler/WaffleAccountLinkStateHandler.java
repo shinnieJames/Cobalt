@@ -11,12 +11,13 @@ import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageBuilder;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestType;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.wam.event.NonMessagePeerDataRequestEventBuilder;
 import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
@@ -103,9 +104,9 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
      * is empty are malformed, and the remaining {@code SET} mutations contribute to the running
      * latest-timestamp tracker. After the per-mutation pass the latest mutation's link state and
      * timestamp are persisted via
-     * {@link com.github.auties00.cobalt.store.AccountStore#setLinkedMetaAccountState(WaffleAccountLinkStateAction.AccountLinkState)}
+     * {@link LinkedWhatsAppAccountStore#setLinkedMetaAccountState(WaffleAccountLinkStateAction.AccountLinkState)}
      * and
-     * {@link com.github.auties00.cobalt.store.AccountStore#setLinkedMetaAccountStateTimestamp(java.time.Instant)},
+     * {@link LinkedWhatsAppAccountStore#setLinkedMetaAccountStateTimestamp(java.time.Instant)},
      * and an {@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE} state triggers
      * {@link #requestNonceFromPrimary(LinkedWhatsAppClient)}.
      *

@@ -7,11 +7,11 @@ import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -142,7 +142,7 @@ public final class CtwaAttributionStanza {
      * Builds the {@code <ctwa_attribution>} child for the given chat, or {@code null} when CTWA attribution does not
      * apply.
      * <p>
-     * Four gates suppress the node: {@code chatJid} is {@code null}, CTWA logging is disabled (see
+     * Four gates suppress the stanza: {@code chatJid} is {@code null}, CTWA logging is disabled (see
      * {@link #isCtxLoggingEnabled()}), no entry point is recorded for the chat, or the
      * {@link #getFirstMessageLoggingOption() first-message logging policy} excludes this chat (typically because it
      * already has multiple non-system messages). When emitted, the child carries the UTF-8 JSON payload as its byte
@@ -152,11 +152,11 @@ public final class CtwaAttributionStanza {
      * wire byte-for-byte, which the server treats as a content tag.
      *
      * @param chatJid the recipient chat {@link Jid}
-     * @return the {@code <ctwa_attribution>} {@link Node}, or {@code null}
+     * @return the {@code <ctwa_attribution>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCtwaAttributionNode", exports = "getCtwaAttributionNode",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node build(Jid chatJid) {
+    public Stanza build(Jid chatJid) {
         if (chatJid == null) {
             return null;
         }
@@ -186,7 +186,7 @@ public final class CtwaAttributionStanza {
 
         var jsonBytes = serializeJson(json).getBytes(StandardCharsets.UTF_8);
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("ctwa_attribution")
                 .content(jsonBytes)
                 .build();

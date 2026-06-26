@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.stream.presence;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedContactPresenceListener;
@@ -10,7 +11,6 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 
 /**
@@ -22,12 +22,12 @@ import com.github.auties00.cobalt.stream.NodeStreamService;
  * {@code from} attribute carries the group JID and a {@code participant} attribute names the device currently composing
  * inside the group, so the update fans out with the group JID as the conversation and the participant JID as the
  * participant. The first child of the stanza encodes the composing state and is mapped to a {@link ContactStatus} by
- * {@link #resolveState(Node)}.
+ * {@link #resolveState(Stanza)}.
  *
  * @implNote
  * This implementation collapses WhatsApp Web's three-stage flow into one method: the factory that splits per source
  * kind, the per-source handlers, and the action that mutates the presence collection. The split is performed inline in
- * {@link #handle(Node)} by inspecting the {@code participant} attribute instead of by reading a {@code stateSource}
+ * {@link #handle(Stanza)} by inspecting the {@code participant} attribute instead of by reading a {@code stateSource}
  * field on a parsed RPC. WhatsApp Web additionally maintains a per-typing-indicator auto-expiry timer of 25 seconds;
  * Cobalt exposes only the raw {@link ContactStatus} transition to its listeners and leaves expiry policy to the
  * embedder.
@@ -72,21 +72,21 @@ public final class ChatStateStreamHandler extends SocketStreamHandler.Concurrent
      * attribute, which is equivalent on the wire because the WhatsApp Web RPC parser ultimately reads the same
      * attribute when building its {@code stateSource} field.
      *
-     * @param node {@inheritDoc}
+     * @param stanza {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WACreateHandleChatState", exports = "createHandleChatState",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handle(Node node) {
-        var from = node.getAttributeAsJid("from", null);
+    public void handle(Stanza stanza) {
+        var from = stanza.getAttributeAsJid("from", null);
         if (from == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring chatstate stanza without from: {0}", node);
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring chatstate stanza without from: {0}", stanza);
             return;
         }
 
-        var participant = node.getAttributeAsJid("participant", null);
+        var participant = stanza.getAttributeAsJid("participant", null);
 
-        var state = resolveState(node);
+        var state = resolveState(stanza);
         if (state == null) {
             return;
         }
@@ -182,7 +182,7 @@ public final class ChatStateStreamHandler extends SocketStreamHandler.Concurrent
      * {@link PresenceStreamHandler}), so the paused branch resolves to {@link ContactStatus#AVAILABLE}, matching the
      * common case where the peer was composing and then stopped without going offline.
      *
-     * @param node the {@code <chatstate>} stanza whose first child encodes the composing state
+     * @param stanza the {@code <chatstate>} stanza whose first child encodes the composing state
      * @return the resolved {@link ContactStatus}, or {@code null} when the child is missing or carries an unsupported
      *         tag
      */
@@ -190,10 +190,10 @@ public final class ChatStateStreamHandler extends SocketStreamHandler.Concurrent
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WASmaxInChatstateStateTypes", exports = "parseStateTypes",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private ContactStatus resolveState(Node node) {
-        var child = node.getChild().orElse(null);
+    private ContactStatus resolveState(Stanza stanza) {
+        var child = stanza.getChild().orElse(null);
         if (child == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring empty chatstate stanza: {0}", node);
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring empty chatstate stanza: {0}", stanza);
             return null;
         }
 
@@ -205,7 +205,7 @@ public final class ChatStateStreamHandler extends SocketStreamHandler.Concurrent
             default -> {
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Ignoring unsupported chatstate child {0} in {1}",
-                        child.description(), node);
+                        child.description(), stanza);
                 yield null;
             }
         };

@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdPaymentSection;
@@ -104,7 +104,7 @@ public final class BizAdCreationPaymentSectionFacebookGraphQlResponse implements
      * fields, and the {@code message.headline}/{@code message.body} onto its explanatory message.
      *
      * @param node the {@code required_action} object, or {@code null}
-     * @return the projected setup step, or {@code null} when {@code node} is {@code null}
+     * @return the projected setup step, or {@code null} when {@code stanza} is {@code null}
      */
     private static BusinessAdPaymentSection.RequiredSetup requiredSetup(JSONObject node) {
         if (node == null) {

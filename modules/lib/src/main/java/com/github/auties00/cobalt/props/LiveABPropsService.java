@@ -7,8 +7,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.props.ABProp;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -112,7 +112,7 @@ public final class LiveABPropsService implements ABPropsService {
      * Inclusive lower bound accepted for the {@code event_code} attribute on {@code SamplingConfig}
      * {@code <prop>} children.
      *
-     * <p>Entries below this bound are dropped with a warning during {@link #process(Node)}.
+     * <p>Entries below this bound are dropped with a warning during {@link #process(Stanza)}.
      *
      * @implNote
      * This implementation mirrors the validation in
@@ -127,7 +127,7 @@ public final class LiveABPropsService implements ABPropsService {
      * Inclusive lower bound accepted for the {@code sampling_weight} attribute on
      * {@code SamplingConfig} {@code <prop>} children.
      *
-     * <p>Entries below this bound are dropped with a warning during {@link #process(Node)}.
+     * <p>Entries below this bound are dropped with a warning during {@link #process(Stanza)}.
      *
      * @implNote
      * This implementation mirrors the validation in
@@ -142,7 +142,7 @@ public final class LiveABPropsService implements ABPropsService {
      * Inclusive upper bound accepted for the {@code sampling_weight} attribute on
      * {@code SamplingConfig} {@code <prop>} children.
      *
-     * <p>Entries above this bound are dropped with a warning during {@link #process(Node)}.
+     * <p>Entries above this bound are dropped with a warning during {@link #process(Stanza)}.
      *
      * @implNote
      * This implementation mirrors the validation in
@@ -171,7 +171,7 @@ public final class LiveABPropsService implements ABPropsService {
      * WAM event sampling-weight overrides keyed by event code.
      *
      * <p>Populated from the {@code SamplingConfig} entries returned alongside the prop list during
-     * {@link #process(Node)}; queried by {@link #getSamplingWeight(int)} during WAM event commit.
+     * {@link #process(Stanza)}; queried by {@link #getSamplingWeight(int)} during WAM event commit.
      */
     private final Map<Integer, Integer> samplingConfigs;
 
@@ -415,12 +415,12 @@ public final class LiveABPropsService implements ABPropsService {
      *                       attribute
      * @param propsRefreshId the refresh id used by the emergency push branch, or {@code null} to
      *                       omit the attribute
-     * @return a {@link NodeBuilder} wrapping the constructed stanza
+     * @return a {@link StanzaBuilder} wrapping the constructed stanza
      */
     @WhatsAppWebExport(moduleName = "WAGetAbPropsProtocol", exports = "getAbPropsProtocol",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private NodeBuilder getAbPropsProtocol(String propsHash, Long propsRefreshId) {
-        var propsNode = new NodeBuilder()
+    private StanzaBuilder getAbPropsProtocol(String propsHash, Long propsRefreshId) {
+        var propsNode = new StanzaBuilder()
                 .description("props")
                 .attribute("protocol", "1");
         if (propsHash != null) {
@@ -429,7 +429,7 @@ public final class LiveABPropsService implements ABPropsService {
         if (propsRefreshId != null) {
             propsNode.attribute("refresh_id", propsRefreshId);
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "abt")
                 .attribute("to", "s.whatsapp.net")
@@ -459,7 +459,7 @@ public final class LiveABPropsService implements ABPropsService {
      * {@code sampling_weight} lies in the closed range
      * [{@value #SAMPLING_WEIGHT_MIN}, {@value #SAMPLING_WEIGHT_MAX}].
      *
-     * @param response the server response node
+     * @param response the server response stanza
      * @return {@code true} when the response was parsed successfully, {@code false} when the
      *         {@code <props>} child was missing
      * @throws NullPointerException when {@code response} is {@code null}
@@ -474,12 +474,12 @@ public final class LiveABPropsService implements ABPropsService {
     @WhatsAppWebExport(moduleName = "WASmaxInAbPropsExperimentOrSamplingConfigMixinGroup",
             exports = "parseExperimentOrSamplingConfigMixinGroup",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public boolean process(Node response) {
+    public boolean process(Stanza response) {
         Objects.requireNonNull(response, "response cannot be null");
 
         var propsNode = response.getChild("props", null);
         if (propsNode == null) {
-            LOGGER.log(System.Logger.Level.WARNING, "AB props response missing <props> node");
+            LOGGER.log(System.Logger.Level.WARNING, "AB props response missing <props> stanza");
             return false;
         }
 
@@ -634,7 +634,7 @@ public final class LiveABPropsService implements ABPropsService {
      *
      * <p>Each non-{@code null} parameter overwrites the corresponding store field; a {@code null}
      * parameter keeps the previous value, matching the {@code abKey ?? m.abKey} fallback chain in
-     * the JS source. Called by {@link #process(Node)} on full (non-delta) updates.
+     * the JS source. Called by {@link #process(Stanza)} on full (non-delta) updates.
      *
      * @implNote
      * This implementation clamps {@code refreshSeconds} to the closed range
@@ -690,7 +690,7 @@ public final class LiveABPropsService implements ABPropsService {
     /**
      * Persists the AB-props refresh id received from the server.
      *
-     * <p>Called from {@link #process(Node)} when the response carries a {@code refresh_id}
+     * <p>Called from {@link #process(Stanza)} when the response carries a {@code refresh_id}
      * attribute.
      *
      * @param refreshId the refresh id to persist
@@ -1083,7 +1083,7 @@ public final class LiveABPropsService implements ABPropsService {
     /**
      * Replaces the sampling-config cache with the supplied entries.
      *
-     * <p>Called from {@link #process(Node)} when the response is a full (non-delta) update carrying
+     * <p>Called from {@link #process(Stanza)} when the response is a full (non-delta) update carrying
      * sampling configs. A {@code null} or empty argument is a no-op and returns {@code false}; a
      * non-empty argument clears and replaces the cache and returns {@code true}, matching the JS
      * export contract.

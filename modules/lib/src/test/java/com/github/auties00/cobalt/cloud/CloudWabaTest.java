@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.model.cloud.signup.CloudAppCredentialsBuilder;
 import com.github.auties00.cobalt.model.cloud.waba.CloudBusinessAccountUserTask;
 import com.github.auties00.cobalt.model.cloud.waba.CloudWabaOwnershipType;
 import com.github.auties00.cobalt.model.cloud.signup.CloudSignupCodeExchangeBuilder;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -35,8 +36,8 @@ class CloudWabaTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .whatsappBusinessAccountId(WABA_ID)
@@ -45,8 +46,8 @@ class CloudWabaTest {
                 .build();
     }
 
-    private static CloudWhatsAppClient clientNoBusiness(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient clientNoBusiness(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .whatsappBusinessAccountId(WABA_ID)
@@ -62,8 +63,8 @@ class CloudWabaTest {
     @DisplayName("account read")
     class AccountRead {
         @Test
-        @DisplayName("queryBusinessAccount projects the account node fields")
-        void getWaba() {
+        @DisplayName("queryBusinessAccount projects the account stanza fields")
+        void getWaba() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"123456789012345\",\"name\":\"Test WhatsApp Business Account\","
                     + "\"timezone_id\":\"1\",\"currency\":\"USD\",\"message_template_namespace\":\"abcd1234_ns\","
@@ -82,7 +83,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("queryBusinessAccount leaves absent fields empty")
-        void getWabaPartial() {
+        void getWabaPartial() throws Exception {
             var http = http();
             http.respondWith("{\"id\":\"123456789012345\",\"name\":\"Acme\"}");
             var waba = client(http).queryBusinessAccount();
@@ -93,7 +94,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("queryOwnedBusinessAccounts parses the data array in order")
-        void owned() {
+        void owned() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[{\"id\":\"1\",\"name\":\"First\"},{\"id\":\"2\",\"name\":\"Second\"}],"
                     + "\"paging\":{\"cursors\":{\"after\":\"A\"}}}");
@@ -106,7 +107,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("queryClientBusinessAccounts hits the client edge")
-        void clientAccounts() {
+        void clientAccounts() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[{\"id\":\"7\",\"name\":\"Shared\"}]}");
             var accounts = client(http).queryClientBusinessAccounts();
@@ -117,7 +118,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("owned accounts require a configured business id")
-        void ownedNoBusiness() {
+        void ownedNoBusiness() throws Exception {
             var http = http();
             assertThrows(IllegalStateException.class,
                     () -> clientNoBusiness(http).queryOwnedBusinessAccounts());
@@ -129,7 +130,7 @@ class CloudWabaTest {
     class AssignedUsers {
         @Test
         @DisplayName("addBusinessAccountUser posts the user and tasks as a JSON array string")
-        void assign() {
+        void assign() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).addBusinessAccountUser("USER-1",
@@ -143,7 +144,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("removeBusinessAccountUser deletes by user query parameter")
-        void remove() {
+        void remove() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).removeBusinessAccountUser("USER-1");
@@ -154,7 +155,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("queryBusinessAccountUsers parses the entries and their tasks")
-        void query() {
+        void query() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[{\"id\":\"ASSIGNED-1\",\"name\":\"Jane\",\"tasks\":[\"MANAGE\"]}],"
                     + "\"paging\":{\"cursors\":{\"after\":\"A\"}}}");
@@ -172,7 +173,7 @@ class CloudWabaTest {
     class OnboardingTokens {
         @Test
         @DisplayName("exchangeSignupCode hits oauth/access_token with the code grant")
-        void exchangeCode() {
+        void exchangeCode() throws Exception {
             var http = http();
             http.respondWith("{\"access_token\":\"TOKEN\",\"token_type\":\"bearer\",\"expires_in\":5183999}");
             var token = client(http).exchangeSignupCode(new CloudSignupCodeExchangeBuilder()
@@ -192,7 +193,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("exchangeLongLivedToken uses the fb_exchange_token grant")
-        void exchangeLongLived() {
+        void exchangeLongLived() throws Exception {
             var http = http();
             http.respondWith("{\"access_token\":\"LONG\",\"token_type\":\"bearer\"}");
             var token = client(http).exchangeLongLivedToken(
@@ -206,7 +207,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("inspectToken parses scopes, validity, and the expiry instant")
-        void debug() {
+        void debug() throws Exception {
             var http = http();
             http.respondWith("{\"data\":{\"app_id\":\"APP\",\"type\":\"USER\",\"application\":\"My App\","
                     + "\"is_valid\":true,\"issued_at\":1347235328,\"expires_at\":1352419328,"
@@ -225,7 +226,7 @@ class CloudWabaTest {
 
         @Test
         @DisplayName("inspectToken treats a missing expiry as a non-expiring token")
-        void debugNoExpiry() {
+        void debugNoExpiry() throws Exception {
             var http = http();
             http.respondWith("{\"data\":{\"app_id\":\"APP\",\"is_valid\":false,\"expires_at\":0,\"scopes\":[]}}");
             var info = client(http).inspectToken("INPUT", "APP-TOKEN");
@@ -240,7 +241,7 @@ class CloudWabaTest {
     class CreditSharing {
         @Test
         @DisplayName("shareCreditLine posts the waba and currency and parses the allocation")
-        void share() {
+        void share() throws Exception {
             var http = http();
             http.respondWith("{\"allocation_config_id\":\"5550001\",\"waba_id\":\"123456789012345\"}");
             var allocation = client(http).shareCreditLine("CREDIT-1", WABA_ID, Currency.getInstance("USD"));

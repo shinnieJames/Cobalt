@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.sync;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -11,14 +11,14 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * arrives at an index that the local device already has a pending mutation
  * for.
  *
- * <p>The {@link ConflictResolutionState} verdict drives the
+ * <p>The {@link MutationConflictResolutionState} verdict drives the
  * {@code remoteMutationsToApply} and {@code pendingSetMutationsToDrop}
  * buckets in the resolver: it decides whether the remote mutation is
  * applied while the local pending mutation is dropped, the remote mutation
  * is skipped outright, or both sides are discarded in favour of a merged
  * mutation. The {@link #mergedMutation()} payload is non-{@code null} only
  * for the merge case produced by {@link #merged(DecryptedMutation.Trusted)};
- * the enum-only verdicts produced by {@link #of(ConflictResolutionState)}
+ * the enum-only verdicts produced by {@link #of(MutationConflictResolutionState)}
  * leave it {@code null}.
  *
  * @param state          the verdict that selects between applying the
@@ -30,16 +30,16 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncActionStore")
 public record ConflictResolution(
-        ConflictResolutionState state,
+        MutationConflictResolutionState state,
         DecryptedMutation.Trusted mergedMutation
 ) {
     /**
      * Wraps an enum-only verdict that needs no merged mutation.
      *
      * <p>Returned by handlers whose verdict maps straight onto one of
-     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL},
-     * {@link ConflictResolutionState#SKIP_REMOTE}, or the no-merge form of
-     * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. Use
+     * {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL},
+     * {@link MutationConflictResolutionState#SKIP_REMOTE}, or the no-merge form of
+     * {@link MutationConflictResolutionState#SKIP_REMOTE_DROP_LOCAL}. Use
      * {@link #merged(DecryptedMutation.Trusted)} instead when the handler
      * substitutes a third mutation in place of the two losing ones.
      *
@@ -49,7 +49,7 @@ public record ConflictResolution(
      * @see #merged(DecryptedMutation.Trusted)
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncActionStore", exports = "doConflictResolution", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static ConflictResolution of(ConflictResolutionState state) {
+    public static ConflictResolution of(MutationConflictResolutionState state) {
         return new ConflictResolution(state, null);
     }
 
@@ -63,18 +63,18 @@ public record ConflictResolution(
      * unions the two ranges into a single mutation, returns it here, and the
      * caller drops both originals before applying {@code merged} to local
      * state. The verdict is fixed at
-     * {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} because the
+     * {@link MutationConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} because the
      * remote mutation is dropped without being applied as-is.
      *
      * @param merged the merged mutation to apply and add to the pending
      *               queue
      * @return a resolution carrying
-     *         {@link ConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} and the
+     *         {@link MutationConflictResolutionState#SKIP_REMOTE_DROP_LOCAL} and the
      *         supplied {@code merged} payload
-     * @see #of(ConflictResolutionState)
+     * @see #of(MutationConflictResolutionState)
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncActionStore", exports = "doConflictResolution", adaptation = WhatsAppAdaptation.ADAPTED)
     public static ConflictResolution merged(DecryptedMutation.Trusted merged) {
-        return new ConflictResolution(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, merged);
+        return new ConflictResolution(MutationConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, merged);
     }
 }

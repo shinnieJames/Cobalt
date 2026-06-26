@@ -5,15 +5,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.preference.LabelBuilder;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelEditAction;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelEditActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.LabelEditMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link LabelEditMutationFactory} builder.
  *
  * <p>Tests run against a fresh in-memory {@link DeviceFixtures#temporaryStore}
- * through {@link TestWhatsAppClient} so the {@link com.github.auties00.cobalt.store.SettingsStore#findLabel(String)}
+ * through {@link TestWhatsAppClient} so the {@link LinkedWhatsAppSettingsStore#findLabel(String)}
  * read-back can be asserted directly. The merge path mutates the existing
  * {@link com.github.auties00.cobalt.model.preference.Label} in place so chat-jid
  * assignments from {@link LabelAssociationHandler} are preserved across edits.
@@ -282,7 +283,7 @@ class LabelEditHandlerTest {
         void newerRemoteApplies() {
             var local = buildSet("42", action("A"), Instant.ofEpochSecond(1_000));
             var remote = buildSet("42", action("B"), Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
 
@@ -290,7 +291,7 @@ class LabelEditHandlerTest {
         @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(buildSet("42", action("A"), ts), buildSet("42", action("B"), ts)).state());
         }
 
@@ -299,7 +300,7 @@ class LabelEditHandlerTest {
         void olderRemoteSkipped() {
             var local = buildSet("42", action("A"), Instant.ofEpochSecond(2_000));
             var remote = buildSet("42", action("B"), Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
         }
 

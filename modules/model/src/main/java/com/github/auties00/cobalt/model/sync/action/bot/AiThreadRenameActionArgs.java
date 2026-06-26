@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.model.sync.action.bot;
 
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncActionArgs;
 
 /**
  * Index arguments that identify the target of an {@link AiThreadRenameAction}.

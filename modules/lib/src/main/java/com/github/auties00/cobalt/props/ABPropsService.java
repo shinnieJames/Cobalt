@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.props;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.props.ABProp;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 import java.util.Map;
@@ -79,10 +79,10 @@ public interface ABPropsService {
      * Implementations update the synced-prop cache from the response and report whether the
      * response carried a parseable {@code <props>} child.
      *
-     * @param response the server response node
+     * @param response the server response stanza
      * @return {@code true} when the response was parsed successfully
      */
-    boolean process(Node response);
+    boolean process(Stanza response);
 
     /**
      * Returns the AB key most recently received from the server.
@@ -139,7 +139,7 @@ public interface ABPropsService {
      *
      * <p>Each non-{@code null} parameter overwrites the corresponding persisted field; a
      * {@code null} parameter keeps the previous value. This forwards the response attributes from
-     * {@link #process(Node)} into the persistent store.
+     * {@link #process(Stanza)} into the persistent store.
      *
      * @param abKey          the AB key, or {@code null} to keep the previous value
      * @param hash           the AB-props hash, or {@code null} to keep the previous value
@@ -162,7 +162,7 @@ public interface ABPropsService {
     /**
      * Persists the AB-props refresh id received from the server.
      *
-     * <p>Called from {@link #process(Node)} when the response carries a {@code refresh_id}
+     * <p>Called from {@link #process(Stanza)} when the response carries a {@code refresh_id}
      * attribute.
      *
      * @param refreshId the refresh id to persist
@@ -421,7 +421,7 @@ public interface ABPropsService {
     /**
      * Replaces the sampling-config cache with the supplied entries.
      *
-     * <p>Called from {@link #process(Node)} when the response is a full (non-delta) update
+     * <p>Called from {@link #process(Stanza)} when the response is a full (non-delta) update
      * carrying sampling configs. A {@code null} or empty argument is a no-op and returns
      * {@code false}; a non-empty argument clears and replaces the cache and returns {@code true}.
      *

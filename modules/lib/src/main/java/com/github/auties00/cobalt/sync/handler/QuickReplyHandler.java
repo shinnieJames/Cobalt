@@ -6,10 +6,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.preference.QuickReplyBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.QuickReplyAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -25,7 +26,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * @implNote
  * This implementation persists each entry on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} via
+ * {@link LinkedWhatsAppStore} via
  * {@code addQuickReply}/{@code removeQuickReply} keyed by id; WA Web stores the
  * same shape in the {@code quick-reply} IndexedDB table. The
  * {@code WAWebBackendApi.frontendFireAndForget} dispatches are dropped because

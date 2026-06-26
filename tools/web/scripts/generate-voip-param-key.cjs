@@ -215,55 +215,71 @@ function decodeBody(buf, start, end) {
       let off;
       [off, p] = readStoreOffset(buf, p);
       ins.push({ k: 'store', w: 1, off });
+    } else if (op === 0x37) { // i64.store
+      let off;
+      [off, p] = readStoreOffset(buf, p);
+      ins.push({ k: 'store', w: 8, off });
     } else if (op === 0x47) { // i32.ne
       ins.push({ k: 'ne' });
+    } else if (op === 0x6a) { // i32.add
+      ins.push({ k: 'add' });
     } else if (op === 0x42) { // i64.const
-      p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      let v;
+      [v, p] = readS(buf, p);
+      ins.push({ k: 'i64const', v });
     } else if (op === 0x43) { // f32.const
       p += 4;
-      ins.push({ k: 'o' });
+      ins.push({ k: 'o', op });
     } else if (op === 0x44) { // f64.const
       p += 8;
-      ins.push({ k: 'o' });
-    } else if (op >= 0x28 && op <= 0x3e) { // remaining loads/stores: memarg
+      ins.push({ k: 'o', op });
+    } else if (op >= 0x28 && op <= 0x35) { // loads: memarg, retained with their offset
+      let off;
+      [off, p] = readStoreOffset(buf, p);
+      ins.push({ k: 'load', off });
+    } else if (op >= 0x38 && op <= 0x3e) { // remaining stores (f32/f64.store, i64.store8/16/32): memarg
       p = skipMemarg(buf, p);
-      ins.push({ k: 'o' });
+      ins.push({ k: 'fstore' });
     } else if (op === 0x02 || op === 0x03 || op === 0x04) { // block/loop/if: blocktype
       p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      ins.push({ k: 'ctrl' });
     } else if (op === 0x0c || op === 0x0d) { // br/br_if
       p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      ins.push({ k: 'ctrl' });
     } else if (op === 0x0e) { // br_table
       let n;
       [n, p] = readU(buf, p);
       for (let i = 0; i <= n; i++) p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      ins.push({ k: 'ctrl' });
     } else if (op === 0x10) { // call
-      p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      let target;
+      [target, p] = readU(buf, p);
+      ins.push({ k: 'call', t: target });
     } else if (op === 0x11) { // call_indirect
       p = skipLEB(buf, p);
       p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      ins.push({ k: 'ctrl' });
     } else if (op === 0x1c) { // select with types
       let n;
       [n, p] = readU(buf, p);
       p += n;
-      ins.push({ k: 'o' });
-    } else if (op >= 0x20 && op <= 0x26) { // local.*, global.*, table.get/set
+      ins.push({ k: 'o', op });
+    } else if (op >= 0x20 && op <= 0x24) { // local.get/set/tee, global.get/set
+      let x;
+      [x, p] = readU(buf, p);
+      ins.push({ k: 'local', op, x });
+    } else if (op === 0x25 || op === 0x26) { // table.get/set
       p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      ins.push({ k: 'o', op });
     } else if (op === 0x3f || op === 0x40) { // memory.size/grow
       p += 1;
-      ins.push({ k: 'o' });
+      ins.push({ k: 'o', op });
     } else if (op === 0xd0) { // ref.null
       p += 1;
-      ins.push({ k: 'o' });
+      ins.push({ k: 'o', op });
     } else if (op === 0xd2) { // ref.func
       p = skipLEB(buf, p);
-      ins.push({ k: 'o' });
+      ins.push({ k: 'o', op });
     } else if (op === 0xfc) { // misc prefix
       let sub;
       [sub, p] = readU(buf, p);
@@ -272,6 +288,12 @@ function decodeBody(buf, start, end) {
         [seg, p] = readU(buf, p);
         p += 1; // memory index
         ins.push({ k: 'meminit', seg });
+      } else if (sub === 10) { // memory.copy
+        p += 2;
+        ins.push({ k: 'mem3' });
+      } else if (sub === 11) { // memory.fill
+        p += 1;
+        ins.push({ k: 'mem3' });
       } else {
         p = skipFC(buf, p, sub);
         ins.push({ k: 'o' });
@@ -287,7 +309,7 @@ function decodeBody(buf, start, end) {
       p = sub === 3 ? p + 1 : skipMemarg(buf, p);
       ins.push({ k: 'o' });
     } else if (NO_IMMEDIATE.has(op)) {
-      ins.push({ k: 'o' });
+      ins.push({ k: 'o', op });
     } else {
       throw new Error(`unhandled opcode 0x${op.toString(16)}`);
     }
@@ -353,6 +375,200 @@ function writeBytes(bytes, offset, value, width) {
 
 function isParamName(name) {
   return name != null && /^(p|mvp|vp|tp)->/.test(name);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Wire-path recovery.
+//
+// The engine's struct-field registry (reg_param_entry_impl) names each tunable by its engine
+// struct path (p->use_mlow_codec); the wire <voip_settings> JSON instead keys fields by an
+// area-sectioned name (encode.use_mlow_codec_v1: root["encode"]["use_mlow_codec_v1"]). These two
+// namespaces are joined inside the param compilation unit (voip_param_internal.cc /
+// voip_param_filler.cc): each descriptor registration (the store to field offset 16) is immediately
+// followed by the matching JSON read, the reader helper call read_param(field_ptr, name, name_len).
+//
+//   - The SECTION is the descriptor's group_id field (offset 12): a pointer to the section-name
+//     string ("encode", "rc", "sfu", ...), authoritative when the registration writes it as a
+//     constant. Params registered inside a loop write group_id from a loop variable; for those the
+//     section is recovered from the reader stream, where the reader fetches each section object by
+//     name before reading its fields, so the most recent section-name string load is the section in
+//     force. Where both are available they agree, so the constant form is preferred and the stream
+//     form fills the loop-built remainder.
+//   - The WIRE FIELD is the name argument the reader read passes. The reader call is
+//     read_param(field_ptr, name_ptr, name_len); name_ptr (the second argument, NOT the first) is
+//     either a data-segment pointer or a stack-local pj_str buffer filled before the call. We
+//     recover it by a forward abstract interpretation of the function body that tracks a symbolic
+//     value stack (constants and local+offset pointers) and a per-local byte memory written by the
+//     const-store run (i64.const/i32.const stores and data-segment copies). At each reader call we
+//     pop the three arguments by stack position and read name_len bytes from where name_ptr points.
+//     Resolving name_ptr precisely is essential: the first argument's field-offset constant often
+//     dereferences to unrelated data bytes, so a positional scan that ignores argument order
+//     reconstructs a mangled name. Many wire names are prefixes of longer merged data strings, so
+//     the read is strictly length-bounded.
+// ---------------------------------------------------------------------------------------------
+
+// Top-level <voip_settings> section names; the reader fetches each by name before reading its fields.
+const SECTION_NAMES = new Set([
+  'aec', 'agc', 'bwe', 'encode', 'decode', 'options', 'rc', 'rc_dyn', 'sfu', 'uaqc', 'vid_rc',
+  'vid_rc_dyn', 'init_bwe', 'ns', 'fs', 're', 'test', 'traffic_shaper', 'transport_splitter',
+  'transport_srtp', 'transport_rtx', 'history_based_bwe', 'history_storage', 'sframe',
+  'plr_predictor', 'bwa_rc', 'vbwa_alg_rc', 'vid_driver', 'voip_settings_version',
+]);
+
+// The reader helper read_param(field_ptr, name_pj_str, name_len). Recovered as the single call
+// target invoked once per descriptor registration across the param-filler functions.
+const READER_HELPER = 703;
+
+function readBytes(segments, addr, len) {
+  for (const segment of segments) {
+    if (addr < segment.start || addr + len > segment.start + segment.bytes.length) continue;
+    return segment.bytes.toString('latin1', addr - segment.start, addr - segment.start + len);
+  }
+  return null;
+}
+
+function i64Bytes(value) {
+  const out = Buffer.alloc(8);
+  try {
+    out.writeBigInt64LE(BigInt(value));
+  } catch {
+    out.writeBigUInt64LE(BigInt.asUintN(64, BigInt(value)));
+  }
+  return out;
+}
+
+function isWireName(value) {
+  return value != null && /^[A-Za-z0-9_.]+$/.test(value);
+}
+
+// Approximate operand arity (pops, pushes) of a generic numeric/parametric opcode, used to keep the
+// abstract value stack aligned around reader calls. Comparisons and binary arithmetic pop two and
+// push one; unary operations and conversions pop one and push one; drop pops one; select pops three
+// and pushes one.
+function numericArity(op) {
+  if (op === 0x1a) return [1, 0]; // drop
+  if (op === 0x1b) return [3, 1]; // select
+  if (op === 0x45 || op === 0x50) return [1, 1]; // i32.eqz / i64.eqz
+  if (op >= 0x67 && op <= 0x69) return [1, 1]; // i32 clz/ctz/popcnt
+  if (op >= 0x79 && op <= 0x7b) return [1, 1]; // i64 clz/ctz/popcnt
+  if (op >= 0xa7 && op <= 0xc4) return [1, 1]; // conversions / sign extensions
+  if ((op >= 0x46 && op <= 0x66) || (op >= 0x6b && op <= 0x78) || (op >= 0x7c && op <= 0x8a)) return [2, 1]; // comparisons + binary arithmetic
+  return [1, 1];
+}
+
+// Forward-simulates a function body and returns a map from each reader-call instruction index to the
+// wire field name that call reads, or null where it cannot be recovered. The value stack holds
+// symbolic nodes: a known constant, a local-plus-offset pointer, an i64 immediate, a data load, or an
+// opaque value. Stores into a local-plus-offset pointer accumulate into that local's byte memory.
+// Control flow and unknown calls reset the stack (the argument build for a reader call is always a
+// straight-line sequence), while the local byte memory persists.
+function simulateWireNames(ins, segments) {
+  const names = {};
+  let stack = [];
+  const localMemory = new Map(); // local index -> Map(byteOffset -> byte)
+  const memoryOf = (local) => {
+    let memory = localMemory.get(local);
+    if (!memory) { memory = new Map(); localMemory.set(local, memory); }
+    return memory;
+  };
+  const writeMemory = (local, offset, bytes) => {
+    const memory = memoryOf(local);
+    for (let i = 0; i < bytes.length; i++) memory.set(offset + i, bytes[i]);
+  };
+  const pop = () => stack.pop() ?? { t: 'other' };
+  for (let index = 0; index < ins.length; index++) {
+    const entry = ins[index];
+    switch (entry.k) {
+      case 'const': stack.push({ t: 'const', v: entry.v }); break;
+      case 'i64const': stack.push({ t: 'i64', v: entry.v }); break;
+      case 'load': { const a = pop(); stack.push(a.t === 'const' ? { t: 'dataload', addr: a.v } : { t: 'other' }); break; }
+      case 'add': {
+        const b = pop(); const a = pop();
+        if (a.t === 'ptr' && b.t === 'const') stack.push({ t: 'ptr', base: a.base, off: a.off + b.v });
+        else if (b.t === 'ptr' && a.t === 'const') stack.push({ t: 'ptr', base: b.base, off: b.off + a.v });
+        else if (a.t === 'const' && b.t === 'const') stack.push({ t: 'const', v: a.v + b.v });
+        else stack.push({ t: 'other' });
+        break;
+      }
+      case 'ne': pop(); pop(); stack.push({ t: 'other' }); break;
+      case 'store': {
+        const value = pop(); const addr = pop();
+        if (addr.t === 'ptr') {
+          const offset = addr.off + entry.off;
+          if (entry.w === 8 && value.t === 'i64') writeMemory(addr.base, offset, i64Bytes(value.v));
+          else if (entry.w === 4 && value.t === 'const') { const word = Buffer.alloc(4); word.writeUInt32LE(value.v >>> 0); writeMemory(addr.base, offset, word); }
+          else if (entry.w === 2 && value.t === 'const') { const half = Buffer.alloc(2); half.writeUInt16LE(value.v & 0xffff); writeMemory(addr.base, offset, half); }
+          else if (entry.w === 1 && value.t === 'const') writeMemory(addr.base, offset, Buffer.from([value.v & 0xff]));
+          else if (value.t === 'dataload') { const width = entry.w === 8 ? 8 : entry.w === 4 ? 4 : entry.w === 2 ? 2 : 1; const copied = readBytes(segments, value.addr, width); if (copied) writeMemory(addr.base, offset, Buffer.from(copied, 'latin1')); }
+        }
+        break;
+      }
+      case 'fstore': pop(); pop(); break;
+      case 'mem3': pop(); pop(); pop(); break;
+      case 'meminit': pop(); pop(); pop(); break;
+      case 'local': {
+        if (entry.op === 0x20) stack.push({ t: 'ptr', base: entry.x, off: 0 }); // local.get
+        else if (entry.op === 0x23) stack.push({ t: 'other' }); // global.get
+        else if (entry.op === 0x21 || entry.op === 0x24) pop(); // local.set / global.set
+        // local.tee (0x22) leaves the value in place
+        break;
+      }
+      case 'call': {
+        if (entry.t === READER_HELPER) {
+          const length = pop(); const namePtr = pop(); pop(); // pop name_len, name_ptr, field_ptr
+          const nameLen = length.t === 'const' ? length.v : null;
+          let name = null;
+          if (nameLen != null && nameLen >= 1 && nameLen <= 120) {
+            if (namePtr.t === 'ptr') {
+              const memory = localMemory.get(namePtr.base);
+              if (memory) {
+                const out = Buffer.alloc(nameLen);
+                let complete = true;
+                for (let i = 0; i < nameLen; i++) { const byte = memory.get(namePtr.off + i); if (byte == null) { complete = false; break; } out[i] = byte; }
+                if (complete) { const candidate = out.toString('latin1'); if (isWireName(candidate)) name = candidate; }
+              }
+            } else if (namePtr.t === 'const') {
+              const slice = readBytes(segments, namePtr.v, nameLen);
+              if (isWireName(slice)) name = slice;
+            }
+          }
+          names[index] = name;
+          stack.push({ t: 'other' }); // the helper returns a status value
+        } else {
+          stack = []; // unknown call: arity unknown, reset to avoid desync
+        }
+        break;
+      }
+      case 'ctrl': stack = []; break; // block/loop/if/br/return/call_indirect boundary
+      case 'o': {
+        if (entry.op === 0x43 || entry.op === 0x44) { stack.push({ t: 'other' }); break; } // f32/f64.const
+        if (entry.op === 0x3f) { stack.push({ t: 'other' }); break; } // memory.size
+        if (entry.op === 0x40) { pop(); stack.push({ t: 'other' }); break; } // memory.grow
+        if (entry.op === 0xd0) { stack.push({ t: 'other' }); break; } // ref.null
+        if (entry.op === 0xd2) { stack.push({ t: 'other' }); break; } // ref.func
+        if (entry.op == null) { stack = []; break; } // opaque (SIMD/atomics/select-with-types): reset
+        const [pops, pushes] = numericArity(entry.op);
+        for (let i = 0; i < pops; i++) pop();
+        for (let i = 0; i < pushes; i++) stack.push({ t: 'other' });
+        break;
+      }
+      default: stack = []; break;
+    }
+  }
+  return names;
+}
+
+// Reads the descriptor's group_id (offset-12) constant as a section-name string pointer, or null
+// when group_id is not written as a constant (loop-built registrations).
+function sectionFromGroupPointer(ins, storeIndex, segments) {
+  for (let i = storeIndex; i >= Math.max(0, storeIndex - 180); i--) {
+    if (ins[i].k !== 'store' || ins[i].w !== 4 || ins[i].off !== 12) continue;
+    const value = constBefore(ins, i);
+    if (value == null) return null;
+    const name = readCString(segments, value);
+    return SECTION_NAMES.has(name) ? name : null;
+  }
+  return null;
 }
 
 function reconstruct(ins, storeIndex, segments) {
@@ -424,6 +640,11 @@ function extractDescriptors(buf) {
   let bodyCount;
   [bodyCount, p] = readU(buf, p);
   const byName = new Map();
+  // Wire-path join state, accumulated across all bodies: which wire paths each struct name was read
+  // under, and which names each wire path was attributed to. Used to keep only bijective pairs.
+  const nameToWirePaths = new Map();
+  const wirePathToNames = new Map();
+  const wirePathToDescriptor = new Map();
   for (let i = 0; i < bodyCount; i++) {
     let size;
     [size, p] = readU(buf, p);
@@ -436,16 +657,99 @@ function extractDescriptors(buf) {
     } catch {
       continue; // a body we cannot fully decode cannot be a registration body
     }
+    // Forward-simulate the body once to recover the precise wire name read at each reader call, then
+    // single-pass in instruction order, tracking the reader's current section (last section-name
+    // string load), collecting registration anchors and reader calls, then pairing each registration
+    // with the reader call that immediately follows it (before the next registration).
+    const wireNames = simulateWireNames(ins, segments);
+    const events = [];
+    let currentSection = null;
     for (let index = 0; index < ins.length; index++) {
       const entry = ins[index];
-      if (entry.k !== 'store' || entry.w !== 4 || entry.off !== 16) continue;
-      const descriptor = reconstruct(ins, index, segments);
-      if (descriptor && !byName.has(descriptor.name)) {
-        byName.set(descriptor.name, descriptor);
+      if (entry.k === 'const') {
+        const text = readCString(segments, entry.v);
+        if (SECTION_NAMES.has(text)) currentSection = text;
+      } else if (entry.k === 'store' && entry.w === 4 && entry.off === 16) {
+        const descriptor = reconstruct(ins, index, segments);
+        if (descriptor) {
+          const groupSection = sectionFromGroupPointer(ins, index, segments);
+          events.push({ kind: 'reg', descriptor, section: groupSection || currentSection });
+        }
+      } else if (entry.k === 'call' && entry.t === READER_HELPER) {
+        events.push({ kind: 'call', wireField: wireNames[index] ?? null });
+      }
+    }
+    for (let e = 0; e < events.length; e++) {
+      if (events[e].kind !== 'reg') continue;
+      let wireField = null;
+      for (let f = e + 1; f < events.length; f++) {
+        if (events[f].kind === 'reg') break;
+        if (events[f].kind === 'call') { wireField = events[f].wireField; break; }
+      }
+      const { descriptor, section } = events[e];
+      // The catalogue dedups by struct name, but the engine struct name is RELATIVE to its
+      // sub-struct (p->enable is a field within aec, agc, ns, ...), so distinct fields collide on
+      // one name. Record every (name, wirePath) read observed; the bijection filter below assigns a
+      // wirePath only when the join is unambiguous, so a collision name (whose reads target different
+      // struct fields) is never given a guessed wire path nor allowed to alias two wire paths onto
+      // one key.
+      if (!byName.has(descriptor.name)) byName.set(descriptor.name, { ...descriptor });
+      if (section && wireField) {
+        const wirePath = `${section}.${wireField}`;
+        (nameToWirePaths.get(descriptor.name) ?? setIn(nameToWirePaths, descriptor.name)).add(wirePath);
+        (wirePathToNames.get(wirePath) ?? setIn(wirePathToNames, wirePath)).add(descriptor.name);
+        // Retain the descriptor backing each wire path so a collision wire path can be emitted as its
+        // own typed constant (one per distinct field). The descriptor type/byteWidth/rate-control flag
+        // are reliable; the struct name becomes non-unique metadata.
+        if (!wirePathToDescriptor.has(wirePath)) {
+          wirePathToDescriptor.set(wirePath, { ...descriptor, wirePath });
+        }
       }
     }
   }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Assign each name-keyed descriptor its wire path only when the name and the wire path are in
+  // bijection: the name was read under exactly one wire path and that wire path was read for exactly
+  // one name. This is the clean, non-colliding majority; a colliding or ambiguous name keeps no wire
+  // path here and is instead split below.
+  for (const record of byName.values()) {
+    const paths = nameToWirePaths.get(record.name);
+    if (!paths || paths.size !== 1) continue;
+    const wirePath = [...paths][0];
+    if (wirePathToNames.get(wirePath).size !== 1) continue;
+    record.wirePath = wirePath;
+  }
+
+  // Collision split: a relative struct name that backs more than one distinct wire path (p->enable
+  // read under traffic_shaper, agc, and ns is three different engine fields) cannot be carried by a
+  // single name-keyed entry. Emit one extra constant per distinct wire path of such a name, each
+  // carrying the descriptor type/byteWidth/rate-control flag observed at that read and the struct
+  // dotted path as non-unique metadata, so every collision field becomes individually wire
+  // addressable. Each distinct wire path is one engine field read (the read target field pointer
+  // recovered from the call is a shared per-section staging slot, not a per-field address, so it
+  // cannot group fields; the wire path itself is the reliable field identity). Ambiguous wire paths
+  // (attributed to more than one struct name) are not split and stay unmodelled.
+  const collisionEntries = [];
+  for (const [wirePath, names] of wirePathToNames) {
+    if (names.size !== 1) continue; // ambiguous read; leave unmodelled
+    const name = [...names][0];
+    const ownerPaths = nameToWirePaths.get(name);
+    if (!ownerPaths || ownerPaths.size <= 1) continue; // not a collision name; already bijective
+    const descriptor = wirePathToDescriptor.get(wirePath);
+    if (descriptor) collisionEntries.push(descriptor);
+  }
+  collisionEntries.sort((a, b) => a.wirePath.localeCompare(b.wirePath));
+  return {
+    entries: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    collisionEntries,
+  };
+}
+
+// Initializes and returns a Set value for a key in a Map.
+function setIn(map, key) {
+  const value = new Set();
+  map.set(key, value);
+  return value;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -469,17 +773,22 @@ const javaKeywords = new Set([
 ]);
 
 const seenConstants = new Set();
-function constantNameFor(name) {
-  const arrow = name.indexOf('->');
-  const prefix = name.slice(0, arrow).toUpperCase();
-  const rest = name.slice(arrow + 2);
-  let base = `${prefix}_${rest}`
+
+// Builds the enum constant name for a key from its wire path. The wire path ({@code section.key}) is
+// the unique identity, so its uppercased, underscore-sanitized form names the constant directly
+// (encode.use_mlow_codec_v1 -> ENCODE_USE_MLOW_CODEC_V1; rc.maxbwe -> RC_MAXBWE). The dot and any
+// other non-alphanumeric byte become an underscore; a leading digit or a Java keyword is prefixed.
+// Wire paths are unique, so a name clash can only come from sanitization (two paths differing only in
+// punctuation) and is resolved with a deterministic numeric suffix.
+function wirePathConstantName(wirePath) {
+  let base = wirePath
     .replace(/[^A-Za-z0-9]+/g, '_')
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .replace(/^_+|_+$/g, '')
     .replace(/_+/g, '_')
     .toUpperCase();
-  if (!base) base = `${prefix}_PARAM`;
+  if (!base) {
+    base = 'PARAM';
+  }
   if (/^[0-9]/.test(base) || javaKeywords.has(base.toLowerCase())) {
     base = `PARAM_${base}`;
   }
@@ -504,248 +813,167 @@ function escapeJavadoc(value) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function namespaceOf(name) {
-  if (name.startsWith('p->')) return 'Call';
-  if (name.startsWith('mvp->') || name.startsWith('vp->')) return 'Media';
-  return 'Transport';
-}
-
 function writeFile(name, lines) {
   fs.writeFileSync(`${outDir}/${name}.java`, lines.join('\n') + '\n', 'utf8');
 }
 
-function generate(entries) {
-  const byNamespace = new Map();
-  for (const entry of entries) {
-    const ns = namespaceOf(entry.name);
-    if (!byNamespace.has(ns)) byNamespace.set(ns, []);
-    byNamespace.get(ns).push(entry);
-  }
-
-  const partitions = [];
-  for (const [ns, nsEntries] of byNamespace) {
-    const partCount = Math.ceil(nsEntries.length / CHUNK_SIZE);
-    for (let part = 0; part < partCount; part++) {
-      const chunk = nsEntries.slice(part * CHUNK_SIZE, (part + 1) * CHUNK_SIZE);
-      partitions.push({ className: `VoipParamKey${ns}${part + 1}`, namespace: ns, chunk });
+function generate(entries, collisionEntries) {
+  // Build one unified set keyed by wire path: the bijective name-keyed entries that recovered a wire
+  // path, plus the former collision-split entries (a struct field name read under several sections is
+  // several distinct wire fields). Constants with no recovered wire path are dropped: they are never
+  // wire addressable, so the deserializer can never reach them. Each distinct wire path becomes one
+  // constant; the wire path is the unique identity, so deduping by wire path is the only dedup.
+  const byWirePath = new Map();
+  for (const entry of [...entries, ...collisionEntries]) {
+    if (entry.wirePath == null) continue;
+    if (!byWirePath.has(entry.wirePath)) {
+      byWirePath.set(entry.wirePath, { type: entry.type, wirePath: entry.wirePath });
     }
   }
-  const permits = partitions.map((partition) => partition.className).join(', ');
+  const unified = [...byWirePath.values()].sort((a, b) => a.wirePath.localeCompare(b.wirePath));
 
-  const iface = [];
-  iface.push('package com.github.auties00.cobalt.calls2.common;');
-  iface.push('');
-  iface.push('import java.util.List;');
-  iface.push('import java.util.Optional;');
-  iface.push('');
-  iface.push('/**');
-  iface.push(' * Enumerates the native voip-param registry keys recovered from WhatsApp Web\'s');
-  iface.push(' * {@code voip_param_entry} descriptor writes.');
-  iface.push(' *');
-  iface.push(' * <p>The keys are generated directly from the wa-voip WASM module. Each key is backed by an');
-  iface.push(' * observed write to the 20-byte native descriptor shape used by {@code reg_param_entry_impl};');
-  iface.push(' * the value type, byte width, and rate-control flag are copied from those writes, not');
-  iface.push(' * inferred from names or JSON values.');
-  iface.push(' *');
-  iface.push(' * <p>The catalogue contains descriptor entries only. JSON section roots such as');
-  iface.push(' * {@code p-&gt;aec} and metadata fields such as {@code voip_settings_version} are not native');
-  iface.push(' * descriptor entries and are retained by {@link VoipParamJsonDeserializer} only as flattened');
-  iface.push(' * unmodelled values.');
-  iface.push(' *');
-  iface.push(' * <p>The keys are partitioned across the permitted enums by namespace ({@code p-&gt;},');
-  iface.push(' * {@code mvp-&gt;}/{@code vp-&gt;}, {@code tp-&gt;}); the {@code p-&gt;} namespace is split further so');
-  iface.push(' * that no generated enum\'s static initializer exceeds the JVM 64KB method-size limit. The');
-  iface.push(' * full key set is the union of every partition, exposed through {@link #values()}.');
-  iface.push(' */');
-  iface.push(`public sealed interface VoipParamKey permits ${permits} {`);
-  iface.push('    /**');
-  iface.push('     * Returns the fully-qualified dotted path the engine addresses this tunable by.');
-  iface.push('     *');
-  iface.push('     * @return the dotted path, such as {@code "p-&gt;conds.cond_range_ul_bwe"}');
-  iface.push('     */');
-  iface.push('    String dottedPath();');
-  iface.push('');
-  iface.push('    /**');
-  iface.push('     * Returns the native descriptor value type for this tunable.');
-  iface.push('     *');
-  iface.push('     * @return the native descriptor value type');
-  iface.push('     */');
-  iface.push('    VoipParamType type();');
-  iface.push('');
-  iface.push('    /**');
-  iface.push('     * Returns the serialized byte width recorded in the native descriptor.');
-  iface.push('     *');
-  iface.push('     * @return the serialized byte width');
-  iface.push('     */');
-  iface.push('    int byteWidth();');
-  iface.push('');
-  iface.push('    /**');
-  iface.push('     * Returns whether the native descriptor marks this tunable as rate-control related.');
-  iface.push('     *');
-  iface.push('     * @return {@code true} if this is a rate-control tunable, {@code false} otherwise');
-  iface.push('     */');
-  iface.push('    boolean bweParam();');
-  iface.push('');
-  iface.push('    /**');
-  iface.push('     * Returns every modelled key, unioned across all partitions in generation order.');
-  iface.push('     *');
-  iface.push('     * @return an unmodifiable list of all modelled keys');
-  iface.push('     */');
-  iface.push('    static List<VoipParamKey> values() {');
-  iface.push('        return VoipParamKeyCatalogue.ALL;');
-  iface.push('    }');
-  iface.push('');
-  iface.push('    /**');
-  iface.push('     * Returns the key whose {@linkplain #dottedPath() dotted path} equals the given value.');
-  iface.push('     *');
-  iface.push('     * @param dottedPath the dotted path to resolve');
-  iface.push('     * @return the matching key, or {@link Optional#empty()} if the path is not modelled');
-  iface.push('     */');
-  iface.push('    static Optional<VoipParamKey> ofDottedPath(String dottedPath) {');
-  iface.push('        return Optional.ofNullable(VoipParamKeyCatalogue.BY_DOTTED_PATH.get(dottedPath));');
-  iface.push('    }');
-  iface.push('}');
-  writeFile('VoipParamKey', iface);
-
-  const cat = [];
-  cat.push('package com.github.auties00.cobalt.calls2.common;');
-  cat.push('');
-  cat.push('import java.util.Arrays;');
-  cat.push('import java.util.List;');
-  cat.push('import java.util.Map;');
-  cat.push('import java.util.stream.Collectors;');
-  cat.push('import java.util.stream.Stream;');
-  cat.push('');
-  cat.push('/**');
-  cat.push(' * Aggregates the partitioned {@link VoipParamKey} catalogue into the union views the public');
-  cat.push(' * accessors return.');
-  cat.push(' *');
-  cat.push(' * <p>The key set is generated into several enum partitions to keep each enum\'s static');
-  cat.push(' * initializer within the JVM 64KB method-size limit; this holder unions them once at class');
-  cat.push(' * load so {@link VoipParamKey#values()} and {@link VoipParamKey#ofDottedPath(String)} answer');
-  cat.push(' * without rescanning each partition.');
-  cat.push(' */');
-  cat.push('final class VoipParamKeyCatalogue {');
-  cat.push('    /**');
-  cat.push('     * Every modelled key, unioned across all partitions in generation order.');
-  cat.push('     */');
-  cat.push('    static final List<VoipParamKey> ALL = Stream.<VoipParamKey[]>of(');
-  partitions.forEach((partition, index) => {
-    const comma = index === partitions.length - 1 ? '' : ',';
-    cat.push(`            ${partition.className}.values()${comma}`);
-  });
-  cat.push('    ).flatMap(Arrays::stream).toList();');
-  cat.push('');
-  cat.push('    /**');
-  cat.push('     * The dotted-path lookup over {@link #ALL}.');
-  cat.push('     */');
-  cat.push('    static final Map<String, VoipParamKey> BY_DOTTED_PATH = ALL.stream()');
-  cat.push('            .collect(Collectors.toUnmodifiableMap(VoipParamKey::dottedPath, key -> key));');
-  cat.push('');
-  cat.push('    /**');
-  cat.push('     * Prevents instantiation of this static holder.');
-  cat.push('     */');
-  cat.push('    private VoipParamKeyCatalogue() {');
-  cat.push('    }');
-  cat.push('}');
-  writeFile('VoipParamKeyCatalogue', cat);
-
-  const nsLabels = { Call: 'p-&gt;', Media: 'mvp-&gt;/vp-&gt;', Transport: 'tp-&gt;' };
-  for (const partition of partitions) {
-    const { className, namespace, chunk } = partition;
-    const out = [];
-    out.push('package com.github.auties00.cobalt.calls2.common;');
-    out.push('');
-    out.push('/**');
-    out.push(` * A partition of the {@code ${nsLabels[namespace]}} voip-param registry keys.`);
-    out.push(' *');
-    out.push(' * <p>This enum exists only to keep its generated static initializer within the JVM 64KB');
-    out.push(' * method-size limit; callers iterate the full key set through {@link VoipParamKey#values()}');
-    out.push(' * rather than this partition directly.');
-    out.push(' */');
-    out.push(`enum ${className} implements VoipParamKey {`);
-    chunk.forEach((entry, index) => {
-      const typeName = typeNames.get(entry.type);
-      const constantName = constantNameFor(entry.name);
-      const terminator = index === chunk.length - 1 ? ';' : ',';
-      out.push('    /**');
-      out.push(`     * Native descriptor for {@code ${escapeJavadoc(entry.name)}}.`);
-      out.push('     */');
-      out.push(`    ${constantName}(${javaString(entry.name)}, VoipParamType.${typeName}, ${entry.valueLen}, ${entry.bweParam ? 'true' : 'false'})${terminator}`);
-      if (index !== chunk.length - 1) out.push('');
-    });
-    out.push('');
-    out.push('    /**');
-    out.push('     * The fully-qualified dotted path the engine addresses this tunable by.');
-    out.push('     */');
-    out.push('    private final String dottedPath;');
-    out.push('');
-    out.push('    /**');
-    out.push('     * The native descriptor value type for this tunable.');
-    out.push('     */');
-    out.push('    private final VoipParamType type;');
-    out.push('');
-    out.push('    /**');
-    out.push('     * The serialized byte width recorded in the native descriptor.');
-    out.push('     */');
-    out.push('    private final int byteWidth;');
-    out.push('');
-    out.push('    /**');
-    out.push('     * Whether the native descriptor marks this tunable as rate-control related.');
-    out.push('     */');
-    out.push('    private final boolean bweParam;');
-    out.push('');
-    out.push('    /**');
-    out.push('     * Constructs a key partition constant from its native descriptor fields.');
-    out.push('     *');
-    out.push('     * @param dottedPath the fully-qualified dotted path');
-    out.push('     * @param type       the native descriptor value type');
-    out.push('     * @param byteWidth   the serialized byte width');
-    out.push('     * @param bweParam   whether this is a rate-control tunable');
-    out.push('     */');
-    out.push(`    ${className}(String dottedPath, VoipParamType type, int byteWidth, boolean bweParam) {`);
-    out.push('        this.dottedPath = dottedPath;');
-    out.push('        this.type = type;');
-    out.push('        this.byteWidth = byteWidth;');
-    out.push('        this.bweParam = bweParam;');
-    out.push('    }');
-    out.push('');
-    out.push('    @Override');
-    out.push('    public String dottedPath() {');
-    out.push('        return dottedPath;');
-    out.push('    }');
-    out.push('');
-    out.push('    @Override');
-    out.push('    public VoipParamType type() {');
-    out.push('        return type;');
-    out.push('    }');
-    out.push('');
-    out.push('    @Override');
-    out.push('    public int byteWidth() {');
-    out.push('        return byteWidth;');
-    out.push('    }');
-    out.push('');
-    out.push('    @Override');
-    out.push('    public boolean bweParam() {');
-    out.push('        return bweParam;');
-    out.push('    }');
-    out.push('}');
-    writeFile(className, out);
+  // Assign each entry its public-static-final constant name, derived from its (unique) wire path, in
+  // emission order so any sanitization-induced clash is resolved by a deterministic numeric suffix.
+  for (const entry of unified) {
+    entry.constantName = wirePathConstantName(entry.wirePath);
   }
 
-  return partitions;
+  // The reserved field/method names that must not clash with a generated constant name.
+  for (const reserved of ['BY_WIRE_PATH']) seenConstants.add(reserved);
+
+  const out = [];
+  out.push('package com.github.auties00.cobalt.calls2.common;');
+  out.push('');
+  out.push('import java.lang.reflect.Modifier;');
+  out.push('import java.util.Collection;');
+  out.push('import java.util.HashMap;');
+  out.push('import java.util.Map;');
+  out.push('import java.util.Optional;');
+  out.push('');
+  out.push('/**');
+  out.push(' * A voip-param key recovered from WhatsApp Web\'s {@code <voip_settings>} reads, identified by');
+  out.push(' * its area-sectioned wire path.');
+  out.push(' *');
+  out.push(' * <p>The modelled keys are generated directly from the wa-voip WASM module as the public');
+  out.push(' * constants of this record, one per distinct wire path. Each key carries its {@code section.key}');
+  out.push(' * {@linkplain #wirePath() wire path} (the name the field carries in the JSON document,');
+  out.push(' * {@code encode.use_mlow_codec_v1}) and the native descriptor {@linkplain #type() value type}');
+  out.push(' * copied from the engine\'s descriptor write, not inferred from names or JSON values. The wire');
+  out.push(' * path is recovered from the native param filler, where each descriptor registration is followed');
+  out.push(' * by the JSON read that populates it; the section comes from the descriptor group pointer and the');
+  out.push(' * field name from that read.');
+  out.push(' *');
+  out.push(' * <p>One engine struct field name read under several sections is several distinct wire fields');
+  out.push(' * (the field behind {@code p-&gt;enable} is a different field under the {@code traffic_shaper},');
+  out.push(' * {@code agc}, and {@code ns} sections); each is a separate constant under its own wire path, so');
+  out.push(' * {@link #ofWirePath(String)} resolves every modelled leaf to one key. A leaf whose wire path is');
+  out.push(' * not modelled is carried by an {@linkplain #unknown(String) unknown} key of type');
+  out.push(' * {@link VoipParamType#UNKNOWN}, so the two together resolve every document leaf.');
+  out.push(' *');
+  out.push(' * <p>Being a record, a key has value equality over {@code (type, wirePath)}; the modelled');
+  out.push(' * constants are singletons, and two unknown keys for the same path are equal, so a key is a sound');
+  out.push(' * map key. The constants are flat public static fields read in a single class initializer, within');
+  out.push(' * the JVM 64KB method-size limit for this key count.');
+  out.push(' *');
+  out.push(' * @param type     the native descriptor value type, or {@link VoipParamType#UNKNOWN} for an');
+  out.push(' *                 unknown key');
+  out.push(' * @param wirePath the area-sectioned {@code section.key} wire path that identifies this key');
+  out.push(' */');
+  out.push('public record VoipParamKey(VoipParamType type, String wirePath) {');
+  unified.forEach((entry) => {
+    const typeName = typeNames.get(entry.type);
+    out.push('    /**');
+    out.push(`     * The {@code ${escapeJavadoc(entry.wirePath)}} voip-param.`);
+    out.push('     */');
+    out.push(`    public static final VoipParamKey ${entry.constantName} = new VoipParamKey(VoipParamType.${typeName}, ${javaString(entry.wirePath)});`);
+  });
+  out.push('');
+  out.push('    /**');
+  out.push('     * The wire-path lookup over every generated constant.');
+  out.push('     *');
+  out.push('     * <p>Maps each {@code section.key} wire path to its constant. The catalogue holds one');
+  out.push('     * constant per distinct wire path, so the map is collision-free on keys.');
+  out.push('     */');
+  out.push('    private static final Map<String, VoipParamKey> BY_WIRE_PATH = buildByWirePath();');
+  out.push('');
+  out.push('    /**');
+  out.push('     * Builds the wire-path lookup by reflecting over this record\'s generated constants.');
+  out.push('     *');
+  out.push('     * <p>Reflection is used deliberately: listing the constants explicitly here would re-add');
+  out.push('     * thousands of field references to the class initializer and overflow the 64KB method-size');
+  out.push('     * limit. Each {@code public static final VoipParamKey} field is read once and indexed by its');
+  out.push('     * wire path.');
+  out.push('     *');
+  out.push('     * @return the unmodifiable wire-path lookup');
+  out.push('     */');
+  out.push('    private static Map<String, VoipParamKey> buildByWirePath() {');
+  out.push('        var map = new HashMap<String, VoipParamKey>();');
+  out.push('        for (var field : VoipParamKey.class.getDeclaredFields()) {');
+  out.push('            if (!Modifier.isStatic(field.getModifiers()) || field.getType() != VoipParamKey.class) {');
+  out.push('                continue;');
+  out.push('            }');
+  out.push('            try {');
+  out.push('                var key = (VoipParamKey) field.get(null);');
+  out.push('                map.put(key.wirePath(), key);');
+  out.push('            } catch (IllegalAccessException exception) {');
+  out.push('                throw new ExceptionInInitializerError(exception);');
+  out.push('            }');
+  out.push('        }');
+  out.push('        return Map.copyOf(map);');
+  out.push('    }');
+  out.push('');
+  out.push('    /**');
+  out.push('     * Returns every modelled key.');
+  out.push('     *');
+  out.push('     * <p>The returned collection is an unmodifiable view over the wire-path lookup\'s values; it');
+  out.push('     * is not a precomputed copy.');
+  out.push('     *');
+  out.push('     * @return an unmodifiable view of all modelled keys');
+  out.push('     */');
+  out.push('    public static Collection<VoipParamKey> values() {');
+  out.push('        return BY_WIRE_PATH.values();');
+  out.push('    }');
+  out.push('');
+  out.push('    /**');
+  out.push('     * Returns the modelled key whose {@linkplain #wirePath() wire path} equals the given value.');
+  out.push('     *');
+  out.push('     * @param wirePath the area-sectioned {@code section.key} wire path to resolve');
+  out.push('     * @return the matching key, or {@link Optional#empty()} if the path is not modelled');
+  out.push('     */');
+  out.push('    public static Optional<VoipParamKey> ofWirePath(String wirePath) {');
+  out.push('        return Optional.ofNullable(BY_WIRE_PATH.get(wirePath));');
+  out.push('    }');
+  out.push('');
+  out.push('    /**');
+  out.push('     * Returns an unknown key for a wire path that no modelled constant covers.');
+  out.push('     *');
+  out.push('     * <p>The deserializer keys a {@code <voip_settings>} leaf whose wire path is not modelled');
+  out.push('     * under such a key (a field added after this module revision, or one whose wire path could');
+  out.push('     * not be reconstructed), so its parsed value is never dropped. The key carries the leaf\'s');
+  out.push('     * wire path and {@link VoipParamType#UNKNOWN}; its value is read back through the coercing');
+  out.push('     * {@link VoipParams} accessors like any other key.');
+  out.push('     *');
+  out.push('     * @param wirePath the area-sectioned {@code section.key} wire path the leaf was carried under');
+  out.push('     * @return an unknown key for the given wire path');
+  out.push('     */');
+  out.push('    public static VoipParamKey unknown(String wirePath) {');
+  out.push('        return new VoipParamKey(VoipParamType.UNKNOWN, wirePath);');
+  out.push('    }');
+  out.push('}');
+  writeFile('VoipParamKey', out);
+
+  return unified;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Entry point.
 // ---------------------------------------------------------------------------------------------
 const wasm = fs.readFileSync(wasmPath);
-const descriptors = extractDescriptors(wasm);
+const { entries: descriptors, collisionEntries } = extractDescriptors(wasm);
 if (descriptors.length < 1000) {
   throw new Error(`only ${descriptors.length} descriptors recovered from ${wasmPath}; extraction likely failed`);
 }
-const partitions = generate(descriptors);
-console.log(`Recovered ${descriptors.length} descriptors from ${wasmPath} across ${partitions.length} partitions:`);
-for (const partition of partitions) {
-  console.log(`  ${partition.className}: ${partition.chunk.length}`);
-}
+const unified = generate(descriptors, collisionEntries);
+const bijectiveWirePaths = descriptors.filter((d) => d.wirePath != null).length;
+console.log(`Extracted ${descriptors.length} descriptors from ${wasmPath}; emitted ${unified.length} wire-path keys as VoipParamKey constants in a single record.`);
+console.log(`(${bijectiveWirePaths} bijective + ${collisionEntries.length} former-collision, merged and deduplicated by wire path.)`);

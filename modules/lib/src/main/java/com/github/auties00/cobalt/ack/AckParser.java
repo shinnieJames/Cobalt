@@ -4,15 +4,15 @@ import com.github.auties00.cobalt.calls2.signaling.RelayInfo;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Decodes a server {@code <ack>} {@link Node} into a structured {@link AckResult}.
+ * Decodes a server {@code <ack>} {@link Stanza} into a structured {@link AckResult}.
  *
- * <p>This utility class exposes a single static {@link #parse(Node)} entry point that flattens
+ * <p>This utility class exposes a single static {@link #parse(Stanza)} entry point that flattens
  * the common envelope attributes ({@code id}, {@code t}, {@code class}, {@code type},
  * {@code from}, {@code participant}, {@code recipient}, {@code error}) and dispatches on the
  * {@code class} attribute to populate the matching {@link AckResult} subtype:
@@ -44,7 +44,7 @@ public final class AckParser {
     }
 
     /**
-     * Parses the given {@code <ack>} node into the matching {@link AckResult} subtype.
+     * Parses the given {@code <ack>} stanza into the matching {@link AckResult} subtype.
      *
      * <p>The input must already be the {@code <ack>} element, not its enclosing {@code <iq>}.
      * The {@code t} attribute is interpreted as epoch seconds and converted to an
@@ -52,18 +52,18 @@ public final class AckParser {
      * dispatch on {@code class} populates the message-fanout slots only for
      * {@link MessageAck}, the {@code <relay>} child only for {@link CallAck}.
      *
-     * @param ack the {@code <ack>} node returned by the server
+     * @param ack the {@code <ack>} stanza returned by the server
      * @return the parsed {@link AckResult} subtype
      * @throws NullPointerException     if {@code ack} is {@code null}
-     * @throws IllegalArgumentException if the node tag is not {@code "ack"}
+     * @throws IllegalArgumentException if the stanza tag is not {@code "ack"}
      */
     @WhatsAppWebExport(moduleName = "WAAckParser", exports = "AckParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static AckResult parse(Node ack) {
+    public static AckResult parse(Stanza ack) {
         Objects.requireNonNull(ack, "ack");
         if (!ack.hasDescription("ack")) {
             throw new IllegalArgumentException(
-                    "Expected <ack> node, got <" + ack.description() + ">");
+                    "Expected <ack> stanza, got <" + ack.description() + ">");
         }
 
         var id = ack.getAttributeAsString("id", null);

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.pairing;
 
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
 
 /**
  * Lifecycle phase of the companion-side alt-device-linking handshake.
@@ -63,7 +64,7 @@ enum CompanionPairingStage {
      *
      * <p>This is the terminal stage from the companion's perspective;
      * the ADV secret has been persisted via
-     * {@link com.github.auties00.cobalt.store.SignalStore#setAdvSecretKey}.
+     * {@link LinkedWhatsAppSignalStore#setAdvSecretKey}.
      * A repeat {@code primary_hello} can still rewind the state back to
      * {@link #AFTER_SEND_COMPANION_HELLO} after the ADV secret is
      * regenerated, up to a bounded number of times per code.

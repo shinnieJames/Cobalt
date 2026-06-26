@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>This service is the per-client owner of the call subsystem: there is exactly one instance per
  * {@link LinkedWhatsAppClient}, constructed eagerly and held as a private final field, before the
- * node-stream service that registers the inbound signaling receiver. It owns the registry of in-flight
+ * stanza-stream service that registers the inbound signaling receiver. It owns the registry of in-flight
  * {@link Calls2Runtime} sessions, and it owns the two host-boundary engine pieces the public surface
  * drives: the {@link LiveCallEventBus} that fans host-facing events out to the registered listeners, and
  * the {@link Calls2LifecycleController} the public call methods delegate to. The at-most-two engine call

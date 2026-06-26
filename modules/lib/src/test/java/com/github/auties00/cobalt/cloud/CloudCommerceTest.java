@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.model.cloud.commerce.CloudCommerceSettings;
 import com.github.auties00.cobalt.model.cloud.commerce.CloudProductListMessage;
 import com.github.auties00.cobalt.model.cloud.commerce.CloudProductMessage;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -34,8 +35,8 @@ class CloudCommerceTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .whatsappBusinessAccountId(WABA_ID)
@@ -52,7 +53,7 @@ class CloudCommerceTest {
     class CommerceSettings {
         @Test
         @DisplayName("get maps the first data entry toggles")
-        void get() {
+        void get() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[{\"id\":\"727705352028726\",\"is_cart_enabled\":true,"
                     + "\"is_catalog_visible\":false}]}");
@@ -65,7 +66,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("get returns empty toggles for empty data")
-        void getEmpty() {
+        void getEmpty() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[]}");
             var settings = client(http).queryCommerceSettings();
@@ -76,7 +77,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("update posts the populated toggles as form parameters")
-        void update() {
+        void update() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).editCommerceSettings(new CloudCommerceSettings(null, true, false));
@@ -87,7 +88,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("update with no toggles throws IllegalArgumentException")
-        void updateEmpty() {
+        void updateEmpty() throws Exception {
             var http = http();
             assertThrows(IllegalArgumentException.class,
                     () -> client(http).editCommerceSettings(new CloudCommerceSettings(null, null, null)));
@@ -99,7 +100,7 @@ class CloudCommerceTest {
     class ConnectedCatalog {
         @Test
         @DisplayName("get returns the first product_catalogs entry")
-        void get() {
+        void get() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[{\"id\":\"914477888655787\",\"name\":\"My Catalog\"}],"
                     + "\"paging\":{\"cursors\":{\"before\":\"b\",\"after\":\"a\"}}}");
@@ -111,7 +112,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("get returns empty for empty data")
-        void getEmpty() {
+        void getEmpty() throws Exception {
             var http = http();
             http.respondWith("{\"data\":[]}");
             assertTrue(client(http).queryConnectedProductCatalog().isEmpty());
@@ -123,7 +124,7 @@ class CloudCommerceTest {
     class CommerceSends {
         @Test
         @DisplayName("sendProduct posts the product interactive with captions")
-        void sendProduct() {
+        void sendProduct() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.TESTPRODUCT\"}]}");
             var key = client(http).sendProduct(RECIPIENT,
@@ -142,7 +143,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("sendProduct omits body and footer when null")
-        void sendProductNoCaptions() {
+        void sendProductNoCaptions() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.X\"}]}");
             client(http).sendProduct(RECIPIENT, new CloudProductMessage(CATALOG_ID, "r9_4_test", null, null));
@@ -153,7 +154,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("sendProductList posts the product_list interactive with sections")
-        void sendProductList() {
+        void sendProductList() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.TESTLIST\"}]}");
             var list = new CloudProductListMessage(CATALOG_ID, "New products", "In stock now", null,
@@ -175,7 +176,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("sendProductList includes the footer when present")
-        void sendProductListFooter() {
+        void sendProductListFooter() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.X\"}]}");
             var list = new CloudProductListMessage(CATALOG_ID, "h", "b", "Free shipping",
@@ -193,7 +194,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("sendCatalog posts the catalog interactive with a thumbnail")
-        void sendCatalog() {
+        void sendCatalog() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.TESTCATALOG\"}]}");
             var key = client(http).sendCatalog(RECIPIENT,
@@ -211,7 +212,7 @@ class CloudCommerceTest {
 
         @Test
         @DisplayName("sendCatalog omits parameters and footer when null")
-        void sendCatalogMinimal() {
+        void sendCatalogMinimal() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.X\"}]}");
             client(http).sendCatalog(RECIPIENT, new CloudCatalogMessage("Browse", null, null));

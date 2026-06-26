@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Holds a plist {@code <array>} node, the binary plist {@code 0xA0..0xAF} marker family.
+ * Holds a plist {@code <array>} stanza, the binary plist {@code 0xA0..0xAF} marker family.
  *
  * <p>An instance represents an ordered sequence of nested {@link PlistValue} entries carried by an
  * APNS plist payload; the entries may be homogeneous or mixed. Iteration order matches the on-wire
@@ -19,7 +19,7 @@ import java.util.Objects;
  */
 public record PlistArrayValue(List<PlistValue> items) implements PlistValue {
     /**
-     * Constructs an array node, rejecting a {@code null} backing list.
+     * Constructs an array stanza, rejecting a {@code null} backing list.
      *
      * <p>The list itself must be non-{@code null}; individual entries may be any concrete
      * {@link PlistValue}.

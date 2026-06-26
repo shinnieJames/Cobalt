@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,7 +26,7 @@ import java.util.OptionalLong;
  * relay block).
  *
  * <p>Several offer children belong to subsystems outside the signaling-payload layer and are carried
- * as raw {@link Node} subtrees so this record stays faithful without duplicating their grammar: the
+ * as raw {@link Stanza} subtrees so this record stays faithful without duplicating their grammar: the
  * group roster ({@code <group_info>}, owned by the participant layer), the ADV device identity
  * ({@code <device-identity>}, owned by the identity store), the engine parameter bundles
  * ({@code <voip_settings>}, owned by the config layer), the one-to-one trusted-contact token
@@ -101,8 +101,8 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
                           byte[] lightweightKey, long reringTimestamp, int netMedium,
                           List<CallCapability> capabilities, List<CallCodecDescriptor> audioCodecs,
                           List<CallCodecDescriptor> videoCodecs, List<CallKeyDistribution> keyDistribution,
-                          CallMediaDescriptor media, CallEncOptions encOptions, Node groupInfo, byte[] deviceIdentity,
-                          byte[] privacyToken, Node relay, Node bot, List<Node> voipSettings, Node callerMetadata)
+                          CallMediaDescriptor media, CallEncOptions encOptions, Stanza groupInfo, byte[] deviceIdentity,
+                          byte[] privacyToken, Stanza relay, Stanza bot, List<Stanza> voipSettings, Stanza callerMetadata)
         implements CallMessage {
     /**
      * The wire element tag for an offer signal.
@@ -376,9 +376,9 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
     /**
      * Returns the raw {@code <group_info>} roster subtree, if present.
      *
-     * @return an {@link Optional} holding the group-info node, or empty for a one-to-one offer
+     * @return an {@link Optional} holding the group-info stanza, or empty for a one-to-one offer
      */
-    public Optional<Node> groupInfoNode() {
+    public Optional<Stanza> groupInfoNode() {
         return Optional.ofNullable(groupInfo);
     }
 
@@ -409,27 +409,27 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
     /**
      * Returns the raw {@code <relay>} transport subtree, if present.
      *
-     * @return an {@link Optional} holding the relay node, or empty when absent
+     * @return an {@link Optional} holding the relay stanza, or empty when absent
      */
-    public Optional<Node> relayNode() {
+    public Optional<Stanza> relayNode() {
         return Optional.ofNullable(relay);
     }
 
     /**
      * Returns the raw {@code <bot>} descriptor subtree, if present.
      *
-     * @return an {@link Optional} holding the bot node, or empty when absent
+     * @return an {@link Optional} holding the bot stanza, or empty when absent
      */
-    public Optional<Node> botNode() {
+    public Optional<Stanza> botNode() {
         return Optional.ofNullable(bot);
     }
 
     /**
      * Returns the raw caller A/B-test metadata subtree, if present.
      *
-     * @return an {@link Optional} holding the metadata node, or empty when absent
+     * @return an {@link Optional} holding the metadata stanza, or empty when absent
      */
-    public Optional<Node> callerMetadataNode() {
+    public Optional<Stanza> callerMetadataNode() {
         return Optional.ofNullable(callerMetadata);
     }
 
@@ -480,7 +480,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
     }
 
     /**
-     * Builds the {@code <offer>} action node with its flat attributes and nested tree.
+     * Builds the {@code <offer>} action stanza with its flat attributes and nested tree.
      *
      * <p>Children are emitted in the order group roster, privacy token, audio formats, video formats,
      * network medium, capabilities, key fanout, media, encryption options, relay, bot, device
@@ -490,50 +490,50 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
      * and children are omitted. The key fanout is emitted as a {@code <destination>} block of
      * per-device {@code <to>} slots; a group offer carries no fanout.
      *
-     * @return the offer action node
+     * @return the offer action stanza
      */
     @Override
-    public Node toNode() {
-        var children = new ArrayList<Node>();
+    public Stanza toStanza() {
+        var children = new ArrayList<Stanza>();
         if (groupInfo != null) {
             children.add(groupInfo);
         }
         if (privacyToken != null) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(PRIVACY_ELEMENT)
                     .content(privacyToken)
                     .build());
         }
         for (var codec : audioCodecs) {
-            children.add(codec.toNode());
+            children.add(codec.toStanza());
         }
         for (var codec : videoCodecs) {
-            children.add(codec.toNode());
+            children.add(codec.toStanza());
         }
         if (netMedium >= 0) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(NET_ELEMENT)
                     .attribute(MEDIUM_ATTRIBUTE, netMedium)
                     .build());
         }
         for (var capability : capabilities) {
-            children.add(capability.toNode());
+            children.add(capability.toStanza());
         }
         if (!keyDistribution.isEmpty()) {
-            var toNodes = new ArrayList<Node>(keyDistribution.size());
+            var toNodes = new ArrayList<Stanza>(keyDistribution.size());
             for (var slot : keyDistribution) {
-                toNodes.add(slot.toNode());
+                toNodes.add(slot.toStanza());
             }
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(DESTINATION_ELEMENT)
                     .content(toNodes)
                     .build());
         }
         if (media != null) {
-            children.add(media.toNode());
+            children.add(media.toStanza());
         }
         if (encOptions != null) {
-            children.add(encOptions.toNode());
+            children.add(encOptions.toStanza());
         }
         if (relay != null) {
             children.add(relay);
@@ -542,7 +542,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
             children.add(bot);
         }
         if (deviceIdentity != null) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(DEVICE_IDENTITY_ELEMENT)
                     .content(deviceIdentity)
                     .build());
@@ -552,7 +552,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
             children.add(callerMetadata);
         }
 
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(CALLER_PN_ATTRIBUTE, callerPn)
                 .attribute(USER_PN_ATTRIBUTE, userPn)
                 .attribute(USERNAME_ATTRIBUTE, username)
@@ -570,7 +570,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
     }
 
     /**
-     * Decodes an {@code <offer>} action node into an {@link OfferStanza}.
+     * Decodes an {@code <offer>} action stanza into an {@link OfferStanza}.
      *
      * <p>The flat attributes, the capability children, the flat {@code <audio>} and {@code <video>}
      * format children, the {@code <net medium>} child, the call-key fanout, the {@code <media>}
@@ -581,55 +581,55 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
      * {@code <device-identity>}, {@code <voip_settings>}, {@code <privacy>}, {@code <relay>},
      * {@code <bot>}, and {@code <metadata>} children are retained as raw subtrees.
      *
-     * @param node the {@code <offer>} node
+     * @param stanza the {@code <offer>} stanza
      * @return the decoded offer signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static OfferStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var callerPn = node.getAttributeAsJid(CALLER_PN_ATTRIBUTE).orElse(null);
-        var userPn = node.getAttributeAsJid(USER_PN_ATTRIBUTE).orElse(null);
-        var username = node.getAttributeAsString(USERNAME_ATTRIBUTE, null);
-        var groupJid = node.getAttributeAsJid(GROUP_JID_ATTRIBUTE).orElse(null);
-        var scheduledId = node.getAttributeAsString(SCHEDULED_ID_ATTRIBUTE, null);
-        var deviceClass = node.getAttributeAsString(DEVICE_CLASS_ATTRIBUTE, null);
-        var joinable = FLAG_TRUE.equals(node.getAttributeAsString(JOINABLE_ATTRIBUTE, FLAG_FALSE));
-        var lightweight = FLAG_TRUE.equals(node.getAttributeAsString(LIGHTWEIGHT_ATTRIBUTE, FLAG_FALSE));
-        var lightweightKey = node.getAttributeAsBytes(LIGHTWEIGHT_KEY_ATTRIBUTE, null);
-        var reringTimestamp = node.getAttributeAsLong(RERING_TS_ATTRIBUTE, -1L);
-        var netMedium = node.getChild(NET_ELEMENT)
+    public static OfferStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var callerPn = stanza.getAttributeAsJid(CALLER_PN_ATTRIBUTE).orElse(null);
+        var userPn = stanza.getAttributeAsJid(USER_PN_ATTRIBUTE).orElse(null);
+        var username = stanza.getAttributeAsString(USERNAME_ATTRIBUTE, null);
+        var groupJid = stanza.getAttributeAsJid(GROUP_JID_ATTRIBUTE).orElse(null);
+        var scheduledId = stanza.getAttributeAsString(SCHEDULED_ID_ATTRIBUTE, null);
+        var deviceClass = stanza.getAttributeAsString(DEVICE_CLASS_ATTRIBUTE, null);
+        var joinable = FLAG_TRUE.equals(stanza.getAttributeAsString(JOINABLE_ATTRIBUTE, FLAG_FALSE));
+        var lightweight = FLAG_TRUE.equals(stanza.getAttributeAsString(LIGHTWEIGHT_ATTRIBUTE, FLAG_FALSE));
+        var lightweightKey = stanza.getAttributeAsBytes(LIGHTWEIGHT_KEY_ATTRIBUTE, null);
+        var reringTimestamp = stanza.getAttributeAsLong(RERING_TS_ATTRIBUTE, -1L);
+        var netMedium = stanza.getChild(NET_ELEMENT)
                 .map(net -> net.getAttributeAsInt(MEDIUM_ATTRIBUTE, -1))
                 .orElse(-1);
 
-        var capabilities = node.streamChildren(CallCapability.ELEMENT)
+        var capabilities = stanza.streamChildren(CallCapability.ELEMENT)
                 .flatMap(child -> CallCapability.of(child).stream())
                 .toList();
-        var audioCodecs = node.streamChildren(AUDIO_ELEMENT)
+        var audioCodecs = stanza.streamChildren(AUDIO_ELEMENT)
                 .flatMap(audio -> CallCodecDescriptor.of(audio).stream())
                 .toList();
-        var videoCodecs = node.streamChildren(VIDEO_ELEMENT)
+        var videoCodecs = stanza.streamChildren(VIDEO_ELEMENT)
                 .flatMap(video -> CallCodecDescriptor.of(video).stream())
                 .toList();
-        var keyDistribution = decodeKeyDistribution(node);
-        var media = node.getChild(CallMediaDescriptor.ELEMENT).flatMap(CallMediaDescriptor::of).orElse(null);
-        var encOptions = node.getChild(CallEncOptions.ELEMENT).flatMap(CallEncOptions::of).orElse(null);
-        var groupInfo = node.getChild(GROUP_INFO_ELEMENT).orElse(null);
-        var deviceIdentity = node.getChild(DEVICE_IDENTITY_ELEMENT)
-                .flatMap(Node::toContentBytes)
+        var keyDistribution = decodeKeyDistribution(stanza);
+        var media = stanza.getChild(CallMediaDescriptor.ELEMENT).flatMap(CallMediaDescriptor::of).orElse(null);
+        var encOptions = stanza.getChild(CallEncOptions.ELEMENT).flatMap(CallEncOptions::of).orElse(null);
+        var groupInfo = stanza.getChild(GROUP_INFO_ELEMENT).orElse(null);
+        var deviceIdentity = stanza.getChild(DEVICE_IDENTITY_ELEMENT)
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
-        var privacyToken = node.getChild(PRIVACY_ELEMENT)
-                .flatMap(Node::toContentBytes)
+        var privacyToken = stanza.getChild(PRIVACY_ELEMENT)
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
-        var relay = node.getChild(RELAY_ELEMENT).orElse(null);
-        var bot = node.getChild(BOT_ELEMENT).orElse(null);
-        var voipSettings = node.getChildren(VOIP_SETTINGS_ELEMENT)
+        var relay = stanza.getChild(RELAY_ELEMENT).orElse(null);
+        var bot = stanza.getChild(BOT_ELEMENT).orElse(null);
+        var voipSettings = stanza.getChildren(VOIP_SETTINGS_ELEMENT)
                 .stream()
                 .toList();
-        var callerMetadata = node.getChild(METADATA_ELEMENT).orElse(null);
+        var callerMetadata = stanza.getChild(METADATA_ELEMENT).orElse(null);
 
         return new OfferStanza(callId, callCreator, callerPn, userPn, username, groupJid, scheduledId, deviceClass,
                 joinable, lightweight, lightweightKey, reringTimestamp, netMedium, capabilities, audioCodecs,
@@ -646,22 +646,22 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
      * single bare {@code <enc>} when no destination is present, modeling the second shape as one
      * fanout slot addressed to the call creator.
      *
-     * @param node the {@code <offer>} node
+     * @param stanza the {@code <offer>} stanza
      * @return the decoded per-device key fanout, possibly empty
      */
-    private static List<CallKeyDistribution> decodeKeyDistribution(Node node) {
-        var destination = node.getChild(DESTINATION_ELEMENT);
+    private static List<CallKeyDistribution> decodeKeyDistribution(Stanza stanza) {
+        var destination = stanza.getChild(DESTINATION_ELEMENT);
         if (destination.isPresent()) {
             return destination.get()
                     .streamChildren(CallKeyDistribution.TO_ELEMENT)
                     .flatMap(to -> CallKeyDistribution.of(to).stream())
                     .toList();
         }
-        var enc = node.getChild(ENC_ELEMENT);
+        var enc = stanza.getChild(ENC_ELEMENT);
         if (enc.isPresent()) {
             var ciphertext = enc.get().toContentBytes();
             if (ciphertext.isPresent()) {
-                var creator = node.getAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE).orElse(null);
+                var creator = stanza.getAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE).orElse(null);
                 if (creator != null) {
                     var version = enc.get().getAttributeAsInt("v", -1);
                     var encType = enc.get().getAttributeAsString("type", null);

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.socket.datagram;
 
 import com.github.auties00.cobalt.socket.websocket.WebSocketFrameOutputStream;
+import com.github.auties00.cobalt.stanza.binary.StanzaWriter;
 import com.github.auties00.cobalt.util.AesGcmStreamCipher;
 import com.github.auties00.cobalt.util.DataUtils;
 
@@ -182,8 +183,8 @@ public final class WhatsAppDatagramOutputStream extends FilterOutputStream {
      * GCM tag and push the bytes downstream. The {@code prologue} is the Noise XX version header ({@code "WA\x06\x07"}
      * or {@code "WA\x05\x07"}) on the very first handshake message and is {@code null} on every subsequent datagram.
      * The cipher and the downstream's length prefix are set up under this call, so the caller can stream the payload
-     * through any byte-oriented encoder (the {@link com.github.auties00.cobalt.node.binary.NodeWriter} streaming
-     * variant {@link com.github.auties00.cobalt.node.binary.NodeWriter#toStream(OutputStream)}, the protobuf
+     * through any byte-oriented encoder (the {@link StanzaWriter} streaming
+     * variant {@link StanzaWriter#toStream(OutputStream)}, the protobuf
      * {@link it.auties.protobuf.stream.ProtobufOutputStream#toStream(OutputStream)} variant) without that encoder
      * having to know about framing or encryption.
      *

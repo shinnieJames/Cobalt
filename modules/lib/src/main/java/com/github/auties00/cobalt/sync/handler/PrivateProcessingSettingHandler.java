@@ -1,10 +1,11 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -16,7 +17,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#UNDEFINED},
  * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#ENABLED},
  * {@link PrivateProcessingSettingAction.PrivateProcessingStatus#DISABLED}) on
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} so the
+ * {@link LinkedWhatsAppStore} so the
  * private-processing toggle stays consistent across paired devices. Only
  * {@link SyncdOperation#SET} is accepted; any other operation is reported as
  * {@link MutationApplicationResult#unsupported()} and a missing or unparseable

@@ -8,8 +8,8 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 /**
  * Covers {@link ChatMessageReceiver} by driving a full encrypt-then-receive cycle: a sender-side
  * {@link MessageEncryption} produces a PKMSG ciphertext, it is wrapped in a synthetic inbound
- * {@code <message>} node, and handed to the recipient's {@link ChatMessageReceiver}, which must
+ * {@code <message>} stanza, and handed to the recipient's {@link ChatMessageReceiver}, which must
  * decrypt, decode the protobuf, and return a populated
  * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} carrying the sender's original
  * {@link MessageContainer}. Both sides share libsignal session state installed by
@@ -53,13 +53,13 @@ class ChatMessageReceiverTest {
                 RECIPIENT_PRIMARY,
                 MessageContainerSpec.encode(senderContainer));
 
-        var inbound = new NodeBuilder()
+        var inbound = new StanzaBuilder()
                 .description("message")
                 .attribute("id", "3EB0RCV0001")
                 .attribute("from", SENDER_PRIMARY)
                 .attribute("t", 1700000000L)
                 .attribute("type", "text")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("enc")
                         .attribute("v", "2")
                         .attribute("type", "pkmsg")
@@ -119,15 +119,15 @@ class ChatMessageReceiverTest {
                 "second decrypt must recover the new plaintext");
     }
 
-    private static Node buildInbound(String id, String encType, byte[] ciphertext) {
-        return new NodeBuilder()
+    private static Stanza buildInbound(String id, String encType, byte[] ciphertext) {
+        return new StanzaBuilder()
                 .description("message")
                 .attribute("id", id)
                 .attribute("from", SENDER_PRIMARY)
                 // pins a deterministic stanza age so the expired-status branch never fires
                 .attribute("t", 1700000000L)
                 .attribute("type", "text")
-                .content(new NodeBuilder()
+                .content(new StanzaBuilder()
                         .description("enc")
                         .attribute("v", "2")
                         .attribute("type", encType)

@@ -86,7 +86,7 @@ class AckParserLiveOracleTest {
     }
 
     @Test
-    @DisplayName("newsletter ack carries server_id (not a parsed attribute; preserved on the node)")
+    @DisplayName("newsletter ack carries server_id (not a parsed attribute; preserved on the stanza)")
     void newsletterAckCarriesServerId() {
         var topic = "send/newsletter-text";
         if (!MessageFixtures.isAvailable(topic + ".ack")) return;
@@ -95,7 +95,7 @@ class AckParserLiveOracleTest {
         for (var event : events) {
             var ack = MessageFixtures.buildNodeFromEvent(event);
             // server_id is the newsletter publish receipt id; AckParser does not surface it but it
-            // must be on the captured node so higher-level newsletter handlers can read it.
+            // must be on the captured stanza so higher-level newsletter handlers can read it.
             assertTrue(ack.getAttributeAsString("server_id").isPresent(),
                     "newsletter ack must carry server_id attribute");
         }

@@ -11,7 +11,6 @@ import com.github.auties00.cobalt.calls2.core.Calls2CallTimerKind;
 import com.github.auties00.cobalt.calls2.core.Calls2CallTimerScheduler;
 import com.github.auties00.cobalt.calls2.core.Calls2LifecycleController;
 import com.github.auties00.cobalt.calls2.core.Calls2MediaPlane;
-import com.github.auties00.cobalt.calls2.core.Calls2OfferAckSender;
 import com.github.auties00.cobalt.calls2.crypto.CallKeyExchange;
 import com.github.auties00.cobalt.calls2.crypto.CallRekeyEnvelope;
 import com.github.auties00.cobalt.calls2.platform.VoipHostApi;
@@ -21,19 +20,15 @@ import com.github.auties00.cobalt.calls2.signaling.CallMessageBuffer;
 import com.github.auties00.cobalt.calls2.signaling.CallSignalingRouter;
 import com.github.auties00.cobalt.calls2.signaling.Calls2CallReceiver;
 import com.github.auties00.cobalt.calls2.signaling.Calls2TerminateReceiver;
-import com.github.auties00.cobalt.calls2.signaling.Calls2CallStanza;
 import com.github.auties00.cobalt.calls2.signaling.OfferStanza;
 import com.github.auties00.cobalt.calls2.signaling.TerminateStanza;
-import com.github.auties00.cobalt.ack.AckParser;
 import com.github.auties00.cobalt.ack.AckResult;
-import com.github.auties00.cobalt.ack.CallAck;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.message.MessageService;
-import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
@@ -41,8 +36,8 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -86,15 +81,15 @@ class Calls2InboundRoutingWiringTest {
     private static final Jid PEER_DEVICE_LID = Jid.of("55555555", JidServer.lid(), 7, 0);
     private static final String CALL_ID = "CAFEBABECAFEBABECAFEBABECAFEBABE";
 
-    private static Node inboundOffer(String callId, Jid from, Jid callCreatorDevice, boolean withMedia) {
-        var offer = new NodeBuilder()
+    private static Stanza inboundOffer(String callId, Jid from, Jid callCreatorDevice, boolean withMedia) {
+        var offer = new StanzaBuilder()
                 .description("offer")
                 .attribute("call-id", callId)
                 .attribute("call-creator", callCreatorDevice);
         if (withMedia) {
-            offer.content(new NodeBuilder().description("media").attribute("type", "audio").build());
+            offer.content(new StanzaBuilder().description("media").attribute("type", "audio").build());
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("call")
                 .attribute("from", from)
                 .attribute("id", "stanza-" + callId)
@@ -103,8 +98,8 @@ class Calls2InboundRoutingWiringTest {
                 .build();
     }
 
-    private static Node inboundEnvelope(Node payload, Jid from, Jid senderLid) {
-        return new NodeBuilder()
+    private static Stanza inboundEnvelope(Stanza payload, Jid from, Jid senderLid) {
+        return new StanzaBuilder()
                 .description("call")
                 .attribute("from", from)
                 .attribute("id", "stanza-x")
@@ -119,7 +114,7 @@ class Calls2InboundRoutingWiringTest {
         @Test
         @DisplayName("a fresh inbound offer is acked and replayed to the calls2 sink, never handed to a legacy receiver")
         void freshOfferRoutesToCalls2() throws IOException {
-            var sentNodes = new ConcurrentLinkedQueue<Node>();
+            var sentNodes = new ConcurrentLinkedQueue<Stanza>();
             var client = clientRecording(sentNodes);
             var forwarded = new ConcurrentLinkedQueue<CallMessage>();
             var receiver = new Calls2CallReceiver(client, new AckSender(client),
@@ -143,7 +138,7 @@ class Calls2InboundRoutingWiringTest {
         @Test
         @DisplayName("a routable signal for an existing call is decoded and forwarded to the calls2 sink")
         void processForwardsToCalls2Sink() throws IOException {
-            var sentNodes = new ConcurrentLinkedQueue<Node>();
+            var sentNodes = new ConcurrentLinkedQueue<Stanza>();
             var client = clientRecording(sentNodes);
             var forwarded = new ConcurrentLinkedQueue<CallMessage>();
             var receiver = new Calls2CallReceiver(client, new AckSender(client),
@@ -151,7 +146,7 @@ class Calls2InboundRoutingWiringTest {
                     callId -> CALL_ID.equals(callId), (message, from) -> forwarded.add(message));
 
             var terminate = TerminateStanza.of(CALL_ID, PEER_DEVICE_LID, CallEndReason.HANGUP, List.of());
-            receiver.handle(inboundEnvelope(terminate.toNode(), PEER_DEVICE_LID, PEER_DEVICE_LID));
+            receiver.handle(inboundEnvelope(terminate.toStanza(), PEER_DEVICE_LID, PEER_DEVICE_LID));
 
             assertEquals(1, forwarded.size(), "a PROCESS verdict must forward exactly one decoded message");
             assertTrue(forwarded.peek() instanceof TerminateStanza, "the forwarded message is the decoded terminate");
@@ -160,14 +155,14 @@ class Calls2InboundRoutingWiringTest {
         @Test
         @DisplayName("a stanza with no payload is dropped without an ack")
         void malformedStanzaDropped() throws IOException {
-            var sentNodes = new ConcurrentLinkedQueue<Node>();
+            var sentNodes = new ConcurrentLinkedQueue<Stanza>();
             var client = clientRecording(sentNodes);
             var forwarded = new ConcurrentLinkedQueue<CallMessage>();
             var receiver = new Calls2CallReceiver(client, new AckSender(client),
                     new CallSignalingRouter(), new CallMessageBuffer(),
                     callId -> true, (message, from) -> forwarded.add(message));
 
-            var bare = new NodeBuilder().description("call").attribute("from", PEER_DEVICE_LID).build();
+            var bare = new StanzaBuilder().description("call").attribute("from", PEER_DEVICE_LID).build();
             receiver.handle(bare);
 
             assertTrue(forwarded.isEmpty(), "no payload means nothing to forward");
@@ -184,7 +179,7 @@ class Calls2InboundRoutingWiringTest {
             var forwarded = new ConcurrentLinkedQueue<TerminateStanza>();
             var receiver = new Calls2TerminateReceiver((terminate, from) -> forwarded.add(terminate));
 
-            var bare = TerminateStanza.of(CALL_ID, PEER_DEVICE_LID, CallEndReason.HANGUP, List.of()).toNode();
+            var bare = TerminateStanza.of(CALL_ID, PEER_DEVICE_LID, CallEndReason.HANGUP, List.of()).toStanza();
             receiver.handle(bare);
 
             assertEquals(1, forwarded.size(), "a well-formed bare terminate must forward once");
@@ -197,7 +192,7 @@ class Calls2InboundRoutingWiringTest {
             var forwarded = new ConcurrentLinkedQueue<TerminateStanza>();
             var receiver = new Calls2TerminateReceiver((terminate, from) -> forwarded.add(terminate));
 
-            receiver.handle(new NodeBuilder().description("terminate").attribute("reason", "hangup").build());
+            receiver.handle(new StanzaBuilder().description("terminate").attribute("reason", "hangup").build());
 
             assertTrue(forwarded.isEmpty(), "a terminate with no call-id cannot be associated with a call");
         }
@@ -237,25 +232,25 @@ class Calls2InboundRoutingWiringTest {
         }
     }
 
-    private static TestWhatsAppClient clientRecording(ConcurrentLinkedQueue<Node> sentNodes) {
+    private static TestWhatsAppClient clientRecording(ConcurrentLinkedQueue<Stanza> sentStanzas) {
         var store = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
         store.addListener(new LinkedWhatsAppClientListener() {
             @Override
-            public void onNodeSent(LinkedWhatsAppClient whatsapp, Node node) {
-                sentNodes.add(node);
+            public void onNodeSent(LinkedWhatsAppClient whatsapp, Stanza stanza) {
+                sentStanzas.add(stanza);
             }
         });
         return TestWhatsAppClient.create().withStore(store);
     }
 
-    private static Optional<Node> outgoing(ConcurrentLinkedQueue<Node> sentNodes, String tag) {
-        return sentNodes.stream().filter(n -> tag.equals(n.description())).findFirst();
+    private static Optional<Stanza> outgoing(ConcurrentLinkedQueue<Stanza> sentStanzas, String tag) {
+        return sentStanzas.stream().filter(n -> tag.equals(n.description())).findFirst();
     }
 
     private LiveCalls2Service serviceWithLifecycle(RecordingEventSink events) {
         var client = clientRecording(new ConcurrentLinkedQueue<>());
         var controller = new Calls2LifecycleController(
-                offerEnvelope -> new NodeBuilder().description("ack").build(),
+                offerEnvelope -> new StanzaBuilder().description("ack").build(),
                 new NoopCallKeyExchange(),
                 new NoopVoipHostApi(),
                 new NoopRegistry(),
@@ -293,7 +288,7 @@ class Calls2InboundRoutingWiringTest {
         }
 
         @Override
-        public MessageInfo process(Node node) {
+        public MessageInfo process(Stanza stanza) {
             throw new UnsupportedOperationException("StubMessageService.process not stubbed");
         }
 
@@ -385,11 +380,12 @@ class Calls2InboundRoutingWiringTest {
 
     private static final class NoopMediaPlane implements Calls2MediaPlane {
         @Override
-        public Session bringUp(String callId, Node relay, java.util.List<Node> voipSettings, byte[] callKey,
+        public Session bringUp(String callId, Stanza relay, java.util.List<Stanza> voipSettings, byte[] callKey,
                                boolean isCaller, boolean video, int participantCount,
                                com.github.auties00.cobalt.calls2.core.participant.CallMembership membership,
                                com.github.auties00.cobalt.calls2.core.Calls2MediaStreams streams,
-                               com.github.auties00.cobalt.model.jid.Jid peerDeviceJid) {
+                               com.github.auties00.cobalt.model.jid.Jid peerDeviceJid,
+                               Optional<String> electedRelayName) {
             return () -> {
             };
         }
@@ -429,7 +425,7 @@ class Calls2InboundRoutingWiringTest {
 
     private static final class NoopVoipHostApi implements VoipHostApi {
         @Override
-        public void sendSignaling(Node node) {
+        public void sendSignaling(Stanza stanza) {
         }
 
         @Override

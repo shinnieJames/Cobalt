@@ -5,10 +5,10 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -26,7 +26,7 @@ import java.util.Optional;
  * Test harness that loads device-package fixtures captured from a live WhatsApp Web session.
  *
  * <p>Two fixture families live under {@code src/test/resources/fixtures/device/}: JSONL stanza
- * dumps (rehydrated into a Cobalt {@link Node} through {@link #loadEvents(String)} and
+ * dumps (rehydrated into a Cobalt {@link Stanza} through {@link #loadEvents(String)} and
  * {@link #buildNodeFromEvent(JSONObject)}), and {@code .expected.json} oracle outputs (exposed as
  * raw {@link JSONObject}). Every fixture path lives under {@code FIXTURE_ROOT}; missing fixtures
  * are reported via {@link #isAvailable(String)} so tests can skip cleanly rather than hard-failing.
@@ -100,30 +100,30 @@ public final class DeviceFixtures {
     }
 
     /**
-     * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a captured event.
+     * Reconstructs a Cobalt {@link Stanza} from the {@code stanza} sub-tree of a captured event.
      *
      * @param event the event object from {@link #loadEvents(String)}
-     * @return the reconstructed {@link Node}
+     * @return the reconstructed {@link Stanza}
      * @throws IllegalArgumentException if the tree is malformed
      */
-    public static Node buildNodeFromEvent(JSONObject event) {
+    public static Stanza buildNodeFromEvent(JSONObject event) {
         Objects.requireNonNull(event, "event");
-        var nodeTree = event.getJSONObject("node");
+        var nodeTree = event.getJSONObject("stanza");
         if (nodeTree == null) {
-            throw new IllegalArgumentException("event missing 'node' subtree");
+            throw new IllegalArgumentException("event missing 'stanza' subtree");
         }
         return buildNode(nodeTree);
     }
 
     /**
-     * Reconstructs a {@link Node} from a captured {@code {tag, attrs, content}} tree already
+     * Reconstructs a {@link Stanza} from a captured {@code {tag, attrs, content}} tree already
      * extracted from a parent event.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
+     * @return the reconstructed stanza
      * @throws IllegalArgumentException if {@code tree} has no tag
      */
-    public static Node buildNodeFromTree(JSONObject tree) {
+    public static Stanza buildNodeFromTree(JSONObject tree) {
         return buildNode(tree);
     }
 
@@ -199,7 +199,7 @@ public final class DeviceFixtures {
     public static LinkedWhatsAppStore temporaryStore(Jid selfPn, Jid selfLid) {
         Objects.requireNonNull(selfPn, "selfPn");
         try {
-            var store = WhatsAppStoreFactory.temporary()
+            var store = LinkedWhatsAppStoreFactory.temporary()
                     .create(LinkedWhatsAppClientType.WEB, Long.parseLong(selfPn.user()));
             store.accountStore().setJid(selfPn);
             if (selfLid != null) {
@@ -228,11 +228,11 @@ public final class DeviceFixtures {
 
     /**
      * Flattens a captured attribute value into the string form the
-     * {@link NodeBuilder#attribute(String, String)} setter expects.
+     * {@link StanzaBuilder#attribute(String, String)} setter expects.
      *
      * <p>The capture wraps internal JIDs as
      * {@code {"$1": {"type": <int>, "user": <string|null>, "server": <string>}}}; Cobalt's
-     * {@link Node} carries those as bare {@code user@server} strings (or {@code @server} when
+     * {@link Stanza} carries those as bare {@code user@server} strings (or {@code @server} when
      * {@code user} is {@code null}). Any other shape is delegated to {@link String#valueOf(Object)}.
      *
      * @param value the raw captured attribute value
@@ -264,18 +264,18 @@ public final class DeviceFixtures {
     }
 
     /**
-     * Recursively builds a {@link Node} from a {@code {tag, attrs, content}} tree.
+     * Recursively builds a {@link Stanza} from a {@code {tag, attrs, content}} tree.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
+     * @return the reconstructed stanza
      */
-    private static Node buildNode(JSONObject tree) {
+    private static Stanza buildNode(JSONObject tree) {
         var tag = tree.getString("tag");
         if (tag == null || tag.isEmpty()) {
-            throw new IllegalArgumentException("node tree missing 'tag': " + tree);
+            throw new IllegalArgumentException("stanza tree missing 'tag': " + tree);
         }
 
-        var builder = new NodeBuilder().description(tag);
+        var builder = new StanzaBuilder().description(tag);
 
         var attrs = tree.getJSONObject("attrs");
         if (attrs != null) {
@@ -299,7 +299,7 @@ public final class DeviceFixtures {
      * @param builder the target builder
      * @param content the JSON-shaped content value
      */
-    private static void applyContent(NodeBuilder builder, Object content) {
+    private static void applyContent(StanzaBuilder builder, Object content) {
         if (content == null) return;
 
         if (content instanceof JSONObject leaf) {
@@ -307,13 +307,13 @@ public final class DeviceFixtures {
                 builder.content(decodeBinary(leaf));
                 return;
             }
-            // A single embedded child node is sometimes captured as a bare object, not a one-element array
+            // A single embedded child stanza is sometimes captured as a bare object, not a one-element array
             builder.content(buildNode(leaf));
             return;
         }
 
         if (content instanceof JSONArray children) {
-            var built = new ArrayList<Node>(children.size());
+            var built = new ArrayList<Stanza>(children.size());
             byte[] inlineBytes = null;
             for (var entry : children) {
                 if (entry instanceof JSONObject obj) {
@@ -323,7 +323,7 @@ public final class DeviceFixtures {
                     }
                     built.add(buildNode(obj));
                 } else if (entry != null) {
-                    built.add(new NodeBuilder().description("__text").content(String.valueOf(entry)).build());
+                    built.add(new StanzaBuilder().description("__text").content(String.valueOf(entry)).build());
                 }
             }
             if (!built.isEmpty()) {

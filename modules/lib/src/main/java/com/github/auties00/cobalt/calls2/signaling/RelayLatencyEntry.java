@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Arrays;
 import java.util.Base64;
@@ -110,6 +110,75 @@ public record RelayLatencyEntry(int latency,
     private static final String TRUE_LITERAL = "1";
 
     /**
+     * The bit the engine sets in the high field of a packed latency to mark the relay measurement valid and
+     * the relay reachable.
+     *
+     * <p>The wire {@code latency}/{@code xlatency} attribute is not a plain millisecond count: it packs a
+     * six-bit high field, a flag bit, and a signed twenty-four-bit latency. A valid, reachable measurement
+     * carries this marker (bit twenty-five); the captured engine reports decode as
+     * {@code 0x02000000 | latencyMillis}.
+     */
+    private static final int LATENCY_REACHABLE_MARKER = 1 << 25;
+
+    /**
+     * The twenty-four-bit mask isolating the latency millisecond count from a packed latency value.
+     */
+    private static final int LATENCY_VALUE_MASK = 0xffffff;
+
+    /**
+     * The packed twenty-four-bit latency value standing for an unreachable relay, the maximum positive
+     * twenty-four-bit value.
+     *
+     * <p>The engine emits this value for a relay it probed but could not reach; a report carrying it marks
+     * the relay unreachable rather than fast.
+     */
+    public static final int LATENCY_UNREACHABLE = 0x7fffff;
+
+    /**
+     * Packs a millisecond latency into the wire {@code latency} value the engine expects.
+     *
+     * <p>Sets the reachable marker in the high field and carries the latency in the low twenty-four bits,
+     * reproducing the encoding {@code unpack_relay_latency} (fn5167) inverts on receipt. A negative or
+     * oversized latency is masked to twenty-four bits.
+     *
+     * @param latencyMillis the round-trip latency to encode, in milliseconds
+     * @return the packed wire latency value
+     */
+    public static int packLatency(int latencyMillis) {
+        return LATENCY_REACHABLE_MARKER | (latencyMillis & LATENCY_VALUE_MASK);
+    }
+
+    /**
+     * Unpacks the millisecond latency from a wire {@code latency} value.
+     *
+     * <p>Recovers the signed twenty-four-bit latency the engine packed, mirroring the low-bits extraction of
+     * {@code unpack_relay_latency} (fn5167); the high field and flag bit are dropped. A packed
+     * {@link #LATENCY_UNREACHABLE} value round-trips to {@code 0x7fffff}, which {@link #isReachable()} treats
+     * as unreachable.
+     *
+     * @param packed the packed wire latency value
+     * @return the latency in milliseconds, sign-extended from twenty-four bits
+     */
+    public static int unpackLatencyMillis(int packed) {
+        var low = packed & LATENCY_VALUE_MASK;
+        return (low & 0x800000) != 0 ? low | ~LATENCY_VALUE_MASK : low;
+    }
+
+    /**
+     * Returns whether this entry reports the relay as reachable.
+     *
+     * <p>An entry whose packed latency unpacks to {@link #LATENCY_UNREACHABLE} reports a relay the peer
+     * probed but could not reach; every other entry reports a reachable relay at the unpacked latency. The
+     * relay election only counts a relay a peer can reach, so this gates folding the entry into the
+     * reachability matrix.
+     *
+     * @return {@code true} when the peer can reach the reported relay
+     */
+    public boolean isReachable() {
+        return unpackLatencyMillis(latency) != LATENCY_UNREACHABLE;
+    }
+
+    /**
      * Canonicalizes the record components, defensively copying the connection id and encrypted blob.
      */
     public RelayLatencyEntry {
@@ -190,17 +259,17 @@ public record RelayLatencyEntry(int latency,
     }
 
     /**
-     * Builds the {@code <te>} node for this latency entry.
+     * Builds the {@code <te>} stanza for this latency entry.
      *
      * <p>The latency attribute is named {@code xlatency} when {@link #encryptedRtt()} is set and
      * {@code latency} otherwise. The bandwidth estimates are omitted when absent, {@code is_favored} is
      * written only when set, and {@code conn_id} is written as the base64 of the connection id only
      * when present. The encrypted blob, when present, becomes an {@code <enc>} child.
      *
-     * @return the relay-latency entry node
+     * @return the relay-latency entry stanza
      */
-    public Node toNode() {
-        var builder = new NodeBuilder()
+    public Stanza toNode() {
+        var builder = new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(encryptedRtt ? XLATENCY_ATTRIBUTE : LATENCY_ATTRIBUTE, latency)
                 .attribute(UPLINK_BW_ATTRIBUTE, uplinkBw, uplinkBw >= 0)
@@ -209,7 +278,7 @@ public record RelayLatencyEntry(int latency,
                 .attribute(RELAY_NAME_ATTRIBUTE, relayName)
                 .attribute(CONN_ID_ATTRIBUTE, connectionId == null ? null : Base64.getEncoder().encodeToString(connectionId));
         if (enc != null) {
-            builder.content(new NodeBuilder()
+            builder.content(new StanzaBuilder()
                     .description(ENC_ELEMENT)
                     .content(enc)
                     .build());
@@ -218,36 +287,36 @@ public record RelayLatencyEntry(int latency,
     }
 
     /**
-     * Decodes a {@code <te>} node into a {@link RelayLatencyEntry}.
+     * Decodes a {@code <te>} stanza into a {@link RelayLatencyEntry}.
      *
      * <p>The latency name is resolved by probing {@code xlatency} first and then {@code latency}; the
-     * presence of {@code xlatency} sets the encrypted-RTT flag. A node that is not a {@code <te>}
+     * presence of {@code xlatency} sets the encrypted-RTT flag. A stanza that is not a {@code <te>}
      * element, or one that carries neither a {@code latency} nor an {@code xlatency} attribute, yields
      * an empty result so callers iterating a mixed child list can skip it. The {@code conn_id} is
      * base64-decoded when present and parseable; an unparseable {@code conn_id} is treated as absent.
      *
-     * @param node the relay-latency entry node
-     * @return the decoded entry, or an empty result when the node is not a usable {@code <te>} element
-     * @throws NullPointerException if {@code node} is {@code null}
+     * @param stanza the relay-latency entry stanza
+     * @return the decoded entry, or an empty result when the stanza is not a usable {@code <te>} element
+     * @throws NullPointerException if {@code stanza} is {@code null}
      */
-    public static Optional<RelayLatencyEntry> of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        if (!node.hasDescription(ELEMENT)) {
+    public static Optional<RelayLatencyEntry> of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        if (!stanza.hasDescription(ELEMENT)) {
             return Optional.empty();
         }
-        var encryptedRtt = node.hasAttribute(XLATENCY_ATTRIBUTE);
+        var encryptedRtt = stanza.hasAttribute(XLATENCY_ATTRIBUTE);
         var latencyAttribute = encryptedRtt ? XLATENCY_ATTRIBUTE : LATENCY_ATTRIBUTE;
-        var latency = node.getAttributeAsInt(latencyAttribute);
+        var latency = stanza.getAttributeAsInt(latencyAttribute);
         if (latency.isEmpty()) {
             return Optional.empty();
         }
-        var uplinkBw = node.getAttributeAsInt(UPLINK_BW_ATTRIBUTE, -1);
-        var downlinkBw = node.getAttributeAsInt(DOWNLINK_BW_ATTRIBUTE, -1);
-        var favored = TRUE_LITERAL.equals(node.getAttributeAsString(IS_FAVORED_ATTRIBUTE, null));
-        var relayName = node.getAttributeAsString(RELAY_NAME_ATTRIBUTE, null);
-        var connectionId = decodeConnectionId(node.getAttributeAsString(CONN_ID_ATTRIBUTE, null));
-        var enc = node.getChild(ENC_ELEMENT)
-                .flatMap(Node::toContentBytes)
+        var uplinkBw = stanza.getAttributeAsInt(UPLINK_BW_ATTRIBUTE, -1);
+        var downlinkBw = stanza.getAttributeAsInt(DOWNLINK_BW_ATTRIBUTE, -1);
+        var favored = TRUE_LITERAL.equals(stanza.getAttributeAsString(IS_FAVORED_ATTRIBUTE, null));
+        var relayName = stanza.getAttributeAsString(RELAY_NAME_ATTRIBUTE, null);
+        var connectionId = decodeConnectionId(stanza.getAttributeAsString(CONN_ID_ATTRIBUTE, null));
+        var enc = stanza.getChild(ENC_ELEMENT)
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
         return Optional.of(new RelayLatencyEntry(latency.getAsInt(), encryptedRtt, uplinkBw, downlinkBw,
                 favored, relayName, connectionId, enc));

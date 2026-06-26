@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.pairing;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
 
 import java.security.GeneralSecurityException;
 
@@ -105,7 +105,7 @@ public interface CompanionPairingService {
      *
      * <p>This is invoked from the notification stream handler when the primary device confirms the
      * typed code. On the first successful call the store's ADV secret is persisted via
-     * {@link com.github.auties00.cobalt.store.SignalStore#setAdvSecretKey}, concluding the handshake. A repeat notification
+     * {@link LinkedWhatsAppSignalStore#setAdvSecretKey}, concluding the handshake. A repeat notification
      * arriving after the handshake has already finished triggers an ADV-secret regeneration and a
      * rerun, up to a bounded number of attempts per code.
      *

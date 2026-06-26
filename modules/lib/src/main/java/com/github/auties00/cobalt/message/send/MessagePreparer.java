@@ -14,13 +14,14 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.*;
 import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
+import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.security.*;
 import com.github.auties00.cobalt.model.message.text.CommentMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfoBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.util.DataUtils;
 
 import java.time.Instant;
@@ -117,7 +118,7 @@ final class MessagePreparer {
 
         var messageSecret = DataUtils.randomByteArray(MESSAGE_SECRET_SIZE);
 
-        var preparedContainer = prepareAddonContent(container, chatJid, localJid);
+        var preparedContainer = prepareAddonContent(container, chatJid, localJid, messageSecret);
 
         var deviceInfo = new ChatMessageContextInfoBuilder()
                 .messageSecret(messageSecret)
@@ -198,32 +199,54 @@ final class MessagePreparer {
      * {@link SecretEncMessage}) must carry both their {@code encPayload} and
      * {@code encIv}, otherwise the call fails fast.
      *
-     * @param container the raw {@link MessageContainer}
-     * @param chatJid   the target chat {@link Jid}
-     * @param selfJid   the sender's own {@link Jid}
+     * @param container      the raw {@link MessageContainer}
+     * @param chatJid        the target chat {@link Jid}
+     * @param selfJid        the sender's own {@link Jid}
+     * @param messageSecret  the per-message secret stamped on the outgoing
+     *                       message, adopted as a {@link PollCreationMessage}'s
+     *                       {@code encKey} when none was supplied
      * @return the container, possibly with addon content converted in place
-     * @throws IllegalArgumentException if a poll vote is missing its encrypted
-     *                                  metadata, an {@code Enc*}-typed addon is
-     *                                  missing its payload or IV, or a CAG addon
-     *                                  cannot resolve its parent message
+     * @throws IllegalArgumentException if a poll vote carries neither an
+     *                                  encrypted payload nor raw selected
+     *                                  options, its referenced poll-creation
+     *                                  message cannot be resolved, an
+     *                                  {@code Enc*}-typed addon is missing its
+     *                                  payload or IV, or a CAG addon cannot
+     *                                  resolve its parent message
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryptAddonMsgData", exports = "encryptAddOn",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryptAddonMsgData", exports = "createDualEncryptionHelper",
             adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebPollsSendPollCreationMsgAction", exports = "createPollCreationMsgData",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebPollsSendVoteMsgAction", exports = "sendVote",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private MessageContainer prepareAddonContent(
             MessageContainer container,
             Jid chatJid,
-            Jid selfJid
+            Jid selfJid,
+            byte[] messageSecret
     ) {
 
         return switch (container.content()) {
+            case PollCreationMessage poll when poll.encKey().isEmpty() -> {
+                // The poll's vote-encryption key is the message secret recipients derive votes against.
+                poll.setEncKey(messageSecret);
+                yield container;
+            }
+
+            case PollUpdateMessage poll when poll.vote().isPresent() || poll.metadata().isPresent() ->
+                    container;
+
             case PollUpdateMessage poll -> {
-                if (poll.metadata().isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "PollUpdateMessage must have encrypted metadata: "
-                            + "use PollUpdateMessageSimpleBuilder to create poll votes");
-                }
+                var pollKey = poll.pollCreationMessageKey()
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "PollUpdateMessage must carry a pollCreationMessageKey"));
+                var pollCreation = resolveParentMessage(chatJid, pollKey)
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Poll creation message not found in store for key " + pollKey));
+                poll.setVote(EncMessageFactory.encryptPollVote(poll.selectedOptions(), pollCreation, selfJid));
                 yield container;
             }
 

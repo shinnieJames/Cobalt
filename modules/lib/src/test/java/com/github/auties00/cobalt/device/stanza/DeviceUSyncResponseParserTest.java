@@ -4,7 +4,7 @@ import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.device.DeviceListResult;
 import com.github.auties00.cobalt.device.adv.DeviceADVValidator;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -46,7 +46,7 @@ class DeviceUSyncResponseParserTest {
     }
 
     // Returns the first direction="in" entry; the outbound query entry is discarded since the parser only consumes responses.
-    private static Node loadResponseNode(String topic) {
+    private static Stanza loadResponseNode(String topic) {
         for (var event : DeviceFixtures.loadEvents(topic)) {
             if ("in".equals(event.getString("direction"))) {
                 return DeviceFixtures.buildNodeFromEvent(event);

@@ -1,10 +1,9 @@
 package com.github.auties00.cobalt.device.stanza;
 
-import com.github.auties00.cobalt.model.device.info.DeviceListHashInfo;
 import com.github.auties00.cobalt.model.device.info.DeviceListHashInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -27,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Structural tests for {@link DeviceUSyncQueryBuilder}, covering the USync IQ
  * stanza shape, the per-user device-hash delta updates, the 500-user batching
  * rule, and factory input validation. The builder is a pure static factory, so
- * every assertion walks the returned {@link Node} tree directly and no captured
+ * every assertion walks the returned {@link Stanza} tree directly and no captured
  * fixtures are needed.
  */
 @DisplayName("DeviceUSyncQueryBuilder")
@@ -330,14 +329,14 @@ class DeviceUSyncQueryBuilderTest {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private static int countUsers(Node iq) {
+    private static int countUsers(Stanza iq) {
         var list = childByDescription(childByDescription(iq, "usync"), "list");
         return (int) list.streamChildren()
                 .filter(child -> "user".equals(child.description()))
                 .count();
     }
 
-    private static Node firstUser(Node iq) {
+    private static Stanza firstUser(Stanza iq) {
         var list = childByDescription(childByDescription(iq, "usync"), "list");
         return list.streamChildren()
                 .filter(child -> "user".equals(child.description()))
@@ -345,7 +344,7 @@ class DeviceUSyncQueryBuilderTest {
                 .orElseThrow();
     }
 
-    private static Node childByDescription(Node parent, String description) {
+    private static Stanza childByDescription(Stanza parent, String description) {
         var hit = parent.streamChildren()
                 .filter(child -> description.equals(child.description()))
                 .findFirst();

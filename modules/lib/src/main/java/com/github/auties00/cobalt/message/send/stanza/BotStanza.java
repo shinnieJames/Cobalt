@@ -13,8 +13,8 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.security.GeneralSecurityException;
 import java.util.Objects;
@@ -23,7 +23,7 @@ import java.util.Objects;
  * Builds the optional {@code <bot>} child of an outgoing {@code <message>} stanza, both in its encrypted-fanout form and
  * its metadata-only form.
  * <p>
- * Two surfaces share the {@code <bot>} node. The encrypted-fanout form
+ * Two surfaces share the {@code <bot>} stanza. The encrypted-fanout form
  * {@code <bot><to jid="...@bot"><enc .../></to></bot>} delivers a separately encrypted copy of the body to a Meta AI bot
  * device or to the original bot for a feedback message. The metadata-only form
  * {@code <bot type="..." local_automated_type="..." client_thread_id="..." />} carries routing attributes for AI thread
@@ -63,7 +63,7 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the encrypted {@code <bot>} node for a 1:1 fanout send.
+     * Builds the encrypted {@code <bot>} stanza for a 1:1 fanout send.
      * <p>
      * Emitted whenever the chat targets a bot directly (chat JID ends in {@code @bot}) or the message is a bot-feedback
      * {@link ProtocolMessage} whose original key identifies a bot sender. Returns {@code null} when no bot is involved or
@@ -77,11 +77,11 @@ public final class BotStanza {
      *
      * @param messageInfo the outgoing {@link ChatMessageInfo}
      * @param chatJid     the recipient chat {@link Jid}
-     * @return the {@code <bot>} {@link Node}, or {@code null}
+     * @return the {@code <bot>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node build(ChatMessageInfo messageInfo, Jid chatJid) {
+    public Stanza build(ChatMessageInfo messageInfo, Jid chatJid) {
         var botJid = resolveBotJid(messageInfo, chatJid);
         if (botJid == null) {
             return null;
@@ -119,18 +119,18 @@ public final class BotStanza {
             return null;
         }
 
-        var encNode = new NodeBuilder()
+        var encNode = new StanzaBuilder()
                 .description("enc")
                 .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                 .attribute("type", payload.type().protocolValue())
                 .content(payload.ciphertext())
                 .build();
-        var toNode = new NodeBuilder()
+        var toNode = new StanzaBuilder()
                 .description("to")
                 .attribute("jid", botJid)
                 .content(encNode)
                 .build();
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("bot")
                 .attribute("type", isFeedback ? "feedback" : null)
                 .content(toNode)
@@ -138,7 +138,7 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the metadata-only {@code <bot>} node carrying the bot-routing attributes that the server uses for AI thread
+     * Builds the metadata-only {@code <bot>} stanza carrying the bot-routing attributes that the server uses for AI thread
      * bookkeeping and analytics.
      * <p>
      * The {@code type} attribute is one of {@code "prompt"}, {@code "command"}, {@code "request_welcome"}, or
@@ -147,18 +147,18 @@ public final class BotStanza {
      * The {@code client_thread_id} attribute carries the AI conversation thread id. The {@code mode_selection} attribute
      * carries the user-selected AI mode label such as {@code "default"} or {@code "think_hard"}, and
      * {@code mode_selected} carries a dynamic-mode override string. Returns {@code null} when no attribute applies so
-     * {@link ChatFanoutStanza} can suppress the empty node.
+     * {@link ChatFanoutStanza} can suppress the empty stanza.
      *
      * @param botMsgBodyType the bot message body type, or {@code null}
      * @param bizBotType     the business-bot classification, or {@code null}
      * @param clientThreadId the AI conversation thread id, or {@code null}
      * @param modeSelection  the user-selected AI mode label, or {@code null}
      * @param modeSelected   the dynamic mode override string, or {@code null}
-     * @return the {@code <bot>} {@link Node}, or {@code null}
+     * @return the {@code <bot>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildMetadata(
+    public static Stanza buildMetadata(
             String botMsgBodyType,
             String bizBotType,
             String clientThreadId,
@@ -170,7 +170,7 @@ public final class BotStanza {
             return null;
         }
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("bot")
                 .attribute("type", botMsgBodyType)
                 .attribute("local_automated_type", bizBotType)
@@ -181,7 +181,7 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the metadata-only {@code <bot>} node without the AI mode selection attributes.
+     * Builds the metadata-only {@code <bot>} stanza without the AI mode selection attributes.
      * <p>
      * Delegates to {@link #buildMetadata(String, String, String, String, String)} with the last two arguments
      * {@code null}, for senders that do not run the AI mode selector surface.
@@ -189,11 +189,11 @@ public final class BotStanza {
      * @param botMsgBodyType the bot message body type, or {@code null}
      * @param bizBotType     the business-bot classification, or {@code null}
      * @param clientThreadId the AI conversation thread id, or {@code null}
-     * @return the {@code <bot>} {@link Node}, or {@code null}
+     * @return the {@code <bot>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildMetadata(
+    public static Stanza buildMetadata(
             String botMsgBodyType,
             String bizBotType,
             String clientThreadId
@@ -202,7 +202,7 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the encrypted {@code <bot>} node for a group SKMSG send into an open-bot group.
+     * Builds the encrypted {@code <bot>} stanza for a group SKMSG send into an open-bot group.
      * <p>
      * When the group has the open Meta AI bot enabled, a separately encrypted copy of the body is sent to the Meta AI
      * FBID bot account in addition to the SKMSG-encrypted group payload. Returns {@code null} when {@code isOpenBotGroup}
@@ -213,11 +213,11 @@ public final class BotStanza {
      *
      * @param messageInfo    the outgoing {@link ChatMessageInfo}
      * @param isOpenBotGroup whether the group has the open Meta AI bot enabled
-     * @return the {@code <bot>} {@link Node}, or {@code null}
+     * @return the {@code <bot>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node buildForGroup(ChatMessageInfo messageInfo, boolean isOpenBotGroup) {
+    public Stanza buildForGroup(ChatMessageInfo messageInfo, boolean isOpenBotGroup) {
         if (!isOpenBotGroup) {
             return null;
         }
@@ -251,18 +251,18 @@ public final class BotStanza {
             return null;
         }
 
-        var encNode = new NodeBuilder()
+        var encNode = new StanzaBuilder()
                 .description("enc")
                 .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                 .attribute("type", payload.type().protocolValue())
                 .content(payload.ciphertext())
                 .build();
-        var toNode = new NodeBuilder()
+        var toNode = new StanzaBuilder()
                 .description("to")
                 .attribute("jid", botJid)
                 .content(encNode)
                 .build();
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("bot")
                 .content(toNode)
                 .build();
@@ -301,7 +301,7 @@ public final class BotStanza {
      * Returns whether the outgoing message is a bot-feedback {@link ProtocolMessage}.
      * <p>
      * Bot feedback rewires the {@code <bot>} child to address the original bot rather than the chat target, and forces
-     * {@code type="feedback"} on the wrapping node.
+     * {@code type="feedback"} on the wrapping stanza.
      *
      * @param messageInfo the outgoing {@link ChatMessageInfo}
      * @return {@code true} when the wrapped content is a {@link ProtocolMessage.Type#BOT_FEEDBACK_MESSAGE}

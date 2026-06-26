@@ -8,8 +8,8 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdPatchBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdPatchSpec;
 import com.github.auties00.cobalt.model.sync.data.SyncdVersionBuilder;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * name), and the multi-collection batched parse.
  *
  * <p>The parser is stateless, so a single {@link #PARSER} instance is shared; every test
- * builds its input {@link Node} via the helpers at the bottom of the class.
+ * builds its input {@link Stanza} via the helpers at the bottom of the class.
  */
 @DisplayName("MutationResponseParser")
 class MutationResponseParserTest {
@@ -49,8 +49,8 @@ class MutationResponseParserTest {
             var iq = iq("result", collection("regular", attrs -> attrs
                     .attribute("version", "42")
                     .attribute("has_more_patches", "true"),
-                    new NodeBuilder().description("patches").content(List.of(
-                            new NodeBuilder().description("patch").content(patchBytes).build()
+                    new StanzaBuilder().description("patches").content(List.of(
+                            new StanzaBuilder().description("patch").content(patchBytes).build()
                     )).build()
             ));
 
@@ -75,7 +75,7 @@ class MutationResponseParserTest {
 
             var iq = iq("result", collection("regular_low", attrs -> attrs
                     .attribute("version", "1"),
-                    new NodeBuilder().description("snapshot").content(blobBytes).build()
+                    new StanzaBuilder().description("snapshot").content(blobBytes).build()
             ));
 
             var response = PARSER.parseSyncResponse(iq);
@@ -113,7 +113,7 @@ class MutationResponseParserTest {
         @DisplayName("409 surfaces Conflict on collectionError instead of throwing (single-collection mode)")
         void code409Conflict() {
             var iq = iq("result", collection("regular", attrs -> attrs.attribute("type", "error"),
-                    new NodeBuilder().description("error").attribute("code", "409").build()
+                    new StanzaBuilder().description("error").attribute("code", "409").build()
             ));
             var response = PARSER.parseSyncResponse(iq);
             assertInstanceOf(WhatsAppWebAppStateSyncException.Conflict.class,
@@ -126,7 +126,7 @@ class MutationResponseParserTest {
             var iq = iq("result", collection("regular", attrs -> attrs
                     .attribute("type", "error")
                     .attribute("has_more_patches", "true"),
-                    new NodeBuilder().description("error").attribute("code", "409").build()
+                    new StanzaBuilder().description("error").attribute("code", "409").build()
             ));
             var conflict = assertInstanceOf(WhatsAppWebAppStateSyncException.Conflict.class,
                     PARSER.parseSyncResponse(iq).collectionError().orElseThrow());
@@ -141,9 +141,9 @@ class MutationResponseParserTest {
                     .keyId(new KeyIdBuilder().id(new byte[]{1, 2, 3}).build())
                     .build());
             var iq = iq("result", collection("regular", attrs -> attrs.attribute("type", "error"),
-                    new NodeBuilder().description("error").attribute("code", "409").build(),
-                    new NodeBuilder().description("patches").content(List.of(
-                            new NodeBuilder().description("patch").content(patchBytes).build()
+                    new StanzaBuilder().description("error").attribute("code", "409").build(),
+                    new StanzaBuilder().description("patches").content(List.of(
+                            new StanzaBuilder().description("patch").content(patchBytes).build()
                     )).build()
             ));
             var response = PARSER.parseSyncResponse(iq);
@@ -156,7 +156,7 @@ class MutationResponseParserTest {
         @DisplayName("400 throws UnexpectedError (fatal)")
         void code400Throws() {
             var iq = iq("result", collection("regular", attrs -> attrs.attribute("type", "error"),
-                    new NodeBuilder().description("error").attribute("code", "400").build()
+                    new StanzaBuilder().description("error").attribute("code", "400").build()
             ));
             assertThrows(WhatsAppWebAppStateSyncException.UnexpectedError.class,
                     () -> PARSER.parseSyncResponse(iq));
@@ -166,7 +166,7 @@ class MutationResponseParserTest {
         @DisplayName("404 throws UnexpectedError (fatal)")
         void code404Throws() {
             var iq = iq("result", collection("regular", attrs -> attrs.attribute("type", "error"),
-                    new NodeBuilder().description("error").attribute("code", "404").build()
+                    new StanzaBuilder().description("error").attribute("code", "404").build()
             ));
             assertThrows(WhatsAppWebAppStateSyncException.UnexpectedError.class,
                     () -> PARSER.parseSyncResponse(iq));
@@ -176,7 +176,7 @@ class MutationResponseParserTest {
         @DisplayName("unmapped collection-level code throws RetryableServerError")
         void otherCodeIsRetryable() {
             var iq = iq("result", collection("regular", attrs -> attrs.attribute("type", "error"),
-                    new NodeBuilder().description("error").attribute("code", "503").build()
+                    new StanzaBuilder().description("error").attribute("code", "503").build()
             ));
             assertThrows(WhatsAppWebAppStateSyncException.RetryableServerError.class,
                     () -> PARSER.parseSyncResponse(iq));
@@ -237,7 +237,7 @@ class MutationResponseParserTest {
         @Test
         @DisplayName("response missing <sync> throws UnexpectedError")
         void missingSync() {
-            var iq = new NodeBuilder().description("iq").attribute("type", "result").build();
+            var iq = new StanzaBuilder().description("iq").attribute("type", "result").build();
             assertThrows(WhatsAppWebAppStateSyncException.UnexpectedError.class,
                     () -> PARSER.parseSyncResponse(iq));
         }
@@ -245,8 +245,8 @@ class MutationResponseParserTest {
         @Test
         @DisplayName("response missing <collection> throws UnexpectedError")
         void missingCollection() {
-            var iq = new NodeBuilder().description("iq").attribute("type", "result")
-                    .content(new NodeBuilder().description("sync").build()).build();
+            var iq = new StanzaBuilder().description("iq").attribute("type", "result")
+                    .content(new StanzaBuilder().description("sync").build()).build();
             assertThrows(WhatsAppWebAppStateSyncException.UnexpectedError.class,
                     () -> PARSER.parseSyncResponse(iq));
         }
@@ -254,7 +254,7 @@ class MutationResponseParserTest {
         @Test
         @DisplayName("collection missing 'name' attribute throws UnexpectedError")
         void missingCollectionName() {
-            var iq = iq("result", new NodeBuilder().description("collection")
+            var iq = iq("result", new StanzaBuilder().description("collection")
                     .attribute("version", "1").build());
             assertThrows(WhatsAppWebAppStateSyncException.UnexpectedError.class,
                     () -> PARSER.parseSyncResponse(iq));
@@ -276,8 +276,8 @@ class MutationResponseParserTest {
         @DisplayName("non-protobuf patch bytes throw UnexpectedError")
         void malformedPatch() {
             var iq = iq("result", collection("regular", attrs -> {},
-                    new NodeBuilder().description("patches").content(List.of(
-                            new NodeBuilder().description("patch")
+                    new StanzaBuilder().description("patches").content(List.of(
+                            new StanzaBuilder().description("patch")
                                     .content(new byte[]{(byte) 0xDE, (byte) 0xAD, (byte) 0xBE, (byte) 0xEF})
                                     .build()
                     )).build()
@@ -287,11 +287,11 @@ class MutationResponseParserTest {
         }
 
         @Test
-        @DisplayName("patch node with no content throws UnexpectedError")
+        @DisplayName("patch stanza with no content throws UnexpectedError")
         void patchWithoutContent() {
             var iq = iq("result", collection("regular", attrs -> {},
-                    new NodeBuilder().description("patches").content(List.of(
-                            new NodeBuilder().description("patch").build()
+                    new StanzaBuilder().description("patches").content(List.of(
+                            new StanzaBuilder().description("patch").build()
                     )).build()
             ));
             assertThrows(WhatsAppWebAppStateSyncException.UnexpectedError.class,
@@ -299,10 +299,10 @@ class MutationResponseParserTest {
         }
 
         @Test
-        @DisplayName("snapshot node with no content throws UnexpectedError")
+        @DisplayName("snapshot stanza with no content throws UnexpectedError")
         void snapshotWithoutContent() {
             var iq = iq("result", collection("regular", attrs -> {},
-                    new NodeBuilder().description("snapshot").build()
+                    new StanzaBuilder().description("snapshot").build()
             ));
             assertThrows(WhatsAppWebAppStateSyncException.UnexpectedError.class,
                     () -> PARSER.parseSyncResponse(iq));
@@ -315,8 +315,8 @@ class MutationResponseParserTest {
         @Test
         @DisplayName("multiple collections produce one MutationSyncResponse per child")
         void multipleCollections() {
-            var iq = new NodeBuilder().description("iq").attribute("type", "result")
-                    .content(new NodeBuilder().description("sync").content(List.of(
+            var iq = new StanzaBuilder().description("iq").attribute("type", "result")
+                    .content(new StanzaBuilder().description("sync").content(List.of(
                             collection("regular",    attrs -> attrs.attribute("version", "1")),
                             collection("regular_low", attrs -> attrs.attribute("version", "2")),
                             collection("critical_block", attrs -> attrs.attribute("version", "3"))
@@ -336,11 +336,11 @@ class MutationResponseParserTest {
         @Test
         @DisplayName("collection-level errors are captured on the response, not thrown")
         void errorCapturedNotThrown() {
-            var iq = new NodeBuilder().description("iq").attribute("type", "result")
-                    .content(new NodeBuilder().description("sync").content(List.of(
+            var iq = new StanzaBuilder().description("iq").attribute("type", "result")
+                    .content(new StanzaBuilder().description("sync").content(List.of(
                             collection("regular",    attrs -> attrs.attribute("version", "1")),
                             collection("regular_low", attrs -> attrs.attribute("type", "error"),
-                                    new NodeBuilder().description("error").attribute("code", "409").build())
+                                    new StanzaBuilder().description("error").attribute("code", "409").build())
                     )).build())
                     .build();
 
@@ -356,8 +356,8 @@ class MutationResponseParserTest {
         @Test
         @DisplayName("empty <sync> returns an empty list")
         void emptySync() {
-            var iq = new NodeBuilder().description("iq").attribute("type", "result")
-                    .content(new NodeBuilder().description("sync").build())
+            var iq = new StanzaBuilder().description("iq").attribute("type", "result")
+                    .content(new StanzaBuilder().description("sync").build())
                     .build();
             assertTrue(PARSER.parseBatchedSyncResponse(iq).isEmpty());
         }
@@ -370,27 +370,27 @@ class MutationResponseParserTest {
         }
     }
 
-    private static Node iq(String iqType, Node collectionNode) {
-        return new NodeBuilder().description("iq").attribute("type", iqType)
-                .content(new NodeBuilder().description("sync")
-                        .content(collectionNode).build())
+    private static Stanza iq(String iqType, Stanza collectionStanza) {
+        return new StanzaBuilder().description("iq").attribute("type", iqType)
+                .content(new StanzaBuilder().description("sync")
+                        .content(collectionStanza).build())
                 .build();
     }
 
-    private static Node errorIq(int code, Long backoffMs) {
-        var error = new NodeBuilder().description("error").attribute("code", String.valueOf(code));
+    private static Stanza errorIq(int code, Long backoffMs) {
+        var error = new StanzaBuilder().description("error").attribute("code", String.valueOf(code));
         if (backoffMs != null) error.attribute("backoff", String.valueOf(backoffMs));
-        return new NodeBuilder().description("iq").attribute("type", "error")
+        return new StanzaBuilder().description("iq").attribute("type", "error")
                 .content(error.build()).build();
     }
 
     @FunctionalInterface
     private interface AttrConfig {
-        void apply(NodeBuilder builder);
+        void apply(StanzaBuilder builder);
     }
 
-    private static Node collection(String name, AttrConfig config, Node... children) {
-        var builder = new NodeBuilder().description("collection").attribute("name", name);
+    private static Stanza collection(String name, AttrConfig config, Stanza... children) {
+        var builder = new StanzaBuilder().description("collection").attribute("name", name);
         config.apply(builder);
         if (children.length > 0) {
             builder.content(List.of(children));

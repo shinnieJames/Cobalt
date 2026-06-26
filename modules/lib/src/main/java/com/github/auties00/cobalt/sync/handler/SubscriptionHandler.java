@@ -6,11 +6,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.BusinessFeatureFlagBuilder;
 import com.github.auties00.cobalt.model.business.BusinessSubscriptionBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.SubscriptionsSyncV2Action;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.time.Instant;
@@ -24,7 +25,7 @@ import java.util.logging.Logger;
  *
  * <p>The sync dispatcher routes incoming mutations here whenever a
  * Business-account subscription state changes. The handler rewrites the
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} business feature flag
+ * {@link LinkedWhatsAppStore} business feature flag
  * and subscription tables in full ("rewrite" semantics) so the next read sees
  * only the new snapshot.
  */
@@ -92,7 +93,7 @@ public final class SubscriptionHandler implements WebAppStateActionHandler {
      * {@inheritDoc}
      *
      * <p>On {@link SyncdOperation#SET} the decoded {@link SubscriptionsSyncV2Action}
-     * clears and refills the two {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore}
+     * clears and refills the two {@link LinkedWhatsAppStore}
      * maps that back business feature flags and subscriptions; a value that does
      * not decode is reported as malformed. {@link SyncdOperation#REMOVE} returns
      * {@link MutationApplicationResult#success()} without mutating state; any other

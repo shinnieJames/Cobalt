@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.calls2.signaling;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 
 import java.util.Objects;
@@ -43,8 +43,8 @@ import java.util.function.Predicate;
  *
  * @implNote This implementation ports {@code handle_incoming_xmpp_msg} (fn11539) and
  * {@code handle_incoming_xmpp_offer} (fn11543) from the wa-voip WASM module {@code ff-tScznZ8P}
- * ({@code protocol/xmpp/call_signaling_xml.cc}), but collapses the native XML-node-to-voip-node bridge
- * ({@code xmlNodeToVoipNode} fn12158): a Cobalt {@link Node} is already the parsed tree, so the
+ * ({@code protocol/xmpp/call_signaling_xml.cc}), but collapses the native XML-stanza-to-voip-stanza bridge
+ * ({@code xmlNodeToVoipNode} fn12158): a Cobalt {@link Stanza} is already the parsed tree, so the
  * receiver reads it directly. The per-call ordering keyed on call-id mirrors the single native
  * message-router queue ({@code message_router.cc}); the receipt-versus-ack split mirrors the native
  * {@code handle_incoming_xmpp_receipt} (fn11551) and {@code handle_incoming_xmpp_ack} (fn11546) legs.
@@ -163,12 +163,12 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      * single shared key so it is still processed in arrival order rather than spread across the key
      * space.
      *
-     * @param node the inbound {@code <call>} stanza
+     * @param stanza the inbound {@code <call>} stanza
      * @return the ordering key, never {@code null}
      */
     @Override
-    protected String orderingKey(Node node) {
-        return node.getChild()
+    protected String orderingKey(Stanza stanza) {
+        return stanza.getChild()
                 .flatMap(payload -> payload.getAttributeAsString(CALL_ID_ATTRIBUTE))
                 .orElse(UNKEYED_ORDERING_KEY);
     }
@@ -181,28 +181,28 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      * payload per the classification verdict. A stanza with no sender or no payload is dropped without
      * acknowledgement because there is nothing to acknowledge.
      *
-     * @param node the inbound {@code <call>} stanza
+     * @param stanza the inbound {@code <call>} stanza
      */
     @Override
-    public void handle(Node node) {
-        var from = node.getAttributeAsJid(FROM_ATTRIBUTE, null);
-        var payload = node.getChild().orElse(null);
+    public void handle(Stanza stanza) {
+        var from = stanza.getAttributeAsJid(FROM_ATTRIBUTE, null);
+        var payload = stanza.getChild().orElse(null);
         if (from == null || payload == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring malformed call stanza: {0}", node);
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring malformed call stanza: {0}", stanza);
             return;
         }
 
-        var senderLid = node.getAttributeAsJid(SENDER_LID_ATTRIBUTE, null);
+        var senderLid = stanza.getAttributeAsJid(SENDER_LID_ATTRIBUTE, null);
         var verdict = router.classify(payload, senderLid,
                 payload.getAttributeAsString(CALL_ID_ATTRIBUTE)
                         .map(callExists::test)
                         .orElse(false));
 
-        acknowledger.acknowledge(node, payload, verdict.callId().orElse(null));
+        acknowledger.acknowledge(stanza, payload, verdict.callId().orElse(null));
 
         switch (verdict.disposition()) {
             case DROP -> LOGGER.log(System.Logger.Level.DEBUG,
-                    "Dropping call payload {0}: {1}", payload.description(), node);
+                    "Dropping call payload {0}: {1}", payload.description(), stanza);
             case BUFFER -> verdict.callId().ifPresent(callId -> bufferAndMaybeReplay(callId, payload, from));
             case PROCESS -> forward(payload, from);
         }
@@ -220,7 +220,7 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      * replayed messages against it. This is the production caller that makes a fresh inbound offer reach the
      * lifecycle controller and ring.
      *
-     * <p>The {@link CallMessageBuffer} stores only the payload {@link Node}, not the sender of the envelope
+     * <p>The {@link CallMessageBuffer} stores only the payload {@link Stanza}, not the sender of the envelope
      * each was carried in, so a drained payload that raced ahead of the offer is replayed under the offer's
      * envelope sender rather than its own. This matches the engine, which processes the buffered offer and
      * the messages that raced ahead of it as one batch authored by the same peer device for the same call.
@@ -230,7 +230,7 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      * @param from    the envelope sender of the stanza that triggered this buffering, used as the
      *                attribution for every drained payload on a call-creating replay
      */
-    private void bufferAndMaybeReplay(String callId, Node payload, Jid from) {
+    private void bufferAndMaybeReplay(String callId, Stanza payload, Jid from) {
         buffer.buffer(callId, payload);
         if (CALL_CREATING_TAGS.contains(payload.description())) {
             buffer.drainBufferedMessages(callId).forEach(drained -> forward(drained, from));
@@ -241,7 +241,7 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      * Decodes a routable payload into a {@link CallMessage} and forwards it, with the envelope
      * {@code from}, to the engine sink.
      *
-     * <p>Decoding goes through {@link Calls2CallStanza#parse(Node)}, the integrator-owned parser that
+     * <p>Decoding goes through {@link Calls2CallStanza#parse(Stanza)}, the integrator-owned parser that
      * maps a {@code <call>} child element to its typed message record. The decoded message is paired with
      * {@code from}, the envelope sender, so the engine receives the authoring device JID alongside the
      * action. A payload the parser cannot decode is dropped without forwarding; the acknowledgement has
@@ -250,7 +250,7 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      * @param payload the {@code <call>} child element to decode and forward
      * @param from    the envelope sender forwarded alongside the decoded message
      */
-    private void forward(Node payload, Jid from) {
+    private void forward(Stanza payload, Jid from) {
         Calls2CallStanza.parse(payload).ifPresentOrElse(
                 message -> sink.accept(message, from),
                 () -> LOGGER.log(System.Logger.Level.DEBUG, "Could not decode call payload: {0}", payload));

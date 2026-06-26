@@ -4,12 +4,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.privacy.TrustedContactTokenService;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.Objects;
 
@@ -70,11 +70,11 @@ public final class TcTokenStanza {
      * receiver-side expiry cutoff.
      *
      * @param chatJid the recipient chat {@link Jid}
-     * @return the {@code <tctoken>} {@link Node}, or {@code null}
+     * @return the {@code <tctoken>} {@link Stanza}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Node build(Jid chatJid) {
+    public Stanza build(Jid chatJid) {
         var tcTokenEnabled = abPropsService.getBool(ABProp.PRIVACY_TOKEN_SENDING_ON_ALL_1_ON_1_MESSAGES);
         if (!tcTokenEnabled) {
             return null;
@@ -96,7 +96,7 @@ public final class TcTokenStanza {
             return null;
         }
 
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("tctoken")
                 .content(tcToken)
                 .build();

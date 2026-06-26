@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.device.key;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ class DevicePreKeyHandlerTest {
     private static final Jid SELF_PN = Jid.of("393495089819@s.whatsapp.net");
     private static final Jid SELF_LID = Jid.of("258252122116273@lid");
 
-    private static Node loadCapturedResponse(String topic) {
+    private static Stanza loadCapturedResponse(String topic) {
         for (var event : DeviceFixtures.loadEvents(topic)) {
             if ("in".equals(event.getString("direction"))) {
                 return DeviceFixtures.buildNodeFromEvent(event);
@@ -37,7 +37,7 @@ class DevicePreKeyHandlerTest {
         throw new AssertionError("no inbound event in fixture " + topic);
     }
 
-    private static List<Jid> capturedDeviceJids(Node response) {
+    private static List<Jid> capturedDeviceJids(Stanza response) {
         var jids = new ArrayList<Jid>();
         response.streamChildren("list")
                 .flatMap(list -> list.streamChildren("user"))

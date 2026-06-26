@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.store;
 
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+
 /**
  * The sealed root of the persistent state backing a {@link com.github.auties00.cobalt.client.WhatsAppClient}.
  *

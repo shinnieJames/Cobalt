@@ -15,7 +15,8 @@ import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.system.DeviceSentMessage;
 import com.github.auties00.cobalt.model.message.system.DeviceSentMessageBuilder;
 import com.github.auties00.cobalt.model.message.group.SenderKeyDistributionMessageBuilder;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.*;
 
@@ -55,7 +56,7 @@ public final class SenderKeyDistribution {
      * Constructs a sender-key distribution service bound to the given dependencies.
      *
      * <p>The three collaborators must share the same {@link LinkedWhatsAppStore} so that the post-send
-     * {@link com.github.auties00.cobalt.store.SignalStore#updateIdentityRange(Collection)} call and the per-recipient
+     * {@link LinkedWhatsAppSignalStore#updateIdentityRange(Collection)} call and the per-recipient
      * {@link DeviceService#computeIcdc(Jid)} lookups observe consistent state.
      *
      * @param encryption    the {@link MessageEncryption} service for per-device encryption
@@ -113,7 +114,7 @@ public final class SenderKeyDistribution {
      * from the result; a primary-device failure propagates as
      * {@link WhatsAppMessageException.Send.Unknown} so the orchestrator can abort the whole send.
      * After encryption the supplied device set is passed to
-     * {@link com.github.auties00.cobalt.store.SignalStore#updateIdentityRange(Collection)} so the next fanout sees the
+     * {@link LinkedWhatsAppSignalStore#updateIdentityRange(Collection)} so the next fanout sees the
      * freshly-keyed recipients in the identity range.
      *
      * @param groupJid       the group {@link Jid}

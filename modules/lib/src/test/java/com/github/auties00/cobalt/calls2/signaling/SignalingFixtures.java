@@ -35,7 +35,7 @@ final class SignalingFixtures {
                 SignalingFixtures::minimalOffer),
         ACCEPT(Calls2SignalingType.ACCEPT, AcceptStanza.class,
                 (id, creator) -> new AcceptStanza(id, creator, 2, List.of(), List.of(), List.of(),
-                        null, null, null)),
+                        null, null, null, null)),
         PREACCEPT(Calls2SignalingType.PREACCEPT, PreacceptStanza.class,
                 (id, creator) -> new PreacceptStanza(id, creator, List.of(), List.of(), null, null)),
         REJECT(Calls2SignalingType.REJECT, RejectStanza.class,

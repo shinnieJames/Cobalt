@@ -10,8 +10,9 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.Arrays;
 import java.util.List;
@@ -36,7 +37,7 @@ import java.util.logging.Logger;
  * The {@code WAWebSyncdResolveMessages.resolveMessagesForMutations} batch
  * pre-pass that consumes these helpers in WA Web has no Cobalt analogue;
  * Cobalt's handlers resolve their messages inline via
- * {@link com.github.auties00.cobalt.store.ChatStore#findChatByJid(com.github.auties00.cobalt.model.jid.JidProvider)}
+ * {@link LinkedWhatsAppChatStore#findChatByJid(com.github.auties00.cobalt.model.jid.JidProvider)}
  * so the AB-prop driven chunked-vs-sync branch and the IDB existence probe are
  * not replicated.
  */

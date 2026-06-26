@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Structural tests for {@link NewsletterStanza}, pinning the
  * {@code <plaintext>} wrapper: presence of the {@code mediatype} attribute
  * only when supplied, byte-for-byte payload round-trip, the empty-payload
- * edge case, and the absence of any Signal envelope on the resulting node.
+ * edge case, and the absence of any Signal envelope on the resulting stanza.
  * The two static overloads are driven directly; no fixture or store is
  * needed.
  */
@@ -27,7 +27,7 @@ class NewsletterStanzaTest {
 
         assertEquals("plaintext", node.description());
         assertTrue(node.attributes().isEmpty(),
-                "plaintext node with no mediaType has no attributes");
+                "plaintext stanza with no mediaType has no attributes");
         assertArrayEquals(payload, node.toContentBytes().orElseThrow());
     }
 
@@ -52,7 +52,7 @@ class NewsletterStanzaTest {
     }
 
     @Test
-    @DisplayName("empty payload: zero-byte content is still a valid plaintext node")
+    @DisplayName("empty payload: zero-byte content is still a valid plaintext stanza")
     void plaintextEmptyPayload() {
         var node = NewsletterStanza.buildPlaintext(new byte[0]);
         assertEquals("plaintext", node.description());
@@ -61,7 +61,7 @@ class NewsletterStanzaTest {
     }
 
     @Test
-    @DisplayName("no Signal envelope: plaintext node has no <enc> child")
+    @DisplayName("no Signal envelope: plaintext stanza has no <enc> child")
     void noEncEnvelope() {
         var node = NewsletterStanza.buildPlaintext(new byte[]{1, 2});
         assertFalse(node.getChild("enc").isPresent(),

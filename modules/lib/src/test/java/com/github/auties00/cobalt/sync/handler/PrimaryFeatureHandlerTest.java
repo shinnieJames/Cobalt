@@ -4,15 +4,16 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.PrimaryFeatureAction;
 import com.github.auties00.cobalt.model.sync.action.device.PrimaryFeatureActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.media.FavoritesActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Covers {@link PrimaryFeatureHandler}: a {@link SyncdOperation#SET} carrying a non-empty
  * or empty flags list persists the flags via
- * {@link com.github.auties00.cobalt.store.SyncStore#setPrimaryFeatures(List)}; a
+ * {@link LinkedWhatsAppSyncStore#setPrimaryFeatures(List)}; a
  * wrong-typed value surfaces as {@link SyncActionState#MALFORMED};
  * {@link SyncdOperation#REMOVE} surfaces as {@link SyncActionState#UNSUPPORTED};
  * {@link PrimaryFeatureHandler#applyMutationBatch} writes only the latest-by-timestamp
@@ -206,7 +207,7 @@ class PrimaryFeatureHandlerTest {
 
             var resolution = new PrimaryFeatureHandler().resolveConflicts(local, remote);
 
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
     }
 

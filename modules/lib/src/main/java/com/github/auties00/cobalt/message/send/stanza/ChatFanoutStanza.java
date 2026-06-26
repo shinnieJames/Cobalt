@@ -6,8 +6,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,13 +16,13 @@ import java.util.Objects;
 
 /**
  * Builds the outer {@code <message>} stanza for 1:1 chat sends and group-direct (per-device) fanout, wrapping per-device
- * {@link MessageEncryptedPayload} entries and every auxiliary child node the server expects.
+ * {@link MessageEncryptedPayload} entries and every auxiliary child stanza the server expects.
  * <p>
  * This is the top-level composer for the chat fanout family. Outbound dispatchers call {@link #build} with the
  * per-device payloads and the optional child nodes ({@code <biz>}, {@code <bot>}, {@code <meta>}, {@code <reporting>},
  * {@code <tctoken>}, {@code <cstoken>}, {@code <ctwa_attribution>}, {@code <device-identity>},
  * {@code <sender_content_binding>}, group-direct {@code <enc type="skmsg">}) already prepared by their respective stanza
- * builders. The returned {@link NodeBuilder} is finalised and sent to the relay.
+ * builders. The returned {@link StanzaBuilder} is finalised and sent to the relay.
  *
  * @implNote This implementation places the single {@code <enc>} directly under {@code <message>} only when there is
  * exactly one payload, that payload targets a primary device ({@code device == 0}), and the message is not bot-related;
@@ -46,11 +46,11 @@ public final class ChatFanoutStanza {
      * sibling {@code <enc>} can coexist, and {@code deviceFanout="false"} is set by the caller for resends and
      * bot-feedback sends to suppress server-side fanout. The {@code peer_recipient_lid}, {@code peer_recipient_pn},
      * {@code recipient_pn}, and {@code peer_recipient_username} attributes carry the peer-id metadata the server uses for
-     * LID 1:1 migration. The trailing child-node arguments are inlined in wire order and {@code null} children are
-     * elided by {@link NodeBuilder#content(Node...)}.
+     * LID 1:1 migration. The trailing child-stanza arguments are inlined in wire order and {@code null} children are
+     * elided by {@link StanzaBuilder#content(Stanza...)}.
      *
-     * @implNote This implementation falls back to {@code cstokenNode} when {@code tctokenNode} is {@code null}. Calls to
-     * {@link ParticipantsStanza#requiresIdentityNode(List)} suppress the caller-supplied {@code identityNode} when no
+     * @implNote This implementation falls back to {@code cstokenStanza} when {@code tctokenStanza} is {@code null}. Calls to
+     * {@link ParticipantsStanza#requiresIdentityNode(List)} suppress the caller-supplied {@code identityStanza} when no
      * payload is a PreKey message.
      *
      * @param messageId             the stanza id (typically the 22-char upper-hex id)
@@ -71,19 +71,19 @@ public final class ChatFanoutStanza {
      * @param peerRecipientPn       the peer PN for 1:1 LID migration, or {@code null}
      * @param recipientPn           the recipient PN attribute, or {@code null}
      * @param peerRecipientUsername the peer username for the usernames feature, or {@code null}
-     * @param identityNode          the {@code <device-identity>} child, or {@code null}
-     * @param metaNode              the {@code <meta>} child, or {@code null}
-     * @param bizNode               the {@code <biz>} child, or {@code null}
-     * @param botNode               the encrypted-bot {@code <bot>} child, or {@code null}
-     * @param reportingNode         the {@code <reporting>} child, or {@code null}
+     * @param identityStanza          the {@code <device-identity>} child, or {@code null}
+     * @param metaStanza              the {@code <meta>} child, or {@code null}
+     * @param bizStanza               the {@code <biz>} child, or {@code null}
+     * @param botStanza               the encrypted-bot {@code <bot>} child, or {@code null}
+     * @param reportingStanza         the {@code <reporting>} child, or {@code null}
      * @param senderContentBinding  the {@code <sender_content_binding>} child, or {@code null}
-     * @param botMetadataNode       the metadata-only {@code <bot>} child, or {@code null}
-     * @param tctokenNode           the {@code <tctoken>} child, or {@code null}
-     * @param cstokenNode           the {@code <cstoken>} child used only when {@code tctokenNode} is {@code null}
-     * @param ctwaNode              the {@code <ctwa_attribution>} child, or {@code null}
-     * @param groupDirectSkmsgNode  an empty {@code <enc type="skmsg">} sibling emitted on group-direct fanout, or
+     * @param botMetadataStanza       the metadata-only {@code <bot>} child, or {@code null}
+     * @param tctokenStanza           the {@code <tctoken>} child, or {@code null}
+     * @param cstokenStanza           the {@code <cstoken>} child used only when {@code tctokenStanza} is {@code null}
+     * @param ctwaStanza              the {@code <ctwa_attribution>} child, or {@code null}
+     * @param groupDirectSkmsgStanza  an empty {@code <enc type="skmsg">} sibling emitted on group-direct fanout, or
      *                              {@code null}
-     * @return the {@link NodeBuilder} for the outer {@code <message>}
+     * @return the {@link StanzaBuilder} for the outer {@code <message>}
      * @throws NullPointerException if {@code messageId}, {@code chatJid}, {@code type}, or {@code payloads} is
      *                              {@code null}
      */
@@ -91,7 +91,7 @@ public final class ChatFanoutStanza {
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WAWebSendDirectMsgToDeviceList", exports = "sendDirectMsgToDeviceList",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static NodeBuilder build(
+    public static StanzaBuilder build(
             String messageId,
             Jid chatJid,
             String type,
@@ -108,17 +108,17 @@ public final class ChatFanoutStanza {
             Jid peerRecipientPn,
             Jid recipientPn,
             String peerRecipientUsername,
-            Node identityNode,
-            Node metaNode,
-            Node bizNode,
-            Node botNode,
-            Node reportingNode,
-            Node senderContentBinding,
-            Node botMetadataNode,
-            Node tctokenNode,
-            Node cstokenNode,
-            Node ctwaNode,
-            Node groupDirectSkmsgNode
+            Stanza identityStanza,
+            Stanza metaStanza,
+            Stanza bizStanza,
+            Stanza botStanza,
+            Stanza reportingStanza,
+            Stanza senderContentBinding,
+            Stanza botMetadataStanza,
+            Stanza tctokenStanza,
+            Stanza cstokenStanza,
+            Stanza ctwaStanza,
+            Stanza groupDirectSkmsgStanza
     ) {
         Objects.requireNonNull(messageId, "messageId");
         Objects.requireNonNull(chatJid, "chatJid");
@@ -132,7 +132,7 @@ public final class ChatFanoutStanza {
 
         var needsIdentity = ParticipantsStanza.requiresIdentityNode(payloads);
 
-        var builder = new NodeBuilder()
+        var builder = new StanzaBuilder()
                 .description("message")
                 .attribute("id", messageId)
                 .attribute("to", chatJid)
@@ -151,18 +151,18 @@ public final class ChatFanoutStanza {
             builder.content(buildParticipantsNode(payloads, mediaType, decryptFail, nativeFlowName, contentBindings));
         }
 
-        var tokenNode = tctokenNode != null ? tctokenNode : cstokenNode;
+        var tokenNode = tctokenStanza != null ? tctokenStanza : cstokenStanza;
         builder.content(
-                botNode,
-                groupDirectSkmsgNode,
-                needsIdentity ? identityNode : null,
-                bizNode,
-                metaNode,
+                botStanza,
+                groupDirectSkmsgStanza,
+                needsIdentity ? identityStanza : null,
+                bizStanza,
+                metaStanza,
                 senderContentBinding,
-                botMetadataNode,
-                reportingNode,
+                botMetadataStanza,
+                reportingStanza,
                 tokenNode,
-                ctwaNode
+                ctwaStanza
         );
 
         return builder;
@@ -190,21 +190,21 @@ public final class ChatFanoutStanza {
      * @param peerRecipientPn       the peer PN, or {@code null}
      * @param recipientPn           the recipient PN, or {@code null}
      * @param peerRecipientUsername the peer username, or {@code null}
-     * @param identityNode          the {@code <device-identity>}, or {@code null}
-     * @param metaNode              the {@code <meta>}, or {@code null}
-     * @param bizNode               the {@code <biz>}, or {@code null}
-     * @param botNode               the encrypted-bot {@code <bot>}, or {@code null}
-     * @param reportingNode         the {@code <reporting>}, or {@code null}
+     * @param identityStanza          the {@code <device-identity>}, or {@code null}
+     * @param metaStanza              the {@code <meta>}, or {@code null}
+     * @param bizStanza               the {@code <biz>}, or {@code null}
+     * @param botStanza               the encrypted-bot {@code <bot>}, or {@code null}
+     * @param reportingStanza         the {@code <reporting>}, or {@code null}
      * @param senderContentBinding  the {@code <sender_content_binding>}, or {@code null}
-     * @param botMetadataNode       the metadata-only {@code <bot>}, or {@code null}
-     * @param tctokenNode           the {@code <tctoken>}, or {@code null}
-     * @param ctwaNode              the {@code <ctwa_attribution>}, or {@code null}
-     * @param groupDirectSkmsgNode  the group-direct {@code <enc type="skmsg">}, or {@code null}
-     * @return the {@link NodeBuilder} for the outer {@code <message>}
+     * @param botMetadataStanza       the metadata-only {@code <bot>}, or {@code null}
+     * @param tctokenStanza           the {@code <tctoken>}, or {@code null}
+     * @param ctwaStanza              the {@code <ctwa_attribution>}, or {@code null}
+     * @param groupDirectSkmsgStanza  the group-direct {@code <enc type="skmsg">}, or {@code null}
+     * @return the {@link StanzaBuilder} for the outer {@code <message>}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static NodeBuilder build(
+    public static StanzaBuilder build(
             String messageId,
             Jid chatJid,
             String type,
@@ -221,16 +221,16 @@ public final class ChatFanoutStanza {
             Jid peerRecipientPn,
             Jid recipientPn,
             String peerRecipientUsername,
-            Node identityNode,
-            Node metaNode,
-            Node bizNode,
-            Node botNode,
-            Node reportingNode,
-            Node senderContentBinding,
-            Node botMetadataNode,
-            Node tctokenNode,
-            Node ctwaNode,
-            Node groupDirectSkmsgNode
+            Stanza identityStanza,
+            Stanza metaStanza,
+            Stanza bizStanza,
+            Stanza botStanza,
+            Stanza reportingStanza,
+            Stanza senderContentBinding,
+            Stanza botMetadataStanza,
+            Stanza tctokenStanza,
+            Stanza ctwaStanza,
+            Stanza groupDirectSkmsgStanza
     ) {
         return build(
                 messageId, chatJid, type, payloads,
@@ -239,14 +239,14 @@ public final class ChatFanoutStanza {
                 contentBindings, isBotRelated,
                 peerRecipientLid, peerRecipientPn, recipientPn,
                 peerRecipientUsername,
-                identityNode, metaNode, bizNode, botNode,
-                reportingNode, senderContentBinding, botMetadataNode,
-                tctokenNode, null, ctwaNode, groupDirectSkmsgNode
+                identityStanza, metaStanza, bizStanza, botStanza,
+                reportingStanza, senderContentBinding, botMetadataStanza,
+                tctokenStanza, null, ctwaStanza, groupDirectSkmsgStanza
         );
     }
 
     /**
-     * Builds a single {@code <enc>} node for one device payload.
+     * Builds a single {@code <enc>} stanza for one device payload.
      * <p>
      * Used both for the single-primary top-level {@code <enc>} and as the inner {@code <enc>} of every
      * {@code <participants><to>} child. The {@code v} attribute always carries {@link MessageEncryption#CIPHERTEXT_VERSION}.
@@ -255,17 +255,17 @@ public final class ChatFanoutStanza {
      * @param mediaType      the {@code mediatype} attribute, or {@code null}
      * @param decryptFail    the {@code decrypt-fail} attribute, or {@code null}
      * @param nativeFlowName the {@code native_flow_name} attribute, or {@code null}
-     * @return the {@code <enc>} {@link Node}
+     * @return the {@code <enc>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static Node buildEncNode(
+    private static Stanza buildEncNode(
             MessageEncryptedPayload payload,
             String mediaType,
             String decryptFail,
             String nativeFlowName
     ) {
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("enc")
                 .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                 .attribute("type", payload.type().protocolValue())
@@ -291,18 +291,18 @@ public final class ChatFanoutStanza {
      * @param decryptFail     the {@code decrypt-fail} attribute, or {@code null}
      * @param nativeFlowName  the {@code native_flow_name} attribute, or {@code null}
      * @param contentBindings per-recipient RCAT tags keyed by user {@link Jid}, or {@code null}
-     * @return the {@code <participants>} {@link Node}
+     * @return the {@code <participants>} {@link Stanza}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static Node buildParticipantsNode(
+    private static Stanza buildParticipantsNode(
             List<MessageEncryptedPayload> payloads,
             String mediaType,
             String decryptFail,
             String nativeFlowName,
             Map<Jid, byte[]> contentBindings
     ) {
-        var children = new ArrayList<Node>(payloads.size());
+        var children = new ArrayList<Stanza>(payloads.size());
         for (var payload : payloads) {
             if (payload.recipientJid() == null) {
                 continue;
@@ -310,25 +310,25 @@ public final class ChatFanoutStanza {
 
             var encNode = buildEncNode(payload, mediaType, decryptFail, nativeFlowName);
 
-            Node contentBindingNode = null;
+            Stanza contentBindingStanza = null;
             if (contentBindings != null) {
                 var binding = contentBindings.get(payload.recipientJid().toUserJid());
                 if (binding != null) {
-                    contentBindingNode = new NodeBuilder()
+                    contentBindingStanza = new StanzaBuilder()
                             .description("content_binding")
                             .content(binding)
                             .build();
                 }
             }
 
-            var toNode = new NodeBuilder()
+            var toNode = new StanzaBuilder()
                     .description("to")
                     .attribute("jid", payload.recipientJid())
-                    .content(encNode, contentBindingNode)
+                    .content(encNode, contentBindingStanza)
                     .build();
             children.add(toNode);
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("participants")
                 .content(children)
                 .build();

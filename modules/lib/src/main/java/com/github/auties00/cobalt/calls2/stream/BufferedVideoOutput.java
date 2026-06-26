@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.calls2.stream;
 
+import java.net.URI;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>The presence of a video source on a placed or accepted call is what makes the call a video call;
  * supplying none makes it audio-only. The geometry is fixed at construction: the factories default to
- * 640x480 at 30 fps with a {@linkplain #defaultBitrate(int, int, int) pixel-derived} bitrate, and
+ * 640x480 at 30 fps with the recovered WhatsApp {@linkplain #DEFAULT_BITRATE_BPS initial bitrate}, and
  * explicit-geometry overloads accept any even resolution of at least {@code 2}, frame rate of at least
  * {@code 1}, and bitrate of at least {@code 1}.
  *
@@ -39,7 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link VideoFrame#ptsMicros()} microsecond clock rather than the legacy millisecond clock.
  */
 public sealed class BufferedVideoOutput implements VideoOutput
-        permits CameraVideoOutput, FileVideoOutput {
+        permits CameraVideoOutput, FfmpegVideoOutput {
     /**
      * Holds the maximum number of buffered frames before {@link #write(VideoFrame)} blocks.
      *
@@ -62,6 +64,23 @@ public sealed class BufferedVideoOutput implements VideoOutput
      * Holds the default target frame rate for the geometry-less factories.
      */
     private static final int DEFAULT_FPS = 30;
+
+    /**
+     * Holds the default initial encoder bitrate in bits per second the factories advertise.
+     *
+     * <p>WhatsApp initializes the video bitrate from the bandwidth estimator independently of the picture
+     * size, so this default is resolution-independent rather than pixel-derived. It mirrors the
+     * authoritative encoder seed
+     * {@link com.github.auties00.cobalt.calls2.media.video.VideoCodecParams#DEFAULT_INIT_TARGET_BITRATE}
+     * (the recovered {@code vid_rc.max_init_bwe = 350000};
+     * re/calls2-spec/captures/voip-settings-merged.json).
+     *
+     * @implNote This value is the advertised {@link #bitrateBps()} only; the call engine configures the
+     * encoder from {@code VideoCodecParams.forResolution} and its runtime rate controller, not from this
+     * advertised field, so it is informational rather than load-bearing. It is package-private so the
+     * device-backed subclasses ({@link ScreenVideoOutput}) advertise the same initial bitrate.
+     */
+    static final int DEFAULT_BITRATE_BPS = 350_000;
 
     /**
      * Marks the end of the source so the engine's {@link #take()} returns {@code null} once drained.
@@ -158,8 +177,8 @@ public sealed class BufferedVideoOutput implements VideoOutput
     }
 
     /**
-     * Returns a manually-written source at the given resolution, 30 fps, with the bitrate
-     * {@linkplain #defaultBitrate(int, int, int) auto-derived} from the pixel count.
+     * Returns a manually-written source at the given resolution, 30 fps, with the recovered WhatsApp
+     * {@linkplain #DEFAULT_BITRATE_BPS initial bitrate}.
      *
      * @param width  the frame width in pixels; even and at least {@code 2}
      * @param height the frame height in pixels; even and at least {@code 2}
@@ -167,12 +186,12 @@ public sealed class BufferedVideoOutput implements VideoOutput
      * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}
      */
     public static BufferedVideoOutput buffered(int width, int height) {
-        return new BufferedVideoOutput(width, height, DEFAULT_FPS, defaultBitrate(width, height, DEFAULT_FPS));
+        return new BufferedVideoOutput(width, height, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 
     /**
      * Returns a manually-written source at the default SD geometry: 640x480 at 30 fps with the
-     * pixel-derived bitrate.
+     * default initial bitrate.
      *
      * @return a new empty buffered source at the default geometry
      */
@@ -202,14 +221,14 @@ public sealed class BufferedVideoOutput implements VideoOutput
 
     /**
      * Returns a source bound to the default camera at the default SD geometry: 640x480 at 30 fps with
-     * the pixel-derived bitrate.
+     * the default initial bitrate.
      *
      * @return a camera-bound source at the default geometry
      * @throws IllegalStateException if no camera is available on the running platform
      */
     public static BufferedVideoOutput fromCamera() {
         return fromCamera(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS,
-                defaultBitrate(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS));
+                DEFAULT_BITRATE_BPS);
     }
 
     /**
@@ -234,14 +253,14 @@ public sealed class BufferedVideoOutput implements VideoOutput
 
     /**
      * Returns a source that shares the primary screen at the default SD geometry: 640x480 at 30 fps with
-     * the pixel-derived bitrate.
+     * the default initial bitrate.
      *
      * @return a screen-share source at the default geometry
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static BufferedVideoOutput fromScreen() {
         return fromScreen(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS,
-                defaultBitrate(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS));
+                DEFAULT_BITRATE_BPS);
     }
 
     /**
@@ -267,7 +286,7 @@ public sealed class BufferedVideoOutput implements VideoOutput
 
     /**
      * Returns a source that transmits the video track of a media file at the default SD geometry:
-     * 640x480 at 30 fps with the pixel-derived bitrate.
+     * 640x480 at 30 fps with the default initial bitrate.
      *
      * @param path the media file to stream
      * @return a file-bound source at the default geometry
@@ -276,22 +295,74 @@ public sealed class BufferedVideoOutput implements VideoOutput
      */
     public static BufferedVideoOutput file(Path path) {
         return file(path, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS,
-                defaultBitrate(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS));
+                DEFAULT_BITRATE_BPS);
     }
 
     /**
-     * Computes a heuristic bitrate target for a resolution and frame rate.
+     * Returns a source that transmits the video track of a media stream addressed by a URI, advertising
+     * the given geometry and bounding every blocking network operation by the given timeout.
      *
-     * <p>The estimate follows WebRTC's typical SD and HD operating points at roughly 0.1 bits per pixel
-     * per frame, clamped to a 64 kbps floor.
+     * <p>The stream's decoded frames are scaled to this source's geometry by the encoder. The accepted
+     * schemes are restricted to a fixed allowlist, so an application-supplied string cannot reach an
+     * unintended protocol.
      *
-     * @param width  the frame width in pixels
-     * @param height the frame height in pixels
-     * @param fps    the target frame rate
-     * @return a starting bitrate in bits per second
+     * @param uri        the media stream to open
+     * @param width      the frame width in pixels; even and at least {@code 2}
+     * @param height     the frame height in pixels; even and at least {@code 2}
+     * @param fps        the target frame rate; at least {@code 1}
+     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
+     * @param ioTimeout  the maximum time any single connect, probe, or read may block; must be positive
+     * @return a URI-bound source advertising the given geometry
+     * @throws NullPointerException     if {@code uri} or {@code ioTimeout} is {@code null}
+     * @throws IllegalArgumentException if {@code ioTimeout} is not positive, the scheme is not permitted,
+     *                                  {@code width} or {@code height} is odd or below {@code 2}, or
+     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
+     * @throws IllegalStateException    if the stream cannot be opened or has no video stream
      */
-    private static int defaultBitrate(int width, int height, int fps) {
-        return Math.max(64_000, width * height * fps / 10);
+    public static BufferedVideoOutput uri(URI uri, int width, int height, int fps, int bitrateBps,
+                                          Duration ioTimeout) {
+        Objects.requireNonNull(uri, "uri cannot be null");
+        Objects.requireNonNull(ioTimeout, "ioTimeout cannot be null");
+        if (ioTimeout.isNegative() || ioTimeout.isZero()) {
+            throw new IllegalArgumentException("ioTimeout must be positive, got " + ioTimeout);
+        }
+        return new UriVideoOutput(uri, width, height, fps, bitrateBps, ioTimeout);
+    }
+
+    /**
+     * Returns a source that transmits the video track of a media stream addressed by a URI, advertising
+     * the given geometry with a fifteen-second timeout on every blocking network operation.
+     *
+     * @param uri        the media stream to open
+     * @param width      the frame width in pixels; even and at least {@code 2}
+     * @param height     the frame height in pixels; even and at least {@code 2}
+     * @param fps        the target frame rate; at least {@code 1}
+     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
+     * @return a URI-bound source advertising the given geometry
+     * @throws NullPointerException     if {@code uri} is {@code null}
+     * @throws IllegalArgumentException if the scheme is not permitted, {@code width} or {@code height} is
+     *                                  odd or below {@code 2}, or {@code fps} or {@code bitrateBps} is
+     *                                  below {@code 1}
+     * @throws IllegalStateException    if the stream cannot be opened or has no video stream
+     */
+    public static BufferedVideoOutput uri(URI uri, int width, int height, int fps, int bitrateBps) {
+        return uri(uri, width, height, fps, bitrateBps, Duration.ofSeconds(15));
+    }
+
+    /**
+     * Returns a source that transmits the video track of a media stream addressed by a URI at the default
+     * SD geometry: 640x480 at 30 fps with the default initial bitrate, with a fifteen-second timeout on every
+     * blocking network operation.
+     *
+     * @param uri the media stream to open
+     * @return a URI-bound source at the default geometry
+     * @throws NullPointerException     if {@code uri} is {@code null}
+     * @throws IllegalArgumentException if the URI has no scheme or its scheme is not permitted
+     * @throws IllegalStateException    if the stream cannot be opened or has no video stream
+     */
+    public static BufferedVideoOutput uri(URI uri) {
+        return uri(uri, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS,
+                DEFAULT_BITRATE_BPS);
     }
 
     /**

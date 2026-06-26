@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.control;
 
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
@@ -7,7 +8,6 @@ import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 
 /**
@@ -74,20 +74,20 @@ public final class StreamErrorStreamHandler extends SocketStreamHandler.Concurre
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebHandleStreamError", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public void handle(Node node) {
-        var conflict = node.getChild("conflict").orElse(null);
+    public void handle(Stanza stanza) {
+        var conflict = stanza.getChild("conflict").orElse(null);
         if (conflict != null) {
             handleConflict(conflict.getAttributeAsString("type", null));
             return;
         }
 
-        var code = node.getAttributeAsInt("code", (Integer) null);
+        var code = stanza.getAttributeAsInt("code", (Integer) null);
         if (code != null) {
             handleCode(code);
             return;
         }
 
-        var ack = node.getChild("ack").orElse(null);
+        var ack = stanza.getChild("ack").orElse(null);
         if (ack != null) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Received stream:error ack for id={0}",
@@ -96,12 +96,12 @@ public final class StreamErrorStreamHandler extends SocketStreamHandler.Concurre
             return;
         }
 
-        if (node.hasChild("xml-not-well-formed")) {
+        if (stanza.hasChild("xml-not-well-formed")) {
             whatsapp.handleFailure(new WhatsAppStreamException.MalformedNode("Server reported xml-not-well-formed"));
             return;
         }
 
-        LOGGER.log(System.Logger.Level.WARNING, "Received unrecognized stream:error stanza: {0}", node);
+        LOGGER.log(System.Logger.Level.WARNING, "Received unrecognized stream:error stanza: {0}", stanza);
         whatsapp.handleFailure(new WhatsAppSessionException.Closed("Stream error: unrecognized"));
     }
 

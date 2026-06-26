@@ -4,8 +4,8 @@ import com.github.auties00.cobalt.calls2.common.VoipCapabilities;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Adversarial wire-format verification for the {@code calls2.signaling} plane against SPEC sections
  * 1-3, 5, 6, and 9. The wire bytes are derived independently from the spec grammar and the RE ground
- * truth and then checked against the produced {@link Node} tree (tags, attributes, nesting), rather
+ * truth and then checked against the produced {@link Stanza} tree (tags, attributes, nesting), rather
  * than trusting the implementation's own constants.
  */
 @DisplayName("calls2 signaling wire format")
@@ -37,8 +37,8 @@ class Calls2SignalingWireFormatTest {
     private static final Jid PEER_USER_LID = Jid.of("44444444", JidServer.lid());
     private static final String CALL_ID = "FACEFACEFACEFACEFACEFACEFACEFACEFACEFACEFACEFACEFACEFACEFACEFACE";
 
-    private static NodeBuilder callChild(Node payload) {
-        return new NodeBuilder()
+    private static StanzaBuilder callChild(Stanza payload) {
+        return new StanzaBuilder()
                 .description(Calls2CallStanza.ELEMENT)
                 .attribute("from", PEER_USER_LID)
                 .attribute("id", "stanza-1")
@@ -59,7 +59,7 @@ class Calls2SignalingWireFormatTest {
             assertEquals("abc123", call.getAttributeAsString("id").orElseThrow());
             var child = call.getChild().orElseThrow();
             assertEquals("offer", child.description());
-            // the action node already carries the universal header; the envelope adds only addressing
+            // the action stanza already carries the universal header; the envelope adds only addressing
             assertEquals(CALL_ID, child.getAttributeAsString("call-id").orElseThrow());
             assertEquals(CALL_CREATOR, child.getAttributeAsJid("call-creator").orElseThrow());
         }
@@ -67,7 +67,7 @@ class Calls2SignalingWireFormatTest {
         @Test
         @DisplayName("an unknown child tag parses to an empty result rather than throwing")
         void unknownChildIsEmpty() {
-            var unknown = new NodeBuilder().description("not_a_call_action").build();
+            var unknown = new StanzaBuilder().description("not_a_call_action").build();
             assertTrue(Calls2CallStanza.parse(unknown).isEmpty());
         }
     }
@@ -88,7 +88,7 @@ class Calls2SignalingWireFormatTest {
                     false, false, null, -1, 3, capabilities, audio, List.of(), keyDistribution, media,
                     null, null, null, null, null, null, List.of(), null);
 
-            var node = offer.toNode();
+            var node = offer.toStanza();
             assertEquals("offer", node.description());
             assertEquals(CALL_ID, node.getAttributeAsString("call-id").orElseThrow());
             assertEquals(CALL_CREATOR, node.getAttributeAsJid("call-creator").orElseThrow());
@@ -128,7 +128,7 @@ class Calls2SignalingWireFormatTest {
             var offer = new OfferStanza(CALL_ID, CALL_CREATOR, null, null, null, group, null, null,
                     true, false, null, -1, -1, List.of(), List.of(), List.of(), List.of(), null,
                     null, null, null, null, null, null, List.of(), null);
-            var node = offer.toNode();
+            var node = offer.toStanza();
             assertEquals(group, node.getAttributeAsJid("group-jid").orElseThrow());
             // SPEC: booleans serialize as the ASCII characters '1'/'0'
             assertEquals("1", node.getAttributeAsString("joinable").orElseThrow());
@@ -145,13 +145,13 @@ class Calls2SignalingWireFormatTest {
         void acceptStructure() {
             var capabilities = List.of(new CallCapability(1, HexFormat.of().parseHex("f709e4bb13")));
             var audio = List.of(CallCodecDescriptor.audio("opus", 16000));
-            var encKey = new NodeBuilder().description("enc").content(HexFormat.of().parseHex("cafe")).build();
-            var transport = new NodeBuilder().description("transport").attribute("call-id", CALL_ID).build();
+            var encKey = new StanzaBuilder().description("enc").content(HexFormat.of().parseHex("cafe")).build();
+            var transport = new StanzaBuilder().description("transport").attribute("call-id", CALL_ID).build();
             var media = new CallMediaDescriptor(5, 48000);
             var accept = new AcceptStanza(CALL_ID, CALL_CREATOR, 2, capabilities, audio,
-                    List.of(encKey), media, null, transport);
+                    List.of(encKey), media, null, transport, null);
 
-            var node = accept.toNode();
+            var node = accept.toStanza();
             assertEquals("accept", node.description());
             assertEquals(CALL_ID, node.getAttributeAsString("call-id").orElseThrow());
             assertEquals(2, node.getChild("net").orElseThrow().getAttributeAsInt("medium").orElseThrow());
@@ -174,7 +174,7 @@ class Calls2SignalingWireFormatTest {
             var d2 = Jid.of("44444444", JidServer.lid(), 2, 0);
             var terminate = TerminateStanza.of(CALL_ID, CALL_CREATOR, CallEndReason.HANGUP, List.of(d1, d2));
 
-            var node = terminate.toNode();
+            var node = terminate.toStanza();
             assertEquals("terminate", node.description());
             // SPEC 3: the reason literal is written on the reason attribute, the spelling the captures carry
             assertEquals("hangup", node.getAttributeAsString("reason").orElseThrow());
@@ -204,14 +204,14 @@ class Calls2SignalingWireFormatTest {
         @DisplayName("parses <ack class='call' type='offer'> with a populated <relay> into an accept outcome")
         void offerAckSuccess() {
             // SPEC 5: the relay credentials arrive as the synchronous <ack class="call"> return value
-            var relay = new NodeBuilder()
+            var relay = new StanzaBuilder()
                     .description("relay")
                     .attribute("call-creator", CALL_CREATOR)
                     .attribute("call-id", CALL_ID)
                     .attribute("uuid", "relay-uuid")
-                    .content(new NodeBuilder().description("key").content("0123456789abcdef").build())
+                    .content(new StanzaBuilder().description("key").content("0123456789abcdef").build())
                     .build();
-            var ack = new NodeBuilder()
+            var ack = new StanzaBuilder()
                     .description("ack")
                     .attribute("class", "call")
                     .attribute("type", "offer")
@@ -233,12 +233,12 @@ class Calls2SignalingWireFormatTest {
         @DisplayName("parses <ack ... error=N> as a NACK whose relay holds only denormalised header")
         void offerAckNack() {
             // SPEC 5 NACK: <ack ... error=N><relay/></ack> with relay carrying only call-creator/call-id
-            var relay = new NodeBuilder()
+            var relay = new StanzaBuilder()
                     .description("relay")
                     .attribute("call-creator", CALL_CREATOR)
                     .attribute("call-id", CALL_ID)
                     .build();
-            var ack = new NodeBuilder()
+            var ack = new StanzaBuilder()
                     .description("ack")
                     .attribute("class", "call")
                     .attribute("type", "offer")
@@ -296,7 +296,7 @@ class Calls2SignalingWireFormatTest {
         @DisplayName("a LID-addressed <offer> for an existing call routes to PROCESS and parses to OfferStanza")
         void offerRoutesToOfferStanza() {
             var offer = SignalingFixtures.minimalOffer(CALL_ID, CALL_CREATOR);
-            var call = callChild(offer.toNode()).build();
+            var call = callChild(offer.toStanza()).build();
             var payload = call.getChild().orElseThrow();
 
             var verdict = router.classify(payload, PEER_USER_LID, true);
@@ -311,7 +311,7 @@ class Calls2SignalingWireFormatTest {
         @EnumSource(value = SignalingFixtures.Kind.class)
         @DisplayName("each representative inbound action classifies to its type and parses to its record")
         void inboundRoutesToRecord(SignalingFixtures.Kind kind) {
-            var payload = kind.build(CALL_ID, CALL_CREATOR).toNode();
+            var payload = kind.build(CALL_ID, CALL_CREATOR).toStanza();
 
             var verdict = router.classify(payload, PEER_USER_LID, true);
             assertEquals(CallSignalingRouter.Disposition.PROCESS, verdict.disposition(),
@@ -328,7 +328,7 @@ class Calls2SignalingWireFormatTest {
         @DisplayName("an offer for a not-yet-existing call is BUFFERed rather than processed")
         void offerBuffersWhenNoCall() {
             var offer = SignalingFixtures.minimalOffer(CALL_ID, CALL_CREATOR);
-            var verdict = router.classify(offer.toNode(), PEER_USER_LID, false);
+            var verdict = router.classify(offer.toStanza(), PEER_USER_LID, false);
             assertEquals(CallSignalingRouter.Disposition.BUFFER, verdict.disposition());
             assertEquals(CALL_ID, verdict.callId().orElseThrow());
         }
@@ -336,7 +336,7 @@ class Calls2SignalingWireFormatTest {
         @Test
         @DisplayName("a payload with no call-id is DROPped with an empty type")
         void missingCallIdDrops() {
-            var bad = new NodeBuilder().description("offer").attribute("call-creator", CALL_CREATOR).build();
+            var bad = new StanzaBuilder().description("offer").attribute("call-creator", CALL_CREATOR).build();
             var verdict = router.classify(bad, PEER_USER_LID, true);
             assertEquals(CallSignalingRouter.Disposition.DROP, verdict.disposition());
             assertTrue(verdict.type().isEmpty());
@@ -361,7 +361,7 @@ class Calls2SignalingWireFormatTest {
             // Calls2CallStanza decodes it; the router falls back to the parser-known tag set and routes it
             // to PROCESS so a RingingStanza reaches the sink. The verdict type stays empty because the
             // action carries no taxonomy ordinal.
-            var ringing = new RingingStanza(CALL_ID, CALL_CREATOR).toNode();
+            var ringing = new RingingStanza(CALL_ID, CALL_CREATOR).toStanza();
             assertTrue(Calls2CallStanza.parse(ringing).isPresent(), "parser decodes <ringing>");
             var verdict = router.classify(ringing, PEER_USER_LID, true);
             assertEquals(CallSignalingRouter.Disposition.PROCESS, verdict.disposition(),
@@ -377,7 +377,7 @@ class Calls2SignalingWireFormatTest {
             // Same fallback as <ringing>: raise_hand is a real inbound signal in the RE ground truth,
             // decodable by the parser but absent from Calls2SignalingType, so the router routes it via the
             // parser-known tag set rather than dropping it.
-            var raiseHand = new RaiseHandStanza(CALL_ID, CALL_CREATOR, true, false).toNode();
+            var raiseHand = new RaiseHandStanza(CALL_ID, CALL_CREATOR, true, false).toStanza();
             assertTrue(Calls2CallStanza.parse(raiseHand).isPresent(), "parser decodes <raise_hand>");
             var verdict = router.classify(raiseHand, PEER_USER_LID, true);
             assertEquals(CallSignalingRouter.Disposition.PROCESS, verdict.disposition(),
@@ -390,7 +390,7 @@ class Calls2SignalingWireFormatTest {
         @DisplayName("an ordinal-less decodable action buffers when its call object does not yet exist")
         void ringingBuffersWhenNoCall() {
             // the ordinal-less fallback honours the same buffer-before-call gate as a taxonomy action
-            var ringing = new RingingStanza(CALL_ID, CALL_CREATOR).toNode();
+            var ringing = new RingingStanza(CALL_ID, CALL_CREATOR).toStanza();
             var verdict = router.classify(ringing, PEER_USER_LID, false);
             assertEquals(CallSignalingRouter.Disposition.BUFFER, verdict.disposition());
             assertEquals(CALL_ID, verdict.callId().orElseThrow());

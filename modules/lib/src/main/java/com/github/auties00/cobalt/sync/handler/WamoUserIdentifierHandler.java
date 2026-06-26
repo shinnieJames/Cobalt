@@ -1,10 +1,11 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.WamoUserIdentifierAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -14,7 +15,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>The sync dispatcher would route incoming {@code generated_wui} mutations here if the server
  * ever emits one. The identifier is an opaque token used to tag the local user inside WA's
  * paid-newsletter subscription pipeline; the handler stores it on
- * {@link com.github.auties00.cobalt.store.SettingsStore#setNewsletterSubscriptionUserIdentifier(String)}
+ * {@link LinkedWhatsAppSettingsStore#setNewsletterSubscriptionUserIdentifier(String)}
  * so subsequent newsletter subscription operations can include it.
  *
  * @implNote
@@ -70,7 +71,7 @@ public final class WamoUserIdentifierHandler implements WebAppStateActionHandler
      * <p>Non-{@link SyncdOperation#SET} operations are {@link MutationApplicationResult#unsupported()}.
      * A missing or blank {@link WamoUserIdentifierAction#identifier()} is
      * {@link MutationApplicationResult#malformed()}, and the resolved string is written to
-     * {@link com.github.auties00.cobalt.store.SettingsStore#setNewsletterSubscriptionUserIdentifier(String)}.
+     * {@link LinkedWhatsAppSettingsStore#setNewsletterSubscriptionUserIdentifier(String)}.
      *
      * @implNote
      * This implementation follows the canonical SET-only single-string shape used by sibling

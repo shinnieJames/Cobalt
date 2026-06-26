@@ -3,11 +3,11 @@ import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
-import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.LiveWamService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * a live connection and is out of scope. The service runs against {@link TestWhatsAppClient} and an
  * in-memory {@link LinkedWhatsAppStore} from {@link DeviceFixtures#temporaryStore(Jid, Jid)} so every test
  * runs without IO; the named JIDs are fictitious and carry no provenance from a real session. The
- * own JID is pinned via {@link com.github.auties00.cobalt.store.AccountStore#setJid(Jid)} so paths that consult {@code store.accountStore().jid()}
+ * own JID is pinned via {@link LinkedWhatsAppAccountStore#setJid(Jid)} so paths that consult {@code store.accountStore().jid()}
  * do not face an absent identity.
  */
 @DisplayName("WebAppStateService")

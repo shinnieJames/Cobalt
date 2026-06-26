@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.stream.presence;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.store.linked.protobuf.ProtobufWhatsAppStore;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedContactPresenceListener;
@@ -10,7 +12,6 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 
 import java.time.Instant;
@@ -65,7 +66,7 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
      *
      * <p>The handler is constructed by the {@link NodeStreamService} wiring; embedders do not call this directly. The
      * supplied client must have an initialized
-     * {@link com.github.auties00.cobalt.store.ProtobufWhatsAppStore store}.
+     * {@link ProtobufWhatsAppStore store}.
      *
      * @param whatsapp the non-{@code null} client whose store is updated and whose listeners are notified
      */
@@ -97,17 +98,17 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
      * Cobalt is headless and has no equivalent display state.</li>
      * </ul>
      *
-     * @param node {@inheritDoc}
+     * @param stanza {@inheritDoc}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandlePresence", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebChangePresenceHandlerAction", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
-    public void handle(Node node) {
-        var from = node.getAttributeAsJid("from", null);
+    public void handle(Stanza stanza) {
+        var from = stanza.getAttributeAsJid("from", null);
         if (from == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring presence stanza without from: {0}", node);
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring presence stanza without from: {0}", stanza);
             return;
         }
 
@@ -121,11 +122,11 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
             return;
         }
 
-        var type = node.getAttributeAsString("type", "available");
+        var type = stanza.getAttributeAsString("type", "available");
         var status = "unavailable".equals(type) ? ContactStatus.UNAVAILABLE : ContactStatus.AVAILABLE;
         contact.setLastKnownPresence(status);
 
-        var lastValue = node.getAttributeAsString("last", null);
+        var lastValue = stanza.getAttributeAsString("last", null);
         var lastSeen = resolveLastSeen(lastValue, status);
         if (lastSeen != null) {
             contact.setLastSeen(lastSeen);
@@ -138,7 +139,7 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
      * Returns the {@link Instant} to store on {@link Contact#lastSeen()} given the raw {@code last} attribute value and
      * the resolved presence {@code status}, or {@code null} when the existing timestamp should be preserved.
      *
-     * <p>This is the four-way classifier {@link #handle(Node)} uses to drive {@link Contact#setLastSeen(Instant)}. It
+     * <p>This is the four-way classifier {@link #handle(Stanza)} uses to drive {@link Contact#setLastSeen(Instant)}. It
      * returns {@code null} for an online contact (last-seen is only relevant to offline contacts), {@link Instant#now()}
      * when an offline contact has no {@code last} attribute at all (the contact just went offline), {@code null} for
      * any of the {@link #HIDDEN_LAST_VALUES} (privacy settings hide the timestamp), and otherwise the unix epoch second
@@ -149,7 +150,7 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
      * time and falls back to the current unix time when the attribute is absent. Cobalt additionally swallows
      * {@link NumberFormatException} on malformed timestamps, where WhatsApp Web's numeric coercion would produce
      * {@code NaN} and propagate; returning {@code null} instead is consistent with the "leave existing timestamp
-     * untouched" semantic in {@link #handle(Node)}.
+     * untouched" semantic in {@link #handle(Stanza)}.
      *
      * @param lastValue the raw {@code last} attribute, or {@code null} when the stanza did not carry one
      * @param status    the {@link ContactStatus} just derived from the {@code type} attribute

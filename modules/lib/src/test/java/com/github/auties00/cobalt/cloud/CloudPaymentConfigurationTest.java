@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.model.cloud.CloudApiVersion;
 import com.github.auties00.cobalt.model.cloud.commerce.CloudPaymentConfiguration;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -26,8 +27,8 @@ class CloudPaymentConfigurationTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .whatsappBusinessAccountId(WABA_ID)
                 .apiVersion(CloudApiVersion.V23_0)
@@ -35,8 +36,8 @@ class CloudPaymentConfigurationTest {
                 .build();
     }
 
-    private static CloudWhatsAppClient clientWithoutWaba(RecordingHttpClient http) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient clientWithoutWaba(RecordingHttpClient http) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(CloudApiVersion.V23_0)
                 .httpClient(http)
@@ -45,7 +46,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("queryPaymentConfigurations GETs the WABA edge and parses the data array")
-    void list() {
+    void list() throws Exception {
         var http = http();
         http.respondWith("""
                 {"data":[{"configuration_name":"my-gateway","provider_name":"razorpay",
@@ -66,7 +67,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("queryPaymentConfigurations returns an empty list when data is absent")
-    void listEmpty() {
+    void listEmpty() throws Exception {
         var http = http();
         http.respondWith("{}");
         assertTrue(client(http).queryPaymentConfigurations().isEmpty());
@@ -74,7 +75,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("queryPaymentConfiguration GETs the edge with the configuration_name query parameter")
-    void get() {
+    void get() throws Exception {
         var http = http();
         http.respondWith("""
                 {"configuration_name":"my-gateway","provider_name":"razorpay","status":"ACTIVE"}""");
@@ -89,7 +90,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("queryPaymentConfiguration returns empty when the response carries no configuration")
-    void getEmpty() {
+    void getEmpty() throws Exception {
         var http = http();
         http.respondWith("{}");
         assertTrue(client(http).queryPaymentConfiguration("missing").isEmpty());
@@ -97,7 +98,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("createPaymentConfiguration POSTs the name, provider, and merchant id")
-    void create() {
+    void create() throws Exception {
         var http = http();
         http.respondWith("{\"success\":true}");
         client(http).createPaymentConfiguration(
@@ -112,7 +113,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("createPaymentConfiguration omits the merchant id when it is absent")
-    void createWithoutMid() {
+    void createWithoutMid() throws Exception {
         var http = http();
         http.respondWith("{\"success\":true}");
         client(http).createPaymentConfiguration(
@@ -125,7 +126,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("deletePaymentConfiguration DELETEs the edge with the configuration_name query parameter")
-    void delete() {
+    void delete() throws Exception {
         var http = http();
         http.respondWith("{\"success\":true}");
         client(http).deletePaymentConfiguration("my-gateway");
@@ -137,7 +138,7 @@ class CloudPaymentConfigurationTest {
 
     @Test
     @DisplayName("the CRUD edges require a configured WhatsApp Business Account id")
-    void requiresWaba() {
+    void requiresWaba() throws Exception {
         var http = http();
         assertThrows(IllegalStateException.class, () -> clientWithoutWaba(http).queryPaymentConfigurations());
         assertThrows(IllegalStateException.class,

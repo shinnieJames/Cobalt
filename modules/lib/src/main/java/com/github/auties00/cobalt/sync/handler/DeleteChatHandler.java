@@ -6,10 +6,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.ConflictResolution;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteChatActionBuilder;
@@ -83,7 +84,7 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
      * This implementation parses the mutation index, validates the embedded
      * {@link Jid} and the {@link DeleteChatAction#messageRange()} payload,
      * and then removes the entire chat from
-     * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} when the chat is
+     * {@link LinkedWhatsAppStore} when the chat is
      * present. WA Web's {@code $DeleteChatSync$p_1} compares the incoming
      * range against the local chat's current range and emits either a
      * partial {@code queryAndRemoveMessagesInMessageRange} or a full
@@ -160,7 +161,7 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
      * resolution from application; WA Web instead applies the merged
      * mutation immediately under {@code lockForMessageRangeSync}. A
      * {@code null} action or {@code messageRange} on either side defaults
-     * to {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} where WA
+     * to {@link MutationConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} where WA
      * Web would throw via {@code WANullthrows}.
      */
     @Override
@@ -176,25 +177,25 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
                 .orElse(null);
 
         if (localAction == null || remoteAction == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         var localRange = localAction.messageRange().orElse(null);
         var remoteRange = remoteAction.messageRange().orElse(null);
 
         if (localRange == null || remoteRange == null) {
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            return ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         return switch (MessageRangeUtils.compareMessageRanges(remoteRange, localRange)) {
             case RANGE_A_ENCLOSES_RANGE_B ->
-                    ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+                    ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
             case RANGE_B_ENCLOSES_RANGE_A ->
-                    ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                    ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_ARE_EQUAL ->
                     localMutation.timestamp().compareTo(remoteMutation.timestamp()) <= 0
-                            ? ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
-                            : ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+                            ? ConflictResolution.of(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
+                            : ConflictResolution.of(MutationConflictResolutionState.SKIP_REMOTE);
             case RANGES_NOT_ENCLOSING -> {
                 var mergedRange = MessageRangeUtils.mergeMessageRanges(remoteRange, localRange);
                 var mergedAction = new DeleteChatActionBuilder()

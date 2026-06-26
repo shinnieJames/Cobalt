@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.calls2.Calls2Service;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 
 import java.util.Objects;
@@ -15,7 +15,7 @@ import java.util.Objects;
  * {@link CallAckParser}); the accept, by contrast, is shipped fire-and-forget, so its
  * {@code <ack class="call" type="accept">} arrives later as a top-level {@code <ack>} stanza with no
  * pending reply to correlate it. This handler is registered under the {@code "ack"} stream tag to catch
- * that uncorrelated ack: it parses the envelope through {@link CallAckParser#parse(Node)} and forwards the
+ * that uncorrelated ack: it parses the envelope through {@link CallAckParser#parse(Stanza)} and forwards the
  * {@link CallAckOutcome} to the injected {@link Calls2Service} for the engine's accept-ack handling. A NACK
  * on that ack is the engine's signal to abandon the answered call.
  *
@@ -79,31 +79,31 @@ public final class Calls2CallAckReceiver extends SocketStreamHandler.Ordered {
      * async ack is serialised on the same per-call chain as any enveloped signal for that call; an ack with
      * no {@code id} falls back to a single shared key so it is still processed in arrival order.
      *
-     * @param node the inbound {@code <ack>} stanza
+     * @param stanza the inbound {@code <ack>} stanza
      * @return the ordering key, never {@code null}
      */
     @Override
-    protected String orderingKey(Node node) {
-        return node.getAttributeAsString(ID_ATTRIBUTE, UNKEYED_ORDERING_KEY);
+    protected String orderingKey(Stanza stanza) {
+        return stanza.getAttributeAsString(ID_ATTRIBUTE, UNKEYED_ORDERING_KEY);
     }
 
     /**
      * {@inheritDoc}
      *
-     * <p>Parses the {@code <ack>} through {@link CallAckParser#parse(Node)} and forwards the decoded
+     * <p>Parses the {@code <ack>} through {@link CallAckParser#parse(Stanza)} and forwards the decoded
      * {@link CallAckOutcome} to the injected {@link Calls2Service}. A top-level {@code <ack>} that is not a
      * call ack yields an empty parse and is ignored, so the handler is inert for the ordinary message and
      * receipt delivery acks; a malformed call ack is dropped without forwarding.
      *
-     * @param node the inbound {@code <ack>} stanza
+     * @param stanza the inbound {@code <ack>} stanza
      */
     @Override
-    public void handle(Node node) {
+    public void handle(Stanza stanza) {
         CallAckOutcome outcome;
         try {
-            outcome = CallAckParser.parse(node).orElse(null);
+            outcome = CallAckParser.parse(stanza).orElse(null);
         } catch (RuntimeException _) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring malformed call <ack>: {0}", node);
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring malformed call <ack>: {0}", stanza);
             return;
         }
         if (outcome == null) {

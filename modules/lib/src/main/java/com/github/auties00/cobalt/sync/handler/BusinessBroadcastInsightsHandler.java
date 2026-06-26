@@ -6,11 +6,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.BusinessBroadcastInsightBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastInsightsAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.ArrayList;
@@ -23,7 +24,7 @@ import java.util.logging.Logger;
  * <p>The analytics surface tracks recipient, delivered, read, replied, and
  * quick-reply counts per campaign. When the server publishes updated insights
  * for a campaign, the mutation lands here, and the result is read back through
- * {@link com.github.auties00.cobalt.store.BusinessStore#findBusinessBroadcastInsight(String)}.
+ * {@link LinkedWhatsAppBusinessStore#findBusinessBroadcastInsight(String)}.
  *
  * @implNote
  * This implementation drops two WA Web side effects: the

@@ -10,12 +10,12 @@ import java.util.Optional;
  * The payment metadata extracted from the {@code <pay>} and
  * {@code <transaction>} children of an incoming {@code <message>} stanza.
  *
- * <p>The two children sit as direct siblings of the {@code <message>} node, not
+ * <p>The two children sit as direct siblings of the {@code <message>} stanza, not
  * nested; this record flattens both into one shape so the UI does not need to
- * know which node carried which attribute. When both are present the
+ * know which stanza carried which attribute. When both are present the
  * {@code <transaction>} fields win, because {@code <transaction>} is the newer
  * Novi/WhatsApp Pay envelope. The {@link #futureproofed()} flag is set when the
- * {@code <pay>} or {@code <transaction>} node is a Novi-style envelope that this
+ * {@code <pay>} or {@code <transaction>} stanza is a Novi-style envelope that this
  * client does not yet understand; downstream code skips rendering payment
  * details in that case. Instances are produced by
  * {@link MessageReceiveStanzaParser} and consumed via
@@ -24,7 +24,7 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceivePaymentInfo {
     /**
-     * {@code true} when the payment node is tagged as a future Novi envelope.
+     * {@code true} when the payment stanza is tagged as a future Novi envelope.
      */
     private final boolean futureproofed;
 
@@ -93,7 +93,7 @@ public final class MessageReceivePaymentInfo {
     }
 
     /**
-     * Returns whether this payment node was tagged as a Novi-style
+     * Returns whether this payment stanza was tagged as a Novi-style
      * futureproofed envelope.
      *
      * <p>When {@code true} every other field on this record is empty; the

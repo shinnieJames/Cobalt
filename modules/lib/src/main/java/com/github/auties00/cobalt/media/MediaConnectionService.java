@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.media;
 import com.github.auties00.cobalt.exception.WhatsAppMediaException;
 import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.media.MediaProvider;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.io.InputStream;
 import java.util.SequencedCollection;
@@ -17,7 +17,7 @@ import java.util.SequencedCollection;
  * transferring any attachment: it carries the authentication token, the
  * list of candidate CDN hosts with their accepted media types and download
  * buckets, the time-to-live values for the credentials, and the retry
- * budgets the server expects. {@link #update(Node)} installs a fresh
+ * budgets the server expects. {@link #update(Stanza)} installs a fresh
  * handshake; the transfer methods consume the most recently installed one.
  * This service is the entry point whenever Cobalt ships or materialises a
  * media-bearing message: {@link #upload(MediaProvider, MediaPayload)} for
@@ -26,9 +26,9 @@ import java.util.SequencedCollection;
  *
  * @implSpec
  * Implementations are expected to be thread-safe; the success-stream
- * handler may call {@link #update(Node)} concurrently with sender and
+ * handler may call {@link #update(Stanza)} concurrently with sender and
  * receiver pipelines invoking the transfer methods. The transfer methods
- * and the credential accessors require at least one {@link #update(Node)}
+ * and the credential accessors require at least one {@link #update(Stanza)}
  * to have landed first; {@link LiveMediaConnectionService} blocks the
  * transfer methods on a first-refresh latch and throws
  * {@link IllegalStateException} from the accessors until then.
@@ -47,14 +47,14 @@ public interface MediaConnectionService {
      * transfer that captured the previous snapshot keeps using it for the
      * duration of the operation, while new callers see the fresh snapshot.
      *
-     * @param response the {@code media_conn} IQ response node
+     * @param response the {@code media_conn} IQ response stanza
      * @throws java.util.NoSuchElementException if {@code response} is
      *         missing the {@code media_conn} child or one of the mandatory
      *         attributes
      * @throws IllegalArgumentException         if a mandatory integer
      *         attribute cannot be parsed as an {@code int}
      */
-    void update(Node response);
+    void update(Stanza response);
 
     /**
      * Uploads a media payload to WhatsApp's CDN on behalf of the given
@@ -240,7 +240,7 @@ public interface MediaConnectionService {
      * <p>Returns {@code true} when no media connection has been installed
      * yet, or when the current clock is at or past
      * {@code timestamp + authTtl}. Callers that observe {@code true} must
-     * request a fresh {@code media_conn} via {@link #update(Node)} before
+     * request a fresh {@code media_conn} via {@link #update(Stanza)} before
      * issuing new CDN requests.
      *
      * @return {@code true} if no credentials are published or the auth

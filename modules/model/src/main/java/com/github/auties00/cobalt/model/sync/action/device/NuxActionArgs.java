@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.device;
 
 
-import com.github.auties00.cobalt.model.sync.SyncActionArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncActionArgs;
 
 /**
  * Index arguments that uniquely identify a single {@link NuxAction} mutation in

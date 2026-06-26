@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Arrays;
 import java.util.NoSuchElementException;
@@ -37,7 +37,7 @@ import java.util.Optional;
  * {@code identity_key_signature} ({@code 0x7639c}), {@code session} ({@code 0x5857e}), {@code state}
  * ({@code 0x71b60}, literals {@code connected} at {@code 0x8af46} and {@code terminated} at
  * {@code 0x8b289}), {@code outgoing} ({@code 0x6985e}), and {@code token} ({@code 0x59a6a}). The
- * identity key, signature, and token are carried as raw binary node attributes; attributes are stamped
+ * identity key, signature, and token are carried as raw binary stanza attributes; attributes are stamped
  * over the common header written by {@code populate_common_call_attr} (fn11591): {@code call-id} (data
  * offset {@code 0x888f9}) and {@code call-creator} (data offset {@code 0x45ea5}).
  *
@@ -281,16 +281,16 @@ public record ExtensionStanza(String callId, Jid callCreator, boolean removal, S
     }
 
     /**
-     * Builds the {@code <extension call-id call-creator extension_id .../>} action node.
+     * Builds the {@code <extension call-id call-creator extension_id .../>} action stanza.
      *
      * <p>Every attribute beyond the common header and {@code extension_id} is omitted when its value
      * is absent; the {@code outgoing} flag is written only when {@link #outgoing()} is {@code true}.
      *
-     * @return the extension action node
+     * @return the extension action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(EXTENSION_ID_ATTRIBUTE, extensionId)
                 .attribute(SCOPE_ATTRIBUTE, scope)
                 .attribute(CREATOR_ATTRIBUTE, extensionCreator)
@@ -304,34 +304,34 @@ public record ExtensionStanza(String callId, Jid callCreator, boolean removal, S
     }
 
     /**
-     * Decodes an {@code <extension>} action node into an {@link ExtensionStanza}.
+     * Decodes an {@code <extension>} action stanza into an {@link ExtensionStanza}.
      *
      * <p>The {@code removal} flag is supplied by the caller because the add and remove flows share the
      * {@code <extension>} wire tag and are distinguished only by the enclosing message type, which the
      * element itself does not carry. An unrecognized {@code state} literal and any absent optional
      * attribute decode to {@code null}; an absent {@code outgoing} decodes to {@code false}.
      *
-     * @param node    the {@code <extension>} node
-     * @param removal {@code true} when the node was carried by a RemoveExtension message, {@code false}
+     * @param stanza    the {@code <extension>} stanza
+     * @param removal {@code true} when the stanza was carried by a RemoveExtension message, {@code false}
      *                when carried by an AddExtension message
      * @return the decoded extension action
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id}, {@code call-creator}, or
      *                                {@code extension_id} attribute is absent
      */
-    public static ExtensionStanza of(Node node, boolean removal) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var extensionId = node.getRequiredAttributeAsString(EXTENSION_ID_ATTRIBUTE);
-        var scope = node.getAttributeAsString(SCOPE_ATTRIBUTE).orElse(null);
-        var extensionCreator = node.getAttributeAsJid(CREATOR_ATTRIBUTE).orElse(null);
-        var identityKey = node.getAttributeAsBytes(IDENTITY_KEY_ATTRIBUTE).orElse(null);
-        var identityKeySignature = node.getAttributeAsBytes(IDENTITY_KEY_SIGNATURE_ATTRIBUTE).orElse(null);
-        var session = node.getAttributeAsString(SESSION_ATTRIBUTE).orElse(null);
-        var state = node.getAttributeAsString(STATE_ATTRIBUTE).flatMap(State::ofWire).orElse(null);
-        var outgoing = FLAG_TRUE.equals(node.getAttributeAsString(OUTGOING_ATTRIBUTE, FLAG_FALSE));
-        var token = node.getAttributeAsBytes(TOKEN_ATTRIBUTE).orElse(null);
+    public static ExtensionStanza of(Stanza stanza, boolean removal) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var extensionId = stanza.getRequiredAttributeAsString(EXTENSION_ID_ATTRIBUTE);
+        var scope = stanza.getAttributeAsString(SCOPE_ATTRIBUTE).orElse(null);
+        var extensionCreator = stanza.getAttributeAsJid(CREATOR_ATTRIBUTE).orElse(null);
+        var identityKey = stanza.getAttributeAsBytes(IDENTITY_KEY_ATTRIBUTE).orElse(null);
+        var identityKeySignature = stanza.getAttributeAsBytes(IDENTITY_KEY_SIGNATURE_ATTRIBUTE).orElse(null);
+        var session = stanza.getAttributeAsString(SESSION_ATTRIBUTE).orElse(null);
+        var state = stanza.getAttributeAsString(STATE_ATTRIBUTE).flatMap(State::ofWire).orElse(null);
+        var outgoing = FLAG_TRUE.equals(stanza.getAttributeAsString(OUTGOING_ATTRIBUTE, FLAG_FALSE));
+        var token = stanza.getAttributeAsBytes(TOKEN_ATTRIBUTE).orElse(null);
         return new ExtensionStanza(callId, callCreator, removal, extensionId, scope, extensionCreator,
                 identityKey, identityKeySignature, session, state, outgoing, token);
     }

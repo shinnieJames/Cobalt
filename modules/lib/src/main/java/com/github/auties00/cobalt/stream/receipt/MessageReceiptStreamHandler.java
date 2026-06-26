@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.stream.receipt;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -19,7 +20,6 @@ import com.github.auties00.cobalt.model.message.MessageReceiptBuilder;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.MdRetryFromUnknownDeviceEventBuilder;
@@ -47,7 +47,7 @@ import java.util.Objects;
  * original outbound message. {@link ReceiptStreamHandler} forwards every
  * non-call receipt here regardless of whether it is a retry or a regular
  * acknowledgement; the secondary split is performed inline by
- * {@link #isRetryReceipt(Node)} in {@link #handle(Node)}.
+ * {@link #isRetryReceipt(Stanza)} in {@link #handle(Stanza)}.
  *
  * @implNote
  * This implementation merges three WA Web pipelines into a single Java
@@ -104,7 +104,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
     /**
      * The {@link LinkedWhatsAppClient} that owns the store this handler mutates
      * and that ships outgoing {@code <ack>} stanzas via
-     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Node)}.
+     * {@link LinkedWhatsAppClient#sendNodeWithNoResponse(Stanza)}.
      */
     private final LinkedWhatsAppClient whatsapp;
 
@@ -154,7 +154,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      *
      * <p>Performs the secondary retry-vs-regular split that
      * {@link ReceiptStreamHandler} defers to this class. Retry receipts
-     * flow into {@link #handleRetryReceipt(Node)}; regular receipts are
+     * flow into {@link #handleRetryReceipt(Stanza)}; regular receipts are
      * parsed into a {@link ParsedReceipt} and routed by class to
      * {@link #handleSimple(SimpleReceipt)},
      * {@link #handleAggregatedByType(AggregatedByTypeReceipt)} or
@@ -172,12 +172,12 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * attribute being absent, matching the WA Web guard
      * {@code u==null && t(a)} inside the {@code C(e)} arrow function.
      *
-     * @param node {@inheritDoc}
+     * @param stanza {@inheritDoc}
      */
     @Override
-    public void handle(Node node) {
-        if (isRetryReceipt(node)) {
-            handleRetryReceipt(node);
+    public void handle(Stanza stanza) {
+        if (isRetryReceipt(stanza)) {
+            handleRetryReceipt(stanza);
             return;
         }
 
@@ -186,14 +186,14 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
                 .receiptStanzaTotalCount(1)
                 .startReceiptStanzaDuration();
 
-        var parsed = parseReceipt(node);
+        var parsed = parseReceipt(stanza);
         if (parsed == null) {
-            sendAck(node, null);
+            sendAck(stanza, null);
             return;
         }
 
         if (parsed instanceof SimpleReceipt simple && simple.ack() == ReceiptAck.CONTENT_GONE) {
-            sendAck(node, parsed);
+            sendAck(stanza, parsed);
             commitReceiptMetric(receiptMetric, parsed);
             return;
         }
@@ -207,11 +207,11 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
         } catch (RuntimeException exception) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to process incoming receipt {0}: {1}",
-                    node.getAttributeAsString("id", "<unknown>"),
+                    stanza.getAttributeAsString("id", "<unknown>"),
                     exception.getMessage());
         }
 
-        sendAck(node, parsed);
+        sendAck(stanza, parsed);
         commitReceiptMetric(receiptMetric, parsed);
     }
 
@@ -221,7 +221,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * carried by {@code builder} using the fields surfaced by the parsed
      * receipt.
      *
-     * <p>Runs once per non-offline receipt after {@link #handle(Node)} has
+     * <p>Runs once per non-offline receipt after {@link #handle(Stanza)} has
      * finished its per-class dispatch. Offline receipts skip the commit
      * entirely so the metric does not double-count replays from the
      * offline queue.
@@ -242,7 +242,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * {@code <user>} child count.
      *
      * @param builder the pre-populated event builder from
-     *                {@link #handle(Node)}
+     *                {@link #handle(Stanza)}
      * @param parsed  the parsed receipt carrying {@code from},
      *                {@code ackString}, {@code offline} and, for
      *                aggregated receipts, the per-user count
@@ -474,25 +474,25 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * the dispatcher already runs each stanza on its own virtual thread
      * and the store mutations downstream are short-lived.
      *
-     * @param node the retry receipt stanza
+     * @param stanza the retry receipt stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMessageRetryRequest",
             exports = "handleMessageRetryRequest",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void handleRetryReceipt(Node node) {
+    private void handleRetryReceipt(Stanza stanza) {
         try {
-            processRetryRequest(node);
+            processRetryRequest(stanza);
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Processed retry receipt request type={0} id={1}",
-                    node.getAttributeAsString("type", null),
-                    node.getAttributeAsString("id", null));
+                    stanza.getAttributeAsString("type", null),
+                    stanza.getAttributeAsString("id", null));
         } catch (RuntimeException exception) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to inspect retry receipt {0}: {1}",
-                    node.getAttributeAsString("id", "<unknown>"),
+                    stanza.getAttributeAsString("id", "<unknown>"),
                     exception.getMessage());
         } finally {
-            sendRetryAck(node);
+            sendRetryAck(stanza);
         }
     }
 
@@ -524,20 +524,20 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * broadcast originating from the local user, which would produce a
      * duplicate.
      *
-     * @param node the retry receipt stanza
+     * @param stanza the retry receipt stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleRetryRequest",
             exports = "handleRetryRequest",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void processRetryRequest(Node node) {
-        var type = node.getAttributeAsString("type", null);
+    private void processRetryRequest(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", null);
         if ("enc_rekey_retry".equals(type) || "voip_1x1_retry".equals(type)) {
             return;
         }
 
-        var from = node.getAttributeAsJid("from").orElse(null);
-        var participant = node.getAttributeAsJid("participant").orElse(null);
-        var retryNode = node.getChild("retry").orElse(null);
+        var from = stanza.getAttributeAsJid("from").orElse(null);
+        var participant = stanza.getAttributeAsJid("participant").orElse(null);
+        var retryNode = stanza.getChild("retry").orElse(null);
         var originalId = retryNode != null ? retryNode.getAttributeAsString("id", null) : null;
 
         var retryCount = retryNode != null
@@ -562,12 +562,12 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
             LOGGER.log(System.Logger.Level.DEBUG,
                     "handleRetryRequest: device {0} not found for {1}",
                     deviceId, requester.user());
-            var offline = node.hasAttribute("offline");
+            var offline = stanza.hasAttribute("offline");
             emitRetryFromUnknownDevice(deviceId, offline);
             return;
         }
 
-        processRetryKeyBundle(node, requester);
+        processRetryKeyBundle(stanza, requester);
         if (originalId == null) {
             return;
         }
@@ -714,20 +714,20 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * try/catch in {@code processKeyBundle}, which swallows session-rebuild
      * failures so the retry-ack still flows.
      *
-     * @param node         the retry receipt stanza
+     * @param stanza         the retry receipt stanza
      * @param remoteDevice the remote device JID extracted from
      *                     {@code participant ?? from}
      */
     @WhatsAppWebExport(moduleName = "WAWebRetryRequestParser",
             exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private void processRetryKeyBundle(Node node, Jid remoteDevice) {
+    private void processRetryKeyBundle(Stanza stanza, Jid remoteDevice) {
         if (remoteDevice == null) {
             return;
         }
 
-        var keysNode = node.getChild("keys").orElse(null);
-        var registrationId = node.getChild("registration")
-                .flatMap(Node::toContentBytes)
+        var keysNode = stanza.getChild("keys").orElse(null);
+        var registrationId = stanza.getChild("registration")
+                .flatMap(Stanza::toContentBytes)
                 .map(bytes -> convertBytesToUint(bytes, 4))
                 .orElse(null);
         if (keysNode == null || registrationId == null) {
@@ -736,7 +736,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
 
         try {
             var identityKey = keysNode.getChild("identity")
-                    .flatMap(Node::toContentBytes)
+                    .flatMap(Stanza::toContentBytes)
                     .map(SignalIdentityPublicKey::ofDirect)
                     .orElse(null);
             var signedPreKey = keysNode.getChild("skey").orElse(null);
@@ -748,26 +748,26 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
                     .registrationId(registrationId)
                     .deviceId(Math.max(remoteDevice.device(), 0))
                     .signedPreKeyId(signedPreKey.getChild("id")
-                            .flatMap(Node::toContentBytes)
+                            .flatMap(Stanza::toContentBytes)
                             .map(bytes -> convertBytesToUint(bytes, 3))
                             .orElseThrow())
                     .signedPreKeyPublic(signedPreKey.getChild("value")
-                            .flatMap(Node::toContentBytes)
+                            .flatMap(Stanza::toContentBytes)
                             .map(SignalIdentityPublicKey::ofDirect)
                             .orElseThrow())
                     .signedPreKeySignature(signedPreKey.getChild("signature")
-                            .flatMap(Node::toContentBytes)
+                            .flatMap(Stanza::toContentBytes)
                             .orElseThrow())
                     .identityKey(identityKey);
 
             var preKey = keysNode.getChild("key").orElse(null);
             if (preKey != null) {
                 var preKeyId = preKey.getChild("id")
-                        .flatMap(Node::toContentBytes)
+                        .flatMap(Stanza::toContentBytes)
                         .map(bytes -> convertBytesToUint(bytes, 3))
                         .orElse(null);
                 var preKeyValue = preKey.getChild("value")
-                        .flatMap(Node::toContentBytes)
+                        .flatMap(Stanza::toContentBytes)
                         .map(SignalIdentityPublicKey::ofDirect)
                         .orElse(null);
                 if (preKeyId != null && preKeyValue != null) {
@@ -789,7 +789,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      *
      * <p>The helper decodes the fixed-width identifier fields carried inside
      * retry-receipt sub-nodes: the {@code <registration>} content is 4
-     * bytes; the {@code <id>} sub-node inside {@code <skey>} and
+     * bytes; the {@code <id>} sub-stanza inside {@code <skey>} and
      * {@code <key>} is 3 bytes.
      *
      * @implNote
@@ -801,7 +801,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * WA Web's {@code WAWebFetchPrekeysJob} and
      * {@code WAWebFetchResendMissingKeyJob}.
      *
-     * @param bytes     the raw content bytes read from a wire-format node
+     * @param bytes     the raw content bytes read from a wire-format stanza
      * @param byteCount the number of leading bytes to interpret
      * @return the decoded big-endian unsigned integer
      * @throws IllegalArgumentException if {@code bytes} is {@code null} or
@@ -839,7 +839,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * id is verified against the cached device list for the user.
      *
      * @param requester the device-level JID extracted by
-     *                  {@link #processRetryRequest(Node)}
+     *                  {@link #processRetryRequest(Stanza)}
      * @param deviceId  the device id to verify, where {@code 0} means
      *                  primary
      * @return {@code true} when the device is known; {@code false}
@@ -1010,15 +1010,15 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * {@code type} attribute is the raw {@code ackString} from the parser
      * or the inbound stanza's {@code type} attribute when parsing failed.
      *
-     * @param node   the inbound receipt stanza
+     * @param stanza   the inbound receipt stanza
      * @param parsed the {@link ParsedReceipt} returned by
-     *               {@link #parseReceipt(Node)}, or {@code null} when
+     *               {@link #parseReceipt(Stanza)}, or {@code null} when
      *               parsing failed
      */
-    private void sendAck(Node node, ParsedReceipt parsed) {
+    private void sendAck(Stanza stanza, ParsedReceipt parsed) {
         var participant = parsed instanceof SimpleReceipt simple ? simple.participant() : null;
-        var ackString = parsed != null ? parsed.ackString() : node.getAttributeAsString("type", null);
-        ackSender.ack(AckClass.RECEIPT, node)
+        var ackString = parsed != null ? parsed.ackString() : stanza.getAttributeAsString("type", null);
+        ackSender.ack(AckClass.RECEIPT, stanza)
                 .type(ackString)
                 .participantIfDifferent(participant)
                 .send();
@@ -1038,12 +1038,12 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * {@code type="retry"} and preserves the original
      * {@code participant} attribute when present.
      *
-     * @param node the retry receipt stanza
+     * @param stanza the retry receipt stanza
      */
-    private void sendRetryAck(Node node) {
-        ackSender.ack(AckClass.RECEIPT, node)
+    private void sendRetryAck(Stanza stanza) {
+        ackSender.ack(AckClass.RECEIPT, stanza)
                 .type("retry")
-                .participant(node.getAttributeAsJid("participant").orElse(null))
+                .participant(stanza.getAttributeAsJid("participant").orElse(null))
                 .send();
     }
 
@@ -1067,40 +1067,40 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * to {@code ACK.SENT}, which Cobalt does not model as a receipt-level
      * concept and folds back into {@code RECEIVED}.
      *
-     * @param node the inbound receipt stanza
+     * @param stanza the inbound receipt stanza
      * @return the parsed receipt, or {@code null} when {@code id} or
      *         {@code from} is missing
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgReceiptParser",
             exports = "msgReceiptParser", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ParsedReceipt parseReceipt(Node node) {
-        var id = node.getAttributeAsString("id", null);
-        var from = node.getAttributeAsJid("from").orElse(null);
+    private ParsedReceipt parseReceipt(Stanza stanza) {
+        var id = stanza.getAttributeAsString("id", null);
+        var from = stanza.getAttributeAsJid("from").orElse(null);
         if (id == null || from == null) {
             return null;
         }
 
-        var offline = node.hasAttribute("offline");
-        var ackString = node.getAttributeAsString("type", null);
+        var offline = stanza.hasAttribute("offline");
+        var ackString = stanza.getAttributeAsString("type", null);
         var ack = ReceiptAck.fromType(ackString);
 
-        var errorNode = node.getChild("error").orElse(null);
+        var errorNode = stanza.getChild("error").orElse(null);
         if (errorNode != null
                 && "lid".equals(errorNode.getAttributeAsString("reason", null))
                 && "feature-incapable".equals(errorNode.getAttributeAsString("type", null))) {
             ack = ReceiptAck.RECEIVED;
         }
 
-        var participantsNode = node.getChild("participants").orElse(null);
+        var participantsNode = stanza.getChild("participants").orElse(null);
         if (participantsNode == null) {
-            return parseSimple(node, id, from, ack, ackString, offline);
+            return parseSimple(stanza, id, from, ack, ackString, offline);
         }
 
         if (participantsNode.hasAttribute("message_id")) {
-            return parseAggregatedByMessage(id, from, node.getAttributeAsJid("recipient").orElse(null), ackString, participantsNode, offline);
+            return parseAggregatedByMessage(id, from, stanza.getAttributeAsJid("recipient").orElse(null), ackString, participantsNode, offline);
         }
 
-        return parseAggregatedByType(id, from, node.getAttributeAsJid("recipient").orElse(null), ack, ackString, participantsNode, offline);
+        return parseAggregatedByType(id, from, stanza.getAttributeAsJid("recipient").orElse(null), ack, ackString, participantsNode, offline);
     }
 
     /**
@@ -1124,41 +1124,41 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * {@code participant} JID resolves to a bot, matching WA Web's
      * {@code n!=null && n.isBot() && t.hasAttr("is_lid")} guard.
      *
-     * @param node      the inbound receipt stanza
+     * @param stanza      the inbound receipt stanza
      * @param id        the {@code id} attribute already extracted by
-     *                  {@link #parseReceipt(Node)}
+     *                  {@link #parseReceipt(Stanza)}
      * @param from      the {@code from} attribute already extracted by
-     *                  {@link #parseReceipt(Node)}
+     *                  {@link #parseReceipt(Stanza)}
      * @param ack       the {@link ReceiptAck} already resolved by
-     *                  {@link #parseReceipt(Node)}
+     *                  {@link #parseReceipt(Stanza)}
      * @param ackString the raw {@code type} attribute, or {@code null}
      * @param offline   {@code true} when the stanza carried the
      *                  {@code offline} attribute
      * @return the parsed {@link SimpleReceipt}
      */
     private ParsedReceipt parseSimple(
-            Node node,
+            Stanza stanza,
             String id,
             Jid from,
             ReceiptAck ack,
             String ackString,
             boolean offline
     ) {
-        var participant = node.getAttributeAsJid("participant").orElse(null);
+        var participant = stanza.getAttributeAsJid("participant").orElse(null);
 
-        var participantPn = node.getAttributeAsJid("participant_pn").orElse(null);
+        var participantPn = stanza.getAttributeAsJid("participant_pn").orElse(null);
 
-        var participantUsername = node.getAttributeAsString("participant_username", null);
+        var participantUsername = stanza.getAttributeAsString("participant_username", null);
 
-        var recipient = node.getAttributeAsJid("recipient").orElse(null);
+        var recipient = stanza.getAttributeAsJid("recipient").orElse(null);
 
         var isLidBot = false;
-        if (participant != null && participant.isBot() && node.hasAttribute("is_lid")) {
-            isLidBot = "true".equals(node.getAttributeAsString("is_lid", null));
+        if (participant != null && participant.isBot() && stanza.hasAttribute("is_lid")) {
+            isLidBot = "true".equals(stanza.getAttributeAsString("is_lid", null));
         }
 
         var externalIds = new ArrayList<String>();
-        var listNode = node.getChild("list").orElse(null);
+        var listNode = stanza.getChild("list").orElse(null);
         var viewReceipt = "view".equals(ackString);
         if (listNode != null) {
             for (var item : listNode.getChildren("item")) {
@@ -1174,7 +1174,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
         }
 
         BizInfo bizInfo = null;
-        var bizNode = node.getChild("biz").orElse(null);
+        var bizNode = stanza.getChild("biz").orElse(null);
         if (bizNode != null) {
             var actualActors = bizNode.getAttributeAsInt("actual_actors").orElse(-1);
             var hostStorage = bizNode.getAttributeAsInt("host_storage").orElse(-1);
@@ -1191,7 +1191,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
                 participantPn,
                 participantUsername,
                 recipient,
-                attributeInstant(node, "t"),
+                attributeInstant(stanza, "t"),
                 ack,
                 ackString,
                 List.copyOf(externalIds),
@@ -1218,14 +1218,14 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * skipping the iteration when the {@code jid} attribute is missing.
      *
      * @param id               the {@code id} attribute already extracted
-     *                         by {@link #parseReceipt(Node)}
+     *                         by {@link #parseReceipt(Stanza)}
      * @param from             the {@code from} attribute already extracted
-     *                         by {@link #parseReceipt(Node)}
+     *                         by {@link #parseReceipt(Stanza)}
      * @param recipient        the {@code recipient} attribute, or
      *                         {@code null}
      * @param ack              the parent {@link ReceiptAck}
      * @param ackString        the raw parent {@code type} attribute
-     * @param participantsNode the {@code <participants>} child
+     * @param participantsStanza the {@code <participants>} child
      * @param offline          {@code true} when the stanza carried the
      *                         {@code offline} attribute
      * @return the parsed {@link AggregatedByTypeReceipt}, or {@code null}
@@ -1238,16 +1238,16 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
             Jid recipient,
             ReceiptAck ack,
             String ackString,
-            Node participantsNode,
+            Stanza participantsStanza,
             boolean offline
     ) {
-        var externalId = participantsNode.getAttributeAsString("key", null);
+        var externalId = participantsStanza.getAttributeAsString("key", null);
         if (externalId == null) {
             return null;
         }
 
         var receipts = new ArrayList<ParticipantReceipt>();
-        for (var userNode : participantsNode.getChildren("user")) {
+        for (var userNode : participantsStanza.getChildren("user")) {
             var participantJid = userNode.getAttributeAsJid("jid").orElse(null);
             if (participantJid == null) {
                 continue;
@@ -1284,13 +1284,13 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * this variant.
      *
      * @param id               the {@code id} attribute already extracted
-     *                         by {@link #parseReceipt(Node)}
+     *                         by {@link #parseReceipt(Stanza)}
      * @param from             the {@code from} attribute already extracted
-     *                         by {@link #parseReceipt(Node)}
+     *                         by {@link #parseReceipt(Stanza)}
      * @param recipient        the {@code recipient} attribute, or
      *                         {@code null}
      * @param ackString        the raw parent {@code type} attribute
-     * @param participantsNode the {@code <participants>} child
+     * @param participantsStanza the {@code <participants>} child
      * @param offline          {@code true} when the stanza carried the
      *                         {@code offline} attribute
      * @return the parsed {@link AggregatedByMessageReceipt}, or
@@ -1302,16 +1302,16 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
             Jid from,
             Jid recipient,
             String ackString,
-            Node participantsNode,
+            Stanza participantsStanza,
             boolean offline
     ) {
-        var externalId = participantsNode.getAttributeAsString("message_id", null);
+        var externalId = participantsStanza.getAttributeAsString("message_id", null);
         if (externalId == null) {
             return null;
         }
 
         var receipts = new ArrayList<ParticipantReceipt>();
-        for (var userNode : participantsNode.getChildren("user")) {
+        for (var userNode : participantsStanza.getChildren("user")) {
             var participantJid = userNode.getAttributeAsJid("jid").orElse(null);
             if (participantJid == null) {
                 continue;
@@ -1345,7 +1345,7 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
 
     /**
      * Returns the {@link Instant} parsed from the {@code key}-named
-     * attribute of {@code node}, or {@code null} when the attribute is
+     * attribute of {@code stanza}, or {@code null} when the attribute is
      * missing or non-numeric.
      *
      * <p>The per-class parsers use it to decode the {@code t} attribute on
@@ -1358,13 +1358,13 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * attribute as a number and converts it through
      * {@code WATimeUtils.castToUnixTime}.
      *
-     * @param node the node to read from
+     * @param stanza the stanza to read from
      * @param key  the attribute name
      * @return the parsed {@link Instant}, or {@code null} when the
      *         attribute is missing or non-numeric
      */
-    private static Instant attributeInstant(Node node, String key) {
-        return node.getAttributeAsLong(key)
+    private static Instant attributeInstant(Stanza stanza, String key) {
+        return stanza.getAttributeAsLong(key)
                 .stream()
                 .mapToObj(Instant::ofEpochSecond)
                 .findFirst()
@@ -1690,15 +1690,15 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * {@code "enc_rekey_retry"} as WA Web's
      * {@code WAWebCommsHandleLoggedInStanza} does. The
      * {@code "voip_1x1_retry"} variant is not split off here because
-     * {@link #processRetryRequest(Node)} drops it explicitly further
+     * {@link #processRetryRequest(Stanza)} drops it explicitly further
      * down the pipeline.
      *
-     * @param node the receipt stanza
+     * @param stanza the receipt stanza
      * @return {@code true} when the {@code type} attribute is
      *         {@code "retry"} or {@code "enc_rekey_retry"}
      */
-    private static boolean isRetryReceipt(Node node) {
-        var type = node.getAttributeAsString("type", null);
+    private static boolean isRetryReceipt(Stanza stanza) {
+        var type = stanza.getAttributeAsString("type", null);
         return "retry".equals(type) || "enc_rekey_retry".equals(type);
     }
 
@@ -1754,15 +1754,15 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
 
     /**
      * Sealed parent of the three parsed receipt shapes
-     * {@link #parseReceipt(Node)} can return.
+     * {@link #parseReceipt(Stanza)} can return.
      *
-     * <p>The variants are consumed by {@link #handle(Node)} for per-class
+     * <p>The variants are consumed by {@link #handle(Stanza)} for per-class
      * dispatch and by
      * {@link #commitReceiptMetric(ReceiptStanzaReceiveEventBuilder, ParsedReceipt)}
      * for the per-shape telemetry overrides.
      *
      * @implNote
-     * This implementation seals the type so {@link #handle(Node)} can
+     * This implementation seals the type so {@link #handle(Stanza)} can
      * exhaustively switch over the three variants; adding a new
      * receipt shape would require touching both the parser and the
      * dispatcher in lockstep.

@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.model.sync.action.contact;
 
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.SyncActionArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncActionArgs;
 
 /**
  * Index arguments that locate a specific {@link LidContactAction} inside a

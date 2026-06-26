@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.graphql.facebook.ads;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.ads.BusinessAdAccount;
@@ -42,7 +43,7 @@ public final class BizAdCreationAdAccountUpdateAdAccountDetailsFacebookGraphQlRe
      * {@code adAccount} field onto a {@link BusinessAdAccount}.
      *
      * @param data the unwrapped GraphQL {@code data} object returned by
-     *             {@link com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlClient#send(FacebookGraphQlOperation.Request)}
+     *             {@link FacebookGraphQlClient#send(FacebookGraphQlOperation.Request)}
      * @return the parsed response, or empty when {@code data} is {@code null}
      */
     public static Optional<BizAdCreationAdAccountUpdateAdAccountDetailsFacebookGraphQlResponse> of(JSONObject data) {
@@ -59,7 +60,7 @@ public final class BizAdCreationAdAccountUpdateAdAccountDetailsFacebookGraphQlRe
      * under its wire alias.
      *
      * @param node the {@code adAccount} object, or {@code null}
-     * @return the projected account, or {@code null} when {@code node} is {@code null}
+     * @return the projected account, or {@code null} when {@code stanza} is {@code null}
      */
     private static BusinessAdAccount adAccount(JSONObject node) {
         if (node == null) {
@@ -80,7 +81,7 @@ public final class BizAdCreationAdAccountUpdateAdAccountDetailsFacebookGraphQlRe
      * Projects the {@code paymentAccount} object onto a {@link BusinessAdAccount.PaymentMethod}.
      *
      * @param node the {@code paymentAccount} object, or {@code null}
-     * @return the projected payment method, or {@code null} when {@code node} is {@code null}
+     * @return the projected payment method, or {@code null} when {@code stanza} is {@code null}
      */
     private static BusinessAdAccount.PaymentMethod paymentMethod(JSONObject node) {
         if (node == null) {

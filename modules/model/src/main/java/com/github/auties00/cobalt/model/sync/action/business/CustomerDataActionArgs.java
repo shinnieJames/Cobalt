@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.model.sync.action.business;
 
-import com.github.auties00.cobalt.model.sync.SyncActionArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncActionArgs;
 
 /**
  * Index arguments identifying a {@link CustomerDataAction} inside a sync patch.

@@ -7,11 +7,12 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.BusinessBroadcastCampaignBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.time.Instant;
@@ -27,7 +28,7 @@ import java.util.logging.Logger;
  * edited, or deleted on another device, the server replays the change here as a
  * {@link SyncdOperation#SET} (upsert) or {@link SyncdOperation#REMOVE}; the
  * result is read back through
- * {@link com.github.auties00.cobalt.store.BusinessStore#findBusinessBroadcastCampaign(String)}.
+ * {@link LinkedWhatsAppBusinessStore#findBusinessBroadcastCampaign(String)}.
  *
  * @implNote
  * This implementation drops two WA Web side effects: the

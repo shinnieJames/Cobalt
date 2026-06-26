@@ -1,4 +1,6 @@
 package com.github.auties00.cobalt.stream.message;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.sync.LiveWebHistorySyncService;
 
@@ -42,8 +44,6 @@ import com.github.auties00.cobalt.model.payment.PaymentInfo;
 import com.github.auties00.cobalt.model.payment.PaymentInfoBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotRecovery;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.sync.WebHistorySyncService;
@@ -97,7 +97,7 @@ import java.util.zip.GZIPInputStream;
  * <p>Each stanza is routed along one of three branches: {@code medianotify}
  * stanzas carry no end-to-end payload and return after the transport ack;
  * stanzas whose {@code from} JID lives on a newsletter server are forwarded
- * to {@link #handleNewsletterMessage(Node)} for plaintext processing without
+ * to {@link #handleNewsletterMessage(Stanza)} for plaintext processing without
  * a delivery receipt; every other stanza is parsed by
  * {@link MessageReceiveStanzaParser}, processed by {@link MessageService},
  * then optionally enriched with a delivery receipt or bot-invoke ack through
@@ -115,7 +115,7 @@ import java.util.zip.GZIPInputStream;
  * mapping sync, history sync, security-notification setting sync),
  * orphan-payment reconciliation, and a fan-out to every registered
  * listener. The handler is wired into the socket stream at client
- * construction and receives stanzas through {@link #handle(Node)}; it is
+ * construction and receives stanzas through {@link #handle(Stanza)}; it is
  * not invoked directly by application code.
  *
  * @implNote
@@ -183,7 +183,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
 
     /**
      * Ships delivery, retry, NACK, and bot-ack receipts back to the server
-     * based on the outcome of {@link MessageService#process(Node)}.
+     * based on the outcome of {@link MessageService#process(Stanza)}.
      */
     private final MessageReceiptHandler receiptHandler;
 
@@ -297,11 +297,11 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * This implementation keys ordering on the {@code from} JID so every message in a chat is
      * processed in arrival order, ensuring a group sender-key distribution message is applied before
      * the sender-key messages that depend on it. A message with no {@code from} attribute (which
-     * {@link #handle(Node)} drops) maps to the empty key.
+     * {@link #handle(Stanza)} drops) maps to the empty key.
      */
     @Override
-    protected String orderingKey(Node node) {
-        return node.getAttributeAsString("from", "");
+    protected String orderingKey(Stanza stanza) {
+        return stanza.getAttributeAsString("from", "");
     }
 
     /**
@@ -328,7 +328,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * the metric fires before any decryption work begins.
      */
     @Override
-    public void handle(Node node) {
+    public void handle(Stanza node) {
         var from = node.getAttributeAsJid("from").orElse(null);
         if (from == null) {
             return;
@@ -409,7 +409,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
 
     /**
      * Processes an inbound newsletter message stanza routed here by
-     * {@link #handle(Node)} because its {@code from} JID lives on a
+     * {@link #handle(Stanza)} because its {@code from} JID lives on a
      * newsletter server.
      *
      * <p>The payload is plaintext and no end-to-end decryption runs. The
@@ -426,11 +426,11 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * {@link E2eDestination#CHANNEL}, matching the WA Web emission for a
      * {@code MessageValidationError} on the channel pipeline.
      *
-     * @param node the inbound newsletter {@code <message>} stanza
+     * @param stanza the inbound newsletter {@code <message>} stanza
      */
-    private void handleNewsletterMessage(Node node) {
+    private void handleNewsletterMessage(Stanza stanza) {
         try {
-            var info = messageService.process(node);
+            var info = messageService.process(stanza);
             if (info == null) {
                 return;
             }
@@ -503,6 +503,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
                     nextRetryCount
             );
             maybeEmitMessageHighRetryCount(stanza, nextRetryCount);
+            surfaceUndecryptableMessage(stanza, exception, nextRetryCount);
             return;
         }
 
@@ -511,6 +512,90 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
         } else {
             receiptHandler.sendDeliveryReceipt(stanza, null);
         }
+    }
+
+    /**
+     * Surfaces an inbound message that could not be decrypted so the failure is not silent while
+     * the Signal retry-receipt ceremony runs.
+     *
+     * <p>A per-message decryption failure is deliberately non-fatal: it is converted into a retry
+     * receipt rather than propagated, so without this method the only trace is a {@code DEBUG} log
+     * and a WAM metric, and a message that never recovers (for example a sender that stays offline)
+     * is lost with no visible signal. Three escalations run here:
+     * <ul>
+     *   <li>On the first failed delivery a {@link ChatMessageInfo.StubType#CIPHERTEXT} placeholder
+     *       (WhatsApp Web's "Waiting for this message" stub) is stored and broadcast to the
+     *       listeners, keyed by the real message id so a later successful retry replaces it.</li>
+     *   <li>Once the retry count reaches {@link #MAX_MESSAGE_RETRY_COUNT} the message is effectively
+     *       stuck: the failure is logged at {@code WARNING} so it is visible at the default level.</li>
+     *   <li>At the same threshold the configured {@link com.github.auties00.cobalt.client.WhatsAppClientErrorHandler}
+     *       is notified through {@link LinkedWhatsAppClient#handleFailure(com.github.auties00.cobalt.exception.WhatsAppException)};
+     *       the exception is non-fatal so the handler's default outcome is to discard without
+     *       disconnecting.</li>
+     * </ul>
+     *
+     * @param stanza     the parsed inbound stanza whose decryption failed
+     * @param exception  the decryption failure
+     * @param retryCount the post-increment retry attempt number
+     */
+    private void surfaceUndecryptableMessage(
+            MessageReceiveStanza stanza,
+            WhatsAppMessageException.Receive exception,
+            int retryCount
+    ) {
+        if (retryCount == 1) {
+            var placeholder = buildUndecryptablePlaceholder(stanza);
+            storeIncomingMessage(placeholder);
+            notifyMessageReceived(placeholder, Optional.empty());
+        }
+
+        if (retryCount == MAX_MESSAGE_RETRY_COUNT) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Message {0} from {1} still undecryptable after {2} retries: {3}",
+                    stanza.id(), stanza.senderJid(), retryCount, exception.getMessage());
+            whatsapp.handleFailure(exception);
+        }
+    }
+
+    /**
+     * Builds the {@link ChatMessageInfo.StubType#CIPHERTEXT} placeholder for an undecryptable
+     * message.
+     *
+     * <p>The placeholder carries the real message key (so a recovered retry overwrites it), an
+     * {@link MessageContainer#empty() empty} body, and {@link MessageStatus#ERROR} status.
+     *
+     * @implNote
+     * This implementation derives {@code fromMe} by matching the sender's user JID against the
+     * local PN and LID accounts, mirroring
+     * {@code MessageReceiver.isFromMe} which is not reachable from this package.
+     *
+     * @param stanza the parsed inbound stanza whose decryption failed
+     * @return the placeholder message info
+     */
+    private ChatMessageInfo buildUndecryptablePlaceholder(MessageReceiveStanza stanza) {
+        var senderJid = stanza.senderJid().toUserJid();
+        var selfPn = whatsapp.store().accountStore().jid().orElse(null);
+        var selfLid = whatsapp.store().accountStore().lid().orElse(null);
+        var fromMe = (selfPn != null && senderJid.equals(selfPn.toUserJid()))
+                || (selfLid != null && senderJid.equals(selfLid.toUserJid()));
+
+        var key = new MessageKeyBuilder()
+                .id(stanza.id())
+                .parentJid(stanza.chatJid())
+                .fromMe(fromMe)
+                .senderJid(senderJid)
+                .build();
+
+        return new ChatMessageInfoBuilder()
+                .key(key)
+                .message(MessageContainer.empty())
+                .timestamp(stanza.timestamp())
+                .status(MessageStatus.ERROR)
+                .senderJid(senderJid)
+                .stubType(ChatMessageInfo.StubType.CIPHERTEXT)
+                .broadcast(stanza.chatJid().hasBroadcastServer())
+                .pushName(stanza.pushName().orElse(null))
+                .build();
     }
 
     /**
@@ -659,7 +744,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * @param stanzaType   the stanza's top-level {@code type} attribute, or
      *                     {@code null}
      * @param pollType     the {@code polltype} attribute from the
-     *                     {@code <meta>} node, or {@code null}
+     *                     {@code <meta>} stanza, or {@code null}
      * @return the corresponding {@link MediaType} enum value
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getMetricMediaType",
@@ -735,14 +820,14 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * Web also leaves the remaining properties absent when its metric parser
      * fails.
      *
-     * @param node              the raw inbound stanza node
+     * @param stanza              the raw inbound stanza stanza
      * @param messageDropReason the drop reason to record on the event
      */
-    private void emitIncomingMessageDropFromNode(Node node, MessageDropReasonType messageDropReason) {
+    private void emitIncomingMessageDropFromNode(Stanza stanza, MessageDropReasonType messageDropReason) {
         var builder = new IncomingMessageDropEventBuilder()
                 .messageDropReason(messageDropReason);
 
-        var offline = node.getAttributeAsLong("offline", (Long) null);
+        var offline = stanza.getAttributeAsLong("offline", (Long) null);
         if (offline != null) {
             builder.offline(true).offlineCount(offline.intValue());
         } else {
@@ -765,15 +850,15 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * matching {@code WAWebPostUnknownStanzaMetric.postUnknownStanzaMetric}
      * which never populates it at this call site.
      *
-     * @param node the stanza that failed to parse
+     * @param stanza the stanza that failed to parse
      */
     @WhatsAppWebExport(moduleName = "WAWebPostUnknownStanzaMetric",
             exports = "postUnknownStanzaMetric",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private void emitUnknownStanzaMetric(Node node) {
+    private void emitUnknownStanzaMetric(Stanza stanza) {
         wamService.commit(new UnknownStanzaEventBuilder()
-                .unknownStanzaTag(node.description())
-                .unknownStanzaType(node.getAttributeAsString("type", null))
+                .unknownStanzaTag(stanza.description())
+                .unknownStanzaType(stanza.getAttributeAsString("type", null))
                 .build());
     }
 
@@ -1524,18 +1609,18 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * {@link #parseErrorReason(String)} so a malformed value falls back to
      * {@link NackReason#UNHANDLED_ERROR} rather than throwing.
      *
-     * @param node      the inbound message stanza to nack
+     * @param stanza      the inbound message stanza to nack
      * @param errorCode the NACK error code, in string form (matches the
      *                  integer constants on WA Web's {@code NackReason})
      */
-    private void sendNack(Node node, String errorCode) {
-        ackSender.sendNack(AckClass.MESSAGE, node, parseErrorReason(errorCode));
+    private void sendNack(Stanza stanza, String errorCode) {
+        ackSender.sendNack(AckClass.MESSAGE, stanza, parseErrorReason(errorCode));
     }
 
     /**
      * Parses a NACK error code string into its typed {@link NackReason}.
      *
-     * <p>Used by {@link #sendNack(Node, String)} for the outbound
+     * <p>Used by {@link #sendNack(Stanza, String)} for the outbound
      * {@code <ack>} path.
      *
      * @implNote
@@ -1700,12 +1785,12 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * payment {@code <transaction>} stanza arrived before its referenced
      * {@code <message>}, the notification handler buffered it; when the late
      * message lands here it is matched and the buffered payment is replayed
-     * through {@link #handlePaymentTransaction(Node)}.
+     * through {@link #handlePaymentTransaction(Stanza)}.
      *
      * @implNote
      * This implementation looks up the orphan by message id and rebuilds the
-     * original transaction {@link Node} so that
-     * {@link #handlePaymentTransaction(Node)} can run unchanged. Non-chat
+     * original transaction {@link Stanza} so that
+     * {@link #handlePaymentTransaction(Stanza)} can run unchanged. Non-chat
      * messages are ignored because only chat payments are buffered as
      * orphans.
      *
@@ -1724,7 +1809,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
             return;
         }
 
-        var transactionNode = new NodeBuilder()
+        var transactionNode = new StanzaBuilder()
                 .description("transaction")
                 .attribute("message-id", orphan.messageId())
                 .attribute("receiver", orphan.receiverJid().orElse(null))
@@ -1757,9 +1842,9 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * {@link #mapTxnStatus(String, String, boolean)}, which mirror the
      * matching helpers in {@code WAWebPaymentStatusUtils}.
      *
-     * @param transaction the {@code <transaction>} stanza node
+     * @param transaction the {@code <transaction>} stanza stanza
      */
-    private void handlePaymentTransaction(Node transaction) {
+    private void handlePaymentTransaction(Stanza transaction) {
         var sender = transaction.getAttributeAsJid("sender").orElse(null);
         var receiver = transaction.getAttributeAsJid("receiver").orElse(null);
         var messageId = transaction.getAttributeAsString("message-id", null);
@@ -1810,7 +1895,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
     /**
      * Locates the chat message a payment transaction stanza targets.
      *
-     * <p>Backs {@link #handlePaymentTransaction(Node)} when reconciling an
+     * <p>Backs {@link #handlePaymentTransaction(Stanza)} when reconciling an
      * inbound {@code <transaction>} against the store.
      *
      * @implNote
@@ -1821,7 +1906,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * unique within the chat.
      *
      * @param remote      the remote JID resolved by
-     *                    {@link #handlePaymentTransaction(Node)}
+     *                    {@link #handlePaymentTransaction(Stanza)}
      * @param participant the participant JID for group messages, or
      *                    {@code null} for direct chats
      * @param messageId   the message id carried on the {@code <transaction>}
@@ -1853,7 +1938,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * {@link PaymentInfo.Status#UNKNOWN_STATUS} and
      * {@link PaymentInfo.TxnStatus#UNKNOWN}.
      *
-     * <p>Used by {@link #handlePaymentTransaction(Node)} when the target
+     * <p>Used by {@link #handlePaymentTransaction(Stanza)} when the target
      * message does not already carry a {@link PaymentInfo}, so that the
      * per-transaction setters always have an instance to mutate.
      *

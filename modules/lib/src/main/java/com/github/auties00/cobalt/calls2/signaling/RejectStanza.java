@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -105,40 +105,40 @@ public record RejectStanza(String callId, Jid callCreator, CallEndReason reason,
     }
 
     /**
-     * Builds the {@code <reject call-id call-creator reason count/>} action node.
+     * Builds the {@code <reject call-id call-creator reason count/>} action stanza.
      *
-     * <p>An absent {@code count} is omitted from the node.
+     * <p>An absent {@code count} is omitted from the stanza.
      *
-     * @return the reject action node
+     * @return the reject action stanza
      */
     @Override
-    public Node toNode() {
-        return CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator)
+    public Stanza toStanza() {
+        return CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator)
                 .attribute(REASON_ATTRIBUTE, reasonWire)
                 .attribute(COUNT_ATTRIBUTE, count, count >= 0)
                 .build();
     }
 
     /**
-     * Decodes a {@code <reject>} action node into a {@link RejectStanza}.
+     * Decodes a {@code <reject>} action stanza into a {@link RejectStanza}.
      *
      * <p>The {@code reason} literal is retained verbatim and also classified into a
      * {@link CallEndReason}; an absent {@code reason} classifies to {@link CallEndReason#UNKNOWN} with
      * an empty wire literal.
      *
-     * @param node the {@code <reject>} node
+     * @param stanza the {@code <reject>} stanza
      * @return the decoded reject signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static RejectStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var reasonWire = node.getAttributeAsString(REASON_ATTRIBUTE, "");
+    public static RejectStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var reasonWire = stanza.getAttributeAsString(REASON_ATTRIBUTE, "");
         var reason = CallEndReason.fromWireValue(reasonWire);
-        var count = node.getAttributeAsInt(COUNT_ATTRIBUTE, -1);
+        var count = stanza.getAttributeAsInt(COUNT_ATTRIBUTE, -1);
         return new RejectStanza(callId, callCreator, reason, reasonWire, count);
     }
 }

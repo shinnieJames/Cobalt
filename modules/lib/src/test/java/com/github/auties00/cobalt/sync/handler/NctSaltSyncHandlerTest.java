@@ -4,14 +4,15 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
+import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.setting.NctSaltSyncAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NctSaltSyncActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Covers {@link NctSaltSyncHandler}: a {@link SyncdOperation#SET} with a non-{@code null} salt
  * writes the bytes via
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore#setNotificationContentTokenSalt(byte[])},
+ * {@link LinkedWhatsAppStore#setNotificationContentTokenSalt(byte[])},
  * {@link SyncdOperation#REMOVE} clears it, a SET with the wrong action type or with no salt field
  * surfaces as {@link SyncActionState#MALFORMED}, the default {@code resolveConflicts} chooses the
  * later timestamp, and the default batch path applies each mutation in order.
@@ -189,7 +190,7 @@ class NctSaltSyncHandlerTest {
         void newerRemoteApplies() {
             var local = mutation(new byte[]{1}, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(new byte[]{2}, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
-            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new NctSaltSyncHandler().resolveConflicts(local, remote).state());
         }
 
@@ -198,7 +199,7 @@ class NctSaltSyncHandlerTest {
         void olderRemoteSkipped() {
             var local = mutation(new byte[]{1}, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(new byte[]{2}, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
-            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(MutationConflictResolutionState.SKIP_REMOTE,
                     new NctSaltSyncHandler().resolveConflicts(local, remote).state());
         }
     }

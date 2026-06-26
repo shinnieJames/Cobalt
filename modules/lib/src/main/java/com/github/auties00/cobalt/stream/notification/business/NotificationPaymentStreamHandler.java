@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.business;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
+import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -19,7 +20,6 @@ import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.payment.OrphanPaymentNotificationBuilder;
 import com.github.auties00.cobalt.model.payment.PaymentInfo;
 import com.github.auties00.cobalt.model.payment.PaymentInfoBuilder;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.message.PaymentMessageStatus;
 import com.github.auties00.cobalt.stream.message.PaymentMessageTransactionType;
 import com.github.auties00.cobalt.util.RandomIdUtils;
@@ -75,28 +75,28 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
      * <p>Stanzas whose description is not {@code notification} or whose {@code type} is not {@code pay} are dropped.
      * Invite takes priority over transaction. A failure during processing is logged and the ack is still sent.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @param stanza the incoming {@code <notification>} stanza
      */
     @Override
-    public void handle(Node node) {
-        if (!node.hasDescription("notification") || !node.hasAttribute("type", "pay")) {
+    public void handle(Stanza stanza) {
+        if (!stanza.hasDescription("notification") || !stanza.hasAttribute("type", "pay")) {
             return;
         }
 
         try {
-            var invite = node.getChild("invite").orElse(null);
+            var invite = stanza.getChild("invite").orElse(null);
             if (invite != null) {
-                handlePaymentInvite(node, invite);
+                handlePaymentInvite(stanza, invite);
             } else {
-                node.getChild("transaction").ifPresent(this::handlePaymentTransaction);
+                stanza.getChild("transaction").ifPresent(this::handlePaymentTransaction);
             }
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to handle payment notification {0}: {1}",
-                    node.getAttributeAsString("id", "[missing-id]"),
+                    stanza.getAttributeAsString("id", "[missing-id]"),
                     throwable.getMessage());
         } finally {
-            sendNotificationAck(node);
+            sendNotificationAck(stanza);
         }
     }
 
@@ -113,15 +113,15 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
      * This implementation uses {@link StubType#PAYMENT_ACTION_ACCOUNT_SETUP_REMINDER} as Cobalt's nearest model
      * equivalent for the account-setup invite stub.
      *
-     * @param node   the parent {@code <notification>} stanza
-     * @param invite the {@code <invite>} child node
+     * @param stanza   the parent {@code <notification>} stanza
+     * @param invite the {@code <invite>} child stanza
      */
-    private void handlePaymentInvite(Node node, Node invite) {
+    private void handlePaymentInvite(Stanza stanza, Stanza invite) {
         var type = invite.getAttributeAsString("type", null);
         var service = invite.getAttributeAsString("service", null);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Received payment invite notification type={0} service={1} id={2}",
-                type, service, node.getAttributeAsString("id", "[missing-id]"));
+                type, service, stanza.getAttributeAsString("id", "[missing-id]"));
         if (!"account-set-up".equals(type)) {
             return;
         }
@@ -179,9 +179,9 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
      * This implementation skips Novi-service transactions ({@code service="NOVI"}) with a warning, as those payments
      * are not supported.
      *
-     * @param transaction the {@code <transaction>} child node
+     * @param transaction the {@code <transaction>} child stanza
      */
-    private void handlePaymentTransaction(Node transaction) {
+    private void handlePaymentTransaction(Stanza transaction) {
         var service = transaction.getAttributeAsString("service", null);
         if (service != null && service.equalsIgnoreCase("NOVI")) {
             LOGGER.log(System.Logger.Level.WARNING, "Payment notification from Novi not supported.");
@@ -230,10 +230,10 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
      * {@link PaymentInfo.TxnStatus#COLLECT_INIT}. The orphan-payment record for this message id is removed on success.
      *
      * @param chatMessageInfo the resolved chat message
-     * @param transaction     the {@code <transaction>} child node
+     * @param transaction     the {@code <transaction>} child stanza
      * @param fromMe          whether the local account is the sender
      */
-    private void applyPaymentTransaction(ChatMessageInfo chatMessageInfo, Node transaction, boolean fromMe) {
+    private void applyPaymentTransaction(ChatMessageInfo chatMessageInfo, Stanza transaction, boolean fromMe) {
         var receiver = transaction.getAttributeAsJid("receiver").orElse(null);
         var type = transaction.getAttributeAsString("transaction-type", null);
         var status = transaction.getAttributeAsString("status", null);
@@ -331,7 +331,7 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
      * Returns a fresh {@link PaymentInfo} with status {@link PaymentInfo.Status#UNKNOWN_STATUS} and transaction status
      * {@link PaymentInfo.TxnStatus#UNKNOWN}.
      *
-     * <p>Used by {@link #applyPaymentTransaction(ChatMessageInfo, Node, boolean)} when neither the resolved message nor
+     * <p>Used by {@link #applyPaymentTransaction(ChatMessageInfo, Stanza, boolean)} when neither the resolved message nor
      * the originating request message has an existing {@link PaymentInfo}.
      *
      * @return the new {@link PaymentInfo}
@@ -527,9 +527,9 @@ final class NotificationPaymentStreamHandler extends SocketStreamHandler.Concurr
      *
      * <p>Fire-and-forget.
      *
-     * @param node the original {@code <notification>} stanza
+     * @param stanza the original {@code <notification>} stanza
      */
-    private void sendNotificationAck(Node node) {
-        ackSender.ack(AckClass.NOTIFICATION, node).type("pay").send();
+    private void sendNotificationAck(Stanza stanza) {
+        ackSender.ack(AckClass.NOTIFICATION, stanza).type("pay").send();
     }
 }

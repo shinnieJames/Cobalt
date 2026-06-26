@@ -6,10 +6,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.MarketingMessageBroadcastBuilder;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.MarketingMessageBroadcastAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -28,7 +29,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * @implNote
  * This implementation persists each association eagerly through
- * {@link com.github.auties00.cobalt.store.BusinessStore#putMarketingMessageBroadcast(com.github.auties00.cobalt.model.business.MarketingMessageBroadcast)}
+ * {@link LinkedWhatsAppBusinessStore#putMarketingMessageBroadcast(com.github.auties00.cobalt.model.business.MarketingMessageBroadcast)}
  * keyed by the sent message id, with the premium template id stored as the
  * record's status field. WA Web batches the pairs and mutates the
  * {@code sentMessageIds} set on each premium template once at the end of the
@@ -84,7 +85,7 @@ public final class MarketingMessageBroadcastHandler implements WebAppStateAction
      * referenced premium template is unknown locally the mutation is reported
      * as {@link MutationApplicationResult#orphan()}; otherwise the
      * association is persisted via
-     * {@link com.github.auties00.cobalt.store.BusinessStore#putMarketingMessageBroadcast(com.github.auties00.cobalt.model.business.MarketingMessageBroadcast)}.
+     * {@link LinkedWhatsAppBusinessStore#putMarketingMessageBroadcast(com.github.auties00.cobalt.model.business.MarketingMessageBroadcast)}.
      *
      * @implNote
      * This implementation classifies a missing index slot as

@@ -6,14 +6,16 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.OrphanMutationEntry;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.mutation.OrphanMutationEntry;
+import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LidContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteAction;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.ArrayList;
@@ -36,7 +38,7 @@ import java.util.logging.Logger;
  *
  * @implNote
  * This implementation persists the contact directly through
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} and stores the
+ * {@link LinkedWhatsAppStore} and stores the
  * username on the contact record so a later remove can recognise it as a
  * username-added contact. After a successful set, any orphan
  * {@link UserStatusMuteAction} mutations keyed by the same LID JID are replayed
@@ -191,7 +193,7 @@ public final class LidContactHandler implements WebAppStateActionHandler {
      * LID JID and prunes the ones that succeed.
      *
      * <p>Iterates the orphan entries returned by
-     * {@link com.github.auties00.cobalt.store.SyncStore#findOrphanMutationsByModel(SyncPatchType, String)},
+     * {@link LinkedWhatsAppSyncStore#findOrphanMutationsByModel(SyncPatchType, String)},
      * rebuilds a {@link DecryptedMutation.Trusted} for each, calls
      * {@link UserStatusMuteHandler#applyMutation(LinkedWhatsAppClient, DecryptedMutation.Trusted)},
      * and removes only the entries that returned {@link SyncActionState#SUCCESS}

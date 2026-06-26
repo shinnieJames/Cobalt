@@ -23,7 +23,7 @@ import java.util.OptionalInt;
  * reporting children, the broadcast contact list, the {@code <hsm>} tags, and
  * every {@code <meta>} attribute that influences downstream routing or
  * rendering. Decryption, dedup, sender-key processing, receipt emission, and UI
- * dispatch all consume this record instead of re-scanning the raw node.
+ * dispatch all consume this record instead of re-scanning the raw stanza.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgCommon")

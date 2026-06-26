@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,16 +14,19 @@ import java.util.OptionalInt;
 /**
  * Represents an {@code <accept>} signal: the callee answers the call.
  *
- * <p>An accept is the callee's answer to an offer. It is the heaviest non-offer action: it carries
- * the callee's capability advertisements, the offered audio codecs, the negotiated media descriptor,
- * the encryption options, the chosen network medium, the callee's key material (the {@code <enc>} key
- * blobs the participant crypto chain produces), and an optional embedded {@code <transport>} block
- * carrying the callee's transport and relay candidates. The transport block is held as a raw subtree
- * because its full grammar is owned by the transport layer; the key blobs are likewise held as raw
- * subtrees because their per-blob layout is owned by the participant-crypto layer.
+ * <p>An accept is the callee's answer to an offer. For a relay call it carries, as its first child, the
+ * server-allocated {@code <relay>} block (the caller's relay credentials the server delivered in the
+ * offer ack), which the server consumes to complete relay allocation before forwarding the accept; an
+ * accept that omits it is torn down with {@code setup_failed}. It also carries the chosen network medium
+ * and the offered audio codecs. The data-channel cert-fingerprint HMAC, e2e public-key {@code <enc>}
+ * blobs, the {@code <media>} descriptor, and the embedded {@code <transport>} block belong to the
+ * conditional Web-P2P/DTLS data-channel path and are absent from a plain relay accept; the relay block is
+ * modeled by {@link RelayInfo}, while the key blobs and transport block are held as raw subtrees because
+ * their grammar is owned by the participant-crypto and transport layers.
  *
  * <p>On the wire the element is {@snippet lang="xml" :
  * <accept call-id="..." call-creator="...">
+ *   <relay self_pid="..." peer_pid="..." uuid="...">CREDENTIALS</relay>
  *   <capability ver="1">MASK</capability>
  *   <audio enc="opus" rate="16000"/>
  *   <net medium="2"/>
@@ -54,11 +57,14 @@ import java.util.OptionalInt;
  * @param media         the negotiated media descriptor, or {@code null} when absent
  * @param encOptions    the encryption options, or {@code null} when absent
  * @param transport     the embedded {@code <transport>} subtree, or {@code null} when absent
+ * @param relay         the parsed server-allocated {@link RelayInfo relay block} (the caller's relay
+ *                      credentials) echoed as the accept's first child for a relay call, or {@code null}
+ *                      when absent
  * @see Calls2SignalingType#ACCEPT
  */
 public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<CallCapability> capabilities,
-                           List<CallCodecDescriptor> audioCodecs, List<Node> encKeys, CallMediaDescriptor media,
-                           CallEncOptions encOptions, Node transport) implements CallMessage {
+                           List<CallCodecDescriptor> audioCodecs, List<Stanza> encKeys, CallMediaDescriptor media,
+                           CallEncOptions encOptions, Stanza transport, RelayInfo relay) implements CallMessage {
     /**
      * The wire element tag for an accept signal.
      */
@@ -88,6 +94,11 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
      * The wire element tag for the embedded transport block.
      */
     private static final String TRANSPORT_ELEMENT = "transport";
+
+    /**
+     * The wire element tag for the server-allocated relay block.
+     */
+    private static final String RELAY_ELEMENT = "relay";
 
     /**
      * Canonicalizes the record components, copying the capability, codec, and key lists.
@@ -137,10 +148,19 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
     /**
      * Returns the embedded {@code <transport>} subtree, if present.
      *
-     * @return an {@link Optional} holding the transport node, or empty when absent
+     * @return an {@link Optional} holding the transport stanza, or empty when absent
      */
-    public Optional<Node> transportNode() {
+    public Optional<Stanza> transportNode() {
         return Optional.ofNullable(transport);
+    }
+
+    /**
+     * Returns the parsed server-allocated {@code <relay>} block, if present.
+     *
+     * @return an {@link Optional} holding the relay info, or empty when absent
+     */
+    public Optional<RelayInfo> relayInfo() {
+        return Optional.ofNullable(relay);
     }
 
     /**
@@ -154,42 +174,45 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
     }
 
     /**
-     * Builds the {@code <accept>} action node with its capability, audio, key, media, encryption, and
-     * transport children.
+     * Builds the {@code <accept>} action stanza with its relay, capability, audio, key, media, encryption,
+     * and transport children.
      *
-     * <p>Children are emitted in the order capabilities, audio formats, network medium, key blobs,
-     * media, encryption options, transport; each audio format is a flat {@code <audio>} element and
-     * the network medium a {@code <net medium>} element emitted only when present, and absent optional
-     * children are omitted.
+     * <p>Children are emitted in the order relay, capabilities, audio formats, network medium, key blobs,
+     * media, encryption options, transport; the relay block leads when present, each audio format is a flat
+     * {@code <audio>} element, the network medium a {@code <net medium>} element emitted only when present,
+     * and absent optional children are omitted.
      *
-     * @return the accept action node
+     * @return the accept action stanza
      */
     @Override
-    public Node toNode() {
-        var children = new ArrayList<Node>();
+    public Stanza toStanza() {
+        var children = new ArrayList<Stanza>();
+        if (relay != null) {
+            children.add(relay.toNode());
+        }
         for (var capability : capabilities) {
-            children.add(capability.toNode());
+            children.add(capability.toStanza());
         }
         for (var codec : audioCodecs) {
-            children.add(codec.toNode());
+            children.add(codec.toStanza());
         }
         if (netMedium >= 0) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description(NET_ELEMENT)
                     .attribute(MEDIUM_ATTRIBUTE, netMedium)
                     .build());
         }
         children.addAll(encKeys);
         if (media != null) {
-            children.add(media.toNode());
+            children.add(media.toStanza());
         }
         if (encOptions != null) {
-            children.add(encOptions.toNode());
+            children.add(encOptions.toStanza());
         }
         if (transport != null) {
             children.add(transport);
         }
-        var builder = CallMessages.stampHeader(new NodeBuilder().description(ELEMENT), callId, callCreator);
+        var builder = CallMessages.stampHeader(new StanzaBuilder().description(ELEMENT), callId, callCreator);
         if (!children.isEmpty()) {
             builder.content(children);
         }
@@ -197,39 +220,41 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
     }
 
     /**
-     * Decodes an {@code <accept>} action node into an {@link AcceptStanza}.
+     * Decodes an {@code <accept>} action stanza into an {@link AcceptStanza}.
      *
-     * <p>Capability children, the flat {@code <audio>} format children, the {@code <net medium>}
-     * child, the {@code <enc>} key blobs, the {@code <media>} descriptor, the {@code <encopt>}
-     * options, and the embedded {@code <transport>} subtree are each decoded when present; the key
-     * blobs and transport subtree are retained verbatim.
+     * <p>The {@code <relay>} block, capability children, the flat {@code <audio>} format children, the
+     * {@code <net medium>} child, the {@code <enc>} key blobs, the {@code <media>} descriptor, the
+     * {@code <encopt>} options, and the embedded {@code <transport>} subtree are each decoded when present;
+     * the relay block is parsed into a {@link RelayInfo}, and the key blobs and transport subtree are
+     * retained verbatim.
      *
-     * @param node the {@code <accept>} node
+     * @param stanza the {@code <accept>} stanza
      * @return the decoded accept signal
-     * @throws NullPointerException   if {@code node} is {@code null}
+     * @throws NullPointerException   if {@code stanza} is {@code null}
      * @throws NoSuchElementException if the required {@code call-id} or {@code call-creator} attribute
      *                                is absent
      */
-    public static AcceptStanza of(Node node) {
-        Objects.requireNonNull(node, "node cannot be null");
-        var callId = node.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
-        var callCreator = node.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
-        var netMedium = node.getChild(NET_ELEMENT)
+    public static AcceptStanza of(Stanza stanza) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
+        var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
+        var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
+        var netMedium = stanza.getChild(NET_ELEMENT)
                 .map(net -> net.getAttributeAsInt(MEDIUM_ATTRIBUTE, -1))
                 .orElse(-1);
-        var capabilities = node.streamChildren(CallCapability.ELEMENT)
+        var capabilities = stanza.streamChildren(CallCapability.ELEMENT)
                 .flatMap(child -> CallCapability.of(child).stream())
                 .toList();
-        var audioCodecs = node.streamChildren(AUDIO_ELEMENT)
+        var audioCodecs = stanza.streamChildren(AUDIO_ELEMENT)
                 .flatMap(audio -> CallCodecDescriptor.of(audio).stream())
                 .toList();
-        var encKeys = node.getChildren(ENC_ELEMENT)
+        var encKeys = stanza.getChildren(ENC_ELEMENT)
                 .stream()
                 .toList();
-        var media = node.getChild(CallMediaDescriptor.ELEMENT).flatMap(CallMediaDescriptor::of).orElse(null);
-        var encOptions = node.getChild(CallEncOptions.ELEMENT).flatMap(CallEncOptions::of).orElse(null);
-        var transport = node.getChild(TRANSPORT_ELEMENT).orElse(null);
+        var media = stanza.getChild(CallMediaDescriptor.ELEMENT).flatMap(CallMediaDescriptor::of).orElse(null);
+        var encOptions = stanza.getChild(CallEncOptions.ELEMENT).flatMap(CallEncOptions::of).orElse(null);
+        var transport = stanza.getChild(TRANSPORT_ELEMENT).orElse(null);
+        var relay = stanza.getChild(RELAY_ELEMENT).flatMap(RelayInfo::of).orElse(null);
         return new AcceptStanza(callId, callCreator, netMedium, capabilities, audioCodecs, encKeys, media,
-                encOptions, transport);
+                encOptions, transport, relay);
     }
 }

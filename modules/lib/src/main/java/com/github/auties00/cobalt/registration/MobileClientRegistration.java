@@ -10,7 +10,9 @@ import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
 import com.github.auties00.cobalt.model.business.*;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.store.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
@@ -127,8 +129,8 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      *
      * <p>Mutated in place when registration succeeds: the
      * {@code registered} flag and the local JID are written via
-     * {@link com.github.auties00.cobalt.store.AccountStore#setRegistered} and
-     * {@link com.github.auties00.cobalt.store.AccountStore#setJid}.
+     * {@link LinkedWhatsAppAccountStore#setRegistered} and
+     * {@link LinkedWhatsAppAccountStore#setJid}.
      */
     protected final LinkedWhatsAppStore store;
 
@@ -250,7 +252,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      *
      * <p>Dispatches to either {@link AndroidClientRegistration} or
      * {@link IosClientRegistration} based on
-     * {@link com.github.auties00.cobalt.store.AccountStore#device}'s
+     * {@link LinkedWhatsAppAccountStore#device}'s
      * {@link ClientPlatformType platform}. A {@code null} attestor
      * falls back to the platform's
      * {@link LinkedWhatsAppClientDeviceAttestor.Android#NONE} or
@@ -345,7 +347,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      * matching the respective native apps.
      *
      * @implSpec
-     * Overriders must read {@link com.github.auties00.cobalt.store.SignalStore#fdid} and return a
+     * Overriders must read {@link LinkedWhatsAppSignalStore#fdid} and return a
      * non-{@code null} UUID string in the per-platform casing.
      *
      * @return the formatted device family identifier
@@ -395,7 +397,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
      *
      * @implSpec
      * Overriders must POST {@code body} verbatim, set the
-     * {@code User-Agent} matching {@link com.github.auties00.cobalt.store.AccountStore#device}'s
+     * {@code User-Agent} matching {@link LinkedWhatsAppAccountStore#device}'s
      * user-agent string, and attach {@code authorizationHeader} as the
      * {@code Authorization} header when it is non-{@code null}. Other
      * headers are platform-specific.

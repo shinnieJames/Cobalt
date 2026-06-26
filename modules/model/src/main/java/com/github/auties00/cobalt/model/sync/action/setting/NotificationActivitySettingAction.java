@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.setting;
 
-import com.github.auties00.cobalt.model.sync.SyncActionEmptyArgs;
-import com.github.auties00.cobalt.model.sync.SyncAction;
+import com.github.auties00.cobalt.model.sync.action.SyncActionEmptyArgs;
+import com.github.auties00.cobalt.model.sync.action.SyncAction;
 
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;

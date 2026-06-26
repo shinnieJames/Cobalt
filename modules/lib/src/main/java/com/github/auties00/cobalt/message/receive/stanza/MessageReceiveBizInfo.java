@@ -51,7 +51,7 @@ public final class MessageReceiveBizInfo {
     /**
      * The native-flow name extracted from either
      * {@code <biz><interactive><native_flow name="..."/></interactive></biz>}
-     * or the {@code native_flow_name} attribute on the {@code <biz>} node.
+     * or the {@code native_flow_name} attribute on the {@code <biz>} stanza.
      */
     private final String nativeFlowName;
 
@@ -62,19 +62,19 @@ public final class MessageReceiveBizInfo {
     private final String campaignId;
 
     /**
-     * The {@code actual_actors} attribute parsed from the {@code <biz>} node,
+     * The {@code actual_actors} attribute parsed from the {@code <biz>} stanza,
      * one component of the privacy-mode triple.
      */
     private final Integer actualActors;
 
     /**
-     * The {@code host_storage} attribute parsed from the {@code <biz>} node,
+     * The {@code host_storage} attribute parsed from the {@code <biz>} stanza,
      * one component of the privacy-mode triple.
      */
     private final Integer hostStorage;
 
     /**
-     * The {@code privacy_mode_ts} attribute parsed from the {@code <biz>} node,
+     * The {@code privacy_mode_ts} attribute parsed from the {@code <biz>} stanza,
      * the seconds-precision timestamp at which the current privacy mode took
      * effect.
      */

@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -17,10 +17,10 @@ import java.util.Objects;
  * {@link MessageReceiveStanza} the rest of the receive pipeline consumes.
  *
  * <p>The single entry point ({@link #parse}) is a stateless adapter. The caller
- * is the inbound message-dispatch loop: it hands every {@code <message>} node to
+ * is the inbound message-dispatch loop: it hands every {@code <message>} stanza to
  * this class before attempting decryption, so the dedup layer, the receipt
  * emitter, and the per-payload decryptor all operate on the same structured
- * snapshot rather than re-scanning the raw node.
+ * snapshot rather than re-scanning the raw stanza.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveStanzaParser {
@@ -37,7 +37,7 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses a raw {@code <message>} node into a structured
+     * Parses a raw {@code <message>} stanza into a structured
      * {@link MessageReceiveStanza}.
      *
      * <p>The local account's PN and LID let the message-type classifier
@@ -48,72 +48,72 @@ public final class MessageReceiveStanzaParser {
      * @implNote
      * This implementation aggregates every parsed field into a single
      * allocation, delegating missing-required-attribute handling to
-     * {@link Node#getRequiredAttributeAsString} and
-     * {@link Node#getRequiredAttributeAsLong}.
+     * {@link Stanza#getRequiredAttributeAsString} and
+     * {@link Stanza#getRequiredAttributeAsLong}.
      *
-     * @param node       the inbound {@code <message>} node
+     * @param stanza       the inbound {@code <message>} stanza
      * @param selfPnJid  the local account's PN JID, or {@code null}
      * @param selfLidJid the local account's LID, or {@code null}
      * @return the parsed stanza
-     * @throws NullPointerException     if {@code node} is {@code null}
+     * @throws NullPointerException     if {@code stanza} is {@code null}
      * @throws IllegalArgumentException if required attributes are missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static MessageReceiveStanza parse(Node node, Jid selfPnJid, Jid selfLidJid) {
-        Objects.requireNonNull(node, "node cannot be null");
+    public static MessageReceiveStanza parse(Stanza stanza, Jid selfPnJid, Jid selfLidJid) {
+        Objects.requireNonNull(stanza, "stanza cannot be null");
 
-        var id = node.getRequiredAttributeAsString("id");
-        var timestampSeconds = node.getRequiredAttributeAsLong("t");
+        var id = stanza.getRequiredAttributeAsString("id");
+        var timestampSeconds = stanza.getRequiredAttributeAsLong("t");
         var timestamp = Instant.ofEpochSecond(timestampSeconds);
-        var fromJid = node.getRequiredAttributeAsJid("from");
+        var fromJid = stanza.getRequiredAttributeAsJid("from");
 
-        var stanzaType = node.getRequiredAttributeAsString("type");
-        var editAttribute = node.getAttributeAsInt("edit", 0);
-        var pushName = node.getAttributeAsString("notify", null);
-        var category = node.getAttributeAsString("category", null);
-        var offline = node.getAttributeAsString("offline", null);
-        var addressingMode = node.getAttributeAsString("addressing_mode", null);
+        var stanzaType = stanza.getRequiredAttributeAsString("type");
+        var editAttribute = stanza.getAttributeAsInt("edit", 0);
+        var pushName = stanza.getAttributeAsString("notify", null);
+        var category = stanza.getAttributeAsString("category", null);
+        var offline = stanza.getAttributeAsString("offline", null);
+        var addressingMode = stanza.getAttributeAsString("addressing_mode", null);
 
-        var participant = node.getAttributeAsJid("participant", null);
+        var participant = stanza.getAttributeAsJid("participant", null);
 
-        var senderPn = node.getAttributeAsJid("sender_pn", null);
-        var senderLid = node.getAttributeAsJid("sender_lid", null);
-        var recipientPn = node.getAttributeAsJid("recipient_pn", null);
-        var recipientLid = node.getAttributeAsJid("recipient_lid", null);
-        var peerRecipientPn = node.getAttributeAsJid("peer_recipient_pn", null);
-        var peerRecipientLid = node.getAttributeAsJid("peer_recipient_lid", null);
-        var peerRecipientUsername = node.getAttributeAsString("peer_recipient_username", null);
-        var recipientLatestLid = node.getAttributeAsJid("recipient_latest_lid", null);
-        var recipientUsername = node.getAttributeAsString("recipient_username", null);
-        var participantPn = node.getAttributeAsJid("participant_pn", null);
-        var participantLid = node.getAttributeAsJid("participant_lid", null);
-        var participantUsername = node.getAttributeAsString("participant_username", null);
-        var username = node.getAttributeAsString("username", null);
-        var displayName = node.getAttributeAsString("display_name", null);
+        var senderPn = stanza.getAttributeAsJid("sender_pn", null);
+        var senderLid = stanza.getAttributeAsJid("sender_lid", null);
+        var recipientPn = stanza.getAttributeAsJid("recipient_pn", null);
+        var recipientLid = stanza.getAttributeAsJid("recipient_lid", null);
+        var peerRecipientPn = stanza.getAttributeAsJid("peer_recipient_pn", null);
+        var peerRecipientLid = stanza.getAttributeAsJid("peer_recipient_lid", null);
+        var peerRecipientUsername = stanza.getAttributeAsString("peer_recipient_username", null);
+        var recipientLatestLid = stanza.getAttributeAsJid("recipient_latest_lid", null);
+        var recipientUsername = stanza.getAttributeAsString("recipient_username", null);
+        var participantPn = stanza.getAttributeAsJid("participant_pn", null);
+        var participantLid = stanza.getAttributeAsJid("participant_lid", null);
+        var participantUsername = stanza.getAttributeAsString("participant_username", null);
+        var username = stanza.getAttributeAsString("username", null);
+        var displayName = stanza.getAttributeAsString("display_name", null);
 
-        var count = node.getAttributeAsInt("count", null);
+        var count = stanza.getAttributeAsInt("count", null);
 
-        var isHsm = node.getChild("hsm").isPresent();
+        var isHsm = stanza.getChild("hsm").isPresent();
 
         var senderJid = resolveSender(fromJid, participant);
 
-        var encs = parseEncryptedPayloads(node);
+        var encs = parseEncryptedPayloads(stanza);
 
         var messageType = resolveMessageType(fromJid, participant, selfPnJid, selfLidJid, encs, category);
 
-        var deviceIdentity = node.getChild("device-identity")
-                .flatMap(Node::toContentBytes)
+        var deviceIdentity = stanza.getChild("device-identity")
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
 
-        var unavailableNode = node.getChild("unavailable", null);
+        var unavailableNode = stanza.getChild("unavailable", null);
         var unavailable = unavailableNode != null;
         var hostedUnavailable = unavailable
                 && "true".equals(unavailableNode.getAttributeAsString("hosted").orElse(null));
         var viewOnceUnavailable = unavailable
                 && "view_once".equals(unavailableNode.getAttributeAsString("type").orElse(null));
 
-        var metaNode = node.getChild("meta", null);
+        var metaNode = stanza.getChild("meta", null);
         String pollType = null;
         String eventType = null;
         String origin = null;
@@ -154,22 +154,22 @@ public final class MessageReceiveStanzaParser {
             senderCountryCode = metaNode.getAttributeAsString("sender_country_code", null);
         }
 
-        var urlNumber = node.getChild("url_number").isPresent();
-        var urlText = node.getChild("url_text").isPresent();
+        var urlNumber = stanza.getChild("url_number").isPresent();
+        var urlText = stanza.getChild("url_text").isPresent();
 
-        var botInfo = parseBotInfo(node);
-        var bizInfo = parseBizInfo(node);
-        var reportingInfo = parseReportingInfo(node);
-        var bclParticipants = parseBroadcastParticipants(node);
-        var paymentInfo = parsePaymentInfo(node);
+        var botInfo = parseBotInfo(stanza);
+        var bizInfo = parseBizInfo(stanza);
+        var reportingInfo = parseReportingInfo(stanza);
+        var bclParticipants = parseBroadcastParticipants(stanza);
+        var paymentInfo = parsePaymentInfo(stanza);
 
-        var ephSetting = node.getAttributeAsString("eph_setting", null);
+        var ephSetting = stanza.getAttributeAsString("eph_setting", null);
 
-        var rcat = node.getChild("rcat")
-                .flatMap(Node::toContentBytes)
+        var rcat = stanza.getChild("rcat")
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
 
-        var hsmNode = node.getChild("hsm", null);
+        var hsmNode = stanza.getChild("hsm", null);
         String hsmTag = null;
         String hsmCategory = null;
         if (hsmNode != null) {
@@ -357,7 +357,7 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses every {@code <enc>} child of the message node into a typed payload
+     * Parses every {@code <enc>} child of the message stanza into a typed payload
      * list.
      *
      * <p>The list iteration order matches the wire order; downstream code relies
@@ -368,13 +368,13 @@ public final class MessageReceiveStanzaParser {
      * This implementation drops {@code <enc>} nodes whose content is empty to
      * avoid producing payloads that no Signal cipher can act on.
      *
-     * @param node the parent {@code <message>} node
+     * @param stanza the parent {@code <message>} stanza
      * @return the parsed encrypted payloads
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static List<MessageReceiveEncryptedPayload> parseEncryptedPayloads(Node node) {
-        var encNodes = node.getChildren("enc");
+    private static List<MessageReceiveEncryptedPayload> parseEncryptedPayloads(Stanza stanza) {
+        var encNodes = stanza.getChildren("enc");
         var payloads = new ArrayList<MessageReceiveEncryptedPayload>(encNodes.size());
         for (var encNode : encNodes) {
             var typeStr = encNode.getRequiredAttributeAsString("type");
@@ -402,13 +402,13 @@ public final class MessageReceiveStanzaParser {
      * rich-response stitcher consumes the result to thread streaming chunks back
      * together.
      *
-     * @param node the parent {@code <message>} node
+     * @param stanza the parent {@code <message>} stanza
      * @return the parsed bot info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static MessageReceiveBotInfo parseBotInfo(Node node) {
-        var botNode = node.getChild("bot", null);
+    private static MessageReceiveBotInfo parseBotInfo(Stanza stanza) {
+        var botNode = stanza.getChild("bot", null);
         if (botNode == null) {
             return null;
         }
@@ -440,22 +440,22 @@ public final class MessageReceiveStanzaParser {
      * @implNote
      * This implementation reads the verified-buttons and verified-list envelopes
      * from the {@code <biz>} child directly, but reads the verified-HSM envelope
-     * from the parent {@code <message>} node because the {@code <hsm>} child sits
+     * from the parent {@code <message>} stanza because the {@code <hsm>} child sits
      * at the message level rather than inside {@code <biz>}.
      *
-     * @param node the parent {@code <message>} node
+     * @param stanza the parent {@code <message>} stanza
      * @return the parsed biz info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static MessageReceiveBizInfo parseBizInfo(Node node) {
-        var verifiedNameSerial = node.getAttributeAsInt("verified_name", null);
-        var verifiedLevel = node.getAttributeAsString("verified_level", null);
-        var verifiedNameCert = node.getChild("verified_name")
-                .flatMap(Node::toContentBytes)
+    private static MessageReceiveBizInfo parseBizInfo(Stanza stanza) {
+        var verifiedNameSerial = stanza.getAttributeAsInt("verified_name", null);
+        var verifiedLevel = stanza.getAttributeAsString("verified_level", null);
+        var verifiedNameCert = stanza.getChild("verified_name")
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
 
-        var bizNode = node.getChild("biz", null);
+        var bizNode = stanza.getChild("biz", null);
         if (verifiedNameSerial == null && verifiedLevel == null
                 && verifiedNameCert == null && bizNode == null) {
             return null;
@@ -479,7 +479,7 @@ public final class MessageReceiveStanzaParser {
             verifiedButtonsEnvelope = bizNode.getChild("buttons").isPresent();
             verifiedListEnvelope = bizNode.getChild("list").isPresent();
 
-            verifiedHsmEnvelope = node.getChild("hsm").isPresent();
+            verifiedHsmEnvelope = stanza.getChild("hsm").isPresent();
         }
 
         return new MessageReceiveBizInfo(
@@ -498,20 +498,20 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Returns the native-flow name from the {@code <biz>} node.
+     * Returns the native-flow name from the {@code <biz>} stanza.
      *
      * <p>Prefers the nested
      * {@code <interactive><native_flow name="..."/></interactive>} shape and
      * falls back to a direct {@code native_flow_name} attribute on the
-     * {@code <biz>} node when the nested structure is absent.
+     * {@code <biz>} stanza when the nested structure is absent.
      *
-     * @param bizNode the {@code <biz>} child node
+     * @param bizStanza the {@code <biz>} child stanza
      * @return the native-flow name, or {@code null} when neither path resolves it
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static String resolveNativeFlowName(Node bizNode) {
-        var interactiveNode = bizNode.getChild("interactive", null);
+    private static String resolveNativeFlowName(Stanza bizStanza) {
+        var interactiveNode = bizStanza.getChild("interactive", null);
         if (interactiveNode != null) {
             var nativeFlowNode = interactiveNode.getChild("native_flow", null);
             if (nativeFlowNode != null) {
@@ -522,7 +522,7 @@ public final class MessageReceiveStanzaParser {
             }
         }
 
-        return bizNode.getAttributeAsString("native_flow_name", null);
+        return bizStanza.getAttributeAsString("native_flow_name", null);
     }
 
     /**
@@ -541,18 +541,18 @@ public final class MessageReceiveStanzaParser {
      * before parsing; absent gating, the absence of a {@code <reporting>} child
      * is the only short-circuit.
      *
-     * @param node the parent {@code <message>} node
+     * @param stanza the parent {@code <message>} stanza
      * @return the parsed reporting info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static MessageReceiveReportingInfo parseReportingInfo(Node node) {
-        var reportingNode = node.getChild("reporting", null);
+    private static MessageReceiveReportingInfo parseReportingInfo(Stanza stanza) {
+        var reportingNode = stanza.getChild("reporting", null);
         if (reportingNode == null) {
             return null;
         }
 
-        var stanzaTs = Instant.ofEpochSecond(node.getRequiredAttributeAsLong("t"));
+        var stanzaTs = Instant.ofEpochSecond(stanza.getRequiredAttributeAsLong("t"));
 
         var tokenNode = reportingNode.getChild("reporting_token", null);
         byte[] reportingToken = null;
@@ -563,7 +563,7 @@ public final class MessageReceiveStanzaParser {
         }
 
         var reportingTag = reportingNode.getChild("reporting_tag")
-                .flatMap(Node::toContentBytes)
+                .flatMap(Stanza::toContentBytes)
                 .orElse(null);
 
         return new MessageReceiveReportingInfo(
@@ -590,14 +590,14 @@ public final class MessageReceiveStanzaParser {
      * and {@code invite} pay types carry no usable payment data and yield
      * {@code null}.
      *
-     * @param node the parent {@code <message>} node
+     * @param stanza the parent {@code <message>} stanza
      * @return the parsed payment info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static MessageReceivePaymentInfo parsePaymentInfo(Node node) {
-        var payNode = node.getChild("pay", null);
-        var transactionNode = node.getChild("transaction", null);
+    private static MessageReceivePaymentInfo parsePaymentInfo(Stanza stanza) {
+        var payNode = stanza.getChild("pay", null);
+        var transactionNode = stanza.getChild("transaction", null);
 
         if (payNode == null && transactionNode == null) {
             return null;
@@ -625,9 +625,9 @@ public final class MessageReceiveStanzaParser {
             var amount1000 = payNode.getAttributeAsLong("amount_1000", null);
             var receiver = payNode.getAttributeAsString("receiver", null);
             if (receiver == null) {
-                receiver = node.getAttributeAsString("recipient", null);
+                receiver = stanza.getAttributeAsString("recipient", null);
             }
-            var ts = node.getAttributeAsLong("t", null);
+            var ts = stanza.getAttributeAsLong("t", null);
             return new MessageReceivePaymentInfo(
                     false,
                     receiver,
@@ -647,13 +647,13 @@ public final class MessageReceiveStanzaParser {
      * <p>Returns an empty list (not {@code null}) when no participants child is
      * present so the caller can iterate unconditionally.
      *
-     * @param node the parent {@code <message>} node
+     * @param stanza the parent {@code <message>} stanza
      * @return the broadcast contact list
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static List<MessageReceiveBroadcastParticipant> parseBroadcastParticipants(Node node) {
-        var participantsNode = node.getChild("participants", null);
+    private static List<MessageReceiveBroadcastParticipant> parseBroadcastParticipants(Stanza stanza) {
+        var participantsNode = stanza.getChild("participants", null);
         if (participantsNode == null) {
             return List.of();
         }

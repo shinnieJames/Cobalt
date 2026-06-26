@@ -96,7 +96,7 @@ public final class ScreenVideoOutput extends CameraVideoOutput {
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static ScreenVideoOutput primary() {
-        return primary(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, defaultBitrate());
+        return primary(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 
     /**
@@ -125,19 +125,19 @@ public final class ScreenVideoOutput extends CameraVideoOutput {
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static ScreenVideoOutput x11(String display) {
-        return x11(display, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, defaultBitrate());
+        return x11(display, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 
     /**
      * Returns a source capturing a Wayland source through the {@code pipewiregrab} input format,
      * advertising the given geometry.
      *
-     * @param node       the PipeWire node name to capture
+     * @param node       the PipeWire stanza name to capture
      * @param width      the advertised frame width in pixels; even and at least {@code 2}
      * @param height     the advertised frame height in pixels; even and at least {@code 2}
      * @param fps        the target frame rate; at least {@code 1}
      * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @return a source capturing the given PipeWire node
+     * @return a source capturing the given PipeWire stanza
      * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
      *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
      * @throws IllegalStateException    if screen capture is unavailable on the running platform
@@ -149,12 +149,12 @@ public final class ScreenVideoOutput extends CameraVideoOutput {
     /**
      * Returns a source capturing a Wayland source at the default SD geometry: 640x480 at 30 fps.
      *
-     * @param node the PipeWire node name to capture
-     * @return a source capturing the given PipeWire node
+     * @param node the PipeWire stanza name to capture
+     * @return a source capturing the given PipeWire stanza
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static ScreenVideoOutput wayland(String node) {
-        return wayland(node, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, defaultBitrate());
+        return wayland(node, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 
     /**
@@ -187,7 +187,7 @@ public final class ScreenVideoOutput extends CameraVideoOutput {
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static ScreenVideoOutput drm(String card) {
-        return drm(card, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, defaultBitrate());
+        return drm(card, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 
     /**
@@ -218,7 +218,7 @@ public final class ScreenVideoOutput extends CameraVideoOutput {
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static ScreenVideoOutput macOs(int screenIndex) {
-        return macOs(screenIndex, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, defaultBitrate());
+        return macOs(screenIndex, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 
     /**
@@ -246,7 +246,7 @@ public final class ScreenVideoOutput extends CameraVideoOutput {
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static ScreenVideoOutput windowsDesktop() {
-        return windowsDesktop(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, defaultBitrate());
+        return windowsDesktop(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 
     /**
@@ -276,18 +276,6 @@ public final class ScreenVideoOutput extends CameraVideoOutput {
      * @throws IllegalStateException if screen capture is unavailable on the running platform
      */
     public static ScreenVideoOutput windowsWindow(String title) {
-        return windowsWindow(title, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, defaultBitrate());
-    }
-
-    /**
-     * Computes the default pixel-derived bitrate for the default SD geometry.
-     *
-     * <p>Matches {@link BufferedVideoOutput}'s pixel-count heuristic at roughly 0.1 bits per pixel per
-     * frame for the 640x480-at-30-fps default, clamped to a 64 kbps floor.
-     *
-     * @return the default bitrate in bits per second
-     */
-    private static int defaultBitrate() {
-        return Math.max(64_000, DEFAULT_WIDTH * DEFAULT_HEIGHT * DEFAULT_FPS / 10);
+        return windowsWindow(title, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS, DEFAULT_BITRATE_BPS);
     }
 }

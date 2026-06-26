@@ -20,9 +20,11 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
-import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder;
 import com.github.auties00.cobalt.wam.type.MessageType;
@@ -64,7 +66,7 @@ import java.util.Objects;
  * is carried on the existing
  * {@link com.github.auties00.cobalt.model.message.MessageReceipt} records created
  * via
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore#createOrMergeReceiptRecords(String, java.util.Collection)},
+ * {@link LinkedWhatsAppStore#createOrMergeReceiptRecords(String, java.util.Collection)},
  * which collapses WA Web's per-clone {@code ackLevel} into the Cobalt-uniform
  * receipt model.
  */
@@ -161,7 +163,7 @@ final class BroadcastMessageSender extends MessageSender<ChatMessageInfo> {
      *
      * @implNote
      * This implementation looks up the recipient roster from
-     * {@link com.github.auties00.cobalt.store.BusinessStore#findBusinessBroadcastList(String)};
+     * {@link LinkedWhatsAppBusinessStore#findBusinessBroadcastList(String)};
      * a missing list surfaces as
      * {@link WhatsAppMessageException.Send.InvalidRecipient}, mirroring WA Web's
      * {@code NO_FANOUT_KEYS} sentinel that
@@ -220,7 +222,7 @@ final class BroadcastMessageSender extends MessageSender<ChatMessageInfo> {
         var participantsNode = buildParticipantsNode(skDistPayloads, skExistingDevices);
         store.signalStore().updateIdentityRange(allDevices);
 
-        var skmsgEncNode = new NodeBuilder()
+        var skmsgEncNode = new StanzaBuilder()
                 .description("enc")
                 .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                 .attribute("type", MessageEncryptionType.SKMSG.protocolValue())
@@ -233,7 +235,7 @@ final class BroadcastMessageSender extends MessageSender<ChatMessageInfo> {
         var metaNode = metaStanza.buildChat(broadcastJid, container, null);
         var reportingNode = reportingStanza.build(messageInfo, selfJid, broadcastJid);
 
-        var stanza = new NodeBuilder()
+        var stanza = new StanzaBuilder()
                 .description("message")
                 .attribute("id", messageId)
                 .attribute("to", broadcastJid)
@@ -335,32 +337,32 @@ final class BroadcastMessageSender extends MessageSender<ChatMessageInfo> {
      * @param skDistPayloads    the per-device sender-key distribution payloads
      *                          for devices that did not hold the key
      * @param skExistingDevices the device JIDs that already hold the sender key
-     * @return the assembled {@code <participants>} {@link Node}, or {@code null}
+     * @return the assembled {@code <participants>} {@link Stanza}, or {@code null}
      *         when no entries apply
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendBroadcastMsg",
             exports = "genBroadcastMessageBody", adaptation = WhatsAppAdaptation.ADAPTED)
-    private Node buildParticipantsNode(List<MessageEncryptedPayload> skDistPayloads,
-                                       List<Jid> skExistingDevices) {
-        var children = new ArrayList<Node>(skDistPayloads.size() + skExistingDevices.size());
+    private Stanza buildParticipantsNode(List<MessageEncryptedPayload> skDistPayloads,
+                                         List<Jid> skExistingDevices) {
+        var children = new ArrayList<Stanza>(skDistPayloads.size() + skExistingDevices.size());
         for (var payload : skDistPayloads) {
             if (payload.recipientJid() == null) {
                 continue;
             }
-            var encNode = new NodeBuilder()
+            var encNode = new StanzaBuilder()
                     .description("enc")
                     .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
                     .attribute("type", payload.type().protocolValue())
                     .content(payload.ciphertext())
                     .build();
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description("to")
                     .attribute("jid", payload.recipientJid())
                     .content(encNode)
                     .build());
         }
         for (var device : skExistingDevices) {
-            children.add(new NodeBuilder()
+            children.add(new StanzaBuilder()
                     .description("to")
                     .attribute("jid", device)
                     .build());
@@ -368,7 +370,7 @@ final class BroadcastMessageSender extends MessageSender<ChatMessageInfo> {
         if (children.isEmpty()) {
             return null;
         }
-        return new NodeBuilder()
+        return new StanzaBuilder()
                 .description("participants")
                 .content(children)
                 .build();

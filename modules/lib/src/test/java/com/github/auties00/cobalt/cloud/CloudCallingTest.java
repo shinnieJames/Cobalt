@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.model.cloud.CloudCallHours;
 import com.github.auties00.cobalt.model.cloud.CloudCallSession;
 import com.github.auties00.cobalt.model.cloud.CloudCallSettings;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.store.cloud.CloudWhatsAppStoreFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -34,15 +35,15 @@ class CloudCallingTest {
         return new RecordingHttpClient();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http, CloudApiVersion version) {
-        return CloudWhatsAppClient.builder()
+    private static CloudWhatsAppClient client(RecordingHttpClient http, CloudApiVersion version) throws Exception {
+        return CloudWhatsAppClient.builder(CloudWhatsAppStoreFactory.temporary())
                 .loadConnection("token", PHONE_ID)
                 .apiVersion(version)
                 .httpClient(http)
                 .build();
     }
 
-    private static CloudWhatsAppClient client(RecordingHttpClient http) {
+    private static CloudWhatsAppClient client(RecordingHttpClient http) throws Exception {
         return client(http, CloudApiVersion.V23_0);
     }
 
@@ -55,7 +56,7 @@ class CloudCallingTest {
     class CallControl {
         @Test
         @DisplayName("connect posts a connect action with an SDP offer and returns the call id")
-        void connect() {
+        void connect() throws Exception {
             var http = http();
             http.respondWith("{\"messaging_product\":\"whatsapp\",\"calls\":[{\"id\":\"wacid.X\"}]}");
             var id = client(http).startCall(RECIPIENT, new CloudCallSession(CloudCallSession.Type.OFFER, "v=0\r\n"), "order-4711");
@@ -72,7 +73,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("connect omits biz_opaque_callback_data when no callback data is given")
-        void connectNoCallback() {
+        void connectNoCallback() throws Exception {
             var http = http();
             http.respondWith("{\"calls\":[{\"id\":\"wacid.Y\"}]}");
             client(http).startCall(RECIPIENT, new CloudCallSession(CloudCallSession.Type.OFFER, "sdp"));
@@ -81,7 +82,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("connect returns empty when the response carries no calls")
-        void connectEmptyResponse() {
+        void connectEmptyResponse() throws Exception {
             var http = http();
             http.respondWith("{\"messaging_product\":\"whatsapp\"}");
             assertTrue(client(http).startCall(RECIPIENT, new CloudCallSession(CloudCallSession.Type.OFFER, "sdp")).isEmpty());
@@ -89,7 +90,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("pre_accept posts a pre_accept action with an SDP answer")
-        void preAccept() {
+        void preAccept() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).preacceptCall("wacid.A", new CloudCallSession(CloudCallSession.Type.ANSWER, "ans"));
@@ -101,7 +102,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("accept posts an accept action with an SDP answer and callback data")
-        void accept() {
+        void accept() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).acceptCall("wacid.B", new CloudCallSession(CloudCallSession.Type.ANSWER, "ans"), "cb");
@@ -114,7 +115,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("reject posts a reject action with no session")
-        void reject() {
+        void reject() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).rejectCall("wacid.C");
@@ -126,7 +127,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("terminate posts a terminate action with no session")
-        void terminate() {
+        void terminate() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).terminateCall("wacid.D");
@@ -142,7 +143,7 @@ class CloudCallingTest {
     class CallPermissions {
         @Test
         @DisplayName("sendCallPermissionRequest posts the interactive permission request")
-        void sendRequest() {
+        void sendRequest() throws Exception {
             var http = http();
             http.respondWith("{\"messages\":[{\"id\":\"wamid.TEST\"}]}");
             var key = client(http).sendCallPermissionRequest(RECIPIENT, "May we call you?");
@@ -159,7 +160,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("queryCallPermission parses permission and actions and sends user_wa_id")
-        void getPermissions() {
+        void getPermissions() throws Exception {
             var http = http();
             http.respondWith("""
                     {"messaging_product":"whatsapp",
@@ -186,7 +187,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("queryCallPermission on a v19 client throws CloudUnsupportedVersionException")
-        void guardRejectsOldVersion() {
+        void guardRejectsOldVersion() throws Exception {
             var http = http();
             var client = client(http, CloudApiVersion.V19_0);
             var exception = assertThrows(WhatsAppCloudException.CloudUnsupportedVersionException.class,
@@ -203,7 +204,7 @@ class CloudCallingTest {
     class CallSettings {
         @Test
         @DisplayName("queryCallSettings maps the full calling object")
-        void getSettings() {
+        void getSettings() throws Exception {
             var http = http();
             http.respondWith("""
                     {"calling":{"status":"ENABLED","call_icon_visibility":"DEFAULT",
@@ -228,7 +229,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("queryCallSettings returns an empty configuration when calling is absent")
-        void getSettingsEmpty() {
+        void getSettingsEmpty() throws Exception {
             var http = http();
             http.respondWith("{}");
             var settings = client(http).queryCallSettings();
@@ -239,7 +240,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("updateCallSettings posts the full calling object")
-        void updateSettings() {
+        void updateSettings() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             var weekly = List.of(new CloudCallHours.WeeklyOperatingHours("MONDAY", "0400", "1020"));
@@ -262,7 +263,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("updateCallSettings with only status omits call_hours and sip")
-        void updateSettingsMinimal() {
+        void updateSettingsMinimal() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             client(http).updateCallSettings(new CloudCallSettings("ENABLED", null, null, null, null, null, null));
@@ -274,7 +275,7 @@ class CloudCallingTest {
 
         @Test
         @DisplayName("updateCallSettings omits holiday_schedule when empty")
-        void updateSettingsNoHolidays() {
+        void updateSettingsNoHolidays() throws Exception {
             var http = http();
             http.respondWith("{\"success\":true}");
             var hours = new CloudCallHours("ENABLED", "America/Manaus",

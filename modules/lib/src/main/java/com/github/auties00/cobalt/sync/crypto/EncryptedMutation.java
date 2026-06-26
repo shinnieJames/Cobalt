@@ -4,8 +4,9 @@ import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.sync.SyncActionDataBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionDataSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionDataBuilder;
+import com.github.auties00.cobalt.model.sync.action.SyncActionDataSpec;
+import com.github.auties00.cobalt.model.sync.action.SyncActionData;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 
@@ -53,7 +54,7 @@ public record EncryptedMutation(
      * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation}, and
      * {@code WAWebSyncdRequestEncode.encodeSyncActionData}:
      * <ul>
-     *   <li>The protobuf encoding of {@link com.github.auties00.cobalt.model.sync.SyncActionData} via
+     *   <li>The protobuf encoding of {@link SyncActionData} via
      *       {@link SyncActionDataSpec#encode}; the WA Web fatal-error WAM
      *       counter is not emitted (Cobalt does not run WAM), but the
      *       throw on serialization failure is preserved as a

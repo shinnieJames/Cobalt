@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.ack;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.stanza.Stanza;
 
 /**
  * Enumerates the stanza classes written into the {@code class} attribute of an outbound
@@ -106,7 +106,7 @@ public enum AckClass {
      * <p>Returns {@code null} for an absent or unrecognised token, including the inbound-only
      * {@code "smax"} variant, so the caller can drop the stanza or surface a warning.
      *
-     * @param token the {@code class} attribute value off an inbound {@link Node}, or {@code null}
+     * @param token the {@code class} attribute value off an inbound {@link Stanza}, or {@code null}
      *              when absent
      * @return the matching {@code AckClass}, or {@code null} when {@code token} is not one of the
      *         four supported values

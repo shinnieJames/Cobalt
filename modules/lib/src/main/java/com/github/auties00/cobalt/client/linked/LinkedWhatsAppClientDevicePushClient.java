@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.registration.push.NoopMobilePushClient;
 import com.github.auties00.cobalt.registration.push.apns.ApnsClient;
 import com.github.auties00.cobalt.registration.push.fcm.FcmClient;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 
 import java.util.Set;
 
@@ -35,7 +36,7 @@ import java.util.Set;
  * is used for Android devices and an APNS-based implementation for iOS
  * devices, but both expose the same surface and are kept stateful by the
  * embedder so neither method needs the live
- * {@link com.github.auties00.cobalt.store.LinkedWhatsAppStore} as input.
+ * {@link LinkedWhatsAppStore} as input.
  *
  * @apiNote
  * Implementations are not required to be stateless or thread-safe: the
