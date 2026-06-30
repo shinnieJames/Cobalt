@@ -22,16 +22,16 @@ public class TextMessageTest {
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
         scanner.nextLine();
-//        System.out.println("Enter the proxy address (format: " + YunsuoProxyParser.INPUT_EXAMPLE + "): ");
-//        var proxyUri = YunsuoProxyParser.parse(scanner.nextLine().trim());
+        System.out.println("Enter the proxy address (format: " + YunsuoProxyParser.INPUT_EXAMPLE + "): ");
+        var proxyUri = YunsuoProxyParser.parse(scanner.nextLine().trim());
         var targetPhone = 60102619686L;
 
         WhatsAppClient whatsapp = WhatsAppClient.builder()
                 .mobileClient()
                 .loadConnection(WhatsAppClientSixPartsKeys.of(sixParts))
-                .proxy(null)
+                .proxy(proxyUri)
                 .device(JidCompanion.ios(business))
-                .name("yunsuo")
+//                .name("yunsuo")
                 .registered()
                 .orElseThrow();
 
