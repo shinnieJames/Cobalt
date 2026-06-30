@@ -143,7 +143,7 @@ public final class PlayStoreUtils {
      * are their stringified forms, dumped from a Google Play system image on the
      * Android Studio emulator (x86_64).
      */
-    private static final String DEVICE_PROFILE_RESOURCE = "/android-device-profiles/sdk-gphone64-x86_64.json";
+    private static final String DEVICE_PROFILE_RESOURCE = "/com/github/auties00/cobalt/util/sdk-gphone64-x86_64.json";
 
     /**
      * Holds the emulator-derived x86_64 device profile loaded from

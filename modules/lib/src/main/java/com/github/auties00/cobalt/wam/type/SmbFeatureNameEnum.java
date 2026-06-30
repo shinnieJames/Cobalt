@@ -29,5 +29,7 @@ public enum SmbFeatureNameEnum {
     @WamEnumConstant(18) AUTHORIZED_AGENT,
     @WamEnumConstant(19) BUSINESS_TOOLS_REC_CARD,
     @WamEnumConstant(20) LISTS_CREATION,
-    @WamEnumConstant(21) LIST_APPLICATION
+    @WamEnumConstant(21) LIST_APPLICATION,
+    @WamEnumConstant(22) SEND_QUICK_REPLY,
+    @WamEnumConstant(23) STATUS_CROSSPOST
 }

@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.ExportResultType;
 import com.github.auties00.cobalt.wam.type.MessageChatType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChatExportWamEvent")
 @WamEvent(id = 7734)
@@ -20,19 +20,19 @@ public interface ChatExportEvent extends WamEventSpec {
     Optional<MessageChatType> chatType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt exportDateRangeUsed();
+    OptionalLong exportDateRangeUsed();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt exportDurationMs();
+    OptionalLong exportDurationMs();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> exportErrorReason();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt exportFileSizeBytes();
+    OptionalLong exportFileSizeBytes();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt exportMessageCount();
+    OptionalLong exportMessageCount();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<ExportModeType> exportMode();
@@ -41,5 +41,5 @@ public interface ChatExportEvent extends WamEventSpec {
     Optional<ExportResultType> exportResult();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt mediaCount();
+    OptionalLong mediaCount();
 }

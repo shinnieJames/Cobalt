@@ -23,7 +23,7 @@ import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebIncomingMessageDropWamEvent")
 @WamEvent(id = 3724)
@@ -74,13 +74,13 @@ public interface IncomingMessageDropEvent extends WamEventSpec {
     Optional<Boolean> offline();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt offlineCount();
+    OptionalLong offlineCount();
 
     @WamProperty(index = 22, type = WamType.BOOLEAN)
     Optional<Boolean> processingDeferred();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<RevokeType> revokeType();

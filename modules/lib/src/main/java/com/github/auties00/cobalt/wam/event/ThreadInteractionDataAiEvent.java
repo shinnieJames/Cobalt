@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AiChatOriginsType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebThreadInteractionDataAiWamEvent")
 @WamEvent(id = 6410)
@@ -21,55 +21,55 @@ public interface ThreadInteractionDataAiEvent extends WamEventSpec {
     Optional<String> aiDiscoveryTab();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt bottomSheetAnimatedSent();
+    OptionalLong bottomSheetAnimatedSent();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt bottomSheetEditedAnimatedSent();
+    OptionalLong bottomSheetEditedAnimatedSent();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt bottomSheetEditedSent();
+    OptionalLong bottomSheetEditedSent();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt bottomSheetImagesGenerated();
+    OptionalLong bottomSheetImagesGenerated();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt bottomSheetMemuInitiated();
+    OptionalLong bottomSheetMemuInitiated();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt bottomSheetMemuMessagesSent();
+    OptionalLong bottomSheetMemuMessagesSent();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt bottomSheetMessagesSent();
+    OptionalLong bottomSheetMessagesSent();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt bottomSheetPromptsInitiated();
+    OptionalLong bottomSheetPromptsInitiated();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt bottomSheetRegeneratedSent();
+    OptionalLong bottomSheetRegeneratedSent();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt commandSheetShow();
+    OptionalLong commandSheetShow();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt imagineCommandClick();
+    OptionalLong imagineCommandClick();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt imagineMeMessagesSent();
+    OptionalLong imagineMeMessagesSent();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt imagineMePromptsInitiatedCount();
+    OptionalLong imagineMePromptsInitiatedCount();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt metaAiMentionClick();
+    OptionalLong metaAiMentionClick();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt metaAiMentionShow();
+    OptionalLong metaAiMentionShow();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt suggestionPromptsClick();
+    OptionalLong suggestionPromptsClick();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt suggestionPromptsShow();
+    OptionalLong suggestionPromptsShow();
 
     @WamProperty(index = 28, type = WamType.STRING)
     Optional<String> threadCreationDate();
@@ -84,8 +84,8 @@ public interface ThreadInteractionDataAiEvent extends WamEventSpec {
     Optional<String> threadIdByLid();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt totalMessageFromAgentCnt();
+    OptionalLong totalMessageFromAgentCnt();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt totalMessageToAgentCnt();
+    OptionalLong totalMessageToAgentCnt();
 }

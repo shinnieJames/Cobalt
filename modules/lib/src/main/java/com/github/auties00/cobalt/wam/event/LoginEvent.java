@@ -18,7 +18,7 @@ import com.github.auties00.cobalt.wam.type.StreamSocketProviderType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLoginWamEvent")
 @WamEvent(id = 460)
@@ -30,7 +30,7 @@ public interface LoginEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<ConnectionOriginType> connectionOrigin();
@@ -69,44 +69,44 @@ public interface LoginEvent extends WamEventSpec {
     Optional<Instant> loginT();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt logoutSessionId();
+    OptionalLong logoutSessionId();
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> longConnect();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt mnsDnsCacheAge();
+    OptionalLong mnsDnsCacheAge();
 
     @WamProperty(index = 24, type = WamType.BOOLEAN)
     Optional<Boolean> networkIsVpn();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt noiseProtocolVersion();
+    OptionalLong noiseProtocolVersion();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt numIpv4Addresses();
+    OptionalLong numIpv4Addresses();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt numIpv6Addresses();
+    OptionalLong numIpv6Addresses();
 
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> passive();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt pendingAcksCount();
+    OptionalLong pendingAcksCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt sequenceStep();
+    OptionalLong sequenceStep();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt serverErrorCode();
+    OptionalLong serverErrorCode();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt unprocessedMessageCount();
+    OptionalLong unprocessedMessageCount();
 }

@@ -31,7 +31,7 @@ import java.util.Set;
  * the peer-message buffer and the UTM read-tracking set.
  *
  * <p>The chat, newsletter, status and message accessors are backed differently by each persistence
- * strategy (LMDB-backed metadata for the persistent store, fully in-memory for the temporary store),
+ * strategy (MVStore-backed metadata for the persistent store, fully in-memory for the temporary store),
  * so they are implemented per-variant; the remaining state is strategy-independent.
  *
  * @apiNote

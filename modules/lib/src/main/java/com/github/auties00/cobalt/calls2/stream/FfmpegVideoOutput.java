@@ -20,17 +20,19 @@ import java.util.Objects;
 
 /**
  * Provides the FFmpeg-backed base of the demuxed-media video sources of a call, decoding the video track
- * of an input into the call's {@link VideoPixelFormat#I420 I420} frames at the advertised geometry.
+ * of an input into the call's {@link VideoPixelFormat#I420 I420} frames at the input's detected geometry.
  *
  * <p>This is the shared engine of {@link FileVideoOutput} (a local media file) and {@link UriVideoOutput}
- * (a media stream addressed by URI). A subclass supplies the advertised geometry and how the input is
- * opened, through the {@link Opener} it passes to the constructor; everything downstream of the opened
- * demuxer is identical and lives here: picking the first video stream, recording its time base for
- * timestamp rescaling, opening its decoder, decoding each packet, and converting each decoded picture to
- * I420 at the advertised {@link #width()} by {@link #height()} geometry with libswscale. Each frame's
- * presentation timestamp is rescaled from the stream's native time base to microseconds. End-of-stream is
- * signalled by {@link #take()} returning {@code null}, and {@link #shutdown()} releases the native
- * demuxer, decoder, and scaler.
+ * (a media stream addressed by URI). A subclass supplies only how the input is opened, through the
+ * {@link Opener} it hands to the shared {@link #openInput(Duration, Opener)} probe; the advertised geometry
+ * is the input's own native pixel geometry, capped to {@code 1280} on the longer side and rounded to even,
+ * detected by that probe rather than supplied by the subclass. Everything downstream of the opened demuxer
+ * is identical and lives here: picking the first video stream, recording its time base for timestamp
+ * rescaling, opening its decoder, decoding each packet, and converting each decoded picture to I420 at the
+ * detected {@link #width()} by {@link #height()} geometry with libswscale. Each frame's presentation
+ * timestamp is rescaled from the stream's native time base to microseconds. End-of-stream is signalled by
+ * {@link #take()} returning {@code null}, and {@link #shutdown()} releases the native demuxer, decoder, and
+ * scaler.
  *
  * <p>Unlike the audio base, this source decodes inline on the engine's drain thread rather than ahead of
  * it: the call engine's capture loop paces the outbound video to wall-clock using each frame's
@@ -159,64 +161,33 @@ public sealed class FfmpegVideoOutput extends BufferedVideoOutput
     private int swsFmt;
 
     /**
-     * Opens the input through the given opener at the given advertised geometry and prepares the video
-     * decode pipeline.
+     * Adopts the native handles of an already-opened input and advertises its detected geometry.
      *
-     * <p>Ensures the FFmpeg libraries are loaded, allocates the lifetime arena and the timeout watchdog,
-     * opens and probes the input through {@code opener}, picks its first video stream, records that
-     * stream's time base for timestamp rescaling, and opens a decoder for its codec. If any step fails the
-     * arena is closed before the exception propagates, so a failed construction leaks no native resources.
+     * <p>The shared {@link #openInput(Duration, Opener)} probe runs the whole open-and-decode-prepare
+     * sequence ahead of this constructor and reports the input's detected pixel geometry, capped to
+     * {@code 1280} on the longer side, through the {@link OpenedInput} it returns; this constructor
+     * advertises that geometry to the engine at a fixed {@code 30} frames per second and adopts the probe's
+     * demuxer, decoder, packet, and frame handles together with its arena, watchdog, time base, and read
+     * timeout. The probe already releases its arena on any open failure, so reaching this constructor means
+     * the pipeline is ready and nothing leaks here.
      *
-     * @param width       the advertised frame width in pixels; even and at least {@code 2}
-     * @param height      the advertised frame height in pixels; even and at least {@code 2}
-     * @param fps         the target frame rate; at least {@code 1}
-     * @param bitrateBps  the target encoder bitrate in bits per second; at least {@code 1}
-     * @param readTimeout the maximum time a single blocking demux read may take, or {@code null} for a
-     *                    non-blocking input that needs no read timeout
-     * @param opener      the strategy that opens and probes the input demuxer
-     * @throws NullPointerException     if {@code opener} is {@code null}
-     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if the input cannot be opened, has no video stream, or its decoder
-     *                                  cannot be initialized
+     * @param in         the opened-and-probed input whose detected geometry and native handles this source
+     *                   adopts
+     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
+     * @throws IllegalArgumentException if {@code bitrateBps} is below {@code 1}
      */
-    protected FfmpegVideoOutput(int width, int height, int fps, int bitrateBps,
-                                Duration readTimeout, Opener opener) {
-        super(width, height, fps, bitrateBps);
-        Objects.requireNonNull(opener, "opener cannot be null");
-        FFmpegLoader.ensureLoaded();
-        this.readTimeout = readTimeout;
-        this.arena = Arena.ofShared();
-        this.watchdog = new FfmpegIoWatchdog(arena);
-        try {
-            this.formatCtx = opener.open(arena, watchdog);
-            this.streamIndex = pickVideoStream(formatCtx);
-            if (streamIndex < 0) {
-                throw new IllegalStateException("no video stream in input");
-            }
-            var stream = streamPointer(formatCtx, streamIndex);
-            var tb = AVStream.time_base(stream);
-            this.timeBaseNum = AVRational.num(tb);
-            this.timeBaseDen = AVRational.den(tb);
-            var params = AVStream.codecpar(stream);
-            var codecId = AVCodecParameters.codec_id(params);
-            var codec = FFmpegError.requireNonNull(
-                    "avcodec_find_decoder(" + codecId + ")",
-                    Ffmpeg.avcodec_find_decoder(codecId));
-            this.codecCtx = FFmpegError.requireNonNull(
-                    "avcodec_alloc_context3",
-                    Ffmpeg.avcodec_alloc_context3(codec));
-            FFmpegError.check("avcodec_parameters_to_context",
-                    Ffmpeg.avcodec_parameters_to_context(codecCtx, params));
-            FFmpegError.check("avcodec_open2",
-                    Ffmpeg.avcodec_open2(codecCtx, codec, MemorySegment.NULL));
-
-            this.packet = FFmpegError.requireNonNull("av_packet_alloc", Ffmpeg.av_packet_alloc());
-            this.frame = FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
-        } catch (RuntimeException e) {
-            arena.close();
-            throw e;
-        }
+    protected FfmpegVideoOutput(OpenedInput in, int bitrateBps) {
+        super(in.width(), in.height(), 30, bitrateBps);
+        this.readTimeout = in.readTimeout();
+        this.watchdog = in.watchdog();
+        this.arena = in.arena();
+        this.formatCtx = in.formatCtx();
+        this.codecCtx = in.codecCtx();
+        this.packet = in.packet();
+        this.frame = in.frame();
+        this.streamIndex = in.streamIndex();
+        this.timeBaseNum = in.timeBaseNum();
+        this.timeBaseDen = in.timeBaseDen();
     }
 
     /**
@@ -495,5 +466,139 @@ public sealed class FfmpegVideoOutput extends BufferedVideoOutput
                 .reinterpret((long) n * ValueLayout.ADDRESS.byteSize());
         return streamsArr.getAtIndex(ValueLayout.ADDRESS, index)
                 .reinterpret(AVStream.layout().byteSize());
+    }
+
+    /**
+     * Opens and decode-prepares an input through the given opener and reports its detected geometry and
+     * native handles.
+     *
+     * <p>Ensures the FFmpeg libraries are loaded, allocates the lifetime arena and the timeout watchdog,
+     * opens and probes the input through {@code opener}, picks its first video stream, records that stream's
+     * time base for timestamp rescaling, reads the stream's native pixel geometry, opens a decoder for its
+     * codec, and allocates the reusable packet and frame. The reported geometry is the native geometry
+     * passed through {@link #capGeometry(int, int)}, so the source advertises the input's own resolution
+     * capped to {@code 1280} on the longer side rather than a fixed default. If any step fails the arena is
+     * closed before the exception propagates, so a failed probe leaks no native resource.
+     *
+     * <p>This probe runs inside the {@code super(...)} argument of a subclass constructor, so its result
+     * feeds the {@link FfmpegVideoOutput#FfmpegVideoOutput(OpenedInput, int)} constructor without a flexible
+     * constructor body: the input must be fully opened before {@code super} runs because the advertised
+     * geometry is only known after the stream is probed.
+     *
+     * @param readTimeout the maximum time a single blocking demux read may take, recorded for the read loop,
+     *                    or {@code null} for a non-blocking input that needs no read timeout
+     * @param opener      the strategy that opens and probes the input demuxer
+     * @return the opened input's detected geometry and native handles
+     * @throws NullPointerException  if {@code opener} is {@code null}
+     * @throws IllegalStateException if the input cannot be opened, has no video stream, or its decoder
+     *                               cannot be initialized
+     */
+    protected static OpenedInput openInput(Duration readTimeout, Opener opener) {
+        Objects.requireNonNull(opener, "opener cannot be null");
+        FFmpegLoader.ensureLoaded();
+        var arena = Arena.ofShared();
+        var watchdog = new FfmpegIoWatchdog(arena);
+        try {
+            var formatCtx = opener.open(arena, watchdog);
+            var streamIndex = pickVideoStream(formatCtx);
+            if (streamIndex < 0) {
+                throw new IllegalStateException("no video stream in input");
+            }
+            var stream = streamPointer(formatCtx, streamIndex);
+            var tb = AVStream.time_base(stream);
+            var timeBaseNum = AVRational.num(tb);
+            var timeBaseDen = AVRational.den(tb);
+            var params = AVStream.codecpar(stream);
+            var nativeWidth = AVCodecParameters.width(params);
+            var nativeHeight = AVCodecParameters.height(params);
+            var codecId = AVCodecParameters.codec_id(params);
+            var codec = FFmpegError.requireNonNull(
+                    "avcodec_find_decoder(" + codecId + ")",
+                    Ffmpeg.avcodec_find_decoder(codecId));
+            var codecCtx = FFmpegError.requireNonNull(
+                    "avcodec_alloc_context3",
+                    Ffmpeg.avcodec_alloc_context3(codec));
+            FFmpegError.check("avcodec_parameters_to_context",
+                    Ffmpeg.avcodec_parameters_to_context(codecCtx, params));
+            FFmpegError.check("avcodec_open2",
+                    Ffmpeg.avcodec_open2(codecCtx, codec, MemorySegment.NULL));
+            var packet = FFmpegError.requireNonNull("av_packet_alloc", Ffmpeg.av_packet_alloc());
+            var frame = FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
+            var capped = capGeometry(nativeWidth, nativeHeight);
+            return new OpenedInput(capped[0], capped[1], readTimeout, watchdog, arena, formatCtx,
+                    codecCtx, packet, frame, streamIndex, timeBaseNum, timeBaseDen);
+        } catch (RuntimeException e) {
+            arena.close();
+            throw e;
+        }
+    }
+
+    /**
+     * Caps a native pixel geometry to the engine's maximum encoded resolution, preserving aspect ratio.
+     *
+     * <p>Returns the geometry rounded down to even when neither dimension exceeds {@code 1280}; otherwise
+     * scales the longer dimension down to {@code 1280} and the shorter dimension proportionally, then rounds
+     * both down to the nearest even value of at least {@code 2}. H264 requires even dimensions, and capping
+     * the longer side bounds the encode cost of a high-resolution source while keeping its aspect ratio, so
+     * a 16:9 input is advertised as 16:9 rather than squished to a fixed 4:3 default.
+     *
+     * @param width  the native pixel width
+     * @param height the native pixel height
+     * @return a two-element array of the capped, even {@code [width, height]}
+     */
+    private static int[] capGeometry(int width, int height) {
+        if (Math.max(width, height) <= 1280) {
+            return new int[]{evenDown(width), evenDown(height)};
+        }
+        int cappedWidth;
+        int cappedHeight;
+        if (width >= height) {
+            cappedWidth = 1280;
+            cappedHeight = (int) Math.round((double) height * 1280 / width);
+        } else {
+            cappedHeight = 1280;
+            cappedWidth = (int) Math.round((double) width * 1280 / height);
+        }
+        return new int[]{evenDown(cappedWidth), evenDown(cappedHeight)};
+    }
+
+    /**
+     * Rounds a dimension down to the nearest even value of at least {@code 2}.
+     *
+     * @param value the dimension to round
+     * @return the largest even value not exceeding {@code value}, or {@code 2} when that would be below
+     *         {@code 2}
+     */
+    private static int evenDown(int value) {
+        return Math.max(2, value & ~1);
+    }
+
+    /**
+     * Carries the detected geometry and native handles of an input opened by
+     * {@link #openInput(Duration, Opener)}.
+     *
+     * <p>Lets the probe run the full open-and-probe sequence before the
+     * {@link FfmpegVideoOutput#FfmpegVideoOutput(OpenedInput, int)} constructor runs, so the constructor can
+     * advertise the detected geometry through {@code super(...)} and then adopt the native handles, without
+     * a flexible constructor body.
+     *
+     * @param width       the advertised frame width in pixels, capped and even
+     * @param height      the advertised frame height in pixels, capped and even
+     * @param readTimeout the maximum time a single blocking demux read may take, or {@code null} for a
+     *                    non-blocking input
+     * @param watchdog    the timeout watchdog the opener installed and the read loop arms
+     * @param arena       the arena owning every native allocation the open made
+     * @param formatCtx   the libavformat demuxer context pointer
+     * @param codecCtx    the libavcodec decoder context pointer
+     * @param packet      the reusable demuxer packet pointer
+     * @param frame       the reusable decoder output frame pointer
+     * @param streamIndex the index of the chosen video stream
+     * @param timeBaseNum the numerator of the chosen stream's time base
+     * @param timeBaseDen the denominator of the chosen stream's time base
+     */
+    private record OpenedInput(int width, int height, Duration readTimeout, FfmpegIoWatchdog watchdog,
+                               Arena arena, MemorySegment formatCtx, MemorySegment codecCtx,
+                               MemorySegment packet, MemorySegment frame, int streamIndex,
+                               int timeBaseNum, int timeBaseDen) {
     }
 }

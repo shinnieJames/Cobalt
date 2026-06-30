@@ -1,6 +1,5 @@
 package com.github.auties00.cobalt.store.linked.protobuf;
 
-import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
@@ -32,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.SequencedCollection;
 import java.util.Set;
@@ -59,12 +59,6 @@ import static java.util.Objects.requireNonNullElseGet;
 @ProtobufMessage
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public final class ProtobufLinkedWhatsAppSyncStore implements LinkedWhatsAppSyncStore {
-    /**
-     * The history-sync policy governing how much prior chat history the server may push.
-     */
-    @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
-    private WhatsAppWebClientHistory webHistoryPolicy;
-
     /**
      * Whether app-state patch MACs are verified during sync.
      */
@@ -213,14 +207,69 @@ public final class ProtobufLinkedWhatsAppSyncStore implements LinkedWhatsAppSync
     private final ConcurrentMap<SyncPatchType, OrphanMutationEntries> orphanMutationEntriesMap;
 
     /**
-     * Whether the primary device allows all mutations from this companion; not persisted.
+     * Whether the primary device allows all mutations from this companion.
      */
-    private boolean primaryAllowsAllMutations;
+    @ProtobufProperty(index = 24, type = ProtobufType.BOOL)
+    boolean primaryAllowsAllMutations;
+
+    /**
+     * Whether the companion advertises a full history sync during pairing.
+     */
+    @ProtobufProperty(index = 25, type = ProtobufType.BOOL)
+    boolean fullHistorySyncRequired;
+
+    /**
+     * Whether the decoded history payload is trimmed on receipt.
+     */
+    @ProtobufProperty(index = 26, type = ProtobufType.BOOL)
+    boolean historyDiscarded;
+
+    /**
+     * Whether the newsletter list is bootstrapped after login; defaults to {@code true} when unset.
+     */
+    @ProtobufProperty(index = 27, type = ProtobufType.BOOL)
+    Boolean historyNewsletters;
+
+    /**
+     * The advertised full-sync day window, or {@code null}.
+     */
+    @ProtobufProperty(index = 28, type = ProtobufType.UINT32)
+    Integer historyFullSyncDays;
+
+    /**
+     * The advertised storage budget in megabytes, or {@code null}.
+     */
+    @ProtobufProperty(index = 29, type = ProtobufType.UINT32)
+    Integer historyStorageQuotaMb;
+
+    /**
+     * The advertised recent-sync day window, or {@code null}.
+     */
+    @ProtobufProperty(index = 30, type = ProtobufType.UINT32)
+    Integer historyRecentSyncDays;
+
+    /**
+     * The advertised thumbnail-sync day window, or {@code null}.
+     */
+    @ProtobufProperty(index = 31, type = ProtobufType.UINT32)
+    Integer historyThumbnailSyncDays;
+
+    /**
+     * The advertised maximum messages per chat in the initial sync, or {@code null}.
+     */
+    @ProtobufProperty(index = 32, type = ProtobufType.UINT32)
+    Integer historyMaxMessagesPerChat;
+
+    /**
+     * Whether the primary device has granted the companion complete on-demand access to the message
+     * history (the desktop "all chat history" setting).
+     */
+    @ProtobufProperty(index = 33, type = ProtobufType.BOOL)
+    boolean completeHistoryAccessGranted;
 
     /**
      * Constructs a sync sub-store and resets every collection's runtime state-machine fields.
      *
-     * @param webHistoryPolicy                   the history policy, or {@code null}
      * @param checkPatchMacs                     whether to verify patch MACs
      * @param syncedChats                        whether chats have synced
      * @param syncedContacts                     whether contacts have synced
@@ -243,9 +292,18 @@ public final class ProtobufLinkedWhatsAppSyncStore implements LinkedWhatsAppSync
      * @param groupAbPropsRefreshId              the group-scoped refresh id
      * @param webAppStateCollections             the per-collection metadata map, or {@code null} for an empty map
      * @param pendingDeviceSyncs                 the pending device syncs, or {@code null} for an empty list
+     * @param primaryAllowsAllMutations          whether the primary allows all mutations
+     * @param fullHistorySyncRequired            whether the companion requests a full sync
+     * @param historyDiscarded                   whether the decoded payload is trimmed on receipt
+     * @param historyNewsletters                 whether newsletters are bootstrapped, or {@code null} for the default
+     * @param historyFullSyncDays                the full-sync day window, or {@code null}
+     * @param historyStorageQuotaMb              the storage quota in megabytes, or {@code null}
+     * @param historyRecentSyncDays              the recent-sync day window, or {@code null}
+     * @param historyThumbnailSyncDays           the thumbnail-sync day window, or {@code null}
+     * @param historyMaxMessagesPerChat          the per-chat message cap, or {@code null}
+     * @param completeHistoryAccessGranted       whether the primary granted complete history access
      */
-    ProtobufLinkedWhatsAppSyncStore(WhatsAppWebClientHistory webHistoryPolicy, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedBusinessCertificate, LinkedHashMap<String, AppStateSyncKey> appStateKeysMap, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeysMap, boolean primaryDeviceSupportsSyncdRecovery, boolean externalWebBeta, List<String> primaryFeatures, long clockSkewSeconds, Instant groupAbPropsEmergencyPushTimestamp, String abPropsAbKey, String abPropsHash, long abPropsRefresh, Instant abPropsLastSyncTime, long abPropsRefreshId, long abPropsWebRefreshId, long groupAbPropsRefreshId, ConcurrentMap<SyncPatchType, SyncCollectionMetadata> webAppStateCollections, List<PendingDeviceSync> pendingDeviceSyncs) {
-        this.webHistoryPolicy = webHistoryPolicy;
+    ProtobufLinkedWhatsAppSyncStore(boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedBusinessCertificate, LinkedHashMap<String, AppStateSyncKey> appStateKeysMap, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeysMap, boolean primaryDeviceSupportsSyncdRecovery, boolean externalWebBeta, List<String> primaryFeatures, long clockSkewSeconds, Instant groupAbPropsEmergencyPushTimestamp, String abPropsAbKey, String abPropsHash, long abPropsRefresh, Instant abPropsLastSyncTime, long abPropsRefreshId, long abPropsWebRefreshId, long groupAbPropsRefreshId, ConcurrentMap<SyncPatchType, SyncCollectionMetadata> webAppStateCollections, List<PendingDeviceSync> pendingDeviceSyncs, boolean primaryAllowsAllMutations, boolean fullHistorySyncRequired, boolean historyDiscarded, Boolean historyNewsletters, Integer historyFullSyncDays, Integer historyStorageQuotaMb, Integer historyRecentSyncDays, Integer historyThumbnailSyncDays, Integer historyMaxMessagesPerChat, boolean completeHistoryAccessGranted) {
         this.checkPatchMacs = checkPatchMacs;
         this.syncedChats = syncedChats;
         this.syncedContacts = syncedContacts;
@@ -276,6 +334,16 @@ public final class ProtobufLinkedWhatsAppSyncStore implements LinkedWhatsAppSync
         this.pendingDeviceSyncs = pendingDeviceSyncs == null
                 ? new CopyOnWriteArrayList<>()
                 : new CopyOnWriteArrayList<>(pendingDeviceSyncs);
+        this.primaryAllowsAllMutations = primaryAllowsAllMutations;
+        this.fullHistorySyncRequired = fullHistorySyncRequired;
+        this.historyDiscarded = historyDiscarded;
+        this.historyNewsletters = historyNewsletters;
+        this.historyFullSyncDays = historyFullSyncDays;
+        this.historyStorageQuotaMb = historyStorageQuotaMb;
+        this.historyRecentSyncDays = historyRecentSyncDays;
+        this.historyThumbnailSyncDays = historyThumbnailSyncDays;
+        this.historyMaxMessagesPerChat = historyMaxMessagesPerChat;
+        this.completeHistoryAccessGranted = completeHistoryAccessGranted;
         this.webAppStatePendingMutations = new ConcurrentHashMap<>();
         this.syncActionEntries = new ConcurrentHashMap<>();
         this.orphanMutationEntriesMap = new ConcurrentHashMap<>();
@@ -309,13 +377,101 @@ public final class ProtobufLinkedWhatsAppSyncStore implements LinkedWhatsAppSync
     }
 
     @Override
-    public Optional<WhatsAppWebClientHistory> webHistoryPolicy() {
-        return Optional.ofNullable(webHistoryPolicy);
+    public boolean isFullHistorySyncRequired() {
+        return fullHistorySyncRequired;
     }
 
     @Override
-    public LinkedWhatsAppSyncStore setWebHistoryPolicy(WhatsAppWebClientHistory webHistoryPolicy) {
-        this.webHistoryPolicy = webHistoryPolicy;
+    public LinkedWhatsAppSyncStore setFullHistorySyncRequired(boolean fullSyncRequired) {
+        this.fullHistorySyncRequired = fullSyncRequired;
+        return this;
+    }
+
+    @Override
+    public boolean isHistoryDiscarded() {
+        return historyDiscarded;
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setHistoryDiscarded(boolean discarded) {
+        this.historyDiscarded = discarded;
+        return this;
+    }
+
+    @Override
+    public boolean hasHistoryNewsletters() {
+        return historyNewsletters == null || historyNewsletters;
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setHistoryNewsletters(boolean newsletters) {
+        this.historyNewsletters = newsletters;
+        return this;
+    }
+
+    @Override
+    public OptionalInt historyFullSyncDays() {
+        return historyFullSyncDays == null ? OptionalInt.empty() : OptionalInt.of(historyFullSyncDays);
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setHistoryFullSyncDays(Integer days) {
+        this.historyFullSyncDays = days;
+        return this;
+    }
+
+    @Override
+    public OptionalInt historyStorageQuotaMb() {
+        return historyStorageQuotaMb == null ? OptionalInt.empty() : OptionalInt.of(historyStorageQuotaMb);
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setHistoryStorageQuotaMb(Integer storageQuotaMb) {
+        this.historyStorageQuotaMb = storageQuotaMb;
+        return this;
+    }
+
+    @Override
+    public OptionalInt historyRecentSyncDays() {
+        return historyRecentSyncDays == null ? OptionalInt.empty() : OptionalInt.of(historyRecentSyncDays);
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setHistoryRecentSyncDays(Integer days) {
+        this.historyRecentSyncDays = days;
+        return this;
+    }
+
+    @Override
+    public OptionalInt historyThumbnailSyncDays() {
+        return historyThumbnailSyncDays == null ? OptionalInt.empty() : OptionalInt.of(historyThumbnailSyncDays);
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setHistoryThumbnailSyncDays(Integer days) {
+        this.historyThumbnailSyncDays = days;
+        return this;
+    }
+
+    @Override
+    public OptionalInt historyMaxMessagesPerChat() {
+        return historyMaxMessagesPerChat == null ? OptionalInt.empty() : OptionalInt.of(historyMaxMessagesPerChat);
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setHistoryMaxMessagesPerChat(Integer count) {
+        this.historyMaxMessagesPerChat = count;
+        return this;
+    }
+
+    @Override
+    public boolean isCompleteHistoryAccessGranted() {
+        return completeHistoryAccessGranted;
+    }
+
+    @Override
+    public LinkedWhatsAppSyncStore setCompleteHistoryAccessGranted(boolean granted) {
+        this.completeHistoryAccessGranted = granted;
         return this;
     }
 
@@ -986,7 +1142,6 @@ public final class ProtobufLinkedWhatsAppSyncStore implements LinkedWhatsAppSync
                && abPropsRefreshId == that.abPropsRefreshId
                && abPropsWebRefreshId == that.abPropsWebRefreshId
                && groupAbPropsRefreshId == that.groupAbPropsRefreshId
-               && Objects.equals(webHistoryPolicy, that.webHistoryPolicy)
                && Objects.equals(appStateKeysMap, that.appStateKeysMap)
                && Objects.equals(missingSyncKeysMap, that.missingSyncKeysMap)
                && Objects.equals(primaryFeatures, that.primaryFeatures)
@@ -996,16 +1151,29 @@ public final class ProtobufLinkedWhatsAppSyncStore implements LinkedWhatsAppSync
                && Objects.equals(abPropsLastSyncTime, that.abPropsLastSyncTime)
                && Objects.equals(webAppStateCollections, that.webAppStateCollections)
                && Objects.equals(pendingDeviceSyncs, that.pendingDeviceSyncs)
+               && primaryAllowsAllMutations == that.primaryAllowsAllMutations
+               && fullHistorySyncRequired == that.fullHistorySyncRequired
+               && historyDiscarded == that.historyDiscarded
+               && completeHistoryAccessGranted == that.completeHistoryAccessGranted
+               && Objects.equals(historyNewsletters, that.historyNewsletters)
+               && Objects.equals(historyFullSyncDays, that.historyFullSyncDays)
+               && Objects.equals(historyStorageQuotaMb, that.historyStorageQuotaMb)
+               && Objects.equals(historyRecentSyncDays, that.historyRecentSyncDays)
+               && Objects.equals(historyThumbnailSyncDays, that.historyThumbnailSyncDays)
+               && Objects.equals(historyMaxMessagesPerChat, that.historyMaxMessagesPerChat)
                && Objects.equals(webAppStatePendingMutations, that.webAppStatePendingMutations);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(webHistoryPolicy, checkPatchMacs, syncedChats, syncedContacts, syncedNewsletters,
+        return Objects.hash(checkPatchMacs, syncedChats, syncedContacts, syncedNewsletters,
                 syncedStatus, syncedBusinessCertificate, appStateKeysMap, missingSyncKeysMap,
                 primaryDeviceSupportsSyncdRecovery, externalWebBeta, primaryFeatures, clockSkewSeconds,
                 groupAbPropsEmergencyPushTimestamp, abPropsAbKey, abPropsHash, abPropsRefresh, abPropsLastSyncTime,
                 abPropsRefreshId, abPropsWebRefreshId, groupAbPropsRefreshId, webAppStateCollections,
-                pendingDeviceSyncs, webAppStatePendingMutations);
+                pendingDeviceSyncs, primaryAllowsAllMutations, fullHistorySyncRequired, historyDiscarded,
+                historyNewsletters, historyFullSyncDays, historyStorageQuotaMb, historyRecentSyncDays,
+                historyThumbnailSyncDays, historyMaxMessagesPerChat, completeHistoryAccessGranted,
+                webAppStatePendingMutations);
     }
 }

@@ -68,12 +68,12 @@ class WamImplGeneratorTest {
             import com.github.auties00.cobalt.wam.model.WamEventSpec;
             import com.github.auties00.cobalt.wam.model.WamType;
             import java.util.Optional;
-            import java.util.OptionalInt;
+            import java.util.OptionalLong;
 
             @WamEvent(id = 9001, channel = WamChannel.REGULAR)
             public interface SyntheticEvent extends WamEventSpec {
                 @WamProperty(index = 1, type = WamType.INTEGER)
-                OptionalInt counter();
+                OptionalLong counter();
 
                 @WamProperty(index = 2, type = WamType.STRING)
                 Optional<String> label();

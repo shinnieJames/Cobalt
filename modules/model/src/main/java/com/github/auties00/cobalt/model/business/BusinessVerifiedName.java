@@ -94,7 +94,7 @@ public final class BusinessVerifiedName {
      * configured server-side.
      */
     @ProtobufProperty(index = 7, type = ProtobufType.ENUM)
-    HostStorageType hostStorage;
+    BusinessHostStorageType hostStorage;
 
     /**
      * Entity that actually reads and writes messages on behalf of the
@@ -134,7 +134,7 @@ public final class BusinessVerifiedName {
      * @throws NullPointerException if {@code jid} is {@code null}
      */
     BusinessVerifiedName(Jid jid, String name, int level, long serial, boolean isApi, boolean isSmb,
-                         HostStorageType hostStorage, ActualActorsType actualActors,
+                         BusinessHostStorageType hostStorage, ActualActorsType actualActors,
                          Instant privacyModeTimestamp) {
         this.jid = Objects.requireNonNull(jid, "jid");
         this.name = name;
@@ -211,10 +211,10 @@ public final class BusinessVerifiedName {
     /**
      * Returns the type of infrastructure that hosts the business's data.
      *
-     * @return an {@code Optional} containing the {@link HostStorageType},
+     * @return an {@code Optional} containing the {@link BusinessHostStorageType},
      *         or empty when no privacy mode has been configured
      */
-    public Optional<HostStorageType> hostStorage() {
+    public Optional<BusinessHostStorageType> hostStorage() {
         return Optional.ofNullable(hostStorage);
     }
 
@@ -272,56 +272,10 @@ public final class BusinessVerifiedName {
     }
 
     /**
-     * Identifies where a business's data is hosted and processed within a
-     * cached {@link BusinessVerifiedName} privacy-mode triplet,
-     * distinguishing on-premises deployments from Meta-managed Cloud API
-     * deployments.
-     */
-    @ProtobufEnum
-    public enum HostStorageType {
-        /**
-         * Data is hosted and processed on the business's own
-         * infrastructure (on-premises deployment of the WhatsApp Business
-         * API).
-         */
-        ON_PREMISE(1),
-
-        /**
-         * Data is hosted and processed on Meta-managed infrastructure
-         * (Cloud API deployment).
-         */
-        FACEBOOK(2);
-
-        /**
-         * Protobuf wire index for this enum constant.
-         */
-        final int index;
-
-        /**
-         * Constructs a {@code HostStorageType} enum constant bound to the
-         * given protobuf wire index.
-         *
-         * @param index the protobuf wire index
-         */
-        HostStorageType(@ProtobufEnumIndex int index) {
-            this.index = index;
-        }
-
-        /**
-         * Returns the protobuf wire index of this enum constant.
-         *
-         * @return the protobuf index
-         */
-        public int index() {
-            return index;
-        }
-    }
-
-    /**
      * Identifies the entity that actually reads and writes messages on
      * behalf of a WhatsApp Business account, as cached in a
      * {@link BusinessVerifiedName} record. Combined with
-     * {@link HostStorageType} and the privacy-mode timestamp it determines
+     * {@link BusinessHostStorageType} and the privacy-mode timestamp it determines
      * the reduced privacy mode (E2EE, BSP-mediated, or Cloud API) advertised
      * to chat peers.
      */

@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MutationOperationType;
 import com.github.auties00.cobalt.wam.type.SyncdCollectionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdSyncdMutationWamEvent")
 @WamEvent(id = 5970)
@@ -24,7 +24,7 @@ public interface MdSyncdMutationEvent extends WamEventSpec {
     Optional<String> companionSessionIds();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt contentLength();
+    OptionalLong contentLength();
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> isInBootstrap();
@@ -51,7 +51,7 @@ public interface MdSyncdMutationEvent extends WamEventSpec {
     Optional<String> patchMac();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt seqNumber();
+    OptionalLong seqNumber();
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<SyncdCollectionType> syncdCollection();

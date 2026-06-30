@@ -23,5 +23,6 @@ public enum AddMembersEntrypointType {
     @WamEnumConstant(12) GROUP_ADD_MEMBER_FROM_CHAT_HEADER,
     @WamEnumConstant(13) GROUP_MENTION_PICKER,
     @WamEnumConstant(14) COMMUNITY_CONTEXT_CARD,
-    @WamEnumConstant(15) COMMUNITY_EMPTY_SUBGROUP
+    @WamEnumConstant(15) COMMUNITY_EMPTY_SUBGROUP,
+    @WamEnumConstant(16) GROUP_MEMBERS_LIST_ADD_BUTTON
 }

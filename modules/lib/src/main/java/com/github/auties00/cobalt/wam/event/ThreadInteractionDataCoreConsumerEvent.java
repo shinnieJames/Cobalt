@@ -13,25 +13,25 @@ import com.github.auties00.cobalt.wam.type.OppositeVisibleIdentificationType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebThreadInteractionDataCoreConsumerWamEvent")
 @WamEvent(id = 6466)
 public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     @WamProperty(index = 138, type = WamType.INTEGER)
-    OptionalInt afterReadDuration();
+    OptionalLong afterReadDuration();
 
     @WamProperty(index = 139, type = WamType.INTEGER)
-    OptionalInt afterReadMessagesExpired();
+    OptionalLong afterReadMessagesExpired();
 
     @WamProperty(index = 144, type = WamType.INTEGER)
-    OptionalInt afterReadMessagesReceived();
+    OptionalLong afterReadMessagesReceived();
 
     @WamProperty(index = 140, type = WamType.INTEGER)
-    OptionalInt afterReadMessagesSent();
+    OptionalLong afterReadMessagesSent();
 
     @WamProperty(index = 141, type = WamType.INTEGER)
-    OptionalInt afterReadMessagesUnreadExpired();
+    OptionalLong afterReadMessagesUnreadExpired();
 
     @WamProperty(index = 142, type = WamType.BOOLEAN)
     Optional<Boolean> afterReadTurnedOff();
@@ -40,166 +40,166 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     Optional<Boolean> afterReadTurnedOn();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt audioMessagesReceived();
+    OptionalLong audioMessagesReceived();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt audioMessagesSent();
+    OptionalLong audioMessagesSent();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt broadcastMsgsReceived();
+    OptionalLong broadcastMsgsReceived();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt broadcastMsgsSent();
+    OptionalLong broadcastMsgsSent();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt chatEphemeralityDuration();
+    OptionalLong chatEphemeralityDuration();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<ChatMutedType> chatMuted();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt chatOverflowClicks();
+    OptionalLong chatOverflowClicks();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<ChatType> chatTypeInd();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt commentsReceived();
+    OptionalLong commentsReceived();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt documentMessagesReceived();
+    OptionalLong documentMessagesReceived();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt documentMessagesSent();
+    OptionalLong documentMessagesSent();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt editedMsgsSent();
+    OptionalLong editedMsgsSent();
 
     @WamProperty(index = 110, type = WamType.INTEGER)
-    OptionalInt ephemeralMessagesExpired();
+    OptionalLong ephemeralMessagesExpired();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt ephemeralMessagesReceived();
+    OptionalLong ephemeralMessagesReceived();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt ephemeralMessagesSent();
+    OptionalLong ephemeralMessagesSent();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt ephemeralMessagesUnreadExpired();
+    OptionalLong ephemeralMessagesUnreadExpired();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt eventCreationMessagesReceived();
+    OptionalLong eventCreationMessagesReceived();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt eventCreationMessagesSent();
+    OptionalLong eventCreationMessagesSent();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt eventResponseMessagesReceived();
+    OptionalLong eventResponseMessagesReceived();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt eventResponseMessagesSent();
+    OptionalLong eventResponseMessagesSent();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt forwardAudioMessagesReceived();
+    OptionalLong forwardAudioMessagesReceived();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt forwardAudioMessagesSent();
+    OptionalLong forwardAudioMessagesSent();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt forwardDocumentMessagesReceived();
+    OptionalLong forwardDocumentMessagesReceived();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt forwardDocumentMessagesSent();
+    OptionalLong forwardDocumentMessagesSent();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt forwardGifMessagesReceived();
+    OptionalLong forwardGifMessagesReceived();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt forwardGifMessagesSent();
+    OptionalLong forwardGifMessagesSent();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt forwardMessagesReceived();
+    OptionalLong forwardMessagesReceived();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt forwardMessagesSent();
+    OptionalLong forwardMessagesSent();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt forwardPhotoMessagesReceived();
+    OptionalLong forwardPhotoMessagesReceived();
 
     @WamProperty(index = 34, type = WamType.INTEGER)
-    OptionalInt forwardPhotoMessagesSent();
+    OptionalLong forwardPhotoMessagesSent();
 
     @WamProperty(index = 134, type = WamType.INTEGER)
-    OptionalInt forwardPtvMessagesReceived();
+    OptionalLong forwardPtvMessagesReceived();
 
     @WamProperty(index = 135, type = WamType.INTEGER)
-    OptionalInt forwardPtvMessagesSent();
+    OptionalLong forwardPtvMessagesSent();
 
     @WamProperty(index = 35, type = WamType.INTEGER)
-    OptionalInt forwardStickerMessagesReceived();
+    OptionalLong forwardStickerMessagesReceived();
 
     @WamProperty(index = 36, type = WamType.INTEGER)
-    OptionalInt forwardStickerMessagesSent();
+    OptionalLong forwardStickerMessagesSent();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
-    OptionalInt forwardTextMessagesReceived();
+    OptionalLong forwardTextMessagesReceived();
 
     @WamProperty(index = 38, type = WamType.INTEGER)
-    OptionalInt forwardTextMessagesSent();
+    OptionalLong forwardTextMessagesSent();
 
     @WamProperty(index = 39, type = WamType.INTEGER)
-    OptionalInt forwardUrlMessagesReceived();
+    OptionalLong forwardUrlMessagesReceived();
 
     @WamProperty(index = 40, type = WamType.INTEGER)
-    OptionalInt forwardUrlMessagesSent();
+    OptionalLong forwardUrlMessagesSent();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt forwardVideoMessagesReceived();
+    OptionalLong forwardVideoMessagesReceived();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt forwardVideoMessagesSent();
+    OptionalLong forwardVideoMessagesSent();
 
     @WamProperty(index = 43, type = WamType.ENUM)
     Optional<GaStatus> gaStatus();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt gifMessagesReceived();
+    OptionalLong gifMessagesReceived();
 
     @WamProperty(index = 45, type = WamType.INTEGER)
-    OptionalInt gifMessagesSent();
+    OptionalLong gifMessagesSent();
 
     @WamProperty(index = 47, type = WamType.INTEGER)
-    OptionalInt groupMembershipReplies();
+    OptionalLong groupMembershipReplies();
 
     @WamProperty(index = 48, type = WamType.INTEGER)
-    OptionalInt groupPrivateReplies();
+    OptionalLong groupPrivateReplies();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt groupSize();
+    OptionalLong groupSize();
 
     @WamProperty(index = 113, type = WamType.INTEGER)
-    OptionalInt groupStatusLikesOthersToOthers();
+    OptionalLong groupStatusLikesOthersToOthers();
 
     @WamProperty(index = 114, type = WamType.INTEGER)
-    OptionalInt groupStatusLikesOthersToOwn();
+    OptionalLong groupStatusLikesOthersToOwn();
 
     @WamProperty(index = 115, type = WamType.INTEGER)
-    OptionalInt groupStatusLikesOwnToOthers();
+    OptionalLong groupStatusLikesOwnToOthers();
 
     @WamProperty(index = 116, type = WamType.INTEGER)
-    OptionalInt groupStatusLikesOwnToOwn();
+    OptionalLong groupStatusLikesOwnToOwn();
 
     @WamProperty(index = 117, type = WamType.INTEGER)
-    OptionalInt groupStatusRepliesOthersToOthers();
+    OptionalLong groupStatusRepliesOthersToOthers();
 
     @WamProperty(index = 118, type = WamType.INTEGER)
-    OptionalInt groupStatusRepliesOthersToOwn();
+    OptionalLong groupStatusRepliesOthersToOwn();
 
     @WamProperty(index = 119, type = WamType.INTEGER)
-    OptionalInt groupStatusRepliesOwnToOthers();
+    OptionalLong groupStatusRepliesOwnToOthers();
 
     @WamProperty(index = 120, type = WamType.INTEGER)
-    OptionalInt groupStatusRepliesOwnToOwn();
+    OptionalLong groupStatusRepliesOwnToOwn();
 
     @WamProperty(index = 145, type = WamType.BOOLEAN)
     Optional<Boolean> hasReplied1On1();
@@ -259,10 +259,10 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     Optional<Boolean> limitSharingOption();
 
     @WamProperty(index = 62, type = WamType.INTEGER)
-    OptionalInt markedReadCnt();
+    OptionalLong markedReadCnt();
 
     @WamProperty(index = 63, type = WamType.INTEGER)
-    OptionalInt markedReadMessageCnt();
+    OptionalLong markedReadMessageCnt();
 
     @WamProperty(index = 131, type = WamType.STRING)
     Optional<String> matchedMessagesMarkedAsReadWithDeltaTime();
@@ -271,19 +271,19 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     Optional<String> matchedMessagesReadWithDeltaTime();
 
     @WamProperty(index = 64, type = WamType.INTEGER)
-    OptionalInt messagesRead();
+    OptionalLong messagesRead();
 
     @WamProperty(index = 65, type = WamType.INTEGER)
-    OptionalInt messagesReceived();
+    OptionalLong messagesReceived();
 
     @WamProperty(index = 133, type = WamType.INTEGER)
-    OptionalInt messagesReceivedWithEnabledReadReceipt();
+    OptionalLong messagesReceivedWithEnabledReadReceipt();
 
     @WamProperty(index = 66, type = WamType.INTEGER)
-    OptionalInt messagesSent();
+    OptionalLong messagesSent();
 
     @WamProperty(index = 68, type = WamType.INTEGER)
-    OptionalInt messagesUnread();
+    OptionalLong messagesUnread();
 
     @WamProperty(index = 146, type = WamType.BOOLEAN)
     Optional<Boolean> oppositePartyHasProfilePhoto();
@@ -295,49 +295,49 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     Optional<OppositeVisibleIdentificationType> oppositeVisibleIdentification();
 
     @WamProperty(index = 70, type = WamType.INTEGER)
-    OptionalInt photoMessagesReceived();
+    OptionalLong photoMessagesReceived();
 
     @WamProperty(index = 71, type = WamType.INTEGER)
-    OptionalInt photoMessagesSent();
+    OptionalLong photoMessagesSent();
 
     @WamProperty(index = 72, type = WamType.INTEGER)
-    OptionalInt pollCreationMessagesReceived();
+    OptionalLong pollCreationMessagesReceived();
 
     @WamProperty(index = 73, type = WamType.INTEGER)
-    OptionalInt pollCreationMessagesSent();
+    OptionalLong pollCreationMessagesSent();
 
     @WamProperty(index = 74, type = WamType.INTEGER)
-    OptionalInt pollUpdateMessagesReceived();
+    OptionalLong pollUpdateMessagesReceived();
 
     @WamProperty(index = 75, type = WamType.INTEGER)
-    OptionalInt pollUpdateMessagesSent();
+    OptionalLong pollUpdateMessagesSent();
 
     @WamProperty(index = 76, type = WamType.INTEGER)
-    OptionalInt profileReplies();
+    OptionalLong profileReplies();
 
     @WamProperty(index = 77, type = WamType.INTEGER)
-    OptionalInt profileViews();
+    OptionalLong profileViews();
 
     @WamProperty(index = 78, type = WamType.INTEGER)
-    OptionalInt pttMessagesReceived();
+    OptionalLong pttMessagesReceived();
 
     @WamProperty(index = 79, type = WamType.INTEGER)
-    OptionalInt pttMessagesSent();
+    OptionalLong pttMessagesSent();
 
     @WamProperty(index = 80, type = WamType.INTEGER)
-    OptionalInt ptvMessagesReceived();
+    OptionalLong ptvMessagesReceived();
 
     @WamProperty(index = 81, type = WamType.INTEGER)
-    OptionalInt ptvMessagesSent();
+    OptionalLong ptvMessagesSent();
 
     @WamProperty(index = 82, type = WamType.INTEGER)
-    OptionalInt reactionsReceived();
+    OptionalLong reactionsReceived();
 
     @WamProperty(index = 83, type = WamType.INTEGER)
-    OptionalInt reactionsSent();
+    OptionalLong reactionsSent();
 
     @WamProperty(index = 85, type = WamType.INTEGER)
-    OptionalInt repliesSent();
+    OptionalLong repliesSent();
 
     @WamProperty(index = 86, type = WamType.BOOLEAN)
     Optional<Boolean> requestedPhoneNumber();
@@ -352,31 +352,31 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     Optional<Boolean> sharesCommonGroup();
 
     @WamProperty(index = 90, type = WamType.INTEGER)
-    OptionalInt statusReactionsReceived();
+    OptionalLong statusReactionsReceived();
 
     @WamProperty(index = 126, type = WamType.INTEGER)
-    OptionalInt statusReactionsSent();
+    OptionalLong statusReactionsSent();
 
     @WamProperty(index = 91, type = WamType.INTEGER)
-    OptionalInt statusReplies();
+    OptionalLong statusReplies();
 
     @WamProperty(index = 127, type = WamType.INTEGER)
-    OptionalInt statusReplyMessagesReceived();
+    OptionalLong statusReplyMessagesReceived();
 
     @WamProperty(index = 92, type = WamType.INTEGER)
-    OptionalInt statusViews();
+    OptionalLong statusViews();
 
     @WamProperty(index = 93, type = WamType.INTEGER)
-    OptionalInt stickerMessagesReceived();
+    OptionalLong stickerMessagesReceived();
 
     @WamProperty(index = 94, type = WamType.INTEGER)
-    OptionalInt stickerMessagesSent();
+    OptionalLong stickerMessagesSent();
 
     @WamProperty(index = 95, type = WamType.INTEGER)
-    OptionalInt textMessagesReceived();
+    OptionalLong textMessagesReceived();
 
     @WamProperty(index = 96, type = WamType.INTEGER)
-    OptionalInt textMessagesSent();
+    OptionalLong textMessagesSent();
 
     @WamProperty(index = 111, type = WamType.STRING)
     Optional<String> threadCreationDate();
@@ -391,35 +391,35 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     Optional<String> threadIdByLid();
 
     @WamProperty(index = 130, type = WamType.INTEGER)
-    OptionalInt tombstoneAiFutureproofedMessagesReceived();
+    OptionalLong tombstoneAiFutureproofedMessagesReceived();
 
     @WamProperty(index = 128, type = WamType.INTEGER)
-    OptionalInt tombstoneEphemeralMessagesReceived();
+    OptionalLong tombstoneEphemeralMessagesReceived();
 
     @WamProperty(index = 129, type = WamType.INTEGER)
-    OptionalInt tombstoneViewOnceMessagesReceived();
+    OptionalLong tombstoneViewOnceMessagesReceived();
 
     @WamProperty(index = 108, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();
 
     @WamProperty(index = 99, type = WamType.INTEGER)
-    OptionalInt urlMessagesReceived();
+    OptionalLong urlMessagesReceived();
 
     @WamProperty(index = 100, type = WamType.INTEGER)
-    OptionalInt urlMessagesSent();
+    OptionalLong urlMessagesSent();
 
     @WamProperty(index = 102, type = WamType.INTEGER)
-    OptionalInt videoMessagesReceived();
+    OptionalLong videoMessagesReceived();
 
     @WamProperty(index = 103, type = WamType.INTEGER)
-    OptionalInt videoMessagesSent();
+    OptionalLong videoMessagesSent();
 
     @WamProperty(index = 104, type = WamType.INTEGER)
-    OptionalInt viewOnceMessagesOpened();
+    OptionalLong viewOnceMessagesOpened();
 
     @WamProperty(index = 105, type = WamType.INTEGER)
-    OptionalInt viewOnceMessagesReceived();
+    OptionalLong viewOnceMessagesReceived();
 
     @WamProperty(index = 106, type = WamType.INTEGER)
-    OptionalInt viewOnceMessagesSent();
+    OptionalLong viewOnceMessagesSent();
 }

@@ -2,14 +2,20 @@ package com.github.auties00.cobalt.calls2.net.transport;
 
 import com.github.auties00.cobalt.calls2.platform.VoipCryptoNative;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptions;
 import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptors;
 import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptions;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -232,65 +238,96 @@ public final class LiveRelayTransport implements MediaTransport {
     private final E2eMediaSrtp e2eRecv;
 
     /**
-     * The number of keepalive ticks between full RTCP sender reports; a compact report is sent on the
-     * intervening ticks.
-     */
-    private static final int RTCP_SR_EVERY_TICKS = 5;
-
-    /**
      * The trailing room, in bytes, reserved after an RTCP report for the hop-by-hop SRTCP index and tag.
+     *
+     * @implNote This implementation reserves {@code 32} bytes, well above the fourteen-byte SRTCP trailer of
+     * the {@link SrtpCryptoSuite#AES_CM_128_HMAC_SHA1_80} suite (a four-byte E-flag-plus-index word and a
+     * ten-byte HMAC-SHA1-80 tag), so the protect call never overruns the report buffer.
      */
     private static final int RTCP_PROTECT_TRAILER = 32;
 
     /**
-     * The RTCP payload type of the compact report.
+     * The number of one-second report ticks between successive application-layer feedback (AFB) records.
+     *
+     * @implNote This implementation sends the AFB on every fourth report tick (about four seconds at the
+     * {@link #KEEPALIVE_INTERVAL_NANOS} report cadence), matching the live capture's AFB period of roughly
+     * four seconds against the per-second Sender Report.
      */
-    private static final int RTCP_PT_COMPACT = 208;
+    private static final int AFB_EVERY_TICKS = 4;
 
     /**
-     * The RTCP payload type of the sender report.
+     * The RTP payload type of the relay leg's audio stream, distinguishing an audio packet from a video
+     * packet so the per-stream tracking and the jitter clock rate are selected correctly.
+     *
+     * @implNote This implementation uses {@code 120}, the audio payload type the outbound audio packetizer
+     * stamps and the inbound demux routes on.
      */
-    private static final int RTCP_PT_SENDER_REPORT = 200;
+    private static final int AUDIO_PAYLOAD_TYPE = 120;
 
     /**
-     * Holds the local media synchronization source read from the first outbound RTP packet, keying the
-     * outbound RTCP reports.
+     * The RTP payload type of the relay leg's video stream.
+     *
+     * @implNote This implementation uses {@code 97}, the video payload type the outbound video packetizer
+     * stamps; an outbound stream carrying it is tracked as the video stream the AFB reports.
      */
-    private volatile int localMediaSsrc;
+    private static final int VIDEO_PAYLOAD_TYPE = 97;
 
     /**
-     * Whether {@link #localMediaSsrc} has been observed from an outbound RTP packet.
+     * The audio stream's RTP timestamp clock rate, in hertz, used to scale the inbound interarrival jitter
+     * estimate into the audio stream's RTP timestamp units.
+     *
+     * @implNote This implementation uses {@code 16000}, the sixteen-kilohertz audio sample rate the relay
+     * leg's audio runs at.
      */
-    private volatile boolean localMediaSsrcKnown;
+    private static final int AUDIO_CLOCK_RATE_HZ = 16_000;
 
     /**
-     * Holds the remote media synchronization source read from the first inbound RTP packet, named in the
-     * outbound RTCP reports.
+     * The video stream's RTP timestamp clock rate, in hertz.
+     *
+     * @implNote This implementation uses {@code 90000}, the standard ninety-kilohertz video RTP clock.
      */
-    private volatile int remoteMediaSsrc;
+    private static final int VIDEO_CLOCK_RATE_HZ = 90_000;
 
     /**
-     * Whether {@link #remoteMediaSsrc} has been observed from an inbound RTP packet.
+     * The number of seconds between the NTP epoch (1 January 1900) and the Unix epoch (1 January 1970),
+     * added to the wall clock to form the RTCP Sender Report NTP timestamp.
+     *
+     * @implNote This implementation uses {@code 2208988800}, the fixed seventy-year offset RFC 868 defines
+     * between the two epochs.
      */
-    private volatile boolean remoteMediaSsrcKnown;
+    private static final long NTP_EPOCH_OFFSET_SECONDS = 2_208_988_800L;
 
     /**
-     * Counts the outbound RTP packets sent, reported in the RTCP sender report.
+     * Holds the per-local-stream outbound send statistics keyed by SSRC, in first-seen order, the source of
+     * each stream's Sender Report counters and the video stream's authenticated-feedback indices.
+     *
+     * <p>Guarded by {@link #rtcpLock}: the send threads advance a stream's counters in
+     * {@link #sendMedia(byte[], int)} while the report thread snapshots them in {@link #driveRtcp()}.
      */
-    private volatile long rtpPacketsSent;
+    private final Map<Integer, LocalStream> localStreams = new LinkedHashMap<>();
 
     /**
-     * Counts the outbound RTP payload octets sent, reported in the RTCP sender report.
+     * Holds the per-remote-stream reception statistics feeding the Sender Report's reception report blocks.
      */
-    private volatile long rtpOctetsSent;
+    private final RtcpReceptionStats receptionStats = new RtcpReceptionStats();
 
     /**
-     * Holds the RTP timestamp of the last outbound packet, reported in the RTCP sender report.
+     * Holds the session canonical name carried in every outbound Source Description, the base64url encoding
+     * of thirteen random bytes generated once at construction.
+     *
+     * @implNote This implementation generates an eighteen-character canonical name (the base64url, no-pad,
+     * encoding of thirteen random bytes) once per transport, so the Source Description record is exactly
+     * thirty-two bytes and stable for the call, matching the engine's per-session opaque CNAME.
      */
-    private volatile int lastRtpTimestamp;
+    private final byte[] cname;
 
     /**
-     * Counts the RTCP reports sent, selecting the compact-versus-sender-report cadence.
+     * Serializes access to {@link #localStreams} between the send threads and the report thread.
+     */
+    private final Object rtcpLock = new Object();
+
+    /**
+     * Counts the RTCP report ticks, selecting the application-layer-feedback cadence.
      */
     private int rtcpTick;
 
@@ -298,6 +335,11 @@ public final class LiveRelayTransport implements MediaTransport {
      * Whether the first outbound RTCP report (or its failure) has been logged.
      */
     private boolean firstRtcpLogged;
+
+    /**
+     * Whether the first outbound RTP packet has been logged.
+     */
+    private boolean firstOutboundRtpLogged;
 
     /**
      * Holds the derived WARP-auth key for the hop-by-hop WARP message-integrity tag, or {@code null}
@@ -626,6 +668,7 @@ public final class LiveRelayTransport implements MediaTransport {
         this.dataChannel = dataChannel;
         this.e2eSend = e2eSend;
         this.e2eRecv = e2eRecv;
+        this.cname = generateCname();
         this.warpClockReferenceNanos = System.nanoTime();
         this.socketDemux = new InboundPacketDemux(this::onStun, this::onDtlsRecord, null, null);
         this.channelDemux = new InboundPacketDemux(
@@ -763,30 +806,37 @@ public final class LiveRelayTransport implements MediaTransport {
         ensureSendable();
         Objects.requireNonNull(packet, "packet cannot be null");
         requireLength(length, packet.length);
-        // Only sniff the media SSRC and RTCP sender stats from a real RTP packet (version two, top two bits
+        // Only track the per-stream RTCP sender statistics from a real RTP packet (version two, top two bits
         // 10); a stray non-RTP datagram on this path would otherwise mis-key the outbound RTCP report's SSRC.
         var isRtp = length >= 12 && (packet[0] & 0xC0) == 0x80;
+        var ssrc = 0;
         if (isRtp) {
-            localMediaSsrc = readUint32(packet, 8);
-            localMediaSsrcKnown = true;
-            lastRtpTimestamp = readUint32(packet, 4);
-            rtpPacketsSent++;
-            rtpOctetsSent += length - 12;
+            ssrc = readUint32(packet, 8);
+            var payloadType = packet[1] & 0x7F;
+            var sequence = ((packet[2] & 0xFF) << 8) | (packet[3] & 0xFF);
+            var rtpTimestamp = readUint32(packet, 4);
+            // The RTCP sender octet count is the payload octets only, so subtract the full RTP header plus
+            // the header extension the packetizer always writes (a fixed twelve subtraction would over-count
+            // by the extension length).
+            var payloadOctets = Math.max(0, length - rtpHeaderAndExtensionLength(packet, length));
+            synchronized (rtcpLock) {
+                var stream = localStreams.computeIfAbsent(
+                        ssrc, key -> new LocalStream(key, payloadType == VIDEO_PAYLOAD_TYPE));
+                stream.packetCount++;
+                stream.octetCount += payloadOctets;
+                stream.lastRtpTimestamp = rtpTimestamp;
+                stream.advanceSequence(sequence);
+            }
         }
         var protectedLength = e2eSend != null
                 ? e2eSend.protectRtp(packet, length)
                 : hbhSrtp.protectRtp(packet, length);
         var accepted = dataChannel.send(slice(packet, protectedLength));
-        if (isRtp) {
-            if (rtpPacketsSent == 1) {
-                LOGGER.log(System.Logger.Level.INFO,
-                        "calls2 relay first outbound RTP: ssrc=0x{0}, payloadLen={1}, onWireLen={2}, e2e={3}, accepted={4}",
-                        Integer.toHexString(localMediaSsrc), length, protectedLength, e2eSend != null, accepted);
-            } else if (rtpPacketsSent % 250 == 0) {
-                LOGGER.log(System.Logger.Level.INFO,
-                        "calls2 relay outbound RTP progress: {0} packets / {1} octets sent (last accepted={2})",
-                        rtpPacketsSent, rtpOctetsSent, accepted);
-            }
+        if (isRtp && !firstOutboundRtpLogged) {
+            firstOutboundRtpLogged = true;
+            LOGGER.log(System.Logger.Level.INFO,
+                    "calls2 relay first outbound RTP: ssrc=0x{0}, payloadLen={1}, onWireLen={2}, e2e={3}, accepted={4}",
+                    Integer.toHexString(ssrc), length, protectedLength, e2eSend != null, accepted);
         }
         return accepted ? length : 0;
     }
@@ -798,6 +848,48 @@ public final class LiveRelayTransport implements MediaTransport {
         requireLength(length, packet.length);
         var protectedLength = hbhSrtp.protectRtcp(packet, length);
         return dataChannel.send(slice(packet, protectedLength)) ? length : 0;
+    }
+
+    /**
+     * Builds and ships one or more generic NACK records requesting retransmission of a set of lost sequence
+     * numbers from a remote stream.
+     *
+     * <p>The missing sequence numbers are sorted and de-duplicated, then packed into the RFC 4585 generic
+     * NACK form: each record carries a packet identifier (the first lost sequence number of a run) and a
+     * sixteen-bit bitmask of the next sixteen sequence numbers that are also lost; a gap wider than sixteen
+     * starts a new record. Each record is hop-by-hop SRTCP-protected and written standalone as its own SCTP
+     * DATA message. The call is a no-op before the data channel is open, after {@link #close()}, or when no
+     * sequence numbers are supplied.
+     *
+     * @apiNote This is the seam the receive-side loss detector (the NetEq NACK list) drives on a confirmed
+     *          inbound gap; the transport owns the SRTCP framing and the data-channel send, the caller owns
+     *          which sequence numbers are due.
+     * @param mediaSsrc         the synchronization source of the remote stream whose packets are requested
+     * @param missingSequences  the sixteen-bit sequence numbers to request, in any order; {@code null} or
+     *                          empty requests nothing
+     */
+    public void sendNack(int mediaSsrc, List<Integer> missingSequences) {
+        if (closed || dataChannel == null || !dataChannel.isReady()
+                || missingSequences == null || missingSequences.isEmpty()) {
+            return;
+        }
+        var sorted = new ArrayList<>(new TreeSet<>(missingSequences));
+        var index = 0;
+        while (index < sorted.size()) {
+            var pid = sorted.get(index) & 0xFFFF;
+            var blp = 0;
+            var next = index + 1;
+            while (next < sorted.size()) {
+                var offset = (sorted.get(next) - pid) & 0xFFFF;
+                if (offset < 1 || offset > 16) {
+                    break;
+                }
+                blp |= 1 << (offset - 1);
+                next++;
+            }
+            protectAndSendRtcp(RtcpReportBuilder.buildNack(mediaSsrc, pid, blp));
+            index = next;
+        }
     }
 
     @Override
@@ -945,6 +1037,52 @@ public final class LiveRelayTransport implements MediaTransport {
         return accepted;
     }
 
+    /**
+     * Builds and ships a {@code 0x0003} subscription envelope carrying this client's sender subscriptions over the
+     * data channel.
+     *
+     * <p>Identical to {@link #sendSubscriptionEnvelope(StreamDescriptors)} except the subscription attribute is the
+     * {@code 0x4025} {@link StunAttributeType#WA_SENDER_SUBSCRIPTIONS} {@link SenderSubscriptions} (this client's
+     * SSRC-to-PID assignment sources: the two simulcast video streams, the audio stream, and the app-data stream,
+     * each binding its SSRCs to the relay-assigned self participant id and SVC temporal layer) in place of the
+     * {@code 0x4024} attribute, matching the byte-verified caller capture. This is the form the subscription resend
+     * ships.
+     *
+     * @implNote This implementation stamps the envelope with the stable per-session
+     * {@link #connectivityTransactionId} and re-ships it on every keepalive tick for the call's lifetime, the same
+     * cadence and framing {@link #sendSubscriptionEnvelope(StreamDescriptors)} uses; it is driven on the single
+     * transport (keepalive) thread.
+     *
+     * @param senderSubscriptions this client's own send-stream SSRC-to-PID assignments to publish; never
+     *                            {@code null}
+     * @return {@code true} when the envelope was assembled and accepted by the data channel, {@code false}
+     *         otherwise
+     * @throws NullPointerException        if {@code senderSubscriptions} is {@code null}
+     * @throws WhatsAppCallException.Srtp  if the platform cannot compute the HMAC-SHA1 message integrity
+     */
+    public boolean sendSubscriptionEnvelope(SenderSubscriptions senderSubscriptions) {
+        Objects.requireNonNull(senderSubscriptions, "senderSubscriptions cannot be null");
+        if (closed || relayKey == null || relayToken == null || relayReflexiveAddress == null) {
+            if (!closed && !subscriptionSkipLogged) {
+                subscriptionSkipLogged = true;
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "calls2 relay 0x0003 subscription NOT sent: relayKey present={0}, relayToken present={1}, reflexiveAddr present={2}",
+                        relayKey != null, relayToken != null, relayReflexiveAddress != null);
+            }
+            return false;
+        }
+        var envelope = SubscriptionEnvelope.subscriptionEnvelope(
+                relayKey, relayToken, senderSubscriptions, relayReflexiveAddress, connectivityTransactionId);
+        var accepted = sendAppData(envelope);
+        if (!subscriptionLogged) {
+            subscriptionLogged = true;
+            LOGGER.log(System.Logger.Level.INFO,
+                    "calls2 relay first outbound 0x0003 subscription sent ({0} bytes, {1} sender-subscription sources, token {3} bytes, key {4} bytes); accepted={2}",
+                    envelope.length, senderSubscriptions.subscriptions().size(), accepted, relayToken.length, relayKey.length);
+        }
+        return accepted;
+    }
+
     @Override
     public void onInboundDatagram(byte[] datagram, SocketAddress source) {
         Objects.requireNonNull(datagram, "datagram cannot be null");
@@ -1069,19 +1207,84 @@ public final class LiveRelayTransport implements MediaTransport {
     }
 
     /**
-     * Builds and ships one periodic RTCP report over the data channel.
+     * Builds and ships the periodic RTCP reports over the data channel for one report tick.
      *
-     * <p>Sends a compact RTCP report on each keepalive tick and a full sender report every
-     * {@value #RTCP_SR_EVERY_TICKS} ticks, hop-by-hop SRTCP protected, once the channel is open and an
-     * outbound media packet has established the local synchronization source. The peer's connection-health
-     * monitor tears the call down when it receives no RTCP even while RTP keeps flowing.
+     * <p>For each local media stream this sends one Sender Report plus Source Description compound (the
+     * Sender Report carrying the stream's send counters and one reception report block per remote stream
+     * received, the Source Description naming the session canonical name), hop-by-hop SRTCP protected, as one
+     * SCTP DATA message. Every {@value #AFB_EVERY_TICKS} ticks it additionally sends the application-layer
+     * feedback record from the video stream carrying that stream's highest hop-by-hop SRTP indices. Each
+     * compound is protected and shipped separately. Nothing is sent before the channel is open or before an
+     * outbound media packet has established at least one local stream; the peer's connection-health monitor
+     * tears the call down when it receives no RTCP even while RTP keeps flowing.
+     *
+     * @implNote This implementation reproduces the per-stream Sender Report plus Source Description compound
+     *           and the slower application-layer feedback the WhatsApp relay leg emits (the pjmedia
+     *           {@code pjmedia_rtcp_build_rtcp}/{@code pjmedia_rtcp_build_sdes} and the proprietary
+     *           {@code _srtp_afb_batch}); the reception report blocks come once per tick from
+     *           {@link RtcpReceptionStats} and are shared across each stream's report.
      */
     private void driveRtcp() {
-        if (dataChannel == null || !dataChannel.isReady() || !localMediaSsrcKnown) {
+        if (dataChannel == null || !dataChannel.isReady()) {
             return;
         }
+        List<LocalStream> streams;
+        synchronized (rtcpLock) {
+            if (localStreams.isEmpty()) {
+                return;
+            }
+            streams = new ArrayList<>(localStreams.values());
+        }
         rtcpTick++;
-        var report = rtcpTick % RTCP_SR_EVERY_TICKS == 0 ? buildSenderReport() : buildCompactRtcp();
+        var nowNanos = System.nanoTime();
+        var reportBlocks = receptionStats.reportBlocks(nowNanos);
+        if (reportBlocks.size() > 0x1F) {
+            // A Sender Report's reception-report count is five bits, so at most thirty-one blocks fit; a
+            // larger roster (a many-party group leg) reports its first thirty-one received streams.
+            reportBlocks = reportBlocks.subList(0, 0x1F);
+        }
+        var ntpTimestamp = nowNtpTimestamp();
+        for (var stream : streams) {
+            long packetCount;
+            long octetCount;
+            int rtpTimestamp;
+            synchronized (rtcpLock) {
+                packetCount = stream.packetCount;
+                octetCount = stream.octetCount;
+                rtpTimestamp = stream.lastRtpTimestamp;
+                stream.rtcpIndex++;
+            }
+            var compound = RtcpReportBuilder.buildSenderReportWithSdes(
+                    stream.ssrc, ntpTimestamp, rtpTimestamp & 0xFFFFFFFFL,
+                    packetCount, octetCount, reportBlocks, cname);
+            protectAndSendRtcp(compound);
+        }
+        if (rtcpTick % AFB_EVERY_TICKS == 0) {
+            for (var stream : streams) {
+                if (!stream.video) {
+                    continue;
+                }
+                long rtpIndex;
+                int rtcpIndex;
+                synchronized (rtcpLock) {
+                    rtpIndex = stream.extendedRtpIndex();
+                    rtcpIndex = (int) stream.rtcpIndex;
+                }
+                protectAndSendRtcp(RtcpReportBuilder.buildAfb(stream.ssrc, stream.ssrc, rtpIndex, rtcpIndex));
+            }
+        }
+    }
+
+    /**
+     * Hop-by-hop SRTCP-protects one cleartext RTCP record or compound and writes it as one SCTP DATA message.
+     *
+     * <p>The record is copied into a buffer with trailing room for the SRTCP trailer, protected in place, and
+     * sent. A protect or send failure is non-fatal: it is swallowed so the next tick retries, with the first
+     * outcome logged once for diagnostics.
+     *
+     * @param report the cleartext RTCP record or compound bytes
+     */
+    private void protectAndSendRtcp(byte[] report) {
         var buffer = new byte[report.length + RTCP_PROTECT_TRAILER];
         System.arraycopy(report, 0, buffer, 0, report.length);
         try {
@@ -1090,9 +1293,8 @@ public final class LiveRelayTransport implements MediaTransport {
             if (!firstRtcpLogged) {
                 firstRtcpLogged = true;
                 LOGGER.log(System.Logger.Level.INFO,
-                        "calls2 relay first outbound RTCP sent ({0} bytes, localSsrc=0x{1}, remoteSsrc=0x{2}); accepted={3}",
-                        protectedLength, Integer.toHexString(localMediaSsrc), Integer.toHexString(remoteMediaSsrc),
-                        accepted);
+                        "calls2 relay first outbound RTCP sent ({0} cleartext bytes, {1} on wire); accepted={2}",
+                        report.length, protectedLength, accepted);
             }
         } catch (RuntimeException exception) {
             // A failed RTCP protection or send is non-fatal; the next tick retries.
@@ -1105,38 +1307,40 @@ public final class LiveRelayTransport implements MediaTransport {
     }
 
     /**
-     * Builds the twelve-byte compact RTCP report carrying the local and remote synchronization sources.
+     * Returns the current wall-clock time as a sixty-four-bit NTP timestamp.
      *
-     * @return the compact RTCP report bytes
+     * <p>The high thirty-two bits are the seconds since the NTP epoch and the low thirty-two bits are the
+     * fractional second, the form the RTCP Sender Report's NTP timestamp field carries.
+     *
+     * @return the current NTP timestamp
      */
-    private byte[] buildCompactRtcp() {
-        var report = new byte[12];
-        report[0] = (byte) 0x81;
-        report[1] = (byte) RTCP_PT_COMPACT;
-        report[3] = 2;
-        writeUint32(report, 4, localMediaSsrc);
-        writeUint32(report, 8, remoteMediaSsrcKnown ? remoteMediaSsrc : 0);
-        return report;
+    private static long nowNtpTimestamp() {
+        var millis = System.currentTimeMillis();
+        var seconds = millis / 1000L + NTP_EPOCH_OFFSET_SECONDS;
+        var fraction = (millis % 1000L) * (1L << 32) / 1000L;
+        return (seconds << 32) | (fraction & 0xFFFFFFFFL);
     }
 
     /**
-     * Builds the twenty-eight-byte RTCP sender report carrying the wall-clock and the send counters.
+     * Returns the byte offset of the RTP payload, past the fixed header, any CSRC list, and the one-byte
+     * header extension when the extension bit is set.
      *
-     * @return the sender report bytes
+     * <p>The outbound packetizers always set the extension bit and write a header extension ahead of the
+     * codec payload, so the RTCP sender octet count subtracts this whole prefix rather than a fixed twelve
+     * bytes. A packet with the extension bit clear, or one too short to hold the declared extension, yields
+     * the offset past the bare header and any CSRC list.
+     *
+     * @param packet the outbound RTP packet bytes
+     * @param length the valid length of {@code packet}
+     * @return the offset of the codec payload, clamped to {@code length}
      */
-    private byte[] buildSenderReport() {
-        var report = new byte[28];
-        report[0] = (byte) 0x80;
-        report[1] = (byte) RTCP_PT_SENDER_REPORT;
-        report[3] = 6;
-        writeUint32(report, 4, localMediaSsrc);
-        var nowMillis = System.currentTimeMillis();
-        writeUint32(report, 8, (int) (nowMillis / 1_000L + 2_208_988_800L));
-        writeUint32(report, 12, (int) (nowMillis % 1_000L * 0x1_0000_0000L / 1_000L));
-        writeUint32(report, 16, lastRtpTimestamp);
-        writeUint32(report, 20, (int) rtpPacketsSent);
-        writeUint32(report, 24, (int) rtpOctetsSent);
-        return report;
+    private static int rtpHeaderAndExtensionLength(byte[] packet, int length) {
+        var offset = 12 + (packet[0] & 0x0F) * 4;
+        if ((packet[0] & 0x10) != 0 && length >= offset + 4) {
+            var extensionWords = ((packet[offset + 2] & 0xFF) << 8) | (packet[offset + 3] & 0xFF);
+            offset += 4 + extensionWords * 4;
+        }
+        return Math.min(offset, length);
     }
 
     /**
@@ -1152,17 +1356,18 @@ public final class LiveRelayTransport implements MediaTransport {
     }
 
     /**
-     * Writes a big-endian thirty-two-bit integer into a buffer.
+     * Generates the session canonical name, the base64url encoding of thirteen random bytes.
      *
-     * @param buffer the buffer to write to
-     * @param offset the offset to write at
-     * @param value  the integer value
+     * <p>Thirteen random bytes base64url-encode without padding to eighteen ASCII characters, so the Source
+     * Description record carrying this canonical name is exactly thirty-two bytes. The value is generated
+     * once per transport and is opaque, matching the engine's per-session CNAME.
+     *
+     * @return the eighteen-byte ASCII canonical name
      */
-    private static void writeUint32(byte[] buffer, int offset, int value) {
-        buffer[offset] = (byte) (value >>> 24);
-        buffer[offset + 1] = (byte) (value >>> 16);
-        buffer[offset + 2] = (byte) (value >>> 8);
-        buffer[offset + 3] = (byte) value;
+    private static byte[] generateCname() {
+        var random = VoipCryptoNative.randomBytes(13);
+        var text = Base64.getUrlEncoder().withoutPadding().encodeToString(random);
+        return text.getBytes(StandardCharsets.US_ASCII);
     }
 
     @Override
@@ -1382,8 +1587,14 @@ public final class LiveRelayTransport implements MediaTransport {
      */
     private void onInboundMedia(byte[] message) {
         if (message.length >= 12) {
-            remoteMediaSsrc = readUint32(message, 8);
-            remoteMediaSsrcKnown = true;
+            // The RTP header rides in the clear ahead of the SRTP ciphertext, so the reception statistics
+            // for the Sender Report's report blocks are taken from the protected packet's header directly.
+            var ssrc = readUint32(message, 8);
+            var payloadType = message[1] & 0x7F;
+            var sequence = ((message[2] & 0xFF) << 8) | (message[3] & 0xFF);
+            var rtpTimestamp = readUint32(message, 4) & 0xFFFFFFFFL;
+            var clockRate = payloadType == AUDIO_PAYLOAD_TYPE ? AUDIO_CLOCK_RATE_HZ : VIDEO_CLOCK_RATE_HZ;
+            receptionStats.onRtpReceived(ssrc, sequence, rtpTimestamp, System.nanoTime(), clockRate);
         }
         var buffer = new byte[Math.max(message.length, MAX_PACKET_SIZE)];
         System.arraycopy(message, 0, buffer, 0, message.length);
@@ -1418,6 +1629,9 @@ public final class LiveRelayTransport implements MediaTransport {
         System.arraycopy(message, 0, buffer, 0, message.length);
         try {
             var cleartextLength = hbhSrtp.unprotectRtcp(buffer, message.length);
+            // Capture each inbound Sender Report's NTP timestamp and arrival so the next outbound report
+            // block can reflect its last-SR and delay-since-last-SR round-trip fields.
+            recordInboundSenderReports(buffer, cleartextLength, System.nanoTime());
             var feedback = RtcpFeedbackParser.parse(buffer, cleartextLength);
             if (inboundRtcpDiagCount++ == 0) {
                 LOGGER.log(System.Logger.Level.INFO,
@@ -1436,8 +1650,39 @@ public final class LiveRelayTransport implements MediaTransport {
                 LOGGER.log(System.Logger.Level.INFO,
                         "calls2 relay first inbound RTCP ({0} bytes) FAILED hop-by-hop unprotect ({1}); dropping",
                         message.length, srtpFailure.getMessage());
-                System.out.println("Test");
             }
+        }
+    }
+
+    /**
+     * Scans one cleartext inbound RTCP compound for Sender Report records and records each one's NTP
+     * timestamp and arrival against its source's reception statistics.
+     *
+     * <p>The compound is walked record by record; for each Sender Report (payload type {@code 200}) the
+     * source SSRC and the sixty-four-bit NTP timestamp are read and handed to {@link RtcpReceptionStats} so
+     * the outbound report block's last-SR and delay-since-last-SR fields can be filled. A record whose
+     * declared length runs past the compound stops the walk.
+     *
+     * @param packet       the cleartext RTCP compound bytes
+     * @param length       the valid length of {@code packet}
+     * @param arrivalNanos the local monotonic arrival time of the compound, in nanoseconds
+     */
+    private void recordInboundSenderReports(byte[] packet, int length, long arrivalNanos) {
+        var offset = 0;
+        while (offset + 4 <= length) {
+            var payloadType = packet[offset + 1] & 0xFF;
+            var declaredWords = ((packet[offset + 2] & 0xFF) << 8) | (packet[offset + 3] & 0xFF);
+            var recordLength = (declaredWords + 1) * 4;
+            if (recordLength <= 0 || offset + recordLength > length) {
+                break;
+            }
+            if (payloadType == 200 && recordLength >= 28) {
+                var sourceSsrc = readUint32(packet, offset + 4);
+                var ntpTimestamp = ((long) readUint32(packet, offset + 8) << 32)
+                        | (readUint32(packet, offset + 12) & 0xFFFFFFFFL);
+                receptionStats.recordInboundSr(sourceSsrc, ntpTimestamp, arrivalNanos);
+            }
+            offset += recordLength;
         }
     }
 
@@ -1532,6 +1777,107 @@ public final class LiveRelayTransport implements MediaTransport {
         }
         if (dataChannel == null || !dataChannel.isReady()) {
             throw new IllegalStateException("media transport data channel is not open");
+        }
+    }
+
+    /**
+     * Holds one local media stream's outbound send statistics, the source of its Sender Report counters and,
+     * for the video stream, its application-layer-feedback SRTP indices.
+     *
+     * <p>This is mutable runtime state guarded by {@link #rtcpLock}: the send threads advance the counters
+     * and sequence watermark as packets are sent, and the report thread snapshots them when it builds a
+     * report.
+     */
+    private static final class LocalStream {
+        /**
+         * Holds the stream synchronization source.
+         */
+        private final int ssrc;
+
+        /**
+         * Holds whether this is the video stream, the stream the application-layer feedback reports.
+         */
+        private final boolean video;
+
+        /**
+         * Holds the cumulative count of RTP data packets sent on this stream.
+         */
+        private long packetCount;
+
+        /**
+         * Holds the cumulative count of RTP payload octets sent on this stream.
+         */
+        private long octetCount;
+
+        /**
+         * Holds the RTP timestamp of the most recent packet sent, reported in the Sender Report.
+         */
+        private int lastRtpTimestamp;
+
+        /**
+         * Holds the highest sixteen-bit RTP sequence number sent on this stream.
+         */
+        private int highestSequence;
+
+        /**
+         * Holds the count of sequence-number rollovers, shifted into the high bits of the extended RTP
+         * packet index the application-layer feedback reports.
+         */
+        private long rolloverCounter;
+
+        /**
+         * Holds whether the sequence watermark has been seeded by a first packet.
+         */
+        private boolean sequenceSeeded;
+
+        /**
+         * Holds the count of SRTCP packets sent for this stream, the highest SRTCP index the
+         * application-layer feedback reports.
+         */
+        private long rtcpIndex;
+
+        /**
+         * Constructs a local stream record.
+         *
+         * @param ssrc  the stream synchronization source
+         * @param video whether this is the video stream
+         */
+        private LocalStream(int ssrc, boolean video) {
+            this.ssrc = ssrc;
+            this.video = video;
+        }
+
+        /**
+         * Advances the highest sequence watermark and the rollover counter for one sent packet.
+         *
+         * <p>The outbound packetizer advances its sequence monotonically, so a forward step past the
+         * sixteen-bit boundary increments the rollover counter; a backward step (a reorder) is ignored.
+         *
+         * @param sequence the sent packet's sixteen-bit RTP sequence number
+         */
+        private void advanceSequence(int sequence) {
+            var masked = sequence & 0xFFFF;
+            if (!sequenceSeeded) {
+                sequenceSeeded = true;
+                highestSequence = masked;
+                return;
+            }
+            var delta = (masked - highestSequence) & 0xFFFF;
+            if (delta != 0 && delta < 0x8000) {
+                if (masked < highestSequence) {
+                    rolloverCounter++;
+                }
+                highestSequence = masked;
+            }
+        }
+
+        /**
+         * Returns the rollover-extended highest RTP packet index, the application-layer feedback's RTP index.
+         *
+         * @return the forty-eight-bit-range extended RTP packet index
+         */
+        private long extendedRtpIndex() {
+            return (rolloverCounter << 16) | (highestSequence & 0xFFFFL);
         }
     }
 

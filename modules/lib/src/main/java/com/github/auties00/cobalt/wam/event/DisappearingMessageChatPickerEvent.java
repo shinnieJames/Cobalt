@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.DmChatPickerEntryPointType;
 import com.github.auties00.cobalt.wam.type.DmChatPickerEventNameType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebDisappearingMessageChatPickerWamEvent")
 @WamEvent(id = 3398)
 public interface DisappearingMessageChatPickerEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt chatsSelected();
+    OptionalLong chatsSelected();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<DmChatPickerEntryPointType> dmChatPickerEntryPoint();
@@ -25,17 +25,17 @@ public interface DisappearingMessageChatPickerEvent extends WamEventSpec {
     Optional<DmChatPickerEventNameType> dmChatPickerEventName();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt ephemeralityDuration();
+    OptionalLong ephemeralityDuration();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt groupChatsSelected();
+    OptionalLong groupChatsSelected();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> groupSizeDistributionJson();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt newlyEphemeralChats();
+    OptionalLong newlyEphemeralChats();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt totalChatsInChatPicker();
+    OptionalLong totalChatsInChatPicker();
 }

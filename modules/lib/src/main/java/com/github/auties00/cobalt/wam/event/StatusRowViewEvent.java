@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.StatusRowEntryMethod;
 import com.github.auties00.cobalt.wam.type.StatusRowSection;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusRowViewWamEvent")
 @WamEvent(id = 1656)
@@ -22,26 +22,26 @@ public interface StatusRowViewEvent extends WamEventSpec {
     Optional<StatusRowEntryMethod> statusRowEntryMethod();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt statusRowIndex();
+    OptionalLong statusRowIndex();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<StatusRowSection> statusRowSection();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt statusRowUnreadItemCount();
+    OptionalLong statusRowUnreadItemCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt statusRowViewCount();
+    OptionalLong statusRowViewCount();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt statusViewerSessionId();
+    OptionalLong statusViewerSessionId();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

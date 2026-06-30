@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.GraphqlCatalogEndpoint;
 import com.github.auties00.cobalt.wam.type.GraphqlRequestResult;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGraphqlCatalogRequestWamEvent")
 @WamEvent(id = 3206, channel = WamChannel.PRIVATE, privateStatsId = 0)
@@ -27,7 +27,7 @@ public interface GraphqlCatalogRequestEvent extends WamEventSpec {
     Optional<GraphqlCatalogEndpoint> graphqlCatalogEndpoint();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt graphqlErrorCode();
+    OptionalLong graphqlErrorCode();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<GraphqlRequestResult> graphqlRequestResult();

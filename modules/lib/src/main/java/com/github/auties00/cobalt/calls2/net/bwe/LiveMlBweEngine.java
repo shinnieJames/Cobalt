@@ -1,7 +1,5 @@
 package com.github.auties00.cobalt.calls2.net.bwe;
 
-import com.github.auties00.cobalt.util.NativeLibLoader;
-
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -12,26 +10,25 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The native-backed machine-learning bandwidth-estimation engine: loads the enabled ExecuTorch models,
- * maintains the recovered per-model slide-window history, and runs one inference round per feedback round
- * through the {@link ExecuTorch} shim.
+ * The recovered machine-learning bandwidth-estimation engine: maintains the per-model slide-window history
+ * and builds the recovered congestion inference round. Its native ExecuTorch backend was removed from
+ * {@code cobalt-native}, so every native model operation throws {@link UnsupportedOperationException} and no
+ * model can load or run.
  *
- * <p>For each enabled {@link MlBweModelType} the engine holds one multi-column history ring (one column
- * per recovered signal) and, when a model is provisioned, one loaded ExecuTorch handle. Every
- * {@link #infer(MlBweSignals)} pushes the round's signals into every ring with the recovered scaling
- * (packet loss times one hundred, nanoseconds to microseconds and bits per second to kilobits per second
- * by dividing by one thousand), then runs each model whose history is full and whose feature selection can
- * be filled from concrete signals. The one fully-recovered output path, the congestion classifier, builds
- * the {@code (rounds, features)} input tensor in the recovered slot order, runs forward, reads the second
- * output float, scales and quantizes it to a probability, and compares that against the per-call threshold
- * to produce the congestion verdict folded into {@link MlBweOutputs}.
+ * <p>For each enabled {@link MlBweModelType} the engine holds one multi-column history ring (one column per
+ * recovered signal). Every {@link #infer(MlBweSignals)} pushes the round's signals into every ring with the
+ * recovered scaling (packet loss times one hundred, nanoseconds to microseconds and bits per second to
+ * kilobits per second by dividing by one thousand). The recovered congestion classifier builds the
+ * {@code (rounds, features)} input tensor in the recovered slot order and would run forward, read the second
+ * output float, scale and quantize it to a probability, and compare against the per-call threshold to
+ * produce the verdict folded into {@link MlBweOutputs}; the forward call now throws, since the backend is
+ * gone.
  *
- * <p>The engine degrades gracefully toward the no-op path. A model is loaded only when the
- * {@link ExecuTorch} shim is {@linkplain ExecuTorch#isAvailable() available} and a {@code .pte} path
- * resolves for it; with no provisioned model {@link #loadedModels()} is empty and {@link #infer(MlBweSignals)}
- * returns {@link MlBweOutputs#DISABLED}, so the pure delay-based and sender-side path runs unchanged. The
- * engine is single-writer: the call session drives one from the single transport thread, the same thread
- * that owns the ExecuTorch model handles.
+ * <p>With no native backend the engine is inert: {@link #loadedModels()} is empty and
+ * {@link #infer(MlBweSignals)} returns {@link MlBweOutputs#DISABLED}, so the media plane uses the
+ * {@link NoopMlBweEngine} and the pure delay-based and sender-side path runs unchanged. Constructing the
+ * engine with a model whose {@code .pte} path resolves makes the native load throw. The engine is
+ * single-writer: a call session would drive one from the single transport thread.
  *
  * @implNote This implementation ports the wa-voip ML-BWE orchestration ({@code network/src/bwe/bwe_ml.cc}):
  * the per-model history ring of {@code wa_slide_window} sub-windows (init {@code fn4433}, push
@@ -128,19 +125,19 @@ public final class LiveMlBweEngine implements MlBweEngine {
     private boolean closed;
 
     /**
-     * Constructs an engine that loads the given enabled models through the {@link ExecuTorch} shim.
+     * Constructs an engine over the given enabled models.
      *
-     * <p>For each entry the engine resolves the model's {@code .pte} path through {@code resolver} and, when
-     * the {@link ExecuTorch} shim is available and the path resolves and creates, holds the loaded handle
-     * and the model's {@link ModelConfig}. A model whose path does not resolve, whose shim create fails, or
-     * whose configuration is absent is held history-only and never run, so the engine degrades to the no-op
-     * path when nothing is provisioned. The history ring is allocated for every requested model regardless,
-     * so a model that becomes loadable later still has its history.
+     * <p>For each entry the engine allocates the model's history ring and resolves its {@code .pte} path
+     * through {@code resolver}. Because the native ExecuTorch backend is not bundled, a model whose path
+     * resolves cannot be loaded and construction throws; a model whose path is absent is held history-only,
+     * so an engine constructed with no provisioned paths builds successfully and stays inert.
      *
      * @param configs  the per-model configuration for every model to enable; never {@code null}
      * @param resolver the resolver mapping a model type to its {@code .pte} filesystem path, or returning
      *                 {@code null} when no path is provisioned for that model; never {@code null}
-     * @throws NullPointerException if {@code configs} or {@code resolver} is {@code null}
+     * @throws NullPointerException          if {@code configs} or {@code resolver} is {@code null}
+     * @throws UnsupportedOperationException if a model's path resolves, since the ExecuTorch backend is not
+     *                                       bundled
      */
     public LiveMlBweEngine(Map<MlBweModelType, ModelConfig> configs, ModelPathResolver resolver) {
         Objects.requireNonNull(configs, "configs cannot be null");
@@ -163,51 +160,38 @@ public final class LiveMlBweEngine implements MlBweEngine {
     }
 
     /**
-     * Returns whether the {@code ml_shim_*} ExecuTorch shim is linked into {@code cobalt-native}.
+     * Returns whether the native ExecuTorch shim is callable.
      *
-     * <p>Loads {@code cobalt-native} (idempotent) and probes it for {@code ml_shim_create_executorch}; when
-     * the ExecuTorch shim and the XNNPACK backend are not built into the combined library the symbol is
-     * absent, so no live model can be loaded and the media plane uses {@link NoopMlBweEngine}. Loading the
-     * library here also lets the {@link ExecuTorch} binding's own
-     * {@linkplain java.lang.foreign.SymbolLookup#loaderLookup() loader lookup} resolve the same symbols on
-     * the downcalls. Any failure to load or resolve is reported as unavailable rather than propagated.
-     *
-     * @return {@code true} when the ExecuTorch shim is callable in {@code cobalt-native}
+     * @return always {@code false}, since the ExecuTorch backend was removed from {@code cobalt-native}
      */
     public static boolean nativeShimAvailable() {
-        try {
-            return NativeLibLoader.load("cobalt-native", Arena.global())
-                    .find("ml_shim_create_executorch")
-                    .isPresent();
-        } catch (Throwable t) {
-            return false;
-        }
+        return false;
     }
 
     /**
-     * Loads the ExecuTorch handle for one model, or returns {@link MemorySegment#NULL} when it cannot be
-     * loaded.
+     * Loads the model handle for one model, or returns {@link MemorySegment#NULL} when no path is
+     * provisioned.
      *
-     * <p>Returns {@link MemorySegment#NULL} when the shim is unavailable, the path does not resolve, the
-     * create returns null, or the post-create status is not OK; a model with a null handle is run-skipped.
+     * <p>Returns {@link MemorySegment#NULL} when the path does not resolve; when a path is provisioned the
+     * native create throws, since the ExecuTorch backend is not bundled, so a model with a {@code .pte} path
+     * cannot be loaded.
      *
      * @param type     the model type to load
      * @param resolver the model-path resolver
-     * @return the loaded handle, or {@link MemorySegment#NULL} when the model is not loadable
+     * @return {@link MemorySegment#NULL} when no path is provisioned
+     * @throws UnsupportedOperationException when a path is provisioned, since the ExecuTorch backend is not
+     *                                       bundled
      */
     private MemorySegment loadHandle(MlBweModelType type, ModelPathResolver resolver) {
-        if (!nativeShimAvailable()) {
-            return MemorySegment.NULL;
-        }
         var path = resolver.resolve(type);
         if (path == null || path.isEmpty()) {
             return MemorySegment.NULL;
         }
         var pathSegment = arena.allocateFrom(path);
-        var handle = ExecuTorch.ml_shim_create_executorch(pathSegment);
-        if (handle.equals(MemorySegment.NULL) || ExecuTorch.ml_get_shim_create_status() != ExecuTorch.COBALT_ET_OK()) {
+        var handle = ml_shim_create_executorch(pathSegment);
+        if (handle.equals(MemorySegment.NULL) || ml_get_shim_create_status() != COBALT_ET_OK()) {
             if (!handle.equals(MemorySegment.NULL)) {
-                ExecuTorch.ml_shim_free(handle);
+                ml_shim_free(handle);
             }
             return MemorySegment.NULL;
         }
@@ -215,9 +199,74 @@ public final class LiveMlBweEngine implements MlBweEngine {
     }
 
     /**
+     * Creates a model handle from a {@code .pte} model path.
+     *
+     * @param modelPath the native UTF-8 model path
+     * @return never returns normally
+     * @throws UnsupportedOperationException always, since the ExecuTorch native backend is not bundled into
+     *                                       {@code cobalt-native}
+     */
+    private static MemorySegment ml_shim_create_executorch(MemorySegment modelPath) {
+        throw nativeUnavailable();
+    }
+
+    /**
+     * Runs one forward pass of a loaded model.
+     *
+     * @param model          the model handle
+     * @param input          the input feature buffer
+     * @param inputLen       the number of input floats
+     * @param output         the output buffer
+     * @param outputCapacity the output buffer capacity in floats
+     * @return never returns normally
+     * @throws UnsupportedOperationException always, since the ExecuTorch native backend is not bundled
+     */
+    private static int ml_shim_forward(MemorySegment model, MemorySegment input, int inputLen, MemorySegment output, int outputCapacity) {
+        throw nativeUnavailable();
+    }
+
+    /**
+     * Frees a loaded model handle.
+     *
+     * @param model the model handle
+     * @throws UnsupportedOperationException always, since the ExecuTorch native backend is not bundled
+     */
+    private static void ml_shim_free(MemorySegment model) {
+        throw nativeUnavailable();
+    }
+
+    /**
+     * Returns the status of the most recent model create.
+     *
+     * @return never returns normally
+     * @throws UnsupportedOperationException always, since the ExecuTorch native backend is not bundled
+     */
+    private static int ml_get_shim_create_status() {
+        throw nativeUnavailable();
+    }
+
+    /**
+     * Returns the native status code denoting a successful model create.
+     *
+     * @return the {@code COBALT_ET_OK} constant
+     */
+    private static int COBALT_ET_OK() {
+        return 0;
+    }
+
+    /**
+     * Returns the exception thrown at the absent native boundary.
+     *
+     * @return an {@link UnsupportedOperationException} describing the removed ExecuTorch backend
+     */
+    private static UnsupportedOperationException nativeUnavailable() {
+        return new UnsupportedOperationException("ExecuTorch native backend is not bundled in cobalt-native");
+    }
+
+    /**
      * {@inheritDoc}
      *
-     * @return the model types whose ExecuTorch handle loaded successfully
+     * @return the model types whose handle loaded successfully
      */
     @Override
     public Set<MlBweModelType> loadedModels() {
@@ -319,7 +368,7 @@ public final class LiveMlBweEngine implements MlBweEngine {
         var input = arena.allocate((long) rounds * features * Float.BYTES);
         fillInput(input, ring, selectedSlots, rounds);
         var output = arena.allocate((long) CONGESTION_OUTPUT_LEN * Float.BYTES);
-        var written = ExecuTorch.ml_shim_forward(model.handle(), input, rounds * features, output, CONGESTION_OUTPUT_LEN);
+        var written = ml_shim_forward(model.handle(), input, rounds * features, output, CONGESTION_OUTPUT_LEN);
         if (written != CONGESTION_OUTPUT_LEN) {
             return MlBweOutputs.DISABLED;
         }
@@ -462,8 +511,8 @@ public final class LiveMlBweEngine implements MlBweEngine {
     /**
      * {@inheritDoc}
      *
-     * @implNote This implementation frees every loaded ExecuTorch handle through the shim and closes the
-     * native arena holding the tensor buffers; closing an already-closed engine has no effect.
+     * @implNote This implementation frees every loaded model handle and closes the native arena holding the
+     * tensor buffers; closing an already-closed engine has no effect.
      */
     @Override
     public void close() {
@@ -476,13 +525,13 @@ public final class LiveMlBweEngine implements MlBweEngine {
     }
 
     /**
-     * Frees every loaded ExecuTorch handle, swallowing any native error.
+     * Frees every loaded model handle, swallowing any error.
      */
     private void freeHandles() {
         for (var model : models.values()) {
             if (!model.handle().equals(MemorySegment.NULL)) {
                 try {
-                    ExecuTorch.ml_shim_free(model.handle());
+                    ml_shim_free(model.handle());
                 } catch (Throwable _) {
                 }
             }
@@ -572,11 +621,11 @@ public final class LiveMlBweEngine implements MlBweEngine {
     }
 
     /**
-     * Holds one model's configuration, history ring, and loaded ExecuTorch handle.
+     * Holds one model's configuration, history ring, and loaded model handle.
      *
      * @param config the model's runtime configuration
      * @param ring   the model's slide-window history ring
-     * @param handle the loaded ExecuTorch handle, or {@link MemorySegment#NULL} when not loaded
+     * @param handle the loaded model handle, or {@link MemorySegment#NULL} when not loaded
      */
     private record LoadedModel(ModelConfig config, HistoryRing ring, MemorySegment handle) {
     }

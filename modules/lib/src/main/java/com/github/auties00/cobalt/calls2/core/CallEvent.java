@@ -62,6 +62,7 @@ public sealed interface CallEvent
         CallEvent.PeerStateChanged,
         CallEvent.MuteChanged,
         CallEvent.VideoStateChanged,
+        CallEvent.VideoUpgradeRequest,
         CallEvent.PeerVideoPermissionChanged,
         CallEvent.ScreenShareChanged,
         CallEvent.Reaction,
@@ -347,6 +348,42 @@ public sealed interface CallEvent
          */
         public Optional<Jid> participant() {
             return Optional.ofNullable(participantJid);
+        }
+
+        /**
+         * {@inheritDoc}
+         *
+         * @return always {@link CallEventType#VIDEO_STATE_CHANGED}
+         */
+        @Override
+        public CallEventType type() {
+            return CallEventType.VIDEO_STATE_CHANGED;
+        }
+    }
+
+    /**
+     * Signals that a peer asked to upgrade an audio-only call to audio plus video.
+     *
+     * <p>This is the decoded form of the inbound {@code <video>} action carrying the
+     * {@code UPGRADE_REQUEST} (or {@code UPGRADE_REQUEST_V2}) state: a distinct host-facing notification
+     * from the camera on/off {@link VideoStateChanged}, since the application must answer it by accepting
+     * or rejecting the upgrade rather than simply rendering a peer's camera toggle. It rides the same
+     * native video-state-changed dispatch id, so it reports {@link CallEventType#VIDEO_STATE_CHANGED};
+     * the bus routes it to the dedicated on-call-video-upgrade-request callback by record class.
+     *
+     * @param callId  the identifier of the call
+     * @param peerJid the JID of the peer requesting the upgrade
+     * @see CallEventType#VIDEO_STATE_CHANGED
+     */
+    record VideoUpgradeRequest(String callId, Jid peerJid) implements CallEvent {
+        /**
+         * Validates the components.
+         *
+         * @throws NullPointerException if {@code callId} or {@code peerJid} is {@code null}
+         */
+        public VideoUpgradeRequest {
+            Objects.requireNonNull(callId, "callId cannot be null");
+            Objects.requireNonNull(peerJid, "peerJid cannot be null");
         }
 
         /**

@@ -13,16 +13,16 @@ import com.github.auties00.cobalt.wam.type.ReceiptStanzaStage;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebReceiptStanzaReceiveWamEvent")
 @WamEvent(id = 2496, betaWeight = 1000, releaseWeight = 2000)
 public interface ReceiptStanzaReceiveEvent extends WamEventSpec {
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt dbReadsCount();
+    OptionalLong dbReadsCount();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt dbWritesCount();
+    OptionalLong dbWritesCount();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<MediaType> mediaType();
@@ -43,26 +43,26 @@ public interface ReceiptStanzaReceiveEvent extends WamEventSpec {
     Optional<Boolean> receiptStanzaHasOrphaned();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt receiptStanzaOfflineCount();
+    OptionalLong receiptStanzaOfflineCount();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt receiptStanzaProcessedCount();
+    OptionalLong receiptStanzaProcessedCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt receiptStanzaRetryVer();
+    OptionalLong receiptStanzaRetryVer();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<ReceiptStanzaStage> receiptStanzaStage();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt receiptStanzaTotalCount();
+    OptionalLong receiptStanzaTotalCount();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> receiptStanzaType();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt stanzaBatchSize();
+    OptionalLong stanzaBatchSize();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt stanzaProcessCount();
+    OptionalLong stanzaProcessCount();
 }

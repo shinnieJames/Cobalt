@@ -280,6 +280,13 @@
             <version>1.0.0</version>
         </dependency>
 
+        <!-- Persistent message store (embedded H2 MVStore, pure Java) -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2-mvstore</artifactId>
+            <version>${h2.mvstore.version}</version>
+        </dependency>
+
         <!-- PDF rendering for document thumbnails in the upload transcoder -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>

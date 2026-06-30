@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.DefenseModeQuarantineAction;
 import com.github.auties00.cobalt.wam.type.JidDomainType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebDefenseModeQuarantineWamEvent")
 @WamEvent(id = 7098)
 public interface DefenseModeQuarantineEvent extends WamEventSpec {
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt defenseModeQuarantineEventCount();
+    OptionalLong defenseModeQuarantineEventCount();
 
     @WamProperty(index = 3, type = WamType.BOOLEAN)
     Optional<Boolean> defenseModeQuarantineIsCapi();

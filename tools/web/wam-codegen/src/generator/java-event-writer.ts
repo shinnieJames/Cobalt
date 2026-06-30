@@ -8,7 +8,7 @@ import type {WamEventDef, WamFieldDef} from "../parser/types.js";
 function returnType(field: WamFieldDef): string {
     switch (field.wamType) {
         case "INTEGER":
-            return "OptionalInt";
+            return "OptionalLong";
         case "FLOAT":
             return "OptionalDouble";
         case "ENUM":
@@ -41,7 +41,7 @@ function collectOptionalImports(fields: readonly WamFieldDef[]): string[] {
     for (const f of fields) {
         switch (f.wamType) {
             case "INTEGER":
-                imports.add("java.util.OptionalInt");
+                imports.add("java.util.OptionalLong");
                 break;
             case "FLOAT":
                 imports.add("java.util.OptionalDouble");

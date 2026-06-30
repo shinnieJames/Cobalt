@@ -26,12 +26,13 @@ import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.wam.type.E2eDeviceType;
 import com.github.auties00.cobalt.wam.type.MediaType;
+import com.github.auties00.cobalt.wam.type.MessageChatType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 
 /**
  * Classifies messages into the WAM {@link MediaType}, {@link MessageType},
- * and {@link E2eDeviceType} enumerations consumed by the WAM send and
- * receive metric emitters.
+ * {@link MessageChatType}, and {@link E2eDeviceType} enumerations consumed by
+ * the WAM send and receive metric emitters.
  *
  * <p>These are pure, stateless functions: each derives a telemetry
  * bucketing dimension from a {@link MessageContainer}, a
@@ -208,6 +209,59 @@ public final class WamMsgUtils {
             return MessageType.CHANNEL;
         }
         return MessageType.INDIVIDUAL;
+    }
+
+    /**
+     * Returns the WAM {@link MessageChatType} classification derived from the
+     * server component of the given chat JID.
+     *
+     * <p>This mirrors the cascaded ternary in
+     * {@code WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid}
+     * exactly, dispatching on the WA Web {@code Wid} predicates in the same
+     * order:
+     * <ol>
+     *     <li>{@code isUser()} (user/legacy-user/LID/bot/hosted/hosted.lid
+     *         domains) maps to {@link MessageChatType#INDIVIDUAL};</li>
+     *     <li>{@code isGroup()} ({@code g.us} domain) maps to
+     *         {@link MessageChatType#GROUP};</li>
+     *     <li>{@code isBroadcast()} ({@code broadcast} domain) maps to
+     *         {@link MessageChatType#BROADCAST};</li>
+     *     <li>{@code isStatus()} ({@code status@broadcast}) maps to
+     *         {@link MessageChatType#STATUS};</li>
+     *     <li>{@code isNewsletter()} ({@code newsletter} domain) maps to
+     *         {@link MessageChatType#CHANNEL};</li>
+     *     <li>anything else maps to {@link MessageChatType#OTHER}.</li>
+     * </ol>
+     *
+     * @param chatJid the chat JID to classify; must not be {@code null}
+     * @return the corresponding {@link MessageChatType}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebGetMessageChatTypeFromWid",
+            exports = "getMessageChatTypeFromWid",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public static MessageChatType getWamChatType(Jid chatJid) {
+        if (chatJid.hasUserServer()
+                || chatJid.hasLidServer()
+                || chatJid.hasBotServer()
+                || chatJid.hasHostedServer()
+                || chatJid.hasHostedLidServer()) {
+            return MessageChatType.INDIVIDUAL;
+        }
+        if (chatJid.hasGroupOrCommunityServer()) {
+            return MessageChatType.GROUP;
+        }
+        if (chatJid.hasBroadcastServer()) {
+            return MessageChatType.BROADCAST;
+        }
+        // (unreachable: isBroadcast above already catches status@broadcast; kept for
+        // structural parity with the JS ternary)
+        if (chatJid.isStatusBroadcastAccount()) {
+            return MessageChatType.STATUS;
+        }
+        if (chatJid.hasNewsletterServer()) {
+            return MessageChatType.CHANNEL;
+        }
+        return MessageChatType.OTHER;
     }
 
     /**

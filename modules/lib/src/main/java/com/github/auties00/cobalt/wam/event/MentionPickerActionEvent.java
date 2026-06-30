@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.GroupTypeClient;
 import com.github.auties00.cobalt.wam.type.MentionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMentionPickerActionWamEvent")
 @WamEvent(id = 7082)
 public interface MentionPickerActionEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt groupSize();
+    OptionalLong groupSize();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<GroupTypeClient> groupTypeClient();

@@ -102,9 +102,6 @@ LIBWEBP_REF=v1.5.0
 FFMPEG_REPO=https://github.com/FFmpeg/FFmpeg.git
 FFMPEG_REF=n7.1
 
-MDBX_REPO=https://github.com/erthink/libmdbx.git
-MDBX_REF=v0.14.2
-
 # WebRTC Audio Processing Module: the PulseAudio-maintained standalone build of
 # WebRTC's AEC3 + noise suppressor (incl. the ML denoiser) + gain controller, the
 # capture-conditioning stack WhatsApp uses (wa_mobile_audio_processing.cc). Meson
@@ -584,23 +581,6 @@ EOF
     vendor_ffmpeg_headers "$b/inst/include"
 }
 
-build_mdbx() {
-    log "mdbx (static)"
-    ensure_src MDBX_SRC "$MDBX_REPO" "$MDBX_REF" mdbx
-    local dist="$MDBX_SRC"
-    [ -f "$dist/mdbx.c" ] || fail "mdbx amalgamated source (mdbx.c) not found under $MDBX_SRC"
-    local b="$BUILD/build-mdbx"
-    rm -rf "$b" && mkdir -p "$b"
-    local cc="${CC:-cc}"
-    local wrap="$DEPS/libmdbx/mdbx_openu.c"
-    # No dllexport macros (LIBMDBX_EXPORTS / MDBX_BUILD_SHARED_LIBRARY): the
-    # combined library's exports are governed by the version-script / .def.
-    "$cc" -O3 -DNDEBUG $EXTRA_CFLAGS -I "$dist" -c "$dist/mdbx.c" -o "$b/mdbx.o"
-    "$cc" -O3 -DNDEBUG $EXTRA_CFLAGS -I "$dist" -c "$wrap"        -o "$b/mdbx_openu.o"
-    ar rcs "$b/libmdbx.a" "$b/mdbx.o" "$b/mdbx_openu.o"
-    vendor_headers "$dist" "$DEPS/libmdbx/headers"
-}
-
 # WebRTC Audio Processing Module (static). Builds with meson + ninja (already
 # required by build_av1), producing libwebrtc-audio-processing.a + its C++
 # headers; the Cobalt extern-C shim cobalt_webrtc_apm_shim.cpp is compiled against
@@ -718,7 +698,6 @@ build_combined() {
         "$BUILD/build-libvpx/libcobalt_vpx_shim.a"
         "$BUILD/build-opus/libcobalt_opus_shim.a"
         "$BUILD/build-openh264/libcobalt_h264_shim.a"
-        "$BUILD/build-mdbx/libmdbx.a"
     )
     # The WebRTC APM is gated: build_webrtc_apm only produces its archives once the
     # extern-C shim source lands, so append them only when present. Until then the
@@ -839,7 +818,6 @@ build_av1
 build_rav1e
 build_libwebp
 build_ffmpeg
-build_mdbx
 build_webrtc_apm
 build_combined
 log "done $CLASSIFIER"

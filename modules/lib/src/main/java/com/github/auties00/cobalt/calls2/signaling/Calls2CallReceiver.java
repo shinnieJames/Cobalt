@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -129,6 +130,11 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
     private final BiConsumer<CallMessage, Jid> sink;
 
     /**
+     * Receives each decoded {@link OfferNoticeStanza} for out-of-engine handling.
+     */
+    private final Consumer<OfferNoticeStanza> offerNoticeSink;
+
+    /**
      * Constructs a call receiver bound to its client, acknowledgement sender, router, buffer,
      * call-existence predicate, and engine sink.
      *
@@ -142,16 +148,19 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      *                   identifier
      * @param sink       the consumer that receives each decoded routable {@link CallMessage} together
      *                   with the envelope {@code from} that authored it
+     * @param offerNoticeSink the consumer that receives each decoded {@link OfferNoticeStanza}, which is
+     *                   handled outside the call engine
      * @throws NullPointerException if any argument is {@code null}
      */
     public Calls2CallReceiver(LinkedWhatsAppClient whatsapp, AckSender ackSender, CallSignalingRouter router,
                               CallMessageBuffer buffer, Predicate<String> callExists,
-                              BiConsumer<CallMessage, Jid> sink) {
+                              BiConsumer<CallMessage, Jid> sink, Consumer<OfferNoticeStanza> offerNoticeSink) {
         this.acknowledger = new CallSignalingAcknowledger(whatsapp, ackSender);
         this.router = Objects.requireNonNull(router, "router cannot be null");
         this.buffer = Objects.requireNonNull(buffer, "buffer cannot be null");
         this.callExists = Objects.requireNonNull(callExists, "callExists cannot be null");
         this.sink = Objects.requireNonNull(sink, "sink cannot be null");
+        this.offerNoticeSink = Objects.requireNonNull(offerNoticeSink, "offerNoticeSink cannot be null");
     }
 
     /**
@@ -192,6 +201,11 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
             return;
         }
 
+        if (OfferNoticeStanza.ELEMENT.equals(payload.description())) {
+            handleOfferNotice(stanza, payload);
+            return;
+        }
+
         var senderLid = stanza.getAttributeAsJid(SENDER_LID_ATTRIBUTE, null);
         var verdict = router.classify(payload, senderLid,
                 payload.getAttributeAsString(CALL_ID_ATTRIBUTE)
@@ -206,6 +220,25 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
             case BUFFER -> verdict.callId().ifPresent(callId -> bufferAndMaybeReplay(callId, payload, from));
             case PROCESS -> forward(payload, from);
         }
+    }
+
+    /**
+     * Acknowledges an {@code <offer_notice>} and hands the decoded notice to the out-of-engine sink.
+     *
+     * <p>An offer notice is not a voip-engine signaling action: it does not create, advance, or buffer a
+     * call object. It is acknowledged with the same {@code <ack class="call" type="offer_notice">} the
+     * server expects for any non-receipt signal, then decoded through {@link OfferNoticeStanza#of(Stanza)}
+     * and forwarded to {@link #offerNoticeSink}, which surfaces it to the application and records it in the
+     * call history. A notice that cannot be decoded is dropped after acknowledgement so the server stops
+     * retransmitting.
+     *
+     * @param stanza  the inbound {@code <call>} envelope
+     * @param payload the {@code <offer_notice>} child element
+     */
+    private void handleOfferNotice(Stanza stanza, Stanza payload) {
+        acknowledger.acknowledge(stanza, payload, payload.getAttributeAsString(CALL_ID_ATTRIBUTE).orElse(null));
+        OfferNoticeStanza.of(stanza).ifPresentOrElse(offerNoticeSink, () ->
+                LOGGER.log(System.Logger.Level.DEBUG, "Could not decode offer_notice: {0}", stanza));
     }
 
     /**

@@ -31,5 +31,7 @@ public enum MessageDropReasonType {
     @WamEnumConstant(21) INVALID_PEER_MESSAGE,
     @WamEnumConstant(22) INVALID_REPORTING_TOKEN,
     @WamEnumConstant(23) MISSING_REPORTING_TOKEN,
-    @WamEnumConstant(24) APPDATA_MISMATCH
+    @WamEnumConstant(24) APPDATA_MISMATCH,
+    @WamEnumConstant(25) COEX_V2_RECV_UNSUPPORTED,
+    @WamEnumConstant(26) COEX_V2_INVALID_SENDER
 }

@@ -35,5 +35,13 @@ public enum AboutPromptType {
     @WamEnumConstant(25) EASTER_HAPPY,
     @WamEnumConstant(26) EASTER_PLANS,
     @WamEnumConstant(27) EASTER_FEELS,
-    @WamEnumConstant(28) EASTER_TIME_FOR
+    @WamEnumConstant(28) EASTER_TIME_FOR,
+    @WamEnumConstant(30) FIFA_WORLDCUP_CHEERING_FOR,
+    @WamEnumConstant(31) FIFA_WORLDCUP_COUNTRY_PRIDE,
+    @WamEnumConstant(32) FIFA_WORLDCUP_YOUR_TEAM_TODAY,
+    @WamEnumConstant(33) FIFA_WORLDCUP_WATCHING_MATCH_WITH,
+    @WamEnumConstant(34) FIFA_WORLDCUP_QUARTERFINALS_PICK,
+    @WamEnumConstant(35) FIFA_WORLDCUP_MATCH_DAY_PLANS,
+    @WamEnumConstant(36) FIFA_WORLDCUP_TAKING_IT_HOME,
+    @WamEnumConstant(37) FIFA_WORLDCUP_FINALS_TEAM
 }

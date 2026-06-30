@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MmDirectionFrom;
 import com.github.auties00.cobalt.wam.type.MmSignalType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMmSignalWamEvent")
 @WamEvent(id = 5572, channel = WamChannel.PRIVATE, privateStatsId = 0)
@@ -27,13 +27,13 @@ public interface MmSignalEvent extends WamEventSpec {
     Optional<Boolean> isLatestConversionToken();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt mmConversationDepth();
+    OptionalLong mmConversationDepth();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt mmConversationRepeat();
+    OptionalLong mmConversationRepeat();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt mmConversionSchemaVersion();
+    OptionalLong mmConversionSchemaVersion();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<MmDirectionFrom> mmDirectionFrom();

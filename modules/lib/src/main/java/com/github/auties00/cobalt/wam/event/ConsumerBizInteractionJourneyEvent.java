@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.ConsumerBizFeatureEnum;
 import com.github.auties00.cobalt.wam.type.ConsumerBizSurfaceEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebConsumerBizInteractionJourneyWamEvent")
 @WamEvent(id = 7760, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -38,7 +38,7 @@ public interface ConsumerBizInteractionJourneyEvent extends WamEventSpec {
     Optional<ConsumerBizFeatureEnum> consumerBizFeature();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt consumerBizSeqId();
+    OptionalLong consumerBizSeqId();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> consumerBizSessionId();

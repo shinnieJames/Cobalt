@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BizPlatform;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMerchantCommerceEventWamEvent")
 @WamEvent(id = 4688)
@@ -72,5 +72,5 @@ public interface MerchantCommerceEventEvent extends WamEventSpec {
     Optional<String> referral();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt sequenceId();
+    OptionalLong sequenceId();
 }

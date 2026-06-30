@@ -16,11 +16,11 @@ import java.util.Objects;
  * <p>This is the device-backed {@link BufferedVideoOutput} returned by
  * {@link BufferedVideoOutput#file(Path)}. It opens the file with libavformat and hands the opened demuxer
  * to {@link FfmpegVideoOutput}, which decodes its first video stream and converts each picture to
- * {@link VideoPixelFormat#I420 I420} at the advertised geometry. The geometry passed to {@code super} is
- * the resolution, frame rate, and bitrate the call engine advertises and encodes at, independent of the
- * file's native video resolution. A local file read does not stall, so this source configures no read
- * timeout and does not arm the demux watchdog; {@link UriVideoOutput} is the timeout-bounded sibling for
- * network inputs.
+ * {@link VideoPixelFormat#I420 I420} at the detected geometry. The geometry the call engine advertises and
+ * encodes at is the file's own native video resolution, capped to {@code 1280} on the longer side and
+ * rounded to even, so a 16:9 file is advertised as 16:9 rather than squished to a fixed default. A local
+ * file read does not stall, so this source configures no read timeout and does not arm the demux watchdog;
+ * {@link UriVideoOutput} is the timeout-bounded sibling for network inputs.
  *
  * @implNote This implementation is the calls2 port of the legacy media-file video source; each converted
  * picture the base produces carries the {@link VideoFrame#ptsMicros()} microsecond presentation timestamp
@@ -28,24 +28,20 @@ import java.util.Objects;
  */
 public final class FileVideoOutput extends FfmpegVideoOutput {
     /**
-     * Opens the given media file at the given advertised geometry and prepares the shared video decode
+     * Opens the given media file, detects its native video geometry, and prepares the shared video decode
      * pipeline.
      *
-     * <p>Passes a {@code null} read timeout to the base, since a local file read does not block on the
-     * network, and an opener that opens and probes the file with libavformat.
+     * <p>Opens and probes the file with a {@code null} read timeout, since a local file read does not block
+     * on the network, then advertises the file's detected video resolution, capped to {@code 1280} on the
+     * longer side and rounded to even, at the default 30 frames per second and the recovered initial
+     * bitrate. The detected geometry replaces any fixed default, so a 16:9 file is advertised as 16:9.
      *
-     * @param path       the media file to open
-     * @param width      the advertised frame width in pixels; even and at least {@code 2}
-     * @param height     the advertised frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @throws NullPointerException     if {@code path} is {@code null}
-     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if the file cannot be opened or has no video stream
+     * @param path the media file to open
+     * @throws NullPointerException  if {@code path} is {@code null}
+     * @throws IllegalStateException if the file cannot be opened or has no video stream
      */
-    public FileVideoOutput(Path path, int width, int height, int fps, int bitrateBps) {
-        super(width, height, fps, bitrateBps, null, (arena, watchdog) -> openFile(arena, path));
+    public FileVideoOutput(Path path) {
+        super(openInput(null, (arena, watchdog) -> openFile(arena, path)), DEFAULT_BITRATE_BPS);
     }
 
     /**

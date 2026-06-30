@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.calls2.stream.VideoInput;
 import com.github.auties00.cobalt.calls2.stream.VideoOutput;
 import com.github.auties00.cobalt.calls2.signaling.CallAckOutcome;
 import com.github.auties00.cobalt.calls2.signaling.CallMessage;
+import com.github.auties00.cobalt.calls2.signaling.OfferNoticeStanza;
 import com.github.auties00.cobalt.calls2.signaling.TerminateStanza;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.call.Call;
@@ -397,6 +398,26 @@ public sealed interface Calls2Service permits LiveCalls2Service {
      * @throws NullPointerException if {@code message} or {@code senderJid} is {@code null}
      */
     void handleInbound(CallMessage message, Jid senderJid);
+
+    /**
+     * Handles an inbound {@code <offer_notice>}: the server's notice that a call was offered to this
+     * device while it was offline.
+     *
+     * <p>An offer notice is informational and is handled outside the call engine: it neither rings a live
+     * call nor creates an engine call object. The implementation drops a notice older than the
+     * WhatsApp-imposed staleness window, records a fresh one in the call history as an offline offer, and
+     * fans it out to the registered {@code onCallOfferNotice} listeners so the application can surface the
+     * missed call.
+     *
+     * @implSpec
+     * Implementations must drop a notice whose {@link OfferNoticeStanza#offerTime()} is older than the
+     * staleness window without recording or surfacing it, and must tolerate a notice for a call the engine
+     * does not track without throwing.
+     *
+     * @param notice the decoded inbound offer notice
+     * @throws NullPointerException if {@code notice} is {@code null}
+     */
+    void handleOfferNotice(OfferNoticeStanza notice);
 
     /**
      * Forwards an inbound bare {@code <terminate>} stanza to the engine lifecycle controller.

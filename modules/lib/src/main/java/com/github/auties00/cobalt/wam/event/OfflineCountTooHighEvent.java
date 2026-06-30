@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.StanzaType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebOfflineCountTooHighWamEvent")
 @WamEvent(id = 2638)
@@ -42,7 +42,7 @@ public interface OfflineCountTooHighEvent extends WamEventSpec {
     Optional<String> notificationStanzaType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt offlineCount();
+    OptionalLong offlineCount();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> receiptStanzaType();

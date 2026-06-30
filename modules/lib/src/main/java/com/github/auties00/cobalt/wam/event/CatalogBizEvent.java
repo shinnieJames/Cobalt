@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.DeepLinkOpenFrom;
 import com.github.auties00.cobalt.wam.type.LastMessageDirection;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCatalogBizWamEvent")
 @WamEvent(id = 1722)
@@ -36,7 +36,7 @@ public interface CatalogBizEvent extends WamEventSpec {
     Optional<String> catalogSessionId();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt collectionCount();
+    OptionalLong collectionCount();
 
     @WamProperty(index = 14, type = WamType.STRING)
     Optional<String> collectionId();
@@ -51,7 +51,7 @@ public interface CatalogBizEvent extends WamEventSpec {
     Optional<String> entryPointConversionSource();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt errorCode();
+    OptionalLong errorCode();
 
     @WamProperty(index = 24, type = WamType.STRING)
     Optional<String> extraAttributes();
@@ -63,13 +63,13 @@ public interface CatalogBizEvent extends WamEventSpec {
     Optional<LastMessageDirection> lastMessageDirection();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt messageDepth();
+    OptionalLong messageDepth();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> orderId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt productCount();
+    OptionalLong productCount();
 
     @WamProperty(index = 2, type = WamType.STRING)
     Optional<String> productId();
@@ -81,7 +81,7 @@ public interface CatalogBizEvent extends WamEventSpec {
     Optional<String> productIndex();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt quantity();
+    OptionalLong quantity();
 
     @WamProperty(index = 23, type = WamType.STRING)
     Optional<String> threadIdHmac();

@@ -242,5 +242,17 @@ public enum TsSurface {
     @WamEnumConstant(233) FOA_BIZ_PROFILE,
     @WamEnumConstant(234) META_AI_NEW_CHAT,
     @WamEnumConstant(235) MANAGE_STORAGE_GALLERY,
-    @WamEnumConstant(236) STATUS_PRIVACY_PARTICIPANT_PICKER
+    @WamEnumConstant(236) STATUS_PRIVACY_PARTICIPANT_PICKER,
+    @WamEnumConstant(237) SMB_CATALOG_ADD_ITEM,
+    @WamEnumConstant(238) SMB_CATALOG_ADD_ITEM_MEDIA,
+    @WamEnumConstant(239) SMB_CATALOG_ADD_ITEM_ORIGIN_COUNTRY,
+    @WamEnumConstant(240) SMB_CATALOG_ADD_ITEM_SAVE,
+    @WamEnumConstant(241) SMB_CATALOG_ADD_ITEM_SAVE_ERROR,
+    @WamEnumConstant(242) SMB_CATALOG_ADD_ITEM_SAVE_SUCCESS,
+    @WamEnumConstant(243) SMB_LISTS_MANAGE,
+    @WamEnumConstant(244) SMB_LISTS_CREATE,
+    @WamEnumConstant(245) SMB_LISTS_PICKER,
+    @WamEnumConstant(246) CHANNEL_ADMIN_PROFILE_VIEWER,
+    @WamEnumConstant(247) CHANNEL_ADMIN_PROFILE_PICTURE,
+    @WamEnumConstant(248) PTT_WIDGET
 }

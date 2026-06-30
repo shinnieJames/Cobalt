@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.SmbListSurfaceType;
 import com.github.auties00.cobalt.wam.type.UpdateEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSmbListEventWamEvent")
 @WamEvent(id = 7102)
@@ -48,10 +48,10 @@ public interface SmbListEventEvent extends WamEventSpec {
     Optional<LastMessageDirection> lastMessageDirection();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt listId();
+    OptionalLong listId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt listIndex();
+    OptionalLong listIndex();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<ListType> listType();
@@ -63,10 +63,10 @@ public interface SmbListEventEvent extends WamEventSpec {
     Optional<String> listsRemoved();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt messageDepth();
+    OptionalLong messageDepth();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt predefinedId();
+    OptionalLong predefinedId();
 
     @WamProperty(index = 20, type = WamType.ENUM)
     Optional<SmbListFeatureNameType> smbListFeatureName();

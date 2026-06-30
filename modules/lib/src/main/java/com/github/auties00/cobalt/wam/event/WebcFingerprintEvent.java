@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.PlatformName;
 import com.github.auties00.cobalt.wam.type.WebcWindowNavigatorWebdriverType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcFingerprintWamEvent")
 @WamEvent(id = 1704)
@@ -23,7 +23,7 @@ public interface WebcFingerprintEvent extends WamEventSpec {
     Optional<String> automationSignals();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt batteryLevel();
+    OptionalLong batteryLevel();
 
     @WamProperty(index = 26, type = WamType.ENUM)
     Optional<BrowserEngineName> browserEngine();
@@ -32,7 +32,7 @@ public interface WebcFingerprintEvent extends WamEventSpec {
     Optional<String> chromeStructure();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
-    OptionalInt connectionRtt();
+    OptionalLong connectionRtt();
 
     @WamProperty(index = 38, type = WamType.STRING)
     Optional<String> cpuMake();
@@ -62,10 +62,10 @@ public interface WebcFingerprintEvent extends WamEventSpec {
     Optional<Boolean> hasWebShare();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt historyLength();
+    OptionalLong historyLength();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt mimeTypeCount();
+    OptionalLong mimeTypeCount();
 
     @WamProperty(index = 32, type = WamType.BOOLEAN)
     Optional<Boolean> notificationPermission();
@@ -83,13 +83,13 @@ public interface WebcFingerprintEvent extends WamEventSpec {
     Optional<PlatformName> platformEstimate();
 
     @WamProperty(index = 35, type = WamType.INTEGER)
-    OptionalInt pluginCount();
+    OptionalLong pluginCount();
 
     @WamProperty(index = 43, type = WamType.STRING)
     Optional<String> screenResolution();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt sessionStorageLength();
+    OptionalLong sessionStorageLength();
 
     @WamProperty(index = 45, type = WamType.STRING)
     Optional<String> timezone();

@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.StatusCategory;
 import com.github.auties00.cobalt.wam.type.StatusPosterContactType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusMuteWamEvent")
 @WamEvent(id = 2978)
@@ -39,26 +39,26 @@ public interface StatusMuteEvent extends WamEventSpec {
     Optional<String> psaCampaignIds();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt psaCampaignItemIndex();
+    OptionalLong psaCampaignItemIndex();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<StatusCategory> statusCategory();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt statusItemIndex();
+    OptionalLong statusItemIndex();
 
     @WamProperty(index = 14, type = WamType.ENUM)
     Optional<StatusPosterContactType> statusPosterContactType();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt statusViewerSessionId();
+    OptionalLong statusViewerSessionId();
 
     @WamProperty(index = 11, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

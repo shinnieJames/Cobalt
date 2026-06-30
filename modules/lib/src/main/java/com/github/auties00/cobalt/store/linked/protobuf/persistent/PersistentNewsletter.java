@@ -22,7 +22,7 @@ import java.util.stream.Stream;
  * Cobalt embedders never construct this directly; {@link PersistentLinkedWhatsAppChatStore#addNewNewsletter(Jid)}
  * returns one as a {@link Newsletter} and the protobuf builder produces one on deserialisation.
  * Every message accessor delegates to the owning store's {@link PersistentMessageStore} so that
- * newsletter bodies stay out of the protobuf snapshot and live in the LMDB env instead.
+ * newsletter bodies stay out of the protobuf snapshot and live in the MVStore instead.
  *
  * @implNote
  * This implementation mirrors {@link PersistentChat} but keys messages by {@code serverId} rather
@@ -32,7 +32,7 @@ import java.util.stream.Stream;
 @ProtobufMessage
 final class PersistentNewsletter extends Newsletter {
     /**
-     * The LMDB facade backing every message accessor.
+     * The MVStore facade backing every message accessor.
      *
      * @implNote
      * This implementation is wired by {@link #attach(PersistentMessageStore)} after construction
@@ -70,7 +70,7 @@ final class PersistentNewsletter extends Newsletter {
     }
 
     /**
-     * Binds the given LMDB facade to this newsletter and reseeds the cached message count.
+     * Binds the given MVStore facade to this newsletter and reseeds the cached message count.
      *
      * @apiNote
      * Invoked by {@link PersistentStore#attachMessageStore(PersistentMessageStore)} immediately
@@ -81,7 +81,7 @@ final class PersistentNewsletter extends Newsletter {
      * This implementation walks {@link PersistentMessageStore#countNewsletterMessages(Jid)} once
      * so subsequent {@link #messageCount()} calls answer in {@code O(1)}.
      *
-     * @param messageStore the LMDB facade owned by the parent store
+     * @param messageStore the MVStore facade owned by the parent store
      */
     void attach(PersistentMessageStore messageStore) {
         this.messageStore = messageStore;
@@ -94,7 +94,7 @@ final class PersistentNewsletter extends Newsletter {
      * @implNote
      * This implementation delegates to
      * {@link PersistentMessageStore#putNewsletterMessage(Jid, NewsletterMessageInfo)} and
-     * increments {@link #messageCount}; the LMDB key is
+     * increments {@link #messageCount}; the MVStore key is
      * {@code newsletterJid + 0x00 + info.serverId()}.
      */
     @Override
@@ -108,7 +108,7 @@ final class PersistentNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation parses {@code messageId} as the numeric server id used as the LMDB key
+     * This implementation parses {@code messageId} as the numeric server id used as the MVStore key
      * suffix; a {@link NumberFormatException} returns {@code false} so callers that pass message
      * id strings (rather than server ids) get a clean no-op instead of an unchecked failure.
      */
@@ -133,7 +133,7 @@ final class PersistentNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation deletes every entry in the LMDB range
+     * This implementation deletes every entry in the MVStore range
      * {@code [newsletterJid + 0x00, newsletterJid + 0x01)} and resets the cached counter to zero.
      */
     @Override
@@ -146,8 +146,9 @@ final class PersistentNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @apiNote
-     * The returned stream owns an LMDB read transaction and a cursor; callers must consume it
-     * inside a try-with-resources block.
+     * The returned stream walks a consistent MVStore snapshot and holds no native resources; callers
+     * continue to consume it inside a try-with-resources block for parity with the rest of the message
+     * API.
      */
     @Override
     public Stream<NewsletterMessageInfo> messages() {
@@ -158,7 +159,7 @@ final class PersistentNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the cached counter rather than re-walking LMDB.
+     * This implementation returns the cached counter rather than re-walking MVStore.
      */
     @Override
     public int messageCount() {
@@ -188,7 +189,7 @@ final class PersistentNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the first entry in the per-newsletter LMDB range, which is the
+     * This implementation returns the first entry in the per-newsletter MVStore range, which is the
      * lowest {@code serverId} because the big-endian encoding aligns memcmp order with numeric
      * order.
      */
@@ -201,7 +202,7 @@ final class PersistentNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the last entry in the per-newsletter LMDB range, which is the
+     * This implementation returns the last entry in the per-newsletter MVStore range, which is the
      * highest {@code serverId}.
      */
     @Override

@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.WebcWhatsNewSurfaceType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcWhatsNewImpressionWamEvent")
 @WamEvent(id = 8200)
@@ -26,5 +26,5 @@ public interface WebcWhatsNewImpressionEvent extends WamEventSpec {
     Optional<Instant> webcWhatsNewTimeSpent();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt webcWhatsNewVariant();
+    OptionalLong webcWhatsNewVariant();
 }

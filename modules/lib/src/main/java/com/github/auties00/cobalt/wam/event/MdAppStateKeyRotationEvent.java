@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.MdAppStateKeyRotationReasonCode;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdAppStateKeyRotationWamEvent")
 @WamEvent(id = 2518, betaWeight = 20, releaseWeight = 1000)
@@ -30,7 +30,7 @@ public interface MdAppStateKeyRotationEvent extends WamEventSpec {
     Optional<String> oldSyncdKeyid();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt seqNumber();
+    OptionalLong seqNumber();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> syncdKeyhashAfterRotation();

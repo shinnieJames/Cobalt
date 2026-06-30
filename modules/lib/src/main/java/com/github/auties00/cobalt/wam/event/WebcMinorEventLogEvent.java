@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.LogType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcMinorEventLogWamEvent")
 @WamEvent(id = 5440, releaseWeight = 100)
@@ -21,7 +21,7 @@ public interface WebcMinorEventLogEvent extends WamEventSpec {
     Optional<String> logContext();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt logCount();
+    OptionalLong logCount();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> logReason();

@@ -38,7 +38,7 @@ import com.github.auties00.cobalt.client.linked.WhatsAppLinkedClientErrorResult;
  * @see WhatsAppLinkedClientErrorHandler
  */
 public abstract sealed class WhatsAppException extends RuntimeException
-        permits WhatsAppABPropTypeMismatchException, WhatsAppAdvCheckException, WhatsAppAdvValidationException, WhatsAppCallException, WhatsAppCloudException, WhatsAppFacebookGraphQlException, WhatsAppConnectionException, WhatsAppCorruptedStoreException, WhatsAppDeviceSyncException, WhatsAppHistorySyncException, WhatsAppLidMigrationException, WhatsAppMalformedJidException, WhatsAppMediaException, WhatsAppMessageException, WhatsAppOwnDeviceListExpiredException, WhatsAppPrivateStatsTokenIssuerException, WhatsAppReconnectionException, WhatsAppRegistrationException, WhatsAppWebGraphQlException, WhatsAppServerRuntimeException, WhatsAppSessionException, WhatsAppStreamException, WhatsAppWebAppStateSyncException {
+        permits WhatsAppABPropTypeMismatchException, WhatsAppAdvCheckException, WhatsAppAdvValidationException, WhatsAppBotSignatureException, WhatsAppCallException, WhatsAppCloudException, WhatsAppFacebookGraphQlException, WhatsAppConnectionException, WhatsAppCorruptedStoreException, WhatsAppDeviceSyncException, WhatsAppHistorySyncException, WhatsAppLidMigrationException, WhatsAppMalformedJidException, WhatsAppMediaException, WhatsAppMessageException, WhatsAppOwnDeviceListExpiredException, WhatsAppPrivateStatsTokenIssuerException, WhatsAppReconnectionException, WhatsAppRegistrationException, WhatsAppWebGraphQlException, WhatsAppServerRuntimeException, WhatsAppSessionException, WhatsAppStreamException, WhatsAppWebAppStateSyncException {
 
     /**
      * Constructs a new WhatsApp exception with no detail message.

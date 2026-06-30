@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.StructuredMessageClass;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStructuredMessageReceiveWamEvent")
 @WamEvent(id = 3222, channel = WamChannel.PRIVATE, privateStatsId = 0)
@@ -44,7 +44,7 @@ public interface StructuredMessageReceiveEvent extends WamEventSpec {
     Optional<String> messageClassAttributes();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt messageDepth();
+    OptionalLong messageDepth();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<MediaType> messageMediaType();

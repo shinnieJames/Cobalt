@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.wam.type.RetryRejectReason;
 import com.github.auties00.cobalt.wam.type.SessionScopeType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebE2eRetryRejectWamEvent")
 @WamEvent(id = 3578)
@@ -43,7 +43,7 @@ public interface E2eRetryRejectEvent extends WamEventSpec {
     Optional<MessageType> messageType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt msgRetryCount();
+    OptionalLong msgRetryCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<RetryRejectReason> retryRejectReason();

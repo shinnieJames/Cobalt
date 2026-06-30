@@ -627,7 +627,7 @@ public final class LiveCloudWhatsAppClient implements CloudWhatsAppClient {
      * {@inheritDoc}
      */
     @Override
-    public Optional<CloudMessageTemplate> queryMessageTemplate(String name) {
+    public Optional<CloudMessageTemplate> queryMessageTemplateByName(String name) {
         var response = api.get(requireWaba() + "/message_templates", Map.of("name", name));
         var data = response.getJSONArray("data");
         if (data == null || data.isEmpty()) {

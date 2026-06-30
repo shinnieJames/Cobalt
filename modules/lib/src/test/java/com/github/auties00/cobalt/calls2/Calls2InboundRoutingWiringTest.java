@@ -20,6 +20,7 @@ import com.github.auties00.cobalt.calls2.signaling.CallMessageBuffer;
 import com.github.auties00.cobalt.calls2.signaling.CallSignalingRouter;
 import com.github.auties00.cobalt.calls2.signaling.Calls2CallReceiver;
 import com.github.auties00.cobalt.calls2.signaling.Calls2TerminateReceiver;
+import com.github.auties00.cobalt.calls2.signaling.OfferNoticeStanza;
 import com.github.auties00.cobalt.calls2.signaling.OfferStanza;
 import com.github.auties00.cobalt.calls2.signaling.TerminateStanza;
 import com.github.auties00.cobalt.ack.AckResult;
@@ -119,7 +120,7 @@ class Calls2InboundRoutingWiringTest {
             var forwarded = new ConcurrentLinkedQueue<CallMessage>();
             var receiver = new Calls2CallReceiver(client, new AckSender(client),
                     new CallSignalingRouter(), new CallMessageBuffer(),
-                    callId -> false, (message, from) -> forwarded.add(message));
+                    callId -> false, (message, from) -> forwarded.add(message), notice -> {});
 
             receiver.handle(inboundOffer(CALL_ID, PEER_DEVICE_LID, PEER_DEVICE_LID, true));
 
@@ -143,7 +144,7 @@ class Calls2InboundRoutingWiringTest {
             var forwarded = new ConcurrentLinkedQueue<CallMessage>();
             var receiver = new Calls2CallReceiver(client, new AckSender(client),
                     new CallSignalingRouter(), new CallMessageBuffer(),
-                    callId -> CALL_ID.equals(callId), (message, from) -> forwarded.add(message));
+                    callId -> CALL_ID.equals(callId), (message, from) -> forwarded.add(message), notice -> {});
 
             var terminate = TerminateStanza.of(CALL_ID, PEER_DEVICE_LID, CallEndReason.HANGUP, List.of());
             receiver.handle(inboundEnvelope(terminate.toStanza(), PEER_DEVICE_LID, PEER_DEVICE_LID));
@@ -160,13 +161,53 @@ class Calls2InboundRoutingWiringTest {
             var forwarded = new ConcurrentLinkedQueue<CallMessage>();
             var receiver = new Calls2CallReceiver(client, new AckSender(client),
                     new CallSignalingRouter(), new CallMessageBuffer(),
-                    callId -> true, (message, from) -> forwarded.add(message));
+                    callId -> true, (message, from) -> forwarded.add(message), notice -> {});
 
             var bare = new StanzaBuilder().description("call").attribute("from", PEER_DEVICE_LID).build();
             receiver.handle(bare);
 
             assertTrue(forwarded.isEmpty(), "no payload means nothing to forward");
             assertTrue(sentNodes.isEmpty(), "no payload means nothing to ack");
+        }
+
+        @Test
+        @DisplayName("an offer_notice is acked with class=call type=offer_notice and surfaced to the offer-notice sink, never the engine sink")
+        void offerNoticeSurfacedNotRoutedToEngine() throws IOException {
+            var sentNodes = new ConcurrentLinkedQueue<Stanza>();
+            var client = clientRecording(sentNodes);
+            var forwarded = new ConcurrentLinkedQueue<CallMessage>();
+            var notices = new ConcurrentLinkedQueue<OfferNoticeStanza>();
+            var receiver = new Calls2CallReceiver(client, new AckSender(client),
+                    new CallSignalingRouter(), new CallMessageBuffer(),
+                    callId -> false, (message, from) -> forwarded.add(message), notices::add);
+
+            var notice = new StanzaBuilder()
+                    .description("offer_notice")
+                    .attribute("call-id", CALL_ID)
+                    .attribute("call-creator", PEER_DEVICE_LID)
+                    .attribute("type", "group")
+                    .attribute("media", "video")
+                    .build();
+            var envelope = new StanzaBuilder()
+                    .description("call")
+                    .attribute("from", PEER_DEVICE_LID)
+                    .attribute("id", "stanza-" + CALL_ID)
+                    .attribute("t", "1700000000")
+                    .content(notice)
+                    .build();
+            receiver.handle(envelope);
+
+            assertTrue(forwarded.isEmpty(), "an offer_notice is not engine signaling; got " + forwarded);
+            assertEquals(1, notices.size(), "the offer_notice must reach the offer-notice sink; got " + notices);
+            var decoded = notices.peek();
+            assertEquals(CALL_ID, decoded.callId());
+            assertTrue(decoded.group(), "type=group must decode as a group notice");
+            assertTrue(decoded.video(), "media=video must decode as a video notice");
+            var ack = outgoing(sentNodes, "ack");
+            assertTrue(ack.isPresent(), "an offer_notice is acked with an <ack>; got " + sentNodes);
+            assertEquals("call", ack.get().getAttributeAsString("class").orElse(null), "ack class must be call");
+            assertEquals("offer_notice", ack.get().getAttributeAsString("type").orElse(null),
+                    "ack type must echo the offer_notice tag");
         }
     }
 

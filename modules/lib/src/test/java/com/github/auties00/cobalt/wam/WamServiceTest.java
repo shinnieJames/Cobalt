@@ -56,8 +56,7 @@ import static org.junit.jupiter.api.DynamicTest.dynamicTest;
  * pinning is verified dynamically against the captured live event registry
  * under {@code wam-event-definitions.json}.
  *
- * <p>The subclass never schedules a real
- * {@link java.util.concurrent.ScheduledExecutorService} task or calls
+ * <p>The subclass never schedules a real recurring tick or calls
  * {@link Thread#sleep(long)}; it records every scheduler and sleep request
  * so the test bodies can drive ticks deterministically. The retry/backoff
  * and connectivity tests use a second-tier {@link RealisticHarness} that

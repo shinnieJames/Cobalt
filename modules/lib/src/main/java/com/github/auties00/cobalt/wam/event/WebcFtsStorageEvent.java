@@ -7,11 +7,11 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcFtsStorageWamEvent")
 @WamEvent(id = 3642)
 public interface WebcFtsStorageEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt ftsTotalSize();
+    OptionalLong ftsTotalSize();
 }

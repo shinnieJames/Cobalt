@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.SignupEntryPoint;
 import com.github.auties00.cobalt.wam.type.ThumbnailType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebQbmMessageClickWamEvent")
 @WamEvent(id = 5178)
@@ -23,10 +23,10 @@ public interface QbmMessageClickEvent extends WamEventSpec {
     Optional<String> bizTrustTier();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt bodyUrlCountInt();
+    OptionalLong bodyUrlCountInt();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt bodyUrlUniqueCountInt();
+    OptionalLong bodyUrlUniqueCountInt();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<QbmMessageClickButtonClickedType> buttonClickedType();
@@ -41,16 +41,16 @@ public interface QbmMessageClickEvent extends WamEventSpec {
     Optional<ContactType> contactType();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt ctaUrlUniqueCountInt();
+    OptionalLong ctaUrlUniqueCountInt();
 
     @WamProperty(index = 17, type = WamType.STRING)
     Optional<String> decisionId();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt deltaTime();
+    OptionalLong deltaTime();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt deltaTimeReceived();
+    OptionalLong deltaTimeReceived();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> entSourceSubplatform();
@@ -110,5 +110,5 @@ public interface QbmMessageClickEvent extends WamEventSpec {
     Optional<ThumbnailType> thumbnailType();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt urlUniqueCountInt();
+    OptionalLong urlUniqueCountInt();
 }

@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMexEventV2WamEvent")
 @WamEvent(id = 4336)
@@ -18,7 +18,7 @@ public interface MexEventV2Event extends WamEventSpec {
     Optional<Instant> mexEventV2DurationMs();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt mexEventV2EndTime();
+    OptionalLong mexEventV2EndTime();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> mexEventV2ErrorCodes();
@@ -27,7 +27,7 @@ public interface MexEventV2Event extends WamEventSpec {
     Optional<String> mexEventV2Errors();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt mexEventV2ExperimentFlag();
+    OptionalLong mexEventV2ExperimentFlag();
 
     @WamProperty(index = 5, type = WamType.BOOLEAN)
     Optional<Boolean> mexEventV2HasData();
@@ -45,11 +45,11 @@ public interface MexEventV2Event extends WamEventSpec {
     Optional<String> mexEventV2QueryId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt mexEventV2StartTime();
+    OptionalLong mexEventV2StartTime();
 
     @WamProperty(index = 11, type = WamType.STRING)
     Optional<String> mexFbUserType();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 }

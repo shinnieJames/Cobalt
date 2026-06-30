@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.ContactNotificationSettingActionType;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebContactNotificationSettingUserJourneyWamEvent")
 @WamEvent(id = 5304)
@@ -22,7 +22,7 @@ public interface ContactNotificationSettingUserJourneyEvent extends WamEventSpec
     Optional<ContactNotificationSettingActionType> contactNotificationSettingActionType();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt groupSize();
+    OptionalLong groupSize();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<TsSurface> uiSurface();

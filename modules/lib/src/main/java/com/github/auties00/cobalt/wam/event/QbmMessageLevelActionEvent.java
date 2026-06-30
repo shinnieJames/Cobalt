@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MessageLevelAction;
 import com.github.auties00.cobalt.wam.type.SignupEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebQbmMessageLevelActionWamEvent")
 @WamEvent(id = 5976)
@@ -21,10 +21,10 @@ public interface QbmMessageLevelActionEvent extends WamEventSpec {
     Optional<String> bizTrustTier();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt bodyUrlCountInt();
+    OptionalLong bodyUrlCountInt();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt bodyUrlUniqueCountInt();
+    OptionalLong bodyUrlUniqueCountInt();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> buttonValueJsonArray();
@@ -33,13 +33,13 @@ public interface QbmMessageLevelActionEvent extends WamEventSpec {
     Optional<ContactType> contactType();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt ctaUrlUniqueCountInt();
+    OptionalLong ctaUrlUniqueCountInt();
 
     @WamProperty(index = 13, type = WamType.STRING)
     Optional<String> decisionId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt deltaTimeReceived();
+    OptionalLong deltaTimeReceived();
 
     @WamProperty(index = 12, type = WamType.STRING)
     Optional<String> entSourceSubplatform();
@@ -96,5 +96,5 @@ public interface QbmMessageLevelActionEvent extends WamEventSpec {
     Optional<String> threadLidHmac();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt urlUniqueCountInt();
+    OptionalLong urlUniqueCountInt();
 }

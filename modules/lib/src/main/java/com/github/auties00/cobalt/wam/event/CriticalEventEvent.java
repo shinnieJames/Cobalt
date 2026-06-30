@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.CrashApplicationState;
 import com.github.auties00.cobalt.wam.type.CrashlogType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCriticalEventWamEvent")
 @WamEvent(id = 1684)
@@ -37,5 +37,5 @@ public interface CriticalEventEvent extends WamEventSpec {
     Optional<String> name();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt storageAvailSizeWithCache();
+    OptionalLong storageAvailSizeWithCache();
 }

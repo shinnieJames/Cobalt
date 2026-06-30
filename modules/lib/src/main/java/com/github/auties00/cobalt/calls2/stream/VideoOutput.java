@@ -30,31 +30,25 @@ import java.util.Objects;
  * implementation uses to release any device it bound.
  *
  * @apiNote An embedder implements this interface for a custom video source, or obtains a bundled
- * buffered or device-backed implementation from one of the factories on this type: {@link #buffered()}
- * for a manually-written source, {@link #fromCamera()} for live webcam capture, {@link #fromScreen()}
- * for screen sharing, {@link #file(Path)} for a local media file, and {@link #uri(URI)} for a media
- * stream addressed by URI. A screen-share source is announced to
- * the peer as a screen-share video stream carrying its source resolution. The {@link #take()} and
+ * buffered or device-backed implementation from one of the factories on this type:
+ * {@link #buffered(int, int)} for a manually-written source, {@link #fromCamera()} for live webcam capture,
+ * {@link #fromScreen()} for screen sharing, {@link #file(Path)} for a local media file, and
+ * {@link #uri(URI)} for a media stream addressed by URI. A buffered source has no device to probe, so it
+ * requires explicit even geometry; a device-backed or media source instead detects its input's own native
+ * resolution, capping the longer side to {@code 1280} and rounding both dimensions to even, so a 16:9
+ * source stays 16:9 rather than being squished to a fixed default. A screen-share source is announced to
+ * the peer as a screen-share video stream carrying its detected source resolution. The {@link #take()} and
  * {@link #shutdown()} methods belong to the engine; application code drives a programmatic source
  * through {@link #write(VideoFrame)} and never calls the engine-facing pair directly.
  */
 public interface VideoOutput {
     /**
-     * Returns a manually-written buffered source the application fills with {@link #write(VideoFrame)},
-     * at the default SD geometry of 640x480 at 30 frames per second with a default initial bitrate.
+     * Returns a manually-written buffered source at the given resolution, 30 frames per second, with the
+     * recovered WhatsApp initial bitrate.
      *
      * <p>This is the path a programmatic producer uses: the engine drains the written frames through
      * {@link #take()} on its own thread, encodes each at the source's geometry, and ships it to the peer.
-     *
-     * @return a new empty buffered source at the default geometry
-     */
-    static VideoOutput buffered() {
-        return BufferedVideoOutput.buffered();
-    }
-
-    /**
-     * Returns a manually-written buffered source at the given resolution, 30 frames per second, with a
-     * default initial bitrate.
+     * A buffered source has no device to probe, so it requires explicit even geometry.
      *
      * @param width  the frame width in pixels; even and at least {@code 2}
      * @param height the frame height in pixels; even and at least {@code 2}
@@ -81,74 +75,15 @@ public interface VideoOutput {
     }
 
     /**
-     * Returns a source bound to the platform's default camera at the default SD geometry of 640x480 at
-     * 30 frames per second with a default initial bitrate.
+     * Returns a source that transmits the video track of a media file, advertising its detected native
+     * resolution.
      *
-     * <p>Each {@link #take()} captures one planar 4:2:0 frame from the default camera, blocking on the
-     * device until a frame is available, until the call ends and the device is released; the captured
-     * frames are scaled to the advertised geometry by the encoder.
-     *
-     * @return a camera-bound source at the default geometry
-     * @throws IllegalStateException if no camera is available on the running platform
-     */
-    static VideoOutput fromCamera() {
-        return BufferedVideoOutput.fromCamera();
-    }
-
-    /**
-     * Returns a source bound to the platform's default camera, advertising the given geometry.
-     *
-     * @param width      the frame width in pixels; even and at least {@code 2}
-     * @param height     the frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @return a camera-bound source advertising the given geometry
-     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if no camera is available on the running platform
-     */
-    static VideoOutput fromCamera(int width, int height, int fps, int bitrateBps) {
-        return BufferedVideoOutput.fromCamera(width, height, fps, bitrateBps);
-    }
-
-    /**
-     * Returns a source that shares the platform's default screen at the default SD geometry of 640x480 at
-     * 30 frames per second with a default initial bitrate.
-     *
-     * <p>Each {@link #take()} captures the default display as one planar 4:2:0 frame, until the call ends.
-     * The engine announces this to the peer as a screen-share video stream carrying the source geometry.
-     *
-     * @return a screen-share source at the default geometry
-     * @throws IllegalStateException if screen capture is unavailable on the running platform
-     */
-    static VideoOutput fromScreen() {
-        return BufferedVideoOutput.fromScreen();
-    }
-
-    /**
-     * Returns a source that shares the platform's default screen, advertising the given geometry.
-     *
-     * @param width      the frame width in pixels; even and at least {@code 2}
-     * @param height     the frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @return a screen-share source advertising the given geometry
-     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if screen capture is unavailable on the running platform
-     */
-    static VideoOutput fromScreen(int width, int height, int fps, int bitrateBps) {
-        return BufferedVideoOutput.fromScreen(width, height, fps, bitrateBps);
-    }
-
-    /**
-     * Returns a source that transmits the video track of a media file at the default SD geometry of
-     * 640x480 at 30 frames per second with a default initial bitrate.
-     *
-     * <p>The file's decoded frames are scaled to the advertised geometry by the encoder.
+     * <p>The file's decoded frames are scaled to the advertised geometry by the encoder. The advertised
+     * geometry is the file's own native video resolution, capped to {@code 1280} on the longer side and
+     * rounded to even, so a 16:9 file is advertised as 16:9 rather than squished to a fixed default.
      *
      * @param path the media file to stream
-     * @return a file-bound source at the default geometry
+     * @return a file-bound source advertising its detected native resolution
      * @throws NullPointerException  if {@code path} is {@code null}
      * @throws IllegalStateException if the file cannot be opened or has no video stream
      */
@@ -158,37 +93,18 @@ public interface VideoOutput {
     }
 
     /**
-     * Returns a source that transmits the video track of a media file, advertising the given geometry.
-     *
-     * @param path       the media file to stream
-     * @param width      the frame width in pixels; even and at least {@code 2}
-     * @param height     the frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @return a file-bound source advertising the given geometry
-     * @throws NullPointerException     if {@code path} is {@code null}
-     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if the file cannot be opened or has no video stream
-     */
-    static VideoOutput file(Path path, int width, int height, int fps, int bitrateBps) {
-        Objects.requireNonNull(path, "path cannot be null");
-        return BufferedVideoOutput.file(path, width, height, fps, bitrateBps);
-    }
-
-    /**
-     * Returns a source that transmits the video track of a media stream addressed by a URI at the default
-     * SD geometry of 640x480 at 30 frames per second with a default initial bitrate, with a fifteen-second
-     * timeout on every blocking network operation.
+     * Returns a source that transmits the video track of a media stream addressed by a URI, advertising its
+     * detected native resolution, with a fifteen-second timeout on every blocking network operation.
      *
      * <p>Generalizes {@link #file(Path)} to any protocol the bundled FFmpeg build enables: in addition to
      * a local {@code file:} path, an {@code http:}/{@code https:} asset, an {@code rtsp:}/{@code rtmp:}/
      * {@code srt:} live stream, and so on. The stream's decoded frames are scaled to the advertised
-     * geometry by the encoder. The accepted schemes are restricted to a fixed allowlist, so an
+     * geometry by the encoder, which is the stream's own native video resolution capped to {@code 1280} on
+     * the longer side and rounded to even. The accepted schemes are restricted to a fixed allowlist, so an
      * application-supplied string cannot reach an unintended protocol.
      *
      * @param uri the media stream to open
-     * @return a URI-bound source at the default geometry
+     * @return a URI-bound source advertising its detected native resolution
      * @throws NullPointerException     if {@code uri} is {@code null}
      * @throws IllegalArgumentException if the URI has no scheme or its scheme is not permitted
      * @throws IllegalStateException    if the stream cannot be opened or has no video stream
@@ -199,49 +115,73 @@ public interface VideoOutput {
     }
 
     /**
-     * Returns a source that transmits the video track of a media stream addressed by a URI, advertising
-     * the given geometry with a fifteen-second timeout on every blocking network operation.
+     * Returns a source that transmits the video track of a media stream addressed by a URI, advertising its
+     * detected native resolution and bounding every blocking network operation by the given timeout.
      *
-     * @param uri        the media stream to open
-     * @param width      the frame width in pixels; even and at least {@code 2}
-     * @param height     the frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @return a URI-bound source advertising the given geometry
-     * @throws NullPointerException     if {@code uri} is {@code null}
-     * @throws IllegalArgumentException if the scheme is not permitted, {@code width} or {@code height} is
-     *                                  odd or below {@code 2}, or {@code fps} or {@code bitrateBps} is
-     *                                  below {@code 1}
+     * <p>If a connect, stream probe, or read makes no progress within {@code ioTimeout}, the operation is
+     * aborted and the source ends with an error rather than stalling the call's encode thread. The
+     * advertised geometry is the stream's own native video resolution, capped to {@code 1280} on the longer
+     * side and rounded to even.
+     *
+     * @param uri       the media stream to open
+     * @param ioTimeout the maximum time any single connect, probe, or read may block; must be positive
+     * @return a URI-bound source advertising its detected native resolution
+     * @throws NullPointerException     if {@code uri} or {@code ioTimeout} is {@code null}
+     * @throws IllegalArgumentException if {@code ioTimeout} is not positive, the URI has no scheme, or its
+     *                                  scheme is not permitted
      * @throws IllegalStateException    if the stream cannot be opened or has no video stream
      */
-    static VideoOutput uri(URI uri, int width, int height, int fps, int bitrateBps) {
+    static VideoOutput uri(URI uri, Duration ioTimeout) {
         Objects.requireNonNull(uri, "uri cannot be null");
-        return BufferedVideoOutput.uri(uri, width, height, fps, bitrateBps);
+        Objects.requireNonNull(ioTimeout, "ioTimeout cannot be null");
+        return BufferedVideoOutput.uri(uri, ioTimeout);
     }
 
     /**
-     * Returns a source that transmits the video track of a media stream addressed by a URI, advertising
-     * the given geometry and bounding every blocking network operation by the given timeout.
+     * Returns a source bound to the platform's default camera, advertising its detected native resolution.
      *
-     * <p>If a connect, stream probe, or read makes no progress within {@code ioTimeout}, the operation is
-     * aborted and the source ends with an error rather than stalling the call's encode thread.
+     * <p>Each {@link #take()} captures one planar 4:2:0 frame from the default camera, blocking on the
+     * device until a frame is available, until the call ends and the device is released; the captured
+     * frames are scaled to the advertised geometry by the encoder. The advertised geometry is the camera's
+     * own native resolution, capped to {@code 1280} on the longer side and rounded to even.
      *
-     * @param uri        the media stream to open
-     * @param width      the frame width in pixels; even and at least {@code 2}
-     * @param height     the frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @param ioTimeout  the maximum time any single connect, probe, or read may block; must be positive
-     * @return a URI-bound source advertising the given geometry
-     * @throws NullPointerException     if {@code uri} or {@code ioTimeout} is {@code null}
-     * @throws IllegalArgumentException if {@code ioTimeout} is not positive, the scheme is not permitted,
-     *                                  {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if the stream cannot be opened or has no video stream
+     * @return a camera-bound source advertising its detected native resolution
+     * @throws IllegalStateException if no camera is available on the running platform
      */
-    static VideoOutput uri(URI uri, int width, int height, int fps, int bitrateBps, Duration ioTimeout) {
-        Objects.requireNonNull(uri, "uri cannot be null");
-        return BufferedVideoOutput.uri(uri, width, height, fps, bitrateBps, ioTimeout);
+    static VideoOutput fromCamera() {
+        return BufferedVideoOutput.fromCamera();
+    }
+
+    /**
+     * Returns a source bound to a named camera, advertising its detected native resolution.
+     *
+     * <p>Opens the named device through the platform's default libavdevice input format; the captured
+     * frames are scaled to the advertised geometry by the encoder, which is the camera's own native
+     * resolution capped to {@code 1280} on the longer side and rounded to even.
+     *
+     * @param deviceUrl the device URL or name (for example {@code "/dev/video1"} on Linux, {@code "1"} on
+     *                  macOS, or {@code "Integrated Camera"} on Windows)
+     * @return a camera-bound source advertising its detected native resolution
+     * @throws NullPointerException  if {@code deviceUrl} is {@code null}
+     * @throws IllegalStateException if the device cannot be opened or has no video stream
+     */
+    static VideoOutput fromCamera(String deviceUrl) {
+        return BufferedVideoOutput.fromCamera(deviceUrl);
+    }
+
+    /**
+     * Returns a source that shares the platform's default screen, advertising its detected native
+     * resolution.
+     *
+     * <p>Each {@link #take()} captures the default display as one planar 4:2:0 frame, until the call ends.
+     * The engine announces this to the peer as a screen-share video stream carrying the display's own
+     * native resolution, capped to {@code 1280} on the longer side and rounded to even.
+     *
+     * @return a screen-share source advertising its detected native resolution
+     * @throws IllegalStateException if screen capture is unavailable on the running platform
+     */
+    static VideoOutput fromScreen() {
+        return BufferedVideoOutput.fromScreen();
     }
 
     /**
@@ -286,7 +226,9 @@ public interface VideoOutput {
      * Returns the frame width in pixels the engine encodes and advertises this video at.
      *
      * <p>Read once when the source is installed; even and at least {@code 2}. The engine scales
-     * captured frames whose native width differs to this advertised width.
+     * captured frames whose native width differs to this advertised width. A device-backed or media source
+     * reports its input's detected native width, capped to {@code 1280} on the longer side and rounded to
+     * even, rather than a fixed advertised one; a buffered source reports the explicit width it was given.
      *
      * @return the advertised frame width in pixels
      */
@@ -296,7 +238,10 @@ public interface VideoOutput {
      * Returns the frame height in pixels the engine encodes and advertises this video at.
      *
      * <p>Read once when the source is installed; even and at least {@code 2}. The engine scales
-     * captured frames whose native height differs to this advertised height.
+     * captured frames whose native height differs to this advertised height. A device-backed or media
+     * source reports its input's detected native height, capped to {@code 1280} on the longer side and
+     * rounded to even, rather than a fixed advertised one; a buffered source reports the explicit height it
+     * was given.
      *
      * @return the advertised frame height in pixels
      */

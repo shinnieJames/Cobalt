@@ -11,19 +11,19 @@ import com.github.auties00.cobalt.wam.type.ChannelEventUnit;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelDiscoveryVisibilityTrackingWamEvent")
 @WamEvent(id = 5766)
 public interface ChannelDiscoveryVisibilityTrackingEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt channelCategoryIndex();
+    OptionalLong channelCategoryIndex();
 
     @WamProperty(index = 2, type = WamType.STRING)
     Optional<String> channelCategoryName();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt channelDirectorySessionId();
+    OptionalLong channelDirectorySessionId();
 
     @WamProperty(index = 18, type = WamType.STRING)
     Optional<String> channelDiscoveryQueryId();
@@ -35,7 +35,7 @@ public interface ChannelDiscoveryVisibilityTrackingEvent extends WamEventSpec {
     Optional<ChannelEventUnit> channelEventUnit();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt channelIndex();
+    OptionalLong channelIndex();
 
     @WamProperty(index = 6, type = WamType.STRING)
     Optional<String> cid();
@@ -53,14 +53,14 @@ public interface ChannelDiscoveryVisibilityTrackingEvent extends WamEventSpec {
     Optional<ChannelDirectoryPillSelected> pillSelected();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt similarChannelsSessionId();
+    OptionalLong similarChannelsSessionId();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 14, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

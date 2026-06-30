@@ -252,5 +252,10 @@ public enum DeepLinkType {
     @WamEnumConstant(242) DEEP_LINK_GALLERY_PERMISSION,
     @WamEnumConstant(244) DEEP_LINK_BIZ_LINK_FACEBOOK,
     @WamEnumConstant(245) DEEP_LINK_BIZ_LINK_INSTAGRAM,
-    @WamEnumConstant(246) DEEP_LINK_PAYMENT_REMITTANCE
+    @WamEnumConstant(246) DEEP_LINK_PAYMENT_REMITTANCE,
+    @WamEnumConstant(247) DEEP_LINK_AIMEDIAGALLERY,
+    @WamEnumConstant(248) DEEP_LINK_SILVERSTONE,
+    @WamEnumConstant(249) DEEP_LINK_IMAGINE,
+    @WamEnumConstant(250) DEEP_LINK_META_AI_INCOGNITO,
+    @WamEnumConstant(251) DEEP_LINK_CHANGE_NUMBER
 }

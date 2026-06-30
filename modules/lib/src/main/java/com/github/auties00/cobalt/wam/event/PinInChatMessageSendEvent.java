@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.PinInChatType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPinInChatMessageSendWamEvent")
 @WamEvent(id = 4438)
@@ -36,11 +36,11 @@ public interface PinInChatMessageSendEvent extends WamEventSpec {
     Optional<MediaType> mediaType();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt pinInChatExpirySecs();
+    OptionalLong pinInChatExpirySecs();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<PinInChatType> pinInChatType();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt timeRemainingToExpirySecs();
+    OptionalLong timeRemainingToExpirySecs();
 }

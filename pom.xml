@@ -84,6 +84,7 @@
         <selenium.version>4.27.0</selenium.version>
         <bouncycastle.version>1.80</bouncycastle.version>
         <pdfbox.version>3.0.5</pdfbox.version>
+        <h2.mvstore.version>2.3.232</h2.mvstore.version>
     </properties>
 
     <profiles>

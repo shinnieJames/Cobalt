@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.EntryPointConversationInitiated;
 import com.github.auties00.cobalt.wam.type.FlowEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebExtensionScreenProgressWamEvent")
 @WamEvent(id = 4112, channel = WamChannel.PRIVATE, privateStatsId = 0)
@@ -27,7 +27,7 @@ public interface ExtensionScreenProgressEvent extends WamEventSpec {
     Optional<String> businessOwnerJid();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt clickSequenceNumber();
+    OptionalLong clickSequenceNumber();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> embeddedError();
@@ -54,7 +54,7 @@ public interface ExtensionScreenProgressEvent extends WamEventSpec {
     Optional<Boolean> extensionRestoredFromCache();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt extensionScreenLength();
+    OptionalLong extensionScreenLength();
 
     @WamProperty(index = 18, type = WamType.STRING)
     Optional<String> extensionStatus();
@@ -93,8 +93,8 @@ public interface ExtensionScreenProgressEvent extends WamEventSpec {
     Optional<String> screenProgress();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt sequenceNumber();
+    OptionalLong sequenceNumber();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt shoppingCartItemsCount();
+    OptionalLong shoppingCartItemsCount();
 }

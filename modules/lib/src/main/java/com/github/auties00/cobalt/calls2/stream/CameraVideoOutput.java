@@ -22,14 +22,14 @@ import java.util.Objects;
  * {@link BufferedVideoOutput#fromCamera()}. Its constructor opens a libavdevice capture device, demuxes
  * its video stream, decodes it, and arranges to convert each decoded picture to
  * {@link VideoPixelFormat#I420 I420} with libswscale so the output matches {@link VideoFrame}'s layout.
- * The geometry passed to {@code super} is the resolution, frame rate, and bitrate the call engine
- * advertises and encodes at, independent of the device's native capture resolution. The four-argument
- * geometry constructor auto-detects the running platform and opens its conventional default camera;
- * {@link #CameraVideoOutput(String, int, int, int, int)} opens a named device using the platform-default
- * input format; and {@link #CameraVideoOutput(String, String, int, int, int, int)} is the power-user
- * entry point that opens an explicit libavdevice input-format and URL pair for cases the platform
- * default does not cover. The same pipeline backs the screen-grab sources created through
- * {@link ScreenVideoOutput}.
+ * The geometry the call engine advertises and encodes at is the device's own native capture resolution,
+ * capped to {@code 1280} on the longer side and rounded to even, detected when the device is opened rather
+ * than supplied by the caller, so a 16:9 camera is advertised as 16:9 rather than squished to a fixed
+ * default. The no-argument constructor auto-detects the running platform and opens its conventional default
+ * camera; {@link #CameraVideoOutput(String)} opens a named device using the platform-default input format;
+ * and {@link #CameraVideoOutput(String, String)} is the power-user entry point that opens an explicit
+ * libavdevice input-format and URL pair for cases the platform default does not cover. The same pipeline
+ * backs the screen-grab sources created through {@link ScreenVideoOutput}.
  *
  * <h2>Platform defaults</h2>
  *
@@ -118,118 +118,76 @@ public sealed class CameraVideoOutput extends BufferedVideoOutput
     private long ptsBaseNanos = Long.MIN_VALUE;
 
     /**
-     * Opens the platform's default camera at the given advertised geometry and begins capturing.
+     * Opens the platform's default camera, detects its native geometry, and begins capturing.
      *
-     * <p>Equivalent to {@link #CameraVideoOutput(String, String, int, int, int, int)} with the
-     * platform's default input format and default device URL.
+     * <p>Equivalent to {@link #CameraVideoOutput(String, String)} with the platform's default input format
+     * and default device URL.
      *
-     * @param width      the advertised frame width in pixels; even and at least {@code 2}
-     * @param height     the advertised frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @throws IllegalArgumentException      if {@code width} or {@code height} is odd or below {@code 2},
-     *                                       or {@code fps} or {@code bitrateBps} is below {@code 1}
      * @throws UnsupportedOperationException if the platform has no conventional default camera (such as
      *                                       Windows)
      * @throws IllegalStateException         if the device cannot be opened or has no video stream
      */
-    public CameraVideoOutput(int width, int height, int fps, int bitrateBps) {
-        this(defaultIndev(), defaultUrl(), width, height, fps, bitrateBps);
+    public CameraVideoOutput() {
+        this(defaultIndev(), defaultUrl());
     }
 
     /**
-     * Opens a named camera using the platform's default libavdevice input format at the given advertised
-     * geometry and begins capturing.
+     * Opens a named camera using the platform's default libavdevice input format, detects its native
+     * geometry, and begins capturing.
      *
      * <p>Uses {@code v4l2} on Linux, {@code avfoundation} on macOS, and {@code dshow} on Windows. On
      * Windows the argument is treated as a device friendly name and prefixed with {@code "video="} as
      * {@code dshow} requires.
      *
-     * @param deviceUrl  the device URL or name (for example {@code "/dev/video1"} on Linux, {@code "1"}
-     *                   on macOS, or {@code "Integrated Camera"} on Windows)
-     * @param width      the advertised frame width in pixels; even and at least {@code 2}
-     * @param height     the advertised frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if the device cannot be opened or has no video stream
+     * @param deviceUrl the device URL or name (for example {@code "/dev/video1"} on Linux, {@code "1"} on
+     *                  macOS, or {@code "Integrated Camera"} on Windows)
+     * @throws NullPointerException  if {@code deviceUrl} is {@code null}
+     * @throws IllegalStateException if the device cannot be opened or has no video stream
      */
-    public CameraVideoOutput(String deviceUrl, int width, int height, int fps, int bitrateBps) {
-        this(defaultIndev(), normalizeUrlForPlatform(deviceUrl), width, height, fps, bitrateBps);
+    public CameraVideoOutput(String deviceUrl) {
+        this(defaultIndev(), normalizeUrlForPlatform(deviceUrl));
     }
 
     /**
-     * Opens an explicit libavdevice input-format and URL pair at the given advertised geometry and
-     * prepares the demux and decode pipeline.
+     * Opens an explicit libavdevice input-format and URL pair, detects its native geometry, and prepares
+     * the demux and decode pipeline.
      *
-     * <p>Ensures the FFmpeg libraries are loaded, registers libavdevice, resolves the named input
-     * format, opens the device, picks its first video stream, and opens a decoder for that stream's
-     * codec. This is the power-user constructor for cases where neither
-     * {@link #CameraVideoOutput(int, int, int, int)} nor
-     * {@link #CameraVideoOutput(String, int, int, int, int)} selects the right device. If any step fails
-     * the arena is closed before the exception propagates, so a failed construction leaks no native
-     * resources.
+     * <p>This is the power-user constructor for cases where neither {@link #CameraVideoOutput()} nor
+     * {@link #CameraVideoOutput(String)} selects the right device. The advertised geometry is the device's
+     * own native capture resolution, capped to {@code 1280} on the longer side and rounded to even, at the
+     * default 30 frames per second and the recovered initial bitrate.
      *
-     * @param indev      the libavdevice input-format name (for example {@code "v4l2"})
-     * @param url        the device URL
-     * @param width      the advertised frame width in pixels; even and at least {@code 2}
-     * @param height     the advertised frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @throws NullPointerException     if {@code indev} or {@code url} is {@code null}
-     * @throws IllegalArgumentException if {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
-     * @throws IllegalStateException    if the named input format is unavailable in this build, the device
-     *                                  cannot be opened, or it has no video stream
+     * @param indev the libavdevice input-format name (for example {@code "v4l2"})
+     * @param url   the device URL
+     * @throws NullPointerException  if {@code indev} or {@code url} is {@code null}
+     * @throws IllegalStateException if the named input format is unavailable in this build, the device
+     *                               cannot be opened, or it has no video stream
      */
-    public CameraVideoOutput(String indev, String url, int width, int height, int fps, int bitrateBps) {
-        super(width, height, fps, bitrateBps);
-        Objects.requireNonNull(indev, "indev cannot be null");
-        Objects.requireNonNull(url, "url cannot be null");
-        FFmpegLoader.ensureLoaded();
-        Ffmpeg.avdevice_register_all();
-        this.arena = Arena.ofShared();
-        try {
-            var ifmt = findInputDevice(indev);
-            if (ifmt == null || ifmt.address() == 0L) {
-                throw new IllegalStateException("libavdevice has no '" + indev
-                        + "' input format on this build");
-            }
+    public CameraVideoOutput(String indev, String url) {
+        this(openDevice(indev, url));
+    }
 
-            var formatPtr = arena.allocate(ValueLayout.ADDRESS);
-            var urlSeg = arena.allocateFrom(url);
-            FFmpegError.check("avformat_open_input(" + indev + ":" + url + ")",
-                    Ffmpeg.avformat_open_input(formatPtr, urlSeg, ifmt, MemorySegment.NULL));
-            this.formatCtx = formatPtr.get(ValueLayout.ADDRESS, 0L)
-                    .reinterpret(AVFormatContext.layout().byteSize());
-            FFmpegError.check("avformat_find_stream_info",
-                    Ffmpeg.avformat_find_stream_info(formatCtx, MemorySegment.NULL));
-
-            this.streamIndex = pickVideoStream(formatCtx);
-            if (streamIndex < 0) {
-                throw new IllegalStateException("device has no video stream");
-            }
-            var stream = streamPointer(formatCtx, streamIndex);
-            var params = AVStream.codecpar(stream);
-            var codecId = AVCodecParameters.codec_id(params);
-            var codec = FFmpegError.requireNonNull(
-                    "avcodec_find_decoder(" + codecId + ")",
-                    Ffmpeg.avcodec_find_decoder(codecId));
-            this.codecCtx = FFmpegError.requireNonNull(
-                    "avcodec_alloc_context3",
-                    Ffmpeg.avcodec_alloc_context3(codec));
-            FFmpegError.check("avcodec_parameters_to_context",
-                    Ffmpeg.avcodec_parameters_to_context(codecCtx, params));
-            FFmpegError.check("avcodec_open2",
-                    Ffmpeg.avcodec_open2(codecCtx, codec, MemorySegment.NULL));
-
-            this.packet = FFmpegError.requireNonNull("av_packet_alloc", Ffmpeg.av_packet_alloc());
-            this.frame = FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
-        } catch (RuntimeException e) {
-            arena.close();
-            throw e;
-        }
+    /**
+     * Adopts the native handles of an already-opened capture device and advertises its detected geometry.
+     *
+     * <p>The {@link #openDevice(String, String)} probe runs the whole open-and-decode-prepare sequence
+     * ahead of this constructor and reports the device's detected geometry, capped to {@code 1280} on the
+     * longer side, through the {@link CapturedInput} it returns; this constructor advertises that geometry
+     * to the engine at a fixed 30 frames per second and adopts the probe's demuxer, decoder, packet, and
+     * frame handles together with its arena. The probe already releases its arena on any open failure, so
+     * reaching this constructor means the pipeline is ready and nothing leaks here.
+     *
+     * @param in the opened-and-probed capture device whose detected geometry and native handles this source
+     *           adopts
+     */
+    private CameraVideoOutput(CapturedInput in) {
+        super(in.width(), in.height(), 30, DEFAULT_BITRATE_BPS);
+        this.arena = in.arena();
+        this.formatCtx = in.formatCtx();
+        this.codecCtx = in.codecCtx();
+        this.packet = in.packet();
+        this.frame = in.frame();
+        this.streamIndex = in.streamIndex();
     }
 
     /**
@@ -530,5 +488,145 @@ public sealed class CameraVideoOutput extends BufferedVideoOutput
                 .reinterpret((long) n * ValueLayout.ADDRESS.byteSize());
         return streamsArr.getAtIndex(ValueLayout.ADDRESS, index)
                 .reinterpret(AVStream.layout().byteSize());
+    }
+
+    /**
+     * Opens and decode-prepares a libavdevice capture device and reports its detected geometry and native
+     * handles.
+     *
+     * <p>Ensures the FFmpeg libraries are loaded, registers libavdevice, resolves the named input format,
+     * opens the device, probes it, picks its first video stream, reads that stream's native pixel geometry,
+     * opens a decoder for its codec, and allocates the reusable packet and frame. The reported geometry is
+     * the native geometry passed through {@link #capGeometry(int, int)}, so the source advertises the
+     * device's own resolution capped to {@code 1280} on the longer side rather than a fixed default. If any
+     * step fails the arena is closed before the exception propagates, so a failed probe leaks no native
+     * resource.
+     *
+     * <p>This probe runs inside the {@code this(...)} argument of the public constructors, so its result
+     * feeds the {@link #CameraVideoOutput(CapturedInput)} constructor without a flexible constructor body:
+     * the device must be fully opened before {@code super} runs because the advertised geometry is only
+     * known after the stream is probed.
+     *
+     * @param indev the libavdevice input-format name (for example {@code "v4l2"})
+     * @param url   the device URL
+     * @return the opened device's detected geometry and native handles
+     * @throws NullPointerException  if {@code indev} or {@code url} is {@code null}
+     * @throws IllegalStateException if the named input format is unavailable in this build, the device
+     *                               cannot be opened, or it has no video stream
+     */
+    private static CapturedInput openDevice(String indev, String url) {
+        Objects.requireNonNull(indev, "indev cannot be null");
+        Objects.requireNonNull(url, "url cannot be null");
+        FFmpegLoader.ensureLoaded();
+        Ffmpeg.avdevice_register_all();
+        var arena = Arena.ofShared();
+        try {
+            var ifmt = findInputDevice(indev);
+            if (ifmt == null || ifmt.address() == 0L) {
+                throw new IllegalStateException("libavdevice has no '" + indev
+                        + "' input format on this build");
+            }
+
+            var formatPtr = arena.allocate(ValueLayout.ADDRESS);
+            var urlSeg = arena.allocateFrom(url);
+            FFmpegError.check("avformat_open_input(" + indev + ":" + url + ")",
+                    Ffmpeg.avformat_open_input(formatPtr, urlSeg, ifmt, MemorySegment.NULL));
+            var formatCtx = formatPtr.get(ValueLayout.ADDRESS, 0L)
+                    .reinterpret(AVFormatContext.layout().byteSize());
+            FFmpegError.check("avformat_find_stream_info",
+                    Ffmpeg.avformat_find_stream_info(formatCtx, MemorySegment.NULL));
+
+            var streamIndex = pickVideoStream(formatCtx);
+            if (streamIndex < 0) {
+                throw new IllegalStateException("device has no video stream");
+            }
+            var stream = streamPointer(formatCtx, streamIndex);
+            var params = AVStream.codecpar(stream);
+            var nativeWidth = AVCodecParameters.width(params);
+            var nativeHeight = AVCodecParameters.height(params);
+            var codecId = AVCodecParameters.codec_id(params);
+            var codec = FFmpegError.requireNonNull(
+                    "avcodec_find_decoder(" + codecId + ")",
+                    Ffmpeg.avcodec_find_decoder(codecId));
+            var codecCtx = FFmpegError.requireNonNull(
+                    "avcodec_alloc_context3",
+                    Ffmpeg.avcodec_alloc_context3(codec));
+            FFmpegError.check("avcodec_parameters_to_context",
+                    Ffmpeg.avcodec_parameters_to_context(codecCtx, params));
+            FFmpegError.check("avcodec_open2",
+                    Ffmpeg.avcodec_open2(codecCtx, codec, MemorySegment.NULL));
+
+            var packet = FFmpegError.requireNonNull("av_packet_alloc", Ffmpeg.av_packet_alloc());
+            var frame = FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
+            var capped = capGeometry(nativeWidth, nativeHeight);
+            return new CapturedInput(capped[0], capped[1], arena, formatCtx, codecCtx, packet, frame,
+                    streamIndex);
+        } catch (RuntimeException e) {
+            arena.close();
+            throw e;
+        }
+    }
+
+    /**
+     * Caps a native pixel geometry to the engine's maximum encoded resolution, preserving aspect ratio.
+     *
+     * <p>Returns the geometry rounded down to even when neither dimension exceeds {@code 1280}; otherwise
+     * scales the longer dimension down to {@code 1280} and the shorter dimension proportionally, then rounds
+     * both down to the nearest even value of at least {@code 2}. H264 requires even dimensions, and capping
+     * the longer side bounds the encode cost of a high-resolution capture while keeping its aspect ratio, so
+     * a 16:9 camera is advertised as 16:9 rather than squished to a fixed 4:3 default.
+     *
+     * @param width  the native pixel width
+     * @param height the native pixel height
+     * @return a two-element array of the capped, even {@code [width, height]}
+     */
+    private static int[] capGeometry(int width, int height) {
+        if (Math.max(width, height) <= 1280) {
+            return new int[]{evenDown(width), evenDown(height)};
+        }
+        int cappedWidth;
+        int cappedHeight;
+        if (width >= height) {
+            cappedWidth = 1280;
+            cappedHeight = (int) Math.round((double) height * 1280 / width);
+        } else {
+            cappedHeight = 1280;
+            cappedWidth = (int) Math.round((double) width * 1280 / height);
+        }
+        return new int[]{evenDown(cappedWidth), evenDown(cappedHeight)};
+    }
+
+    /**
+     * Rounds a dimension down to the nearest even value of at least {@code 2}.
+     *
+     * @param value the dimension to round
+     * @return the largest even value not exceeding {@code value}, or {@code 2} when that would be below
+     *         {@code 2}
+     */
+    private static int evenDown(int value) {
+        return Math.max(2, value & ~1);
+    }
+
+    /**
+     * Carries the detected geometry and native handles of a capture device opened by
+     * {@link #openDevice(String, String)}.
+     *
+     * <p>Lets the probe run the full open-and-probe sequence before the
+     * {@link #CameraVideoOutput(CapturedInput)} constructor runs, so the constructor can advertise the
+     * detected geometry through {@code super(...)} and then adopt the native handles, without a flexible
+     * constructor body.
+     *
+     * @param width       the advertised frame width in pixels, capped and even
+     * @param height      the advertised frame height in pixels, capped and even
+     * @param arena       the arena owning every native allocation the open made
+     * @param formatCtx   the libavformat input context pointer
+     * @param codecCtx    the libavcodec decoder context pointer
+     * @param packet      the reusable demuxer packet pointer
+     * @param frame       the reusable decoded-frame pointer
+     * @param streamIndex the index of the chosen video stream
+     */
+    private record CapturedInput(int width, int height, Arena arena, MemorySegment formatCtx,
+                                 MemorySegment codecCtx, MemorySegment packet, MemorySegment frame,
+                                 int streamIndex) {
     }
 }

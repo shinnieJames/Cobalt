@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -594,8 +595,9 @@ public sealed class LinkedWhatsAppClientBuilder {
          * The {@link LinkedWhatsAppClientType#WEB} specialisation of the
          * {@code Options} stage.
          *
-         * <p>Adds the {@link #historySetting(WhatsAppWebClientHistory)}
-         * option and the terminal step methods
+         * <p>Adds the {@link #fullHistory()}, {@link #defaultHistory()}, and
+         * {@link #discardHistory()} history options (the first two with
+         * configurator overloads) and the terminal step methods
          * {@link #unregistered(LinkedWhatsAppClientVerificationHandler.Web.QrCode)},
          * {@link #unregistered(long, LinkedWhatsAppClientVerificationHandler.Web.PairingCode)},
          * and {@link #registered()} that materialise the client.
@@ -659,24 +661,127 @@ public sealed class LinkedWhatsAppClientBuilder {
             }
 
             /**
-             * Sets the chat-history policy applied during the initial
-             * history sync that runs after companion linking completes.
+             * Configures the companion to advertise a full history sync over
+             * WhatsApp's maximum 365-day window during pairing.
              *
-             * <p>The default is one year of history. Use
-             * {@link WhatsAppWebClientHistory#discard(boolean)},
-             * {@link WhatsAppWebClientHistory#standard(boolean)}, or
-             * {@link WhatsAppWebClientHistory#extended(boolean)} for
-             * common presets.
+             * <p>The replay can span up to a year of messages, so memory and
+             * bandwidth use is higher than {@link #defaultHistory()}.
              *
-             * @param historyLength the history policy
+             * @apiNote
+             * Prefer this when the integration needs the largest history
+             * WhatsApp Web itself requests; use {@link #fullHistory(Consumer)}
+             * to choose a different day window.
+             *
              * @return this builder, for chaining
-             * @throws NullPointerException if {@code historyLength} is
+             */
+            public Web fullHistory() {
+                return fullHistory(history -> {});
+            }
+
+            /**
+             * Configures the companion to advertise a full history sync,
+             * customised through the supplied configurator.
+             *
+             * <p>The {@link WhatsAppWebHistoryConfigurator.Full} configurator
+             * exposes the full-sync day window and the newsletter toggle.
+             *
+             * @param configurator the full-sync configurator
+             * @return this builder, for chaining
+             * @throws NullPointerException if {@code configurator} is
              *                              {@code null}
              */
-            public Web historySetting(WhatsAppWebClientHistory historyLength) {
-                Objects.requireNonNull(historyLength, "historyLength must not be null");
-                store.syncStore().setWebHistoryPolicy(historyLength);
+            public Web fullHistory(Consumer<WhatsAppWebHistoryConfigurator.Full> configurator) {
+                Objects.requireNonNull(configurator, "configurator must not be null");
+                var history = new WhatsAppWebHistoryConfigurator.Full();
+                configurator.accept(history);
+                applyHistory(true, false, history.newsletters, history.days, null, null, null, null);
                 return this;
+            }
+
+            /**
+             * Configures the companion to advertise the standard
+             * (production-default) history sync during pairing.
+             *
+             * <p>This is also the behaviour applied when no history option is
+             * set: the primary ships its default recent window, bounded by the
+             * user's per-device setting on the phone.
+             *
+             * @apiNote
+             * The recommended option for most integrations; use
+             * {@link #defaultHistory(Consumer)} to tune the storage quota or
+             * windowing caps.
+             *
+             * @return this builder, for chaining
+             */
+            public Web defaultHistory() {
+                return defaultHistory(history -> {});
+            }
+
+            /**
+             * Configures the companion to advertise the standard history sync,
+             * customised through the supplied configurator.
+             *
+             * <p>The {@link WhatsAppWebHistoryConfigurator.Default}
+             * configurator exposes the storage quota, the recent and thumbnail
+             * windows, the per-chat message cap, and the newsletter toggle.
+             *
+             * @param configurator the standard-sync configurator
+             * @return this builder, for chaining
+             * @throws NullPointerException if {@code configurator} is
+             *                              {@code null}
+             */
+            public Web defaultHistory(Consumer<WhatsAppWebHistoryConfigurator.Default> configurator) {
+                Objects.requireNonNull(configurator, "configurator must not be null");
+                var history = new WhatsAppWebHistoryConfigurator.Default();
+                configurator.accept(history);
+                applyHistory(false, false, history.newsletters, null, history.storageQuotaMb, history.recentSyncDays, history.thumbnailSyncDays, history.maxMessagesPerChat);
+                return this;
+            }
+
+            /**
+             * Configures the companion to discard chat history on receipt,
+             * keeping only the addressing, cryptographic, and contact-naming
+             * data Cobalt needs.
+             *
+             * <p>The wire request matches {@link #defaultHistory()}; WhatsApp
+             * has no zero-history wire mode, so the trim is applied after
+             * decoding.
+             *
+             * @apiNote
+             * Use this for real-time-only integrations that do not need past
+             * chat history.
+             *
+             * @return this builder, for chaining
+             */
+            public Web discardHistory() {
+                applyHistory(false, true, true, null, null, null, null, null);
+                return this;
+            }
+
+            /**
+             * Writes the resolved history settings into the
+             * {@link com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore},
+             * reached by the history step methods.
+             *
+             * @param requireFullSync    whether to request a full sync
+             * @param discard            whether to trim the decoded payload
+             * @param newsletters        whether to bootstrap newsletters
+             * @param fullSyncDays       the full-sync day window, or {@code null}
+             * @param storageQuotaMb     the storage quota in megabytes, or {@code null}
+             * @param recentSyncDays     the recent-sync day window, or {@code null}
+             * @param thumbnailSyncDays  the thumbnail-sync day window, or {@code null}
+             * @param maxMessagesPerChat the per-chat message cap, or {@code null}
+             */
+            private void applyHistory(boolean requireFullSync, boolean discard, boolean newsletters, Integer fullSyncDays, Integer storageQuotaMb, Integer recentSyncDays, Integer thumbnailSyncDays, Integer maxMessagesPerChat) {
+                var sync = store.syncStore();
+                sync.setFullHistorySyncRequired(requireFullSync);
+                sync.setHistoryDiscarded(discard);
+                sync.setHistoryNewsletters(newsletters);
+                sync.setHistoryFullSyncDays(fullSyncDays);
+                sync.setHistoryStorageQuotaMb(storageQuotaMb);
+                sync.setHistoryRecentSyncDays(recentSyncDays);
+                sync.setHistoryThumbnailSyncDays(thumbnailSyncDays);
+                sync.setHistoryMaxMessagesPerChat(maxMessagesPerChat);
             }
 
             /**

@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.GroupHistoryReceiverUserJourneyAction
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupHistoryReceiverUserJourneyWamEvent")
 @WamEvent(id = 7064)
@@ -19,13 +19,13 @@ public interface GroupHistoryReceiverUserJourneyEvent extends WamEventSpec {
     Optional<Boolean> groupHistoryDbIgnoredOlderMessages();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt groupHistoryMessagesCount();
+    OptionalLong groupHistoryMessagesCount();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt groupHistoryOutWindowPinsCount();
+    OptionalLong groupHistoryOutWindowPinsCount();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt groupHistoryPinsCount();
+    OptionalLong groupHistoryPinsCount();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<GroupHistoryReceiverUserJourneyActionType> groupHistoryReceiverActionType();
@@ -34,7 +34,7 @@ public interface GroupHistoryReceiverUserJourneyEvent extends WamEventSpec {
     Optional<String> groupHistoryReceiverGroupId();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt groupHistoryUncountedMessagesCount();
+    OptionalLong groupHistoryUncountedMessagesCount();
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> isAutoProcess();
@@ -43,7 +43,7 @@ public interface GroupHistoryReceiverUserJourneyEvent extends WamEventSpec {
     Optional<String> messageKeyHash();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt messageReceivedTs();
+    OptionalLong messageReceivedTs();
 
     @WamProperty(index = 11, type = WamType.STRING)
     Optional<String> receiverFailureReason();
@@ -55,5 +55,5 @@ public interface GroupHistoryReceiverUserJourneyEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt userJourneyMs();
+    OptionalLong userJourneyMs();
 }

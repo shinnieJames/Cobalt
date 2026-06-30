@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPnhDailyWamEvent")
 @WamEvent(id = 3806)
@@ -18,22 +18,22 @@ public interface PnhDailyEvent extends WamEventSpec {
     Optional<String> communityId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt mappingMissing();
+    OptionalLong mappingMissing();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt pnhIndicatorClicksChat();
+    OptionalLong pnhIndicatorClicksChat();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt pnhIndicatorClicksInfoScreen();
+    OptionalLong pnhIndicatorClicksInfoScreen();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt reactionDeleteCount();
+    OptionalLong reactionDeleteCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt reactionOpenTrayCount();
+    OptionalLong reactionOpenTrayCount();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt totalContacts();
+    OptionalLong totalContacts();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

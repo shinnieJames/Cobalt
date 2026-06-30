@@ -22,7 +22,7 @@ import com.github.auties00.cobalt.wam.type.SizeBucket;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPlaceholderActivityWamEvent")
 @WamEvent(id = 1980)
@@ -31,7 +31,7 @@ public interface PlaceholderActivityEvent extends WamEventSpec {
     Optional<BotType> botType();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt deviceCount();
+    OptionalLong deviceCount();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<SizeBucket> deviceSizeBucket();
@@ -70,7 +70,7 @@ public interface PlaceholderActivityEvent extends WamEventSpec {
     Optional<MessageType> messageType();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt participantCount();
+    OptionalLong participantCount();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<PlaceholderAction> placeholderActionInd();
@@ -85,7 +85,7 @@ public interface PlaceholderActivityEvent extends WamEventSpec {
     Optional<PlaceholderPopulationType> placeholderPopulationType();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt placeholderTimePeriod();
+    OptionalLong placeholderTimePeriod();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<PlaceholderType> placeholderTypeInd();

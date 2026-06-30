@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.AdminFlowType;
 import com.github.auties00.cobalt.wam.type.ChannelAdminAction;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelAdminWamEvent")
 @WamEvent(id = 4556)
 public interface ChannelAdminEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt adminFlowActionSequenceNumber();
+    OptionalLong adminFlowActionSequenceNumber();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<AdminFlowType> adminFlowType();
@@ -25,11 +25,11 @@ public interface ChannelAdminEvent extends WamEventSpec {
     Optional<ChannelAdminAction> channelAdminAction();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt channelAdminSessionId();
+    OptionalLong channelAdminSessionId();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
+import com.github.auties00.cobalt.model.contact.UsernameState;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload.ClientReleaseChannel;
 import com.github.auties00.cobalt.model.device.pairing.LinkedPrimaryPlatform;
@@ -546,4 +547,49 @@ public interface LinkedWhatsAppAccountStore {
      * @return this store instance for method chaining
      */
     LinkedWhatsAppAccountStore setShareableChatLinkKey(byte[] key);
+
+    /**
+     * Returns the account's own assigned username.
+     *
+     * @return the username, or empty until one is reserved or set
+     */
+    Optional<String> username();
+
+    /**
+     * Sets the account's own assigned username.
+     *
+     * @param username the username, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppAccountStore setUsername(String username);
+
+    /**
+     * Returns the registration state of the account's username.
+     *
+     * @return the username registration state, or empty if none is recorded
+     */
+    Optional<UsernameState> usernameState();
+
+    /**
+     * Sets the registration state of the account's username.
+     *
+     * @param usernameState the username registration state, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppAccountStore setUsernameState(UsernameState usernameState);
+
+    /**
+     * Returns whether a username recovery PIN is set on the account.
+     *
+     * @return the recovery-PIN flag, or empty when unknown
+     */
+    Optional<Boolean> usernameHasRecoveryPin();
+
+    /**
+     * Sets whether a username recovery PIN is set on the account.
+     *
+     * @param usernameHasRecoveryPin the recovery-PIN flag, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppAccountStore setUsernameHasRecoveryPin(Boolean usernameHasRecoveryPin);
 }

@@ -9,5 +9,7 @@ import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 @WamEnum
 public enum BundleSendSource {
     @WamEnumConstant(1) NOTIFICATION,
-    @WamEnumConstant(2) IQ_RESPONSE
+    @WamEnumConstant(2) IQ_RESPONSE,
+    @WamEnumConstant(3) SYSTEM_MESSAGE,
+    @WamEnumConstant(4) CONTACT_CARD
 }

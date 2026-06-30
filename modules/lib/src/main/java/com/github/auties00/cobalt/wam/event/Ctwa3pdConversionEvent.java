@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.CtwaDirectionFrom;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCtwa3pdConversionWamEvent")
 @WamEvent(id = 5138)
@@ -24,16 +24,16 @@ public interface Ctwa3pdConversionEvent extends WamEventSpec {
     Optional<String> ctwa3pdConversionType();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt ctwa3pdSchemaVersion();
+    OptionalLong ctwa3pdSchemaVersion();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> ctwa3pdSurfaceType();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt ctwaConversationDepth();
+    OptionalLong ctwaConversationDepth();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt ctwaConversationRepeat();
+    OptionalLong ctwaConversationRepeat();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<CtwaDirectionFrom> ctwaDirectionFrom();

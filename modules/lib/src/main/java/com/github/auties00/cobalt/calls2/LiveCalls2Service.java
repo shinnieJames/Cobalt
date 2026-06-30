@@ -15,10 +15,13 @@ import com.github.auties00.cobalt.calls2.core.Calls2MediaStreams;
 import com.github.auties00.cobalt.calls2.core.LiveCallEventBus;
 import com.github.auties00.cobalt.calls2.signaling.CallAckOutcome;
 import com.github.auties00.cobalt.calls2.signaling.CallMessage;
+import com.github.auties00.cobalt.calls2.signaling.OfferNoticeStanza;
 import com.github.auties00.cobalt.calls2.signaling.OfferStanza;
 import com.github.auties00.cobalt.calls2.signaling.TerminateStanza;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedCallEndedListener;
+import com.github.auties00.cobalt.listener.linked.LinkedCallOfferNoticeListener;
+import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.call.CallEndReason;
@@ -30,9 +33,11 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.CallEventBuilder;
 import com.github.auties00.cobalt.wam.event.JoinableCallEventBuilder;
+import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingActivity;
 import com.github.auties00.cobalt.wam.type.CallResultType;
 import com.github.auties00.cobalt.wam.type.CallSide;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -77,6 +82,18 @@ public final class LiveCalls2Service implements Calls2Service {
      * Logs call-setup diagnostics and isolated telemetry or listener-dispatch failures.
      */
     private static final System.Logger LOGGER = System.getLogger(LiveCalls2Service.class.getName());
+
+    /**
+     * The window within which an {@code <offer_notice>} is still acted on; a notice whose original offer
+     * is older than this is dropped, and a recorded notice is purged from the call history after the same
+     * window elapses.
+     *
+     * @implNote
+     * This implementation matches the {@code c = 45} second constant WhatsApp Web's
+     * {@code WAWebIncomingOfferNoticeVoipHandlerAction} uses both as the staleness threshold and as the
+     * delay of the {@code setTimeout} that removes the notice from the call collection.
+     */
+    private static final Duration OFFER_NOTICE_STALENESS = Duration.ofSeconds(45);
 
     /**
      * Holds the owning client, used to resolve the local self {@link Jid}, resolve a peer's device list,
@@ -592,6 +609,59 @@ public final class LiveCalls2Service implements Calls2Service {
     /**
      * {@inheritDoc}
      *
+     * @implNote This implementation drops a notice whose original offer is older than
+     * {@link #OFFER_NOTICE_STALENESS}, mirroring WhatsApp Web's stale-offer guard. A fresh notice is
+     * recorded in the call history as an {@link IncomingCall} flagged as an offline offer, its peer
+     * resolved from the {@code call-creator} device JID and mapped back to its phone number when known, and
+     * is fanned out to the {@code onCallOfferNotice} listeners; for a one-to-one notice the chat JID is the
+     * peer, and a group notice carries no group JID because the wire form does not include one. The notice
+     * is purged from the call history after {@link #OFFER_NOTICE_STALENESS} elapses, matching WhatsApp
+     * Web's {@code setTimeout} cleanup.
+     */
+    @Override
+    public void handleOfferNotice(OfferNoticeStanza notice) {
+        Objects.requireNonNull(notice, "notice cannot be null");
+        if (Duration.between(notice.offerTime(), Instant.now()).compareTo(OFFER_NOTICE_STALENESS) > 0) {
+            LOGGER.log(System.Logger.Level.DEBUG, "Dropping stale offer_notice for call {0}", notice.callId());
+            return;
+        }
+        var peer = toListenerJid(notice.callCreator().toUserJid());
+        var incoming = new IncomingCall(notice.callId(), peer, peer, notice.offerTime(),
+                notice.video(), notice.group(), null, true);
+        whatsapp.store().chatStore().addCall(incoming);
+        notifyOfferNotice(incoming);
+        ScheduledTask.scheduleDelayed(OFFER_NOTICE_STALENESS,
+                () -> whatsapp.store().chatStore().removeCall(notice.callId()));
+    }
+
+    /**
+     * Fans an offline-offer notice out to every registered {@link LinkedCallOfferNoticeListener}.
+     *
+     * <p>Each listener is invoked on its own virtual thread, and a listener exception is logged and
+     * swallowed rather than propagated, so one faulty listener neither stalls the signaling reader nor
+     * blocks the fan-out to the other listeners.
+     *
+     * @param call the offline-offer descriptor to deliver
+     */
+    private void notifyOfferNotice(IncomingCall call) {
+        for (var listener : whatsapp.store().listeners()) {
+            if (listener instanceof LinkedCallOfferNoticeListener typed) {
+                Thread.startVirtualThread(() -> {
+                    try {
+                        typed.onCallOfferNotice(whatsapp, call);
+                    } catch (RuntimeException exception) {
+                        LOGGER.log(System.Logger.Level.WARNING,
+                                "onCallOfferNotice listener threw " + exception.getClass().getSimpleName()
+                                        + ": " + exception.getMessage());
+                    }
+                });
+            }
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * @implNote This implementation forwards the terminate to the engine for its teardown and then, only when
      * the engine reports the terminate was effected, fans the {@code onCallEnded} listener event out through
      * {@link #notifyEnded(String, Jid, String)} with the terminate's call creator and wire reason, so a
@@ -772,7 +842,7 @@ public final class LiveCalls2Service implements Calls2Service {
     private Calls2Runtime registerRuntime(Call call, CallSide side, boolean video,
                                           AudioOutput audioOut, AudioInput audioIn,
                                           VideoOutput videoOut, VideoInput videoIn) {
-        var runtimeVideoOut = videoOut != null ? videoOut : BufferedVideoOutput.buffered();
+        var runtimeVideoOut = videoOut != null ? videoOut : BufferedVideoOutput.buffered(640, 480);
         var runtimeVideoIn = videoIn != null ? videoIn : BufferedVideoInput.buffered();
         var stats = new Calls2CallStats(call.callId(), side, video, Instant.now());
         var runtime = new Calls2Runtime(call, stats, audioOut, audioIn, runtimeVideoOut, runtimeVideoIn);
@@ -852,9 +922,12 @@ public final class LiveCalls2Service implements Calls2Service {
      *
      * <p>The event combines the call's start-time telemetry dimensions, drawn from its
      * {@link Calls2Runtime#stats()} accumulator, with the call's terminal {@link CallEndReason} mapped to a
-     * {@link CallResultType}, and is committed through {@link WamService}. Any {@link RuntimeException}
-     * raised while building or committing is swallowed so that telemetry never propagates a failure into
-     * the call path.
+     * {@link CallResultType}, and is committed through {@link WamService}. The completed call is also reported
+     * to the ctlv2 thread-logging aggregator through
+     * {@link LinkedWhatsAppClient#recordThreadActivity(com.github.auties00.cobalt.model.jid.JidProvider, ThreadLoggingActivity)}
+     * as a {@link ThreadLoggingActivity.Call} keyed by the call's {@link com.github.auties00.cobalt.model.call.Call#chatJid() chat JID},
+     * carrying the direction and connected duration. Any {@link RuntimeException} raised while building,
+     * committing, or recording is swallowed so that telemetry never propagates a failure into the call path.
      *
      * @param runtime the runtime of the call that just ended
      */
@@ -877,6 +950,8 @@ public final class LiveCalls2Service implements Calls2Service {
                 builder.durationTSs(Instant.ofEpochSecond(connectedDuration));
             }
             wamService.commit(builder.build());
+            whatsapp.recordThreadActivity(runtime.call().chatJid(), new ThreadLoggingActivity.Call(
+                    stats.side() == CallSide.CALLER, connectedDuration));
             if (runtime.call().isGroup()) {
                 emitJoinableCallEvent(runtime, resultType);
             }

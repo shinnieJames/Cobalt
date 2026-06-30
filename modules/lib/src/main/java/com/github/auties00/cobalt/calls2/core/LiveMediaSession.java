@@ -28,6 +28,12 @@ import com.github.auties00.cobalt.calls2.signaling.RelayInfo;
 import com.github.auties00.cobalt.calls2.stream.*;
 import com.github.auties00.cobalt.calls2.util.TimerHeap;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptionExt;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptionExtBuilder;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptionExtPidTemporalLayerBuilder;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptionExtSSrcsToPidAssignmentsBuilder;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptions;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptionsBuilder;
 import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptor;
 import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptorBuilder;
 import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptors;
@@ -55,8 +61,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 
 /**
  * The live media plane for one call: the running audio and video pipeline that turns a connected call's
@@ -358,13 +366,17 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
     private static final int RTP_HEADER_LENGTH = 12;
 
     /**
-     * The four-byte length of the empty {@code 0xDEBE} RTP header extension WhatsApp stamps on every outbound
-     * media packet: the two-byte {@code 0xDEBE} profile word followed by a two-byte zero extension-word count.
+     * The four-byte length of the {@code 0xDEBE} RTP header-extension preamble WhatsApp stamps on every outbound
+     * media packet: the two-byte {@code 0xDEBE} profile word followed by a two-byte extension-word count.
      *
-     * @implNote This implementation stamps the extension empty (no audio-level element) because its per-call
-     * extmap id is not recoverable (see {@code sendAudioPacket}); the live capture shows the relay nonetheless
-     * requires the extension bit set and the {@code de be 00 00} header present on every media packet to forward
-     * the stream, so the empty extension is stamped even though it carries no element.
+     * <p>This is only the preamble. The audio path stamps a zero word count (an empty extension, total four
+     * bytes) while the video path follows the preamble with two or three element words (id3 + id6 + id9, see
+     * {@link OutboundVideoRtpPacketizer#packetize(byte[], long, boolean, boolean)}); a packet's full extension
+     * length is this preamble plus the word count times four.
+     *
+     * @implNote The audio extension is stamped empty because its per-call extmap id is not recoverable (see
+     * {@code sendAudioPacket}); the live capture shows the relay requires the extension bit set and the
+     * {@code de be} profile present on every media packet to forward the stream.
      */
     private static final int RTP_HEADER_EXTENSION_LENGTH = 4;
 
@@ -387,8 +399,12 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
     /**
      * The RTP payload type stamped on outbound video packets, a dynamic type distinct from the audio type
      * so the inbound demux routes by payload type.
+     *
+     * <p>The value is the {@code 97} the live data-channel capture shows every WhatsApp video RTP packet
+     * carrying (the audio type is {@code 120}); the demux treats any non-audio payload type as video, so the
+     * value only has to match what the peer expects for its decoder.
      */
-    private static final int VIDEO_PAYLOAD_TYPE = 96;
+    private static final int VIDEO_PAYLOAD_TYPE = 97;
 
     /**
      * The RTP timestamp clock rate of the video stream, ninety kilohertz, the standard video RTP clock the
@@ -1422,9 +1438,16 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                                 localDeviceJid, resolvedPeer);
                     }
                 }
+                // The local device's relay-assigned participant id (the <relay> block's self_pid attribute,
+                // RelayInfo.selfPidValue), the same PID space the receive-subscription pidResolver maps peer
+                // JIDs into from the relay <participant> list. It is stamped into every self sender-subscription
+                // descriptor (the 0x4025 SSrcsToPidAssignments pid field) so the SFU maps each forwarded SSRC
+                // back to this device. A connected relay leg always assigns it; an absent attribute (a malformed
+                // block) falls back to participant 0.
+                var selfPid = relayInfo.selfPidValue().orElse(0);
                 return assemble(callId, relayConnection, channel, hbhSrtp, warpAuthKey, warpMiTagLength,
                         audioCodec, repacketizer, sframeProvider, isCaller, video, voipParamManager, participantCount,
-                        streamLayout, membership, streams, useMlowCodec, e2eSend, e2eRecv);
+                        streamLayout, membership, streams, useMlowCodec, e2eSend, e2eRecv, selfPid);
             } catch (WhatsAppCallException exception) {
                 releaseQuietly(channel, hbhSrtp, audioCodec, repacketizer);
                 throw exception;
@@ -1504,6 +1527,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          *                         or {@code null} for a group call whose media is hop-by-hop SRTP
          * @param e2eRecv          the end-to-end SRTP context unprotecting inbound media on a one-to-one call,
          *                         or {@code null} for a group call whose media is hop-by-hop SRTP
+         * @param selfPid          the local device's relay-assigned participant id (the {@code <relay>} block's
+         *                         {@code self_pid}), stamped into every self sender-subscription descriptor
          * @return the started media session
          */
         private Session assemble(String callId, RelayConnection relayConnection, DatagramChannel channel,
@@ -1513,7 +1538,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                                  boolean video, LiveVoipParamManager voipParamManager, int participantCount,
                                  StreamLayout streamLayout, CallMembership membership,
                                  Calls2MediaStreams streams, boolean useMlow,
-                                 E2eMediaSrtp e2eSend, E2eMediaSrtp e2eRecv) {
+                                 E2eMediaSrtp e2eSend, E2eMediaSrtp e2eRecv, int selfPid) {
             var relayAddress = relayConnection.address();
             // Route the decode side through the same codec the encode side selected: an MLow call decodes
             // through an MLowAudioDecoder, otherwise the default OpusAudioDecoder. LiveNetEq renders each frame
@@ -1639,6 +1664,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     e2eSend,
                     e2eRecv);
             transportHolder.set(transport);
+            // The demux is built before the transport, so install the NACK send seam now: a confirmed inbound
+            // audio or video gap ships a generic NACK back through the transport's standalone SRTCP send path.
+            inboundMedia.nackEmitter(transport::sendNack);
 
             // Per-RTCP rate-control tick (Step 2 -> Step 3): the relay transport unprotects and parses each
             // inbound RTCP compound packet into an RtcpFeedback and delivers it here, where one feedback
@@ -1647,8 +1675,17 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             // process_key_frame_request reaction to an inbound PLI/FIR (fn5534 via the rtcp parse fn4572).
             // The pipeline is read from the shared holder rather than captured, so after a mid-call upgrade an
             // inbound PLI arms the freshly built encoder; a call with no video pipeline yet has none to arm.
+            // The feedback's round-trip estimate also feeds the NACK scheduler so a packet is requested only
+            // once roughly a round-trip has elapsed since it was noticed missing.
             transport.onInboundRtcp(feedback -> {
                 rateControlLoop.onRtcpFeedback(feedback);
+                if (feedback.hasRtt()) {
+                    var rttMillis = feedback.rttNs() / 1_000_000L;
+                    if (netEq != null) {
+                        netEq.updateRttMillis(rttMillis);
+                    }
+                    inboundMedia.updateVideoRttMillis(rttMillis);
+                }
                 var pipeline = videoPipelineRef.get();
                 if (feedback.keyFrameRequested() && pipeline != null) {
                     pipeline.requestKeyFrame();
@@ -1656,20 +1693,21 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             });
 
             if (videoPipeline != null && videoCaptureSource != null) {
-                var videoPacketizer = new OutboundVideoRtpPacketizer(streamLayout.videoStream0Ssrc());
+                var videoPacketizer = new OutboundVideoRtpPacketizer(streamLayout.videoStream0Ssrc(),
+                        rateControlLoop::videoTargetBitrateBps, rateControlLoop::bandwidthEstimateBps);
                 videoPipeline.bindFrameSink(encoded -> sendVideoPacket(transport, videoPacketizer, encoded));
             }
 
             // The SFU subscription publisher (SPEC 14.3): it owns the receive-subscription cache, the 96-slot
-            // hop-by-hop RTCP-feedback table, and the StreamDescriptors build keyed by this client's SSRC
-            // layout, and is threaded the membership provider so the receive-subscription compute
-            // (LiveSubscriptionPublisher.computeRxSubscription, the recoverable roster->subscription map the
-            // transport core implemented) can read the roster (firstConnectedPeer/videoStreamSubscriberCount).
-            // On each resend tick (rx_subscription_timer) the resender rebuilds the fused 0x4024 StreamSubscriptions
-            // matrix from the local send layout (the participant-less self entry) and the membership roster (one
-            // positionally-indexed block of audio + simulcast-video entries per connected peer, each entry's SSRC
-            // the deterministic value CallSecureSsrcGenerator derived per device JID), and ships it inside the
-            // 0x0003 STUN-magic envelope as SCTP DATA on the data channel: the envelope's outer MESSAGE-INTEGRITY
+            // hop-by-hop RTCP-feedback table, and is threaded the membership provider so the receive-subscription
+            // compute (LiveSubscriptionPublisher.computeRxSubscription, the recoverable roster->subscription map
+            // the transport core implemented) can read the roster (firstConnectedPeer/videoStreamSubscriberCount).
+            // On each resend tick (rx_subscription_timer) the resender re-ships this client's own 0x4025
+            // SenderSubscriptions: the four SSRC-to-PID assignment sources (video stream 0, video stream 1, audio,
+            // app-data) buildSelfSenderSubscriptions derives from this client's deterministic SSRC layout and the
+            // relay-assigned self PID, built once at assembly since neither changes for the call's lifetime. It is
+            // shipped inside the 0x0003 STUN-magic envelope as SCTP DATA on the data channel: the envelope's outer
+            // MESSAGE-INTEGRITY
             // is HMAC-SHA1 keyed by the relay <key> (re/calls2-spec/web-transport-crypto-RE.md ADDENDUM, confirmed
             // against the O4cDmmXP6rI wasm), and the 0x0016 carries the selected relay endpoint's reflexive
             // address. The live capture's leading 0x4000 WARP attribute is an optional rate-control report
@@ -1682,7 +1720,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             // forwards a peer's media only after it has the subscription, so the transport ships it as a
             // connect-time burst and then on content change. The publisher below is retained for its
             // receive-subscription cache and hop-by-hop RTCP-feedback table.
-            var subResender = subscriptionResender(transportHolder, buildSelfStreamDescriptors(callId, selfJid.get()));
+            var subResender = subscriptionResender(transportHolder,
+                    buildSelfSenderSubscriptions(callId, selfJid.get(), selfPid, video));
             transport.onSubscriptionResend(() -> subResender.accept(null));
             var subscriptionPublisher = new LiveSubscriptionPublisher(
                     new TimerHeap(),
@@ -1868,7 +1907,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 return null;
             }
             if (videoCaptureSource != null) {
-                var videoPacketizer = new OutboundVideoRtpPacketizer(videoSsrc);
+                var videoPacketizer = new OutboundVideoRtpPacketizer(videoSsrc,
+                        rateControlLoop::videoTargetBitrateBps, rateControlLoop::bandwidthEstimateBps);
                 pipeline.bindFrameSink(encoded -> sendVideoPacket(transport, videoPacketizer, encoded));
             }
             if (managerVideoBridge != null) {
@@ -2185,7 +2225,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 var rtpTimestamp = ((packet[4] & 0xFFL) << 24) | ((packet[5] & 0xFFL) << 16)
                         | ((packet[6] & 0xFFL) << 8) | (packet[7] & 0xFFL);
                 paceSend(rtpTimestamp);
-                transport.sendMedia(packet, RTP_HEADER_LENGTH + RTP_HEADER_EXTENSION_LENGTH + payload.length);
+                // The wire length excludes the trailing SRTP-tag room the packetizer over-allocates and
+                // includes the packet's populated header extension.
+                transport.sendMedia(packet, packet.length - 64);
             } catch (RuntimeException exception) {
                 LOGGER.log(System.Logger.Level.DEBUG, "calls2 outbound audio send failed", exception);
             }
@@ -2236,7 +2278,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * <p>Splits the access unit into RTP payloads through
          * {@link H264RtpPacketization#packetizeAccessUnit(byte[], int)} (a single-NAL payload per NAL that
          * fits {@link #VIDEO_MTU_BYTES}, an FU-A fragment run for a NAL too large), packetizes each through
-         * {@link OutboundVideoRtpPacketizer#packetize(byte[], long, boolean)} sharing the access unit's
+         * {@link OutboundVideoRtpPacketizer#packetize(byte[], long, boolean, boolean)} sharing the access unit's
          * ninety-kilohertz timestamp, and ships each through {@link MediaTransport#sendMedia} with the marker
          * bit set only on the last packet of the picture. An empty access unit (a dropped frame) sends
          * nothing.
@@ -2261,8 +2303,10 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 for (var index = 0; index < payloads.size(); index++) {
                     var payload = payloads.get(index);
                     var marker = index == payloads.size() - 1;
-                    var packet = packetizer.packetize(payload, frame.ptsMicros(), marker);
-                    transport.sendMedia(packet, RTP_HEADER_LENGTH + payload.length);
+                    var packet = packetizer.packetize(payload, frame.ptsMicros(), marker, index == 0, frame.keyFrame());
+                    // The wire length excludes the trailing SRTP-tag room the packetizer over-allocates and
+                    // includes the packet's header extension.
+                    transport.sendMedia(packet, packet.length - 64);
                 }
             } catch (RuntimeException exception) {
                 LOGGER.log(System.Logger.Level.DEBUG, "calls2 outbound video send failed", exception);
@@ -2469,34 +2513,34 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * keepalive cadence ({@code rx_subscription_timer}) through
          * {@link LiveRelayTransport#onSubscriptionResend(Runnable)}; it is shipped on every relay call
          * (one-to-one audio included) and is never gated on the receive-subscription feature predicate. The
-         * {@code 0x4024} {@link StunAttributeType#WA_SUBSCRIPTION} attribute carries the fixed
-         * {@link StreamDescriptors} declaring this client's own send streams (the audio plus both simulcast video
-         * layers, each a media/FEC/NACK triple of distinct SSRCs), built once at assembly by
-         * {@link #buildSelfStreamDescriptors(String, Jid)} since the deterministic SSRCs do not change for the
-         * call's lifetime; each tick re-ships that same descriptor set through
-         * {@link LiveRelayTransport#sendSubscriptionEnvelope(StreamDescriptors)}. The descriptors are this
-         * client's own streams only: each endpoint declares its own streams in its own envelope, matching the
-         * live capture, so the call roster is not read here. It is a no-op when the transport is not yet built;
-         * the transport itself drops the send when it holds no relay key or reflexive address or the data channel
-         * is not open. The {@link SubscriptionStunAttribute} the publisher hands this callback is ignored: this
-         * revision ships the {@code 0x4024} descriptor envelope, so the descriptor set is the authoritative
-         * content and the publisher's tick is used only as the resend cadence.
+         * {@code 0x4025} {@link StunAttributeType#WA_SENDER_SUBSCRIPTIONS} attribute carries the fixed
+         * {@link SenderSubscriptions} declaring this client's own send streams as four SSRC-to-PID assignment
+         * sources (video stream {@code 0}, video stream {@code 1}, audio, and app-data), built once at assembly
+         * by {@link #buildSelfSenderSubscriptions(String, Jid, int, boolean)} since the deterministic SSRCs and
+         * the relay-assigned self PID do not change for the call's lifetime; each tick re-ships that same set
+         * through {@link LiveRelayTransport#sendSubscriptionEnvelope(SenderSubscriptions)}. The assignments are
+         * this client's own streams only: each endpoint declares its own streams in its own envelope, matching
+         * the live capture, so the call roster is not read here. It is a no-op when the transport is not yet
+         * built; the transport itself drops the send when it holds no relay key or reflexive address or the data
+         * channel is not open. The {@link SubscriptionStunAttribute} the publisher hands this callback is
+         * ignored: this revision ships the {@code 0x4025} sender-subscription envelope, so the assignment set is
+         * the authoritative content and the publisher's tick is used only as the resend cadence.
          *
-         * @param transportHolder the holder of the relay transport the envelope is shipped through, set once the
-         *                        transport is built
-         * @param selfDescriptors this client's own send-stream descriptors carried as the {@code 0x4024}
-         *                        attribute; never {@code null}
+         * @param transportHolder        the holder of the relay transport the envelope is shipped through, set
+         *                               once the transport is built
+         * @param selfSenderSubscriptions this client's own send-stream SSRC-to-PID assignments carried as the
+         *                               {@code 0x4025} attribute; never {@code null}
          * @return the resend callback that emits the {@code 0x0003} envelope
          */
         private static Consumer<SubscriptionStunAttribute> subscriptionResender(
                 AtomicReference<LiveRelayTransport> transportHolder,
-                StreamDescriptors selfDescriptors) {
+                SenderSubscriptions selfSenderSubscriptions) {
             return _ -> {
                 var transport = transportHolder.get();
                 if (transport == null) {
                     return;
                 }
-                transport.sendSubscriptionEnvelope(selfDescriptors);
+                transport.sendSubscriptionEnvelope(selfSenderSubscriptions);
             };
         }
 
@@ -2686,6 +2730,129 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     .payloadType(StreamDescriptor.PayloadType.NACK)
                     .ssrc(triple.oobNack())
                     .build());
+        }
+
+        /**
+         * Builds the {@code 0x4025} {@link SenderSubscriptions} publishing this client's own send-stream
+         * SSRC-to-PID assignments.
+         *
+         * <p>Emits exactly four {@link SenderSubscriptionExt} sources, in the load-bearing wire order the live
+         * caller capture pins: the first simulcast video stream, the second simulcast video stream, the audio
+         * stream, then the app-data stream. Each source carries the ordered SSRCs the SFU forwards the stream on
+         * and, optionally, a {@link SenderSubscriptionExt.PidTemporalLayer} descriptor binding the
+         * {@code selfPid} relay participant id to the SVC temporal layer:
+         * <ul>
+         * <li>video stream {@code 0}: the {@code [primary, FEC, NACK]} triple
+         *     ({@link CallSecureSsrcGenerator#videoTriple(String, CallDeviceJid, int)} stream {@code 0}); a
+         *     {@code (selfPid, ENHANCEMENT)} descriptor only when {@code sendingVideo}, otherwise no descriptor;
+         * <li>video stream {@code 1}: the {@code [primary, FEC, NACK]} triple (stream {@code 1}); never a
+         *     descriptor;
+         * <li>audio: the {@code [primary, FEC, NACK]} triple
+         *     ({@link CallSecureSsrcGenerator#audioTriple(String, CallDeviceJid)}); a {@code (selfPid, BASE)}
+         *     descriptor;
+         * <li>app-data: the single {@link CallSecureSsrcGenerator#appDataSsrc(String, CallDeviceJid)} SSRC; a
+         *     {@code (selfPid, BASE)} descriptor.
+         * </ul>
+         *
+         * <p>Every SSRC is carried as an unsigned {@code long} in the {@code 0..0xFFFFFFFF} range so a
+         * high-bit-set SSRC encodes as a five-byte unsigned varint rather than the ten-byte sign-extended form a
+         * negative {@code int} would produce. The assignments are this client's own streams only; each endpoint
+         * declares its own streams in its own envelope. When {@code selfDeviceJid} is {@code null} (the
+         * degenerate no-identity bring-up) the subscription list is empty.
+         *
+         * @implNote This implementation reproduces the four-source {@code SenderSubscriptions} the newer wa-voip
+         * web revision publishes as the {@code 0x4025} attribute through
+         * {@code add_stun_attr_sender_subscriptions} / {@code append_stream_descriptors} (fn5182/fn5183 in
+         * {@code wa_transport_subscription.cc}). A {@code BASE} temporal layer is modelled as an absent
+         * {@code layer_id} ({@code null}) rather than the {@code BASE} enum constant: {@code BASE} is the
+         * proto3 enum default, which the wire form drops, so an audio or app-data descriptor emits only
+         * {@code 08 <pid>} while the video-stream-0 descriptor emits {@code 08 <pid> 10 01} for
+         * {@code ENHANCEMENT}; passing the {@code BASE} constant would instead emit a spurious {@code 10 00}.
+         * The four-source caller capture is eighty-six bytes for its own session; the exact length is per-call,
+         * since the deterministic SSRCs and the relay self PID are session-specific varint widths.
+         *
+         * @param callId        the call-id string from the offer the deterministic SSRCs are derived under
+         * @param selfDeviceJid this client's own device JID the SSRCs are derived from, or {@code null}
+         * @param selfPid       the local device's relay-assigned participant id stamped into each descriptor
+         * @param sendingVideo  whether this client sends video, gating the video-stream-0 descriptor
+         * @return the local sender subscriptions carried as the {@code 0x4025} attribute
+         */
+        static SenderSubscriptions buildSelfSenderSubscriptions(String callId, Jid selfDeviceJid, int selfPid,
+                                                                boolean sendingVideo) {
+            var subscriptions = new ArrayList<SenderSubscriptionExt>();
+            if (selfDeviceJid != null) {
+                var device = CallDeviceJid.of(selfDeviceJid);
+                var video0 = CallSecureSsrcGenerator.videoTriple(callId, device, 0);
+                subscriptions.add(senderSubscriptionSource(
+                        unsignedSsrcs(video0.primary(), video0.fec(), video0.oobNack()),
+                        sendingVideo ? Integer.valueOf(selfPid) : null,
+                        sendingVideo ? SenderSubscriptionExt.TemporalLayer.ENHANCEMENT : null));
+                var video1 = CallSecureSsrcGenerator.videoTriple(callId, device, 1);
+                subscriptions.add(senderSubscriptionSource(
+                        unsignedSsrcs(video1.primary(), video1.fec(), video1.oobNack()),
+                        null, null));
+                var audio = CallSecureSsrcGenerator.audioTriple(callId, device);
+                subscriptions.add(senderSubscriptionSource(
+                        unsignedSsrcs(audio.primary(), audio.fec(), audio.oobNack()),
+                        selfPid, null));
+                subscriptions.add(senderSubscriptionSource(
+                        unsignedSsrcs(CallSecureSsrcGenerator.appDataSsrc(callId, device)),
+                        selfPid, null));
+            }
+            return new SenderSubscriptionsBuilder()
+                    .subscriptions(subscriptions)
+                    .build();
+        }
+
+        /**
+         * Builds one {@link SenderSubscriptionExt} source from its ordered SSRCs and an optional PID descriptor.
+         *
+         * <p>The source's {@link SenderSubscriptionExt.SSrcsToPidAssignments} carries the {@code ssrcs} list
+         * verbatim. A {@code null} {@code pid} omits the {@code pids} entry entirely (the source declares SSRCs
+         * with no PID descriptor); a non-{@code null} {@code pid} contributes a single
+         * {@link SenderSubscriptionExt.PidTemporalLayer} binding the PID to {@code layer}. A {@code null}
+         * {@code layer} models the {@code BASE} proto3 default, which the wire form drops, so the descriptor
+         * emits only {@code 08 <pid>}; a non-{@code null} {@code layer} emits the temporal-layer field.
+         *
+         * @param ssrcs the ordered unsigned SSRCs the source declares
+         * @param pid   the relay participant id to bind, or {@code null} to emit no PID descriptor
+         * @param layer the temporal layer the PID occupies, or {@code null} for the dropped {@code BASE} default
+         * @return the assembled sender-subscription source
+         */
+        private static SenderSubscriptionExt senderSubscriptionSource(List<Long> ssrcs, Integer pid,
+                                                                      SenderSubscriptionExt.TemporalLayer layer) {
+            var pids = pid == null
+                    ? List.<SenderSubscriptionExt.PidTemporalLayer>of()
+                    : List.of(new SenderSubscriptionExtPidTemporalLayerBuilder()
+                            .pid(pid)
+                            .layerId(layer)
+                            .build());
+            var assignments = new SenderSubscriptionExtSSrcsToPidAssignmentsBuilder()
+                    .ssrcs(ssrcs)
+                    .pids(pids)
+                    .build();
+            return new SenderSubscriptionExtBuilder()
+                    .ssrcLayers(assignments)
+                    .build();
+        }
+
+        /**
+         * Converts a sequence of 32-bit SSRCs to the unsigned {@code long} range the {@code 0x4025} packed
+         * SSRC field encodes.
+         *
+         * <p>Each {@code int} SSRC is widened through {@link Integer#toUnsignedLong(int)} so a high-bit-set SSRC
+         * becomes a value in {@code 0..0xFFFFFFFF} that encodes as a minimal unsigned varint rather than a
+         * sign-extended ten-byte one.
+         *
+         * @param ssrcs the 32-bit SSRCs in declaration order
+         * @return the SSRCs as unsigned {@code long} values, in the same order
+         */
+        private static List<Long> unsignedSsrcs(int... ssrcs) {
+            var list = new ArrayList<Long>(ssrcs.length);
+            for (var ssrc : ssrcs) {
+                list.add(Integer.toUnsignedLong(ssrc));
+            }
+            return list;
         }
 
         /**
@@ -3264,6 +3431,12 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private boolean markerStamped;
 
         /**
+         * Holds the rolling sixteen-bit transport send tag stamped in the id9 header-extension element on every
+         * packet, advanced by one per packet.
+         */
+        private int extensionSendTag;
+
+        /**
          * Constructs a packetizer stamping the given audio SSRC with the RTP sequence seeded at one (the value
          * WhatsApp starts at, not zero) and the timestamp zeroed.
          *
@@ -3279,6 +3452,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             this.samplesPerPacket = samplesPerPacket;
             this.sequence = 1;
             this.timestamp = 0;
+            this.extensionSendTag = 0;
         }
 
         /**
@@ -3294,16 +3468,22 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * @param extendedSequence the sender's extended sequence (used only for diagnostics; the wire
          *                         sequence is the packetizer's own running counter)
          * @return the RTP packet buffer, sized for the header, the extension, the payload, and the SRTP tag
-         * @implNote This implementation sets the extension bit ({@code 0x90}) and writes the four-byte
-         * {@code de be 00 00} empty header extension (profile {@code 0xDEBE}, zero word count) the live capture
-         * shows on every WhatsApp relayed media packet. The relay forwards a stream's media only when the
-         * extension is present, so the empty extension is stamped even though the per-element audio-level value
-         * is not (its extmap id is unrecovered, see {@code sendAudioPacket}). The end-to-end SRTP transform
-         * encrypts the payload after this header, locating its end from the extension bit, so the extension
-         * rides in the clear ahead of the ciphertext exactly as the captured packets carry it.
+         * @implNote This implementation sets the extension bit ({@code 0x90}) and writes the populated
+         * {@code 0xBEDE} one-byte header extension a byte-level capture shows on every WhatsApp audio packet:
+         * two extension words holding id3 (frame flags, stamped {@code 0x01} for audio), id6 (transmission
+         * offset, stamped zero), and id9 (a per-packet transport send tag). The profile word is written
+         * {@code DE BE} (the byte-swapped {@code 0xBEDE}) to match WhatsApp's little-endian store, and the relay
+         * forwards a stream's media only when the extension is present. The end-to-end SRTP transform encrypts
+         * the payload after this header, locating its end from the extension bit, so the extension rides in the
+         * clear ahead of the ciphertext exactly as the captured packets carry it.
+         * TODO: stamp the id5 config tag the capture also shows on most audio media packets; a two-call capture
+         * recovered it as a per-stream receiver-opaque tag in the {@code 0x2900}-{@code 0x2c00} range (the same
+         * value the video stream stamps), so a fixed {@code 0x2a00} suffices.
          */
         private byte[] packetize(byte[] payload, long extendedSequence) {
-            var packet = new byte[RTP_HEADER_LENGTH + RTP_HEADER_EXTENSION_LENGTH + payload.length + 64];
+            var extensionLength = RTP_HEADER_EXTENSION_LENGTH + 8;
+            var sendTag = extensionSendTag = (extensionSendTag + 1) & 0xFFFF;
+            var packet = new byte[RTP_HEADER_LENGTH + extensionLength + payload.length + 64];
             packet[0] = (byte) 0x90;
             // The RTP marker bit flags the first packet of a talkspurt; the live capture sets it on the first
             // media packet of the stream (and the peer's jitter buffer keys playout start off it). The stream
@@ -3323,8 +3503,16 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             packet[12] = (byte) 0xDE;
             packet[13] = (byte) 0xBE;
             packet[14] = 0;
-            packet[15] = 0;
-            System.arraycopy(payload, 0, packet, RTP_HEADER_LENGTH + RTP_HEADER_EXTENSION_LENGTH, payload.length);
+            packet[15] = 2;
+            packet[16] = (byte) 0x30;
+            packet[17] = 0x01;
+            packet[18] = (byte) 0x61;
+            packet[19] = 0x00;
+            packet[20] = 0x00;
+            packet[21] = (byte) 0x91;
+            packet[22] = (byte) ((sendTag >>> 8) & 0xFF);
+            packet[23] = (byte) (sendTag & 0xFF);
+            System.arraycopy(payload, 0, packet, RTP_HEADER_LENGTH + extensionLength, payload.length);
             sequence = (sequence + 1) & 0xFFFF;
             timestamp += samplesPerPacket;
             return packet;
@@ -3437,11 +3625,12 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
      * until the inbound resolution is threaded through, the same missing video capture that would supply it
      * (re/calls2-spec/captures/CAPTURE-FINDINGS.md Q8: RTP rides the worker UDP, invisible to a page capture;
      * group video never connected, so no live fragmented-video RTP frame was capturable, and this codec is
-     * validated against the static fn8681/fn8729 byte ops rather than a live frame). STAP-A is parsed on the
-     * inbound side but not emitted on the outbound side: the native packetizer aggregates only the small
-     * parameter-set NALs into STAP-A and the precise aggregation threshold is not recovered, so a small NAL is
-     * sent as a single-NAL packet (the wire-equivalent the depacketizer also accepts) rather than fabricating
-     * an aggregation boundary.
+     * validated against the static fn8681/fn8729 byte ops rather than a live frame). STAP-A is emitted as well
+     * as parsed: {@link #flushAggregate} aggregates a run of consecutive budget-fitting NAL units into one
+     * payload (the {@code maxNRI | 24} header then a two-byte length prefix per NAL), so a key frame's small
+     * parameter-set NALs ride one STAP-A ahead of the slice's FU-A run; the aggregation threshold (the payload
+     * budget) and form follow the meowcaller reference, and a lone budget-fitting NAL stays a single-NAL
+     * packet.
      */
     private static final class H264RtpPacketization {
         /**
@@ -3492,11 +3681,12 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         /**
          * Splits one Annex-B H264 access unit into the RTP payloads that carry it.
          *
-         * <p>The access unit is parsed into its NAL units on the Annex-B start codes the encoder emits; each
-         * NAL that fits the per-packet codec budget becomes one single-NAL payload, and each NAL too large is
-         * split into fragmentation-unit-A payloads whose first carries the start bit, whose last carries the
-         * end bit, and whose reassembled NAL type is the original NAL type. An empty or start-code-only access
-         * unit yields no payloads.
+         * <p>The access unit is parsed into its NAL units on the Annex-B start codes the encoder emits. A run
+         * of consecutive NAL units that fit the per-packet codec budget together is aggregated into one STAP-A
+         * payload (a run of a single such NAL stays a single-NAL payload); a NAL too large to fit is split into
+         * fragmentation-unit-A payloads whose first carries the start bit, whose last carries the end bit, and
+         * whose reassembled NAL type is the original NAL type. So a key frame's small parameter-set NALs ride
+         * one STAP-A ahead of the slice's FU-A run. An empty or start-code-only access unit yields no payloads.
          *
          * @param accessUnit the Annex-B access unit bytes (NAL units delimited by {@code 00 00 01} or
          *                   {@code 00 00 00 01} start codes)
@@ -3510,17 +3700,62 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 payloadBudget = 2;
             }
             var payloads = new ArrayList<byte[]>();
+            var pending = new ArrayList<byte[]>();
+            var pendingBytes = 1;
             for (var nal : splitAnnexBNalUnits(accessUnit)) {
                 if (nal.length == 0) {
                     continue;
                 }
-                if (nal.length <= payloadBudget) {
-                    payloads.add(nal);
-                } else {
+                if (nal.length > payloadBudget) {
+                    pendingBytes = flushAggregate(pending, payloads);
                     fragmentNal(nal, payloadBudget, payloads);
+                    continue;
                 }
+                if (pendingBytes + 2 + nal.length > payloadBudget) {
+                    pendingBytes = flushAggregate(pending, payloads);
+                }
+                pending.add(nal);
+                pendingBytes += 2 + nal.length;
             }
+            flushAggregate(pending, payloads);
             return payloads;
+        }
+
+        /**
+         * Flushes the pending run of budget-fitting NAL units into one RTP payload and clears it.
+         *
+         * <p>A run of two or more NAL units becomes one STAP-A aggregation payload (the {@code maxNRI | 24}
+         * aggregation header, then per NAL a two-byte big-endian length prefix and the NAL bytes); a run of a
+         * single NAL unit becomes one single-NAL payload; an empty run emits nothing. The pending list is
+         * cleared and the reset aggregate byte count, the one STAP-A header byte, is returned.
+         *
+         * @param pending the run of budget-fitting NAL units awaiting aggregation, cleared on return
+         * @param out     the payload list the aggregated or single-NAL payload is appended to
+         * @return the reset pending-aggregate byte count, one for the STAP-A header byte
+         */
+        private static int flushAggregate(List<byte[]> pending, List<byte[]> out) {
+            if (pending.size() == 1) {
+                out.add(pending.get(0));
+            } else if (pending.size() >= 2) {
+                var total = 1;
+                var maxNri = 0;
+                for (var nal : pending) {
+                    total += 2 + nal.length;
+                    maxNri = Math.max(maxNri, nal[0] & NAL_NRI_MASK);
+                }
+                var stapA = new byte[total];
+                stapA[0] = (byte) (maxNri | NAL_TYPE_STAP_A);
+                var offset = 1;
+                for (var nal : pending) {
+                    stapA[offset++] = (byte) ((nal.length >>> 8) & 0xFF);
+                    stapA[offset++] = (byte) (nal.length & 0xFF);
+                    System.arraycopy(nal, 0, stapA, offset, nal.length);
+                    offset += nal.length;
+                }
+                out.add(stapA);
+            }
+            pending.clear();
+            return 1;
         }
 
         /**
@@ -3841,9 +4076,45 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private final int ssrc;
 
         /**
+         * Supplies the live video target bitrate, in bits per second, stamped as the id13 keyframe descriptor's
+         * bitrate field on every keyframe after the first.
+         */
+        private final IntSupplier targetBitrate;
+
+        /**
+         * Supplies the live combined sender bandwidth estimate, in bits per second, stamped as the id13 keyframe
+         * descriptor's estimate field on every keyframe after the first.
+         */
+        private final IntSupplier bandwidthEstimate;
+
+        /**
          * Holds the next sixteen-bit RTP sequence number to stamp.
          */
         private int sequence;
+
+        /**
+         * Holds the number of id13 keyframe descriptors stamped so far, distinguishing the call's first keyframe
+         * (which carries a zero bitrate and a zero state byte) from later ones.
+         */
+        private int keyframeDescriptorsSent;
+
+        /**
+         * Holds the sixteen-bit picture number stamped in the id3 frame-marking header-extension element on the
+         * first packet of each access unit.
+         *
+         * <p>WhatsApp widens the id3 element to three bytes on a frame's first packet, the trailing two bytes
+         * carrying a picture counter that advances by one per access unit; this field holds the next value.
+         */
+        private int frameNumber;
+
+        /**
+         * Holds the rolling sixteen-bit transport send tag stamped in the id9 header-extension element on every
+         * packet.
+         *
+         * <p>WhatsApp stamps a per-packet sixteen-bit value in the id9 element; this counter advances by one per
+         * packet to supply it.
+         */
+        private int extensionSendTag;
 
         /**
          * Constructs a video packetizer stamping the given video SSRC with a zeroed sequence.
@@ -3852,35 +4123,75 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * ({@link CallSecureSsrcGenerator#videoTriple(String, CallDeviceJid, int)} stream {@code 0},
          * media-type {@code 2}), the value the peer pre-registers a receive context for, never random.
          *
-         * @param ssrc the outbound video stream SSRC
+         * @param ssrc              the outbound video stream SSRC
+         * @param targetBitrate     supplies the live video target bitrate for the id13 keyframe descriptor
+         * @param bandwidthEstimate supplies the live bandwidth estimate for the id13 keyframe descriptor
          */
-        private OutboundVideoRtpPacketizer(int ssrc) {
+        private OutboundVideoRtpPacketizer(int ssrc, IntSupplier targetBitrate, IntSupplier bandwidthEstimate) {
             this.ssrc = ssrc;
+            this.targetBitrate = targetBitrate;
+            this.bandwidthEstimate = bandwidthEstimate;
             this.sequence = 0;
+            this.frameNumber = 0;
+            this.extensionSendTag = 0;
+            this.keyframeDescriptorsSent = 0;
         }
 
         /**
          * Packetizes one RTP payload of an access unit into a video RTP packet buffer with trailing SRTP tag
          * room, stamping the marker bit on the last packet of the picture.
          *
-         * <p>Builds the twelve-byte header (version two, no padding, no extension, the marker bit set only
-         * when {@code marker} is set, the dynamic video payload type, the running sequence, the
+         * <p>Builds the twelve-byte fixed header (version two, no padding, the extension bit set, the marker
+         * bit set only when {@code marker} is set, the dynamic video payload type, the running sequence, the
          * ninety-kilohertz timestamp derived from the access unit's microsecond presentation timestamp shared
-         * across the picture's packets, and the stream SSRC), copies the payload after it, and leaves
-         * sixty-four bytes of trailing room for the transport's hop-by-hop SRTP tag. The sequence advances by
-         * one. Every packet of one access unit carries the same timestamp so the depacketizer groups them.
+         * across the picture's packets, and the stream SSRC), then the populated {@code 0xBEDE} one-byte header
+         * extension, then the payload, leaving sixty-four bytes of trailing room for the transport's
+         * hop-by-hop SRTP tag. The sequence advances by one and every packet of one access unit carries the
+         * same timestamp so the depacketizer groups them.
          *
-         * @param payload   the RTP payload bytes to wrap (a single NAL or one FU-A fragment of the access
-         *                  unit)
-         * @param ptsMicros the access unit's presentation timestamp in microseconds, mapped to the
-         *                  ninety-kilohertz RTP clock
-         * @param marker    whether to set the RTP marker bit, marking the last packet of the access unit
-         * @return the RTP packet buffer, sized for the header, the payload, and the SRTP tag
+         * <p>The header extension carries elements in ascending id order. Every packet carries id3 (frame flags,
+         * one byte, widened to three bytes carrying the sixteen-bit picture number on a frame's first packet),
+         * id6 (transmission offset), and id9 (transport send tag). A keyframe packet additionally carries id5 (a
+         * per-stream config tag), and a keyframe's first packet additionally carries id13 (the extended
+         * descriptor holding the target bitrate). The extension is two words for an inter-frame packet, three for
+         * a frame start or a non-first keyframe packet, and six for a keyframe's first packet.
+         *
+         * @implNote The extension is reconstructed from byte-level captures of real WhatsApp 1:1 video calls:
+         * every video packet carries the populated {@code 0xBEDE} extension, never the empty {@code de be 00 00}
+         * word, and the relay's forwarding gate requires the extension bit and {@code de be} profile. The profile
+         * word is written {@code DE BE} (the byte-swapped {@code 0xBEDE}) to match WhatsApp's little-endian store.
+         * id3 flags are stamped {@code 0x00}, id6 zero, and id9 advances per packet. id5 is stamped
+         * {@code 0x2a00}, a fixed value in the captured per-stream {@code 0x2900}-{@code 0x2c00} range the
+         * receiver reads opaquely. id13 is {@code [0x09][u24 target-bitrate][u32 bandwidth-estimate][state]}: the
+         * call's first keyframe carries zeros and a {@code 0x00} state byte, every later keyframe the live video
+         * target bitrate and combined bandwidth estimate (both read per keyframe from the rate-control loop) and
+         * a {@code 0x01} state byte. The {@code u24} bitrate matches the captured BWE-driven ramp; the {@code u32}
+         * estimate matches the captured available-bandwidth field (a low-motion sender's climbs well above its
+         * send bitrate).
+         *
+         * @param payload    the RTP payload bytes to wrap (a single NAL, a STAP-A aggregate, or one FU-A
+         *                   fragment of the access unit)
+         * @param ptsMicros  the access unit's presentation timestamp in microseconds, mapped to the
+         *                   ninety-kilohertz RTP clock
+         * @param marker     whether to set the RTP marker bit, marking the last packet of the access unit
+         * @param frameStart whether this is the first packet of the access unit, which widens the id3 element to
+         *                   carry the advancing picture number
+         * @param keyframe   whether the access unit is an intra picture, which adds the id5 element to every
+         *                   packet and the id13 descriptor to the first
+         * @return the RTP packet buffer, sized for the header, the header extension, the payload, and the SRTP
+         *         tag; the wire length is {@code packet.length} less the trailing sixty-four-byte SRTP room
          */
-        private byte[] packetize(byte[] payload, long ptsMicros, boolean marker) {
+        private byte[] packetize(byte[] payload, long ptsMicros, boolean marker, boolean frameStart, boolean keyframe) {
             var timestamp = ptsMicros * VIDEO_RTP_CLOCK_RATE / 1_000_000L;
-            var packet = new byte[RTP_HEADER_LENGTH + payload.length + 64];
-            packet[0] = (byte) 0x80;
+            var descriptor = keyframe && frameStart;
+            var words = descriptor ? 6 : ((keyframe || frameStart) ? 3 : 2);
+            var extensionLength = RTP_HEADER_EXTENSION_LENGTH + words * 4;
+            if (frameStart) {
+                frameNumber = (frameNumber + 1) & 0xFFFF;
+            }
+            var sendTag = extensionSendTag = (extensionSendTag + 1) & 0xFFFF;
+            var packet = new byte[RTP_HEADER_LENGTH + extensionLength + payload.length + 64];
+            packet[0] = (byte) 0x90;
             packet[1] = (byte) ((marker ? 0x80 : 0x00) | (VIDEO_PAYLOAD_TYPE & 0x7F));
             packet[2] = (byte) ((sequence >>> 8) & 0xFF);
             packet[3] = (byte) (sequence & 0xFF);
@@ -3892,7 +4203,48 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             packet[9] = (byte) ((ssrc >>> 16) & 0xFF);
             packet[10] = (byte) ((ssrc >>> 8) & 0xFF);
             packet[11] = (byte) (ssrc & 0xFF);
-            System.arraycopy(payload, 0, packet, RTP_HEADER_LENGTH, payload.length);
+            packet[12] = (byte) 0xDE;
+            packet[13] = (byte) 0xBE;
+            packet[14] = (byte) ((words >>> 8) & 0xFF);
+            packet[15] = (byte) (words & 0xFF);
+            var cursor = 16;
+            if (frameStart) {
+                packet[cursor++] = (byte) 0x32;
+                packet[cursor++] = 0x00;
+                packet[cursor++] = (byte) ((frameNumber >>> 8) & 0xFF);
+                packet[cursor++] = (byte) (frameNumber & 0xFF);
+            } else {
+                packet[cursor++] = (byte) 0x30;
+                packet[cursor++] = 0x00;
+            }
+            if (keyframe) {
+                packet[cursor++] = (byte) 0x51;
+                packet[cursor++] = (byte) 0x2A;
+                packet[cursor++] = 0x00;
+            }
+            packet[cursor++] = (byte) 0x61;
+            packet[cursor++] = 0x00;
+            packet[cursor++] = 0x00;
+            packet[cursor++] = (byte) 0x91;
+            packet[cursor++] = (byte) ((sendTag >>> 8) & 0xFF);
+            packet[cursor++] = (byte) (sendTag & 0xFF);
+            if (descriptor) {
+                var first = keyframeDescriptorsSent == 0;
+                keyframeDescriptorsSent++;
+                var rate = first ? 0 : targetBitrate.getAsInt();
+                var estimate = first ? 0 : bandwidthEstimate.getAsInt();
+                packet[cursor++] = (byte) 0xD8;
+                packet[cursor++] = 0x09;
+                packet[cursor++] = (byte) ((rate >>> 16) & 0xFF);
+                packet[cursor++] = (byte) ((rate >>> 8) & 0xFF);
+                packet[cursor++] = (byte) (rate & 0xFF);
+                packet[cursor++] = (byte) ((estimate >>> 24) & 0xFF);
+                packet[cursor++] = (byte) ((estimate >>> 16) & 0xFF);
+                packet[cursor++] = (byte) ((estimate >>> 8) & 0xFF);
+                packet[cursor++] = (byte) (estimate & 0xFF);
+                packet[cursor] = (byte) (first ? 0x00 : 0x01);
+            }
+            System.arraycopy(payload, 0, packet, RTP_HEADER_LENGTH + extensionLength, payload.length);
             sequence = (sequence + 1) & 0xFFFF;
             return packet;
         }
@@ -3952,6 +4304,38 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private final InboundH264Depacketizer videoDepacketizer;
 
         /**
+         * Holds the callback that ships a generic NACK for a remote audio stream's lost sequence numbers, or
+         * {@code null} until the transport is built and installs it.
+         *
+         * <p>Installed by the assembly through {@link #nackEmitter(BiConsumer)} once the transport exists,
+         * since the demux is built first; the receive thread reads it after each audio or video insert, so it
+         * is {@code volatile}. The first argument is the remote stream SSRC, the second the due sequence
+         * numbers.
+         */
+        private volatile BiConsumer<Integer, List<Integer>> nackEmitter;
+
+        /**
+         * Holds the per-remote-video-SSRC loss detectors that decide which inbound video sequence numbers to
+         * request a retransmission for.
+         *
+         * <p>Keyed by the remote video synchronization source, with one {@link VideoNackTracker} created
+         * lazily on the first packet of each source. The map and every tracker in it are touched only on the
+         * single transport receive thread that drives {@link #acceptVideo(VideoPipeline, byte[])}, so a plain
+         * {@link HashMap} needs no synchronization.
+         */
+        private final Map<Integer, VideoNackTracker> videoNackTrackers = new HashMap<>();
+
+        /**
+         * Holds the latest path round-trip-time estimate in milliseconds the video NACK scheduler spaces its
+         * re-NACK requests against, or {@code 0} before the first inbound RTCP feedback.
+         *
+         * <p>Written by the RTCP feedback handler through {@link #updateVideoRttMillis(long)} and read on the
+         * receive thread by {@link #acceptVideo(VideoPipeline, byte[])}, so it is {@code volatile}; the value
+         * is a lock-free hand-off, the same round-trip estimate the audio jitter buffer is fed.
+         */
+        private volatile long videoRttMillis;
+
+        /**
          * Constructs a demultiplexer over the audio jitter buffer, the optional video pipeline, the optional
          * SFrame chain, and the rate-control loop.
          *
@@ -3969,6 +4353,36 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             this.sframeProvider = sframeProvider;
             this.rateControlLoop = rateControlLoop;
             this.videoDepacketizer = new InboundH264Depacketizer();
+        }
+
+        /**
+         * Installs the callback that ships a generic NACK for a remote audio or video stream's lost sequence
+         * numbers.
+         *
+         * <p>The assembly calls this once the transport exists, since the demux is constructed first; the
+         * receive thread reads it after each audio or video insert. Passing {@code null} disables NACK
+         * emission.
+         *
+         * @param nackEmitter the NACK callback, taking the remote stream SSRC and the due sequence numbers,
+         *                    or {@code null} to disable
+         */
+        private void nackEmitter(BiConsumer<Integer, List<Integer>> nackEmitter) {
+            this.nackEmitter = nackEmitter;
+        }
+
+        /**
+         * Updates the path round-trip-time estimate the video NACK scheduler spaces its re-NACK requests
+         * against.
+         *
+         * <p>Called from the inbound RTCP feedback handler whenever a feedback report carries a round-trip
+         * sample, the same estimate the audio jitter buffer is fed. A negative estimate is floored to zero.
+         * The value is read on the receive thread by {@link #acceptVideo(VideoPipeline, byte[])}; the write
+         * is a lock-free volatile hand-off.
+         *
+         * @param rttMillis the path round-trip-time estimate, in milliseconds
+         */
+        private void updateVideoRttMillis(long rttMillis) {
+            this.videoRttMillis = Math.max(0, rttMillis);
         }
 
         /**
@@ -4010,7 +4424,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          *
          * <p>The packet's RTP timestamp (in {@code clockRateHz} units) is converted to a millisecond send
          * time, the local arrival time is taken from {@link System#nanoTime()} in milliseconds, and the media
-         * payload size (the packet length past the twelve-byte RTP header) is the byte count; the estimator
+         * payload size (the packet length past the RTP header and any header extension) is the byte count; the estimator
          * groups packets by send burst and fits its over-use trendline from these arrival deltas (SPEC 14.2,
          * 15.1). A failed tee is swallowed so an estimator hiccup never disturbs the decode path.
          *
@@ -4031,12 +4445,35 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     | ((long) (rtpPacket[6] & 0xFF) << 8) | (rtpPacket[7] & 0xFF);
             var sendTimeMs = rtpTimestamp * 1000L / clockRateHz;
             var arrivalMs = System.nanoTime() / 1_000_000L;
-            var payloadBytes = rtpPacket.length - RTP_HEADER_LENGTH;
+            var payloadBytes = rtpPacket.length - rtpPayloadOffset(rtpPacket);
             try {
                 rateControlLoop.onPacketReceived(sendTimeMs, arrivalMs, payloadBytes);
             } catch (RuntimeException exception) {
                 LOGGER.log(System.Logger.Level.DEBUG, "calls2 inbound rate-control tee failed", exception);
             }
+        }
+
+        /**
+         * Returns the byte offset of the RTP payload, past the fixed header, any CSRC list, and the
+         * {@code 0xBEDE} one-byte header extension when the extension bit is set.
+         *
+         * <p>Every relayed WhatsApp media packet sets the extension bit and carries a {@code de be} header
+         * extension ahead of the codec payload (the same one the outbound packetizers stamp), so stripping a
+         * fixed twelve bytes would feed the extension bytes into the audio or video depacketizer. This reads
+         * the extension's two-byte word count and skips the whole block, and also skips any CSRC list, so the
+         * returned offset points at the codec payload. A packet with the extension bit clear, or one too short
+         * to hold the declared extension, yields the bare header length.
+         *
+         * @param rtpPacket the inbound RTP packet bytes
+         * @return the offset of the codec payload past the header and any header extension
+         */
+        private static int rtpPayloadOffset(byte[] rtpPacket) {
+            var offset = RTP_HEADER_LENGTH + (rtpPacket[0] & 0x0F) * 4;
+            if ((rtpPacket[0] & 0x10) != 0 && rtpPacket.length >= offset + 4) {
+                var extensionWords = ((rtpPacket[offset + 2] & 0xFF) << 8) | (rtpPacket[offset + 3] & 0xFF);
+                offset += 4 + extensionWords * 4;
+            }
+            return Math.min(offset, rtpPacket.length);
         }
 
         /**
@@ -4053,7 +4490,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             var sequence = ((rtpPacket[2] & 0xFF) << 8) | (rtpPacket[3] & 0xFF);
             var timestamp = ((long) (rtpPacket[4] & 0xFF) << 24) | ((long) (rtpPacket[5] & 0xFF) << 16)
                     | ((long) (rtpPacket[6] & 0xFF) << 8) | (rtpPacket[7] & 0xFF);
-            var body = Arrays.copyOfRange(rtpPacket, RTP_HEADER_LENGTH, rtpPacket.length);
+            var ssrc = ((rtpPacket[8] & 0xFF) << 24) | ((rtpPacket[9] & 0xFF) << 16)
+                    | ((rtpPacket[10] & 0xFF) << 8) | (rtpPacket[11] & 0xFF);
+            var body = Arrays.copyOfRange(rtpPacket, rtpPayloadOffset(rtpPacket), rtpPacket.length);
             var payload = openSframe(body);
             if (payload == null) {
                 return;
@@ -4062,6 +4501,18 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 netEq.insert(sequence, timestamp, payload);
             } catch (RuntimeException exception) {
                 LOGGER.log(System.Logger.Level.DEBUG, "calls2 inbound audio insert failed", exception);
+                return;
+            }
+            // After inserting, request retransmission of any audio sequence gap the NACK scheduler now judges
+            // due (the same loss list the jitter buffer would otherwise only conceal); the scheduler's re-NACK
+            // gate paces repeats, so this fires only on a confirmed gap. The insert stamps arrival with the
+            // wall clock, so the due-time query uses the same clock.
+            var emitter = nackEmitter;
+            if (emitter != null) {
+                var due = netEq.pendingNackList(System.currentTimeMillis());
+                if (!due.isEmpty()) {
+                    emitter.accept(ssrc, due);
+                }
             }
         }
 
@@ -4077,6 +4528,12 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * not close an access unit (a non-final fragment) inserts nothing; the completed picture is inserted as
          * one {@link EncodedVideoFrame}, flagged a key frame when it carries an instantaneous-decoder-refresh or
          * parameter-set NAL.
+         *
+         * <p>Every packet's sequence number is fed to the remote source's {@link VideoNackTracker} before
+         * reassembly, since gap detection runs per RTP packet rather than per completed picture; a confirmed
+         * gap past the reorder window ships a generic NACK through the shared {@link #nackEmitter}, the same
+         * seam the audio path uses. A completed key frame is a refresh point, so the tracker is cleared on one
+         * and no retransmission is requested across the reset.
          *
          * @implNote This implementation feeds the reassembly through {@link InboundH264Depacketizer}, the port
          * of the inbound side of {@code unnamed_function_8729}, replacing the prior single-packet-equals-one-
@@ -4098,7 +4555,16 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             var marker = (rtpPacket[1] & 0x80) != 0;
             var timestamp = ((long) (rtpPacket[4] & 0xFF) << 24) | ((long) (rtpPacket[5] & 0xFF) << 16)
                     | ((long) (rtpPacket[6] & 0xFF) << 8) | (rtpPacket[7] & 0xFF);
-            var body = Arrays.copyOfRange(rtpPacket, RTP_HEADER_LENGTH, rtpPacket.length);
+            var ssrc = ((rtpPacket[8] & 0xFF) << 24) | ((rtpPacket[9] & 0xFF) << 16)
+                    | ((rtpPacket[10] & 0xFF) << 8) | (rtpPacket[11] & 0xFF);
+            // Gap detection runs per RTP packet, so feed every packet's sequence to this source's tracker
+            // before reassembly (a fragment that never completes a picture still advances the sequence and so
+            // still reveals a gap). The tracker map is touched only here, on the single transport receive
+            // thread.
+            var nowMillis = System.currentTimeMillis();
+            var tracker = videoNackTrackers.computeIfAbsent(ssrc, _ -> new VideoNackTracker());
+            tracker.recordReceived(sequence);
+            var body = Arrays.copyOfRange(rtpPacket, rtpPayloadOffset(rtpPacket), rtpPacket.length);
             // Reassemble the RTP packets into the Annex-B access unit first, then run the (currently
             // pass-through) SFrame open once per completed picture. openSframe returns its input unchanged on
             // the relayed path -- the SFrame per-frame transform is proven NOT engaged there -- so this order
@@ -4106,18 +4572,32 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             // NAL packetization on a topology that DOES engage SFrame is part of the same unrecovered SFrame
             // wire layout the open is blocked on (see openSframe), so the open is applied per picture as the
             // least-surprising placeholder rather than per fragment.
+            var keyFrame = false;
             var accessUnit = videoDepacketizer.accept(body, timestamp, marker);
-            if (accessUnit == null) {
+            if (accessUnit != null) {
+                accessUnit = openSframe(accessUnit);
+                if (accessUnit != null) {
+                    keyFrame = accessUnitIsKeyFrame(accessUnit);
+                    var frame = new EncodedVideoFrame(accessUnit, VideoDecoderCapability.H264, keyFrame,
+                            VIDEO_WIDTH, VIDEO_HEIGHT, timestamp);
+                    pipeline.insert(frame, System.nanoTime() / 1_000_000L, timestamp, sequence);
+                }
+            }
+            // A key frame is a decoder refresh point: clear the tracker so no retransmission is requested
+            // across the reset, since the packets before it are no longer needed to decode.
+            if (keyFrame) {
+                tracker.reset();
                 return;
             }
-            accessUnit = openSframe(accessUnit);
-            if (accessUnit == null) {
-                return;
+            // After tracking, request retransmission of any video sequence gap the scheduler now judges due
+            // past the reorder window; the re-NACK gate paces repeats, so this fires only on a confirmed gap.
+            var emitter = nackEmitter;
+            if (emitter != null) {
+                var due = tracker.nackList(nowMillis, videoRttMillis);
+                if (!due.isEmpty()) {
+                    emitter.accept(ssrc, due);
+                }
             }
-            var keyFrame = accessUnitIsKeyFrame(accessUnit);
-            var frame = new EncodedVideoFrame(accessUnit, VideoDecoderCapability.H264, keyFrame, VIDEO_WIDTH,
-                    VIDEO_HEIGHT, timestamp);
-            pipeline.insert(frame, System.nanoTime() / 1_000_000L, timestamp, sequence);
         }
 
         /**
@@ -5022,16 +5502,11 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private VideoRateController videoRc;
 
         /**
-         * The machine-learning bandwidth-estimation engine: a {@link LiveMlBweEngine} when the native
-         * {@link ExecuTorch} shim is available, otherwise a {@link NoopMlBweEngine}.
+         * The machine-learning bandwidth-estimation engine, always a {@link NoopMlBweEngine}.
          *
-         * <p>The engine is selected by {@link #selectMlBweEngine()}: it picks the native-backed engine when
-         * the four {@code ml_shim_*} symbols resolve in {@code cobalt-native}, but constructs it with no model
-         * configuration and a path resolver that provisions nothing, so it loads no model and degrades to the
-         * no-op path until the per-model {@code voip_settings} bitmap, feature count, history depth, threshold,
-         * and {@code .pte} paths are decoded (re/calls2-spec/ML-BWE-RE.md sec 6). With nothing provisioned its
-         * {@link MlBweEngine#infer(MlBweSignals)} returns {@link MlBweOutputs#DISABLED}, identical to the
-         * {@link NoopMlBweEngine}.
+         * <p>ML-BWE inference is not provisioned in Cobalt, so the engine loads no model and
+         * {@link MlBweEngine#infer(MlBweSignals)} returns {@link MlBweOutputs#DISABLED}; the pure
+         * delay-based and sender-side estimator runs standalone.
          */
         private final MlBweEngine mlEngine;
 
@@ -5078,6 +5553,42 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * re-run, or {@code 0} when none was observed.
          */
         private long lastRttNs;
+
+        /**
+         * The combined sender bandwidth estimate, in bits per second, from the most recent rate-control round,
+         * published for the video packetizer's id13 keyframe descriptor; zero before the first round.
+         *
+         * <p>Written under {@link #lock} on each round and read without it through
+         * {@link #bandwidthEstimateBps()}; declared {@code volatile} so the send thread observes each update.
+         */
+        private volatile int lastBandwidthEstimateBps;
+
+        /**
+         * The video target bitrate, in bits per second, from the most recent rate-control round, published for
+         * the video packetizer's id13 keyframe descriptor; zero before the first round or on an audio-only call.
+         *
+         * <p>Written under {@link #lock} on each round and read without it through
+         * {@link #videoTargetBitrateBps()}; declared {@code volatile} so the send thread observes each update.
+         */
+        private volatile int lastVideoTargetBitrateBps;
+
+        /**
+         * The combined sender bandwidth estimate, in bits per second, from the most recent rate-control round,
+         * published for the video packetizer's id13 keyframe descriptor.
+         *
+         * <p>Written under {@link #lock} each round and read without it through {@link #bandwidthEstimateBps()};
+         * declared {@code volatile} so the send thread observes each update.
+         */
+        private volatile int lastBandwidthEstimateBps;
+
+        /**
+         * The video target bitrate, in bits per second, from the most recent rate-control round, published for
+         * the video packetizer's id13 keyframe descriptor; zero until the call carries video.
+         *
+         * <p>Written under {@link #lock} each round and read without it through
+         * {@link #videoTargetBitrateBps()}; declared {@code volatile} so the send thread observes each update.
+         */
+        private volatile int lastVideoTargetBitrateBps;
 
         /**
          * Tracks whether the periodic tick is running, so its thread exits on {@link #stop()}.
@@ -5173,39 +5684,17 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         }
 
         /**
-         * Selects the machine-learning bandwidth-estimation engine for the call, the native-backed one when
-         * its shim resolves and the no-op one otherwise.
+         * Returns the machine-learning bandwidth-estimation engine for the call.
          *
-         * <p>When the {@link ExecuTorch} shim is {@linkplain LiveMlBweEngine#nativeShimAvailable() available} (the four
-         * {@code ml_shim_*} symbols resolve in {@code cobalt-native}) this builds a {@link LiveMlBweEngine},
-         * otherwise a {@link NoopMlBweEngine}. The live engine is built with no per-model configuration and a
-         * resolver that provisions no model path, so it loads no model and behaves exactly like the no-op
-         * engine until the per-model metadata and model paths are decoded; this keeps the engine seam wired
-         * without changing behaviour.
-         *
-         * @implNote This implementation realises the availability guard ML-BWE-RE.md sec 6 specifies: the
-         * native engine is preferred when the shim resolves, but it stays dormant because the per-model
-         * {@code voip_settings} bitmap, feature count, history depth, aggregation mode, and probability
-         * threshold are runtime voip-params not yet decoded (re/calls2-spec/ML-BWE-RE.md sec 3 UNRECOVERED) and
-         * the model {@code .pte} paths are not yet provisioned, so {@link LiveMlBweEngine.ModelConfig} and the
-         * {@link LiveMlBweEngine.ModelPathResolver} carry nothing and the engine loads no model. Populating the
-         * model configuration and paths is the deferred ML-BWE provisioning step; until then both branches
-         * yield {@link MlBweOutputs#DISABLED}.
+         * <p>This is always a {@link NoopMlBweEngine}: ML-BWE inference is not provisioned, so the engine
+         * loads no model and {@link MlBweEngine#infer(MlBweSignals)} returns {@link MlBweOutputs#DISABLED},
+         * leaving the pure delay-based and sender-side estimator to run standalone. The recovered congestion
+         * model an inference-backed engine would run is in re/calls2-spec/ML-BWE-RE.md.
          *
          * @return the machine-learning engine for the call, never {@code null}
          */
         private static MlBweEngine selectMlBweEngine() {
-            if (!LiveMlBweEngine.nativeShimAvailable()) {
-                return new NoopMlBweEngine();
-            }
-            // The native shim resolves, but no model is provisioned: the per-model bitmap / feature count /
-            // history depth / threshold are runtime voip-params not yet decoded (ML-BWE-RE.md sec 3) and the
-            // .pte paths are not yet provisioned, so the engine is built empty and degrades to the no-op path.
-            // TODO: decode the per-model voip-param metadata (cc_enable_ml_*_inference gates, the n_features /
-            //  rounds / aggMode / threshold runtime values) and provision the .pte model paths, then pass the
-            //  populated ModelConfig map and a real ModelPathResolver here so the congestion model runs; the
-            //  per-model metadata is BLOCKED on decoding the voip_settings bitmap (ML-BWE-RE.md sec 3, sec 6).
-            return new LiveMlBweEngine(Map.of(), type -> null);
+            return new NoopMlBweEngine();
         }
 
         /**
@@ -5393,6 +5882,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             var target = senderBwe.onFeedback(plr, rttNs, remoteBweBps, MIN_REMOTE_BITRATE_BPS,
                     linkCapacityBps, nowMs);
             target = applyMlSteering(target, plr, rttNs, remoteBweBps);
+            lastBandwidthEstimateBps = (int) target;
 
             var rttMs = rttNs > 0 ? rttNs / 1_000_000.0 : 0.0;
             var audioTarget = audioShare(target);
@@ -5405,7 +5895,30 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                         nowMs, videoParams);
                 videoParams = videoResult.params();
                 videoPipeline.modifyCodec(videoParams);
+                lastVideoTargetBitrateBps = videoParams.targetBitrate();
             }
+        }
+
+        /**
+         * Returns the video target bitrate, in bits per second, from the most recent rate-control round.
+         *
+         * <p>The video packetizer reads this each keyframe to stamp the id13 descriptor's bitrate field.
+         *
+         * @return the latest video target bitrate, or {@code 0} before the first round or on an audio-only call
+         */
+        private int videoTargetBitrateBps() {
+            return lastVideoTargetBitrateBps;
+        }
+
+        /**
+         * Returns the combined sender bandwidth estimate, in bits per second, from the most recent round.
+         *
+         * <p>The video packetizer reads this each keyframe to stamp the id13 descriptor's estimate field.
+         *
+         * @return the latest bandwidth estimate, or {@code 0} before the first round
+         */
+        private int bandwidthEstimateBps() {
+            return lastBandwidthEstimateBps;
         }
 
         /**
@@ -5415,9 +5928,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * <p>Builds the round's {@link MlBweSignals} from the measured packet loss, round-trip time, remote and
          * sender estimates, and the configured maximum bitrate, runs one
          * {@link MlBweEngine#infer(MlBweSignals)} round, and folds the engine's high-definition target delta
-         * through the combiner's probing increase. When the engine is disabled (the {@link NoopMlBweEngine}, or
-         * a {@link LiveMlBweEngine} with no provisioned model) its {@link MlBweOutputs#DISABLED} outputs carry
-         * no high-definition target, so the additive is zero and the target is returned unchanged.
+         * through the combiner's probing increase. With the engine disabled (the {@link NoopMlBweEngine}) its
+         * {@link MlBweOutputs#DISABLED} outputs carry no high-definition target, so the additive is zero and
+         * the target is returned unchanged.
          *
          * @implNote This builds the signal set with {@link MlBweSignals#ofThreaded(double, long, long, long,
          * long)} from the values the rate loop already measures (the unthreaded measured slots are
@@ -5452,8 +5965,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             //  min-time-between-ramp-downs guard. BLOCKED: the PID gains (kp/ki/kd), integral bounds, target
             //  level, and min factor are runtime voip-params absent from the captured voip_settings, and the
             //  fn4417 ramp-down thresholds DAT_504/DAT_508 are runtime-computed compiled defaults not
-            //  statically recoverable (re/calls2-spec/ML-BWE-RE.md sec 4). The engine is disabled until the ML
-            //  provisioning lands (see selectMlBweEngine), so the verdict is always false and this is inert.
+            //  statically recoverable (re/calls2-spec/ML-BWE-RE.md sec 4). The engine is always a
+            //  NoopMlBweEngine (the native ExecuTorch inference backend was removed), so the verdict is always
+            //  false and this is inert.
             var additive = outputs.hdTargetBps() > targetBps ? outputs.hdTargetBps() - targetBps : 0;
             return senderBwe.combiner().applyProbingIncrease(targetBps, additive);
         }

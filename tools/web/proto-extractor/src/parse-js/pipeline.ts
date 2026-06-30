@@ -6,6 +6,7 @@ import type {
     EnumValue,
     Identifier,
     IndentationEntry,
+    MessageMember,
     ModuleInfo,
     ParsedProtos,
 } from "../types.js";
@@ -16,6 +17,30 @@ import {
     renameIdentifier,
 } from "./ast.js";
 import { applyConstraints, findByAlias, parseMember } from "./members.js";
+
+/**
+ * Proto modules that are never exchanged with the server and are therefore
+ * filtered out of extraction: client-local IndexedDB row blobs
+ * ({@code WAWebProtobufsMdStorage*}), the libsignal on-disk record structures
+ * ({@code WASignalLocalStorage*}), the local media-entry cache
+ * ({@code WAMediaEntryData.pb}), and the out-of-band P2P safety-number
+ * fingerprints ({@code WAFingerprint.pb}, {@code WAWebProtobufsFingerprintV3.pb}).
+ * Filtering is module-scoped, never type-name-scoped, because several local type
+ * names (e.g. {@code PollEncValue}, {@code PollOption}) collide with distinct wire
+ * types declared in modules that are kept.
+ */
+const EXCLUDED_PROTO_MODULES: ReadonlySet<string> = new Set([
+    "WAMediaEntryData.pb",
+    "WAFingerprint.pb",
+    "WAWebProtobufsFingerprintV3.pb",
+]);
+
+/** Returns whether the named proto module is client-local and should be skipped. */
+function isExcludedProtoModule(moduleName: string): boolean {
+    return moduleName.startsWith("WAWebProtobufsMdStorage")
+        || moduleName.startsWith("WASignalLocalStorage")
+        || EXCLUDED_PROTO_MODULES.has(moduleName);
+}
 
 /** Parses one JS chunk and returns every top-level {@code __d("Module", ...)} call whose body assigns to {@code <alias>.internalSpec}. */
 function findProtoModules(chunk: JsChunk): AstNode[] {
@@ -107,6 +132,34 @@ function collectIdentifiers(
 }
 
 /**
+ * Extracts enum {@code (name, id)} pairs from a bare object literal whose values
+ * are all numeric literals (e.g. {@code {EVERYONE:1, SILENT:2}}). Returns
+ * {@code null} when the node is not such an all-numeric object, which excludes
+ * empty message-spec initializers ({@code {}}) and field-spec arrays.
+ *
+ * @param node - the candidate {@code ObjectExpression} AST node.
+ * @returns the enum value list, or {@code null} when the node is not an enum body.
+ */
+function bareEnumValues(node: AstNode): EnumValue[] | null {
+    if (node?.type !== "ObjectExpression" || !node.properties?.length) {
+        return null;
+    }
+    const values: EnumValue[] = [];
+    for (const p of node.properties) {
+        if (p?.type !== "Property") return null;
+        const negative = p.value?.type === "UnaryExpression" && p.value.operator === "-";
+        const literal = negative ? p.value.argument : p.value;
+        if (literal?.type !== "Literal" || typeof literal.value !== "number") {
+            return null;
+        }
+        const name = p.key?.name ?? p.key?.value;
+        if (name == null) return null;
+        values.push({ name, id: negative ? -literal.value : literal.value });
+    }
+    return values;
+}
+
+/**
  * Walks one proto module and collects the enum bodies keyed by their local alias.
  *
  * @remarks
@@ -148,6 +201,28 @@ function collectEnumAliases(module: AstNode): Record<string, EnumValue[]> {
             }
         },
     } as walk.AncestorVisitors<unknown>);
+
+    /* Enums declared as bare object-literal variables (e.g. `s={EVERYONE:1,...}`)
+     * exported under an ALL_CAPS name: neither an `internalSpec` assignment nor a
+     * wrapper call, so the passes above miss them. Keyed by the local variable
+     * name, matching how a field's enum reference is resolved by alias. */
+    walk.simple(module, {
+        VariableDeclarator(node: AstNode) {
+            const values = bareEnumValues(node.init);
+            if (values && node.id?.name) {
+                enumAliases[node.id.name] = values;
+            }
+        },
+        AssignmentExpression(node: AstNode) {
+            if (node?.left?.type === "Identifier") {
+                const values = bareEnumValues(node.right);
+                if (values) {
+                    enumAliases[node.left.name] = values;
+                }
+            }
+        },
+    });
+
     return enumAliases;
 }
 
@@ -209,6 +284,107 @@ function collectMessageMembers(
     });
 }
 
+/** Converts a {@code SCREAMING_SNAKE} token to {@code PascalCase} (e.g. {@code SPECIAL_TEXT_SIZE} -> {@code SpecialTextSize}). */
+function screamingToPascal(name: string): string {
+    return name
+        .split("_")
+        .filter((word) => word.length > 0)
+        .map((word) => word[0]!.toUpperCase() + word.slice(1).toLowerCase())
+        .join("");
+}
+
+/** Converts a {@code $}-nested PascalCase path to its {@code SCREAMING_SNAKE} export prefix (e.g. {@code ConsumerApplication$Metadata} -> {@code CONSUMER_APPLICATION_METADATA}). */
+function pascalPathToScreaming(name: string): string {
+    return name
+        .split("$")
+        .map((segment) => segment.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toUpperCase())
+        .join("_");
+}
+
+/** Returns whether any member (recursing into oneof groups) uses {@code typeName} as its field type. */
+function memberTreeReferences(members: MessageMember[], typeName: string): boolean {
+    return members.some(
+        (m) => m.type === typeName || (m.members != null && memberTreeReferences(m.members, typeName)),
+    );
+}
+
+/** Rewrites every member field type (recursing into oneof groups) named in {@code renames} to its new name. */
+function renameMemberTypes(members: MessageMember[], renames: Map<string, string>): void {
+    for (const m of members) {
+        const renamed = renames.get(m.type);
+        if (renamed) m.type = renamed;
+        if (m.members) renameMemberTypes(m.members, renames);
+    }
+}
+
+/**
+ * Re-homes enums declared as bare {@code SCREAMING_SNAKE} export constants onto
+ * their real proto location.
+ *
+ * @param modulesInfo - per-module parsed identifiers, mutated in place.
+ * @param indentation - the nesting map, updated so re-homed enums emit nested.
+ *
+ * @remarks
+ * WhatsApp exports a nested enum under a flattened uppercase key (e.g.
+ * {@code Command.CommandType} as {@code COMMAND_COMMAND_TYPE}) with no
+ * {@code .name}, so the field passes leave it top-level under that screaming key.
+ * proto2 scopes enum values to the enclosing scope (C++ scoping), so two such
+ * top-level enums sharing a value name (e.g. {@code NONE}) collide and fail to
+ * compile. This pass nests each one under the single same-module message that
+ * references it, reconstructing the PascalCase leaf by stripping the parent's
+ * screaming-snake prefix; an enum referenced cross-module or by no message stays
+ * top-level but is still de-screamed. Every affected field reference is rewritten
+ * to the new canonical name.
+ */
+function renestBareEnums(
+    modulesInfo: Record<string, ModuleInfo>,
+    indentation: Record<string, IndentationEntry>,
+): void {
+    const renames = new Map<string, string>();
+
+    for (const info of Object.values(modulesInfo)) {
+        const messages = Object.values(info.identifiers).filter((it) => it.members);
+        for (const enumIdent of Object.values(info.identifiers)) {
+            if (
+                !enumIdent.enumValues?.length ||
+                enumIdent.members ||
+                !/^[A-Z][A-Z0-9_]*$/.test(enumIdent.name)
+            ) {
+                continue;
+            }
+
+            const oldName = enumIdent.name;
+            const referrers = messages.filter((m) => memberTreeReferences(m.members ?? [], oldName));
+
+            let newName: string;
+            if (referrers.length === 1) {
+                const parent = referrers[0]!;
+                const prefix = `${pascalPathToScreaming(parent.name)}_`;
+                const suffix = oldName.startsWith(prefix) ? oldName.slice(prefix.length) : oldName;
+                newName = `${parent.name}$${screamingToPascal(suffix)}`;
+                indentation[newName] = { indentation: parent.name };
+                const slot = (indentation[parent.name] ??= {});
+                (slot.members ??= new Set<string>()).add(newName);
+            } else {
+                newName = screamingToPascal(oldName);
+                if (newName === oldName) continue;
+                indentation[newName] = { indentation: "" };
+            }
+
+            delete info.identifiers[oldName];
+            delete indentation[oldName];
+            renames.set(oldName, newName);
+            info.identifiers[newName] = { ...enumIdent, name: newName };
+        }
+    }
+
+    for (const info of Object.values(modulesInfo)) {
+        for (const ident of Object.values(info.identifiers)) {
+            if (ident.members) renameMemberTypes(ident.members, renames);
+        }
+    }
+}
+
 /**
  * Extracts every protobuf identifier (messages and enums) declared across the
  * given JS chunks served by WhatsApp Web.
@@ -233,7 +409,7 @@ export function parseProtoModules(chunks: readonly JsChunk[]): ParsedProtos {
         const modules = findProtoModules(chunk);
         for (const module of modules) {
             const moduleName: string | undefined = module?.expression?.arguments?.[0]?.value;
-            if (!moduleName || modulesInfo[moduleName]) continue;
+            if (!moduleName || modulesInfo[moduleName] || isExcludedProtoModule(moduleName)) continue;
 
             modulesInfo[moduleName] = { crossRefs: [], identifiers: {} };
             moduleOrder.push(moduleName);
@@ -253,6 +429,8 @@ export function parseProtoModules(chunks: readonly JsChunk[]): ParsedProtos {
     for (const { name, module } of allModuleNodes) {
         collectMessageMembers(module, modulesInfo[name]!, modulesInfo);
     }
+
+    renestBareEnums(modulesInfo, indentation);
 
     return { modulesInfo, indentation, moduleOrder };
 }

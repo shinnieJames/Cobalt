@@ -13,13 +13,13 @@ import com.github.auties00.cobalt.wam.type.WaffleLifecycleTraceActionType;
 import com.github.auties00.cobalt.wam.type.WaffleLifecycleTraceSourceType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWaffleCompanionStateLifecycleWamEvent")
 @WamEvent(id = 8248)
 public interface WaffleCompanionStateLifecycleEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt waffleLifecycleElapsedMs();
+    OptionalLong waffleLifecycleElapsedMs();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<WaffleLifecycleErrorActionType> waffleLifecycleErrorAction();
@@ -37,7 +37,7 @@ public interface WaffleCompanionStateLifecycleEvent extends WamEventSpec {
     Optional<WaffleLifecycleLinkStateType> waffleLifecycleLinkState();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt waffleLifecycleRetryCount();
+    OptionalLong waffleLifecycleRetryCount();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<WaffleLifecycleTraceActionType> waffleLifecycleTraceAction();
@@ -46,5 +46,5 @@ public interface WaffleCompanionStateLifecycleEvent extends WamEventSpec {
     Optional<WaffleLifecycleTraceSourceType> waffleLifecycleTraceSource();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt waffleLifecycleUnlinkType();
+    OptionalLong waffleLifecycleUnlinkType();
 }

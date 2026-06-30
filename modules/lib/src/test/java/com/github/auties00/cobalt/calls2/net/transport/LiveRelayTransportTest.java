@@ -113,6 +113,45 @@ class LiveRelayTransportTest {
     }
 
     @Test
+    @DisplayName("a report tick after an audio send writes a Sender Report immediately followed by a Source Description")
+    void driveRtcpEmitsSenderReportWithSdes() {
+        var channel = new FakeDataChannel(true);
+        var transport = newTransport(new FakeHbhSrtp(), channel, null, 0);
+        transport.start();
+        var audio = new byte[64];
+        audio[0] = (byte) 0x80;  // version two, no header extension
+        audio[1] = (byte) 120;   // audio payload type
+        transport.sendMedia(audio, 12);
+        transport.tick(System.nanoTime());
+        // Among everything the tick wrote (a keepalive, then the report compound), find the Sender Report.
+        var compound = channel.sent.stream()
+                .filter(message -> message.length > 4 && (message[1] & 0xFF) == 0xC8)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no Sender Report was written"));
+        // The Source Description (payload type 202) immediately follows the Sender Report in the datagram.
+        var senderReportWords = ((compound[2] & 0xFF) << 8) | (compound[3] & 0xFF);
+        var senderReportLength = (senderReportWords + 1) * 4;
+        assertEquals(0xCA, compound[senderReportLength + 1] & 0xFF, "Source Description does not follow the Sender Report");
+    }
+
+    @Test
+    @DisplayName("sendNack writes a 16-byte generic NACK standalone with the fixed sender SSRC 1")
+    void sendNackWritesNack() {
+        var channel = new FakeDataChannel(true);
+        var transport = newTransport(new FakeHbhSrtp(), channel, null, 0);
+        transport.start();
+        transport.sendNack(0x12345678, List.of(100, 101, 103));
+        // 100, 101, 103 are within one packet-identifier-plus-bitmask run, so exactly one record is sent.
+        assertEquals(1, channel.sent.size());
+        var nack = channel.sent.getFirst();
+        assertEquals(0xCD, nack[1] & 0xFF);          // payload type 205 (RTPFB)
+        assertEquals(0x00, nack[4] & 0xFF);
+        assertEquals(0x00, nack[5] & 0xFF);
+        assertEquals(0x00, nack[6] & 0xFF);
+        assertEquals(0x01, nack[7] & 0xFF);          // fixed sender SSRC 0x00000001
+    }
+
+    @Test
     @DisplayName("close releases the data channel")
     void closeReleasesChannel() {
         var channel = new FakeDataChannel(true);

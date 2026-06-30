@@ -13,13 +13,13 @@ import com.github.auties00.cobalt.wam.type.ChannelDirectoryPillSelected;
 import com.github.auties00.cobalt.wam.type.ChannelDirectorySurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelDirectoryWamEvent")
 @WamEvent(id = 4544)
 public interface ChannelDirectoryEvent extends WamEventSpec {
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt channelCategoryIndex();
+    OptionalLong channelCategoryIndex();
 
     @WamProperty(index = 12, type = WamType.STRING)
     Optional<String> channelCategoryName();
@@ -28,7 +28,7 @@ public interface ChannelDirectoryEvent extends WamEventSpec {
     Optional<ChannelDirectoryAction> channelDirectoryAction();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt channelDirectoryActionSequenceNumber();
+    OptionalLong channelDirectoryActionSequenceNumber();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<ChannelDirectoryEntryPoint> channelDirectoryEntryPoint();
@@ -37,13 +37,13 @@ public interface ChannelDirectoryEvent extends WamEventSpec {
     Optional<String> channelDirectorySearchSessionId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt channelDirectorySessionId();
+    OptionalLong channelDirectorySessionId();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<ChannelDirectorySurface> channelDirectorySurface();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt channelIndex();
+    OptionalLong channelIndex();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> cid();
@@ -64,5 +64,5 @@ public interface ChannelDirectoryEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

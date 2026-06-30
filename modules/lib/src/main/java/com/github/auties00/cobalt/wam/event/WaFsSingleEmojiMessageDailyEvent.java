@@ -8,7 +8,7 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWaFsSingleEmojiMessageDailyWamEvent")
 @WamEvent(id = 5602)
@@ -17,26 +17,26 @@ public interface WaFsSingleEmojiMessageDailyEvent extends WamEventSpec {
     Optional<Boolean> animatedEmojiEnabled();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt animatedEmojiReceiveCnt();
+    OptionalLong animatedEmojiReceiveCnt();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt animatedEmojiSendCnt();
+    OptionalLong animatedEmojiSendCnt();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt emojiClickCnt();
+    OptionalLong emojiClickCnt();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt emojiReplyCount();
+    OptionalLong emojiReplyCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt pauseAnimationCnt();
+    OptionalLong pauseAnimationCnt();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt replayAnimationCnt();
+    OptionalLong replayAnimationCnt();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt singleEmojiReceiveCnt();
+    OptionalLong singleEmojiReceiveCnt();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt singleEmojiSendCnt();
+    OptionalLong singleEmojiSendCnt();
 }

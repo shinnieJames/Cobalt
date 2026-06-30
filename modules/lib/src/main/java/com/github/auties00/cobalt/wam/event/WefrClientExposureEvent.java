@@ -9,13 +9,13 @@ import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWefrClientExposureWamEvent")
 @WamEvent(id = 5504, channel = WamChannel.REALTIME)
 public interface WefrClientExposureEvent extends WamEventSpec {
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt canonicalEntLastValidationTsMs();
+    OptionalLong canonicalEntLastValidationTsMs();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> deviceExpId();
@@ -36,5 +36,5 @@ public interface WefrClientExposureEvent extends WamEventSpec {
     Optional<Boolean> sentWithDaily();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt userLid();
+    OptionalLong userLid();
 }

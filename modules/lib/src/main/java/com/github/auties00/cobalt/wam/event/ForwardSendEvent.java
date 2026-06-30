@@ -19,7 +19,7 @@ import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebForwardSendWamEvent")
 @WamEvent(id = 1728)
@@ -31,10 +31,10 @@ public interface ForwardSendEvent extends WamEventSpec {
     Optional<E2eCiphertextType> e2eCiphertextType();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt e2eCiphertextVersion();
+    OptionalLong e2eCiphertextVersion();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt ephemeralityDuration();
+    OptionalLong ephemeralityDuration();
 
     @WamProperty(index = 24, type = WamType.ENUM)
     Optional<EphemeralityInitiatorType> ephemeralityInitiator();
@@ -85,16 +85,16 @@ public interface ForwardSendEvent extends WamEventSpec {
     Optional<MessageType> messageType();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt receiverDefaultDisappearingDuration();
+    OptionalLong receiverDefaultDisappearingDuration();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt resendCount();
+    OptionalLong resendCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt senderDefaultDisappearingDuration();
+    OptionalLong senderDefaultDisappearingDuration();
 
     @WamProperty(index = 23, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

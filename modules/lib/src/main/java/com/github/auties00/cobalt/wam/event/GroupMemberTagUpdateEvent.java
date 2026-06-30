@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.GroupMemberTagUpdateActionType;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupMemberTagUpdateWamEvent")
 @WamEvent(id = 7010)
@@ -35,5 +35,5 @@ public interface GroupMemberTagUpdateEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 }

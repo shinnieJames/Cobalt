@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.LidMigrationSourceType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLidMigrationDailyWamEvent")
 @WamEvent(id = 5842)
@@ -21,38 +21,38 @@ public interface LidMigrationDailyEvent extends WamEventSpec {
     Optional<LidMigrationSourceType> lidMigrationSource();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt numberOfChatsWithClientAssignedLid();
+    OptionalLong numberOfChatsWithClientAssignedLid();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt numberOfDeprecatedChats();
+    OptionalLong numberOfDeprecatedChats();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt numberOfLidBroadcastLists();
+    OptionalLong numberOfLidBroadcastLists();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt numberOfLidGroups();
+    OptionalLong numberOfLidGroups();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt numberOfPnBroadcastLists();
+    OptionalLong numberOfPnBroadcastLists();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt numberOfPnChatsWithoutMapping();
+    OptionalLong numberOfPnChatsWithoutMapping();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt numberOfPnGroups();
+    OptionalLong numberOfPnGroups();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt numberOfPnhCtwaThreadsKnownMapping();
+    OptionalLong numberOfPnhCtwaThreadsKnownMapping();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt numberOfPnhCtwaThreadsMissingMapping();
+    OptionalLong numberOfPnhCtwaThreadsMissingMapping();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt numberOfRegularPnChats();
+    OptionalLong numberOfRegularPnChats();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt numberOfSplitThreads();
+    OptionalLong numberOfSplitThreads();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt numberOfUserChatsWithoutAccountLid();
+    OptionalLong numberOfUserChatsWithoutAccountLid();
 }

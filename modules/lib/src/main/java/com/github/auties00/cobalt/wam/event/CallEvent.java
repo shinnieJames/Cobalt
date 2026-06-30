@@ -14,6 +14,7 @@ import com.github.auties00.cobalt.wam.type.AppExitReason;
 import com.github.auties00.cobalt.wam.type.AudioEngineType;
 import com.github.auties00.cobalt.wam.type.AudioOutputRoute;
 import com.github.auties00.cobalt.wam.type.BusyReason;
+import com.github.auties00.cobalt.wam.type.Ca2dExtensionConnectionState;
 import com.github.auties00.cobalt.wam.type.CallFromUi;
 import com.github.auties00.cobalt.wam.type.CallNetworkMedium;
 import com.github.auties00.cobalt.wam.type.CallRelayBindStatus;
@@ -49,6 +50,7 @@ import com.github.auties00.cobalt.wam.type.MlUndershootPytorchEdgeLibLoadErrorCo
 import com.github.auties00.cobalt.wam.type.MlUndershootPytorchEdgeLibLoadStatus;
 import com.github.auties00.cobalt.wam.type.NsMode;
 import com.github.auties00.cobalt.wam.type.PeerCallNetworkMedium;
+import com.github.auties00.cobalt.wam.type.PeripheralDeviceType;
 import com.github.auties00.cobalt.wam.type.PushGhostCallReason;
 import com.github.auties00.cobalt.wam.type.PushOfferResult;
 import com.github.auties00.cobalt.wam.type.PushProvider;
@@ -68,7 +70,7 @@ import com.github.auties00.cobalt.wam.type.XmppStatus;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCallWamEvent")
 @WamEvent(id = 462)
@@ -92,13 +94,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> ackToFirstFrameEncodedTSs();
 
     @WamProperty(index = 412, type = WamType.INTEGER)
-    OptionalInt activeRelayProtocol();
+    OptionalLong activeRelayProtocol();
 
     @WamProperty(index = 1428, type = WamType.INTEGER)
-    OptionalInt adaptiveTcpErrorBitmap();
+    OptionalLong adaptiveTcpErrorBitmap();
 
     @WamProperty(index = 1844, type = WamType.INTEGER)
-    OptionalInt aecAlgorithmUsed();
+    OptionalLong aecAlgorithmUsed();
 
     @WamProperty(index = 1186, type = WamType.TIMER)
     Optional<Instant> aflDisPrefetchFailure1x();
@@ -191,7 +193,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> aflPureLossTotal();
 
     @WamProperty(index = 1845, type = WamType.INTEGER)
-    OptionalInt agcAlgorithmUsed();
+    OptionalLong agcAlgorithmUsed();
 
     @WamProperty(index = 2382, type = WamType.TIMER)
     Optional<Instant> aiVoiceBackgroundingTime();
@@ -206,16 +208,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> aiVoiceOutOfAppBackgrounded();
 
     @WamProperty(index = 593, type = WamType.INTEGER)
-    OptionalInt allocErrorBitmap();
+    OptionalLong allocErrorBitmap();
 
     @WamProperty(index = 1963, type = WamType.INTEGER)
-    OptionalInt allocErrorRelayFailoverCnt();
+    OptionalLong allocErrorRelayFailoverCnt();
 
     @WamProperty(index = 1374, type = WamType.TIMER)
     Optional<Instant> altAfFirstPongTimeMs();
 
     @WamProperty(index = 1375, type = WamType.INTEGER)
-    OptionalInt altAfPingsSent();
+    OptionalLong altAfPingsSent();
 
     @WamProperty(index = 1055, type = WamType.BOOLEAN)
     Optional<Boolean> androidAudioRouteMismatch();
@@ -233,19 +235,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> androidTelecomTimeSpentBeforeReject();
 
     @WamProperty(index = 1917, type = WamType.INTEGER)
-    OptionalInt answerCallDurationMs();
+    OptionalLong answerCallDurationMs();
 
     @WamProperty(index = 2342, type = WamType.INTEGER)
-    OptionalInt appDataRxRtpErrorCount();
+    OptionalLong appDataRxRtpErrorCount();
 
     @WamProperty(index = 2343, type = WamType.INTEGER)
-    OptionalInt appDataRxRtpPktCount();
+    OptionalLong appDataRxRtpPktCount();
 
     @WamProperty(index = 2344, type = WamType.INTEGER)
-    OptionalInt appDataTxRtpErrorCount();
+    OptionalLong appDataTxRtpErrorCount();
 
     @WamProperty(index = 2345, type = WamType.INTEGER)
-    OptionalInt appDataTxRtpPktCount();
+    OptionalLong appDataTxRtpPktCount();
 
     @WamProperty(index = 1755, type = WamType.ENUM)
     Optional<AppExitReason> appExitReason();
@@ -254,19 +256,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> appInBackgroundDuringCall();
 
     @WamProperty(index = 1938, type = WamType.INTEGER)
-    OptionalInt arEffectAttemptedCount();
+    OptionalLong arEffectAttemptedCount();
 
     @WamProperty(index = 1939, type = WamType.INTEGER)
-    OptionalInt arEffectCanceledCount();
+    OptionalLong arEffectCanceledCount();
 
     @WamProperty(index = 1940, type = WamType.TIMER)
     Optional<Instant> arEffectDurationT();
 
     @WamProperty(index = 1941, type = WamType.INTEGER)
-    OptionalInt arEffectEnabledCount();
+    OptionalLong arEffectEnabledCount();
 
     @WamProperty(index = 1942, type = WamType.INTEGER)
-    OptionalInt arEffectFailedCount();
+    OptionalLong arEffectFailedCount();
 
     @WamProperty(index = 1943, type = WamType.TIMER)
     Optional<Instant> arEffectLoadingT();
@@ -284,52 +286,52 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble audShareAvgLoudnessSystem();
 
     @WamProperty(index = 1873, type = WamType.INTEGER)
-    OptionalInt audShareDuckingProcTime500usTo1ms();
+    OptionalLong audShareDuckingProcTime500usTo1ms();
 
     @WamProperty(index = 1874, type = WamType.INTEGER)
-    OptionalInt audShareDuckingProcTimeGt1ms();
+    OptionalLong audShareDuckingProcTimeGt1ms();
 
     @WamProperty(index = 1875, type = WamType.INTEGER)
-    OptionalInt audShareDuckingProcTimeLt500us();
+    OptionalLong audShareDuckingProcTimeLt500us();
 
     @WamProperty(index = 1805, type = WamType.INTEGER)
-    OptionalInt audShareEchoConfidence();
+    OptionalLong audShareEchoConfidence();
 
     @WamProperty(index = 1806, type = WamType.TIMER)
     Optional<Instant> audShareMaxDuckingProcTime();
 
     @WamProperty(index = 1807, type = WamType.INTEGER)
-    OptionalInt audShareNumInputFrames();
+    OptionalLong audShareNumInputFrames();
 
     @WamProperty(index = 1808, type = WamType.INTEGER)
-    OptionalInt audShareNumMixedFrames();
+    OptionalLong audShareNumMixedFrames();
 
     @WamProperty(index = 1809, type = WamType.INTEGER)
-    OptionalInt audShareStartRequestCount();
+    OptionalLong audShareStartRequestCount();
 
     @WamProperty(index = 1810, type = WamType.INTEGER)
-    OptionalInt audShareStartSuccessCount();
+    OptionalLong audShareStartSuccessCount();
 
     @WamProperty(index = 1811, type = WamType.INTEGER)
-    OptionalInt audShareStopRequestCount();
+    OptionalLong audShareStopRequestCount();
 
     @WamProperty(index = 1812, type = WamType.INTEGER)
-    OptionalInt audShareStopSuccessCount();
+    OptionalLong audShareStopSuccessCount();
 
     @WamProperty(index = 1119, type = WamType.FLOAT)
     OptionalDouble audStreamMixPct();
 
     @WamProperty(index = 1565, type = WamType.INTEGER)
-    OptionalInt audioCalleeAcceptToDecodeT();
+    OptionalLong audioCalleeAcceptToDecodeT();
 
     @WamProperty(index = 2727, type = WamType.TIMER)
     Optional<Instant> audioCallerAcceptReceivedToDecodeT();
 
     @WamProperty(index = 1566, type = WamType.INTEGER)
-    OptionalInt audioCallerOfferToDecodeT();
+    OptionalLong audioCallerOfferToDecodeT();
 
     @WamProperty(index = 2724, type = WamType.INTEGER)
-    OptionalInt audioCodecBitrateCap();
+    OptionalLong audioCodecBitrateCap();
 
     @WamProperty(index = 1847, type = WamType.FLOAT)
     OptionalDouble audioCodecDecodedFecBitrate();
@@ -341,7 +343,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble audioCodecDecodedFecBytes();
 
     @WamProperty(index = 755, type = WamType.INTEGER)
-    OptionalInt audioCodecDecodedFecFrames();
+    OptionalLong audioCodecDecodedFecFrames();
 
     @WamProperty(index = 2628, type = WamType.FLOAT)
     OptionalDouble audioCodecDecodedFecSpeechBitrate();
@@ -359,40 +361,40 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble audioCodecDecodedNormalSpeechBitrate();
 
     @WamProperty(index = 756, type = WamType.INTEGER)
-    OptionalInt audioCodecDecodedPlcFrames();
+    OptionalLong audioCodecDecodedPlcFrames();
 
     @WamProperty(index = 751, type = WamType.INTEGER)
-    OptionalInt audioCodecEncodedFecFrames();
+    OptionalLong audioCodecEncodedFecFrames();
 
     @WamProperty(index = 753, type = WamType.INTEGER)
-    OptionalInt audioCodecEncodedNonVoiceFrames();
+    OptionalLong audioCodecEncodedNonVoiceFrames();
 
     @WamProperty(index = 1177, type = WamType.INTEGER)
-    OptionalInt audioCodecEncodedThrottledVoiceFrames();
+    OptionalLong audioCodecEncodedThrottledVoiceFrames();
 
     @WamProperty(index = 752, type = WamType.INTEGER)
-    OptionalInt audioCodecEncodedVoiceFrames();
+    OptionalLong audioCodecEncodedVoiceFrames();
 
     @WamProperty(index = 754, type = WamType.INTEGER)
-    OptionalInt audioCodecReceivedFecFrames();
+    OptionalLong audioCodecReceivedFecFrames();
 
     @WamProperty(index = 1521, type = WamType.INTEGER)
-    OptionalInt audioDecodeErrors();
+    OptionalLong audioDecodeErrors();
 
     @WamProperty(index = 2122, type = WamType.BOOLEAN)
     Optional<Boolean> audioDevIsStalled();
 
     @WamProperty(index = 860, type = WamType.INTEGER)
-    OptionalInt audioDeviceIssues();
+    OptionalLong audioDeviceIssues();
 
     @WamProperty(index = 861, type = WamType.INTEGER)
-    OptionalInt audioDeviceLastIssue();
+    OptionalLong audioDeviceLastIssue();
 
     @WamProperty(index = 2123, type = WamType.INTEGER)
-    OptionalInt audioDeviceStartupStatus();
+    OptionalLong audioDeviceStartupStatus();
 
     @WamProperty(index = 867, type = WamType.INTEGER)
-    OptionalInt audioDeviceSwitchCount();
+    OptionalLong audioDeviceSwitchCount();
 
     @WamProperty(index = 866, type = WamType.TIMER)
     Optional<Instant> audioDeviceSwitchDuration();
@@ -404,10 +406,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble audioDupEnabledRatio();
 
     @WamProperty(index = 1522, type = WamType.INTEGER)
-    OptionalInt audioEncodeErrors();
+    OptionalLong audioEncodeErrors();
 
     @WamProperty(index = 1736, type = WamType.INTEGER)
-    OptionalInt audioFrameFromServerDup();
+    OptionalLong audioFrameFromServerDup();
 
     @WamProperty(index = 724, type = WamType.TIMER)
     Optional<Instant> audioFrameLoss1xMs();
@@ -422,151 +424,160 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> audioFrameLoss8xMs();
 
     @WamProperty(index = 83, type = WamType.INTEGER)
-    OptionalInt audioGetFrameUnderflowPs();
+    OptionalLong audioGetFrameUnderflowPs();
 
     @WamProperty(index = 679, type = WamType.INTEGER)
-    OptionalInt audioInbandFecDecoded();
+    OptionalLong audioInbandFecDecoded();
 
     @WamProperty(index = 678, type = WamType.INTEGER)
-    OptionalInt audioInbandFecEncoded();
+    OptionalLong audioInbandFecEncoded();
 
     @WamProperty(index = 1318, type = WamType.INTEGER)
-    OptionalInt audioJbResets();
+    OptionalLong audioJbResets();
 
     @WamProperty(index = 1334, type = WamType.INTEGER)
-    OptionalInt audioJbResetsPartial();
+    OptionalLong audioJbResetsPartial();
 
     @WamProperty(index = 722, type = WamType.INTEGER)
-    OptionalInt audioLossPeriodCount();
+    OptionalLong audioLossPeriodCount();
 
     @WamProperty(index = 1184, type = WamType.BOOLEAN)
     Optional<Boolean> audioNackHbhEnabled();
 
     @WamProperty(index = 1271, type = WamType.INTEGER)
-    OptionalInt audioNackReqPktsProcessed();
+    OptionalLong audioNackReqPktsProcessed();
 
     @WamProperty(index = 646, type = WamType.INTEGER)
-    OptionalInt audioNackReqPktsRecvd();
+    OptionalLong audioNackReqPktsRecvd();
 
     @WamProperty(index = 645, type = WamType.INTEGER)
-    OptionalInt audioNackReqPktsSent();
+    OptionalLong audioNackReqPktsSent();
 
     @WamProperty(index = 649, type = WamType.INTEGER)
-    OptionalInt audioNackRtpRetransmitDiscardCount();
+    OptionalLong audioNackRtpRetransmitDiscardCount();
 
     @WamProperty(index = 651, type = WamType.INTEGER)
-    OptionalInt audioNackRtpRetransmitFailCount();
+    OptionalLong audioNackRtpRetransmitFailCount();
 
     @WamProperty(index = 648, type = WamType.INTEGER)
-    OptionalInt audioNackRtpRetransmitRecvdCount();
+    OptionalLong audioNackRtpRetransmitRecvdCount();
 
     @WamProperty(index = 647, type = WamType.INTEGER)
-    OptionalInt audioNackRtpRetransmitReqCount();
+    OptionalLong audioNackRtpRetransmitReqCount();
 
     @WamProperty(index = 650, type = WamType.INTEGER)
-    OptionalInt audioNackRtpRetransmitSentCount();
+    OptionalLong audioNackRtpRetransmitSentCount();
 
     @WamProperty(index = 1008, type = WamType.INTEGER)
-    OptionalInt audioNumPiggybackRxPkt();
+    OptionalLong audioNumPiggybackRxPkt();
 
     @WamProperty(index = 1007, type = WamType.INTEGER)
-    OptionalInt audioNumPiggybackTxPkt();
+    OptionalLong audioNumPiggybackTxPkt();
 
     @WamProperty(index = 1523, type = WamType.INTEGER)
-    OptionalInt audioPacketizeErrors();
+    OptionalLong audioPacketizeErrors();
 
     @WamProperty(index = 1524, type = WamType.INTEGER)
-    OptionalInt audioParseErrors();
+    OptionalLong audioParseErrors();
 
     @WamProperty(index = 1283, type = WamType.INTEGER)
-    OptionalInt audioPktsNotTriggerOutOfPaused();
+    OptionalLong audioPktsNotTriggerOutOfPaused();
 
     @WamProperty(index = 1138, type = WamType.INTEGER)
-    OptionalInt audioPlayCbIntervalGtDefaultCnt();
+    OptionalLong audioPlayCbIntervalGtDefaultCnt();
 
     @WamProperty(index = 1139, type = WamType.INTEGER)
-    OptionalInt audioPlayCbLatencyGteMaxCnt();
+    OptionalLong audioPlayCbLatencyGteMaxCnt();
 
     @WamProperty(index = 2593, type = WamType.INTEGER)
-    OptionalInt audioPlayerInitMs();
+    OptionalLong audioPlayerInitMs();
 
     @WamProperty(index = 2594, type = WamType.INTEGER)
-    OptionalInt audioPlayerStartMs();
-
-    @WamProperty(index = 2924, type = WamType.FLOAT)
-    OptionalDouble audioPostProcessSiiSnr();
+    OptionalLong audioPlayerStartMs();
 
     @WamProperty(index = 1878, type = WamType.INTEGER)
-    OptionalInt audioPutFrameOverflowCount();
+    OptionalLong audioPutFrameOverflowCount();
 
     @WamProperty(index = 2595, type = WamType.INTEGER)
-    OptionalInt audioRecorderInitMs();
+    OptionalLong audioRecorderInitMs();
 
     @WamProperty(index = 2596, type = WamType.INTEGER)
-    OptionalInt audioRecorderStartMs();
+    OptionalLong audioRecorderStartMs();
 
     @WamProperty(index = 2330, type = WamType.INTEGER)
-    OptionalInt audioRtpTsJumpBackCount();
+    OptionalLong audioRtpTsJumpBackCount();
 
     @WamProperty(index = 2331, type = WamType.INTEGER)
-    OptionalInt audioRtpTsJumpBackMaxMs();
+    OptionalLong audioRtpTsJumpBackMaxMs();
 
     @WamProperty(index = 2332, type = WamType.INTEGER)
-    OptionalInt audioRtpTsJumpBackTotalMs();
+    OptionalLong audioRtpTsJumpBackTotalMs();
 
     @WamProperty(index = 2333, type = WamType.INTEGER)
-    OptionalInt audioRtpTsJumpForwardCount();
+    OptionalLong audioRtpTsJumpForwardCount();
 
     @WamProperty(index = 2334, type = WamType.INTEGER)
-    OptionalInt audioRtpTsJumpForwardMaxMs();
+    OptionalLong audioRtpTsJumpForwardMaxMs();
 
     @WamProperty(index = 2335, type = WamType.INTEGER)
-    OptionalInt audioRtpTsJumpForwardTotalMs();
+    OptionalLong audioRtpTsJumpForwardTotalMs();
 
     @WamProperty(index = 677, type = WamType.INTEGER)
-    OptionalInt audioRtxPktDiscarded();
+    OptionalLong audioRtxPktDiscarded();
 
     @WamProperty(index = 676, type = WamType.INTEGER)
-    OptionalInt audioRtxPktProcessed();
+    OptionalLong audioRtxPktProcessed();
 
     @WamProperty(index = 675, type = WamType.INTEGER)
-    OptionalInt audioRtxPktSent();
+    OptionalLong audioRtxPktSent();
 
     @WamProperty(index = 728, type = WamType.FLOAT)
     OptionalDouble audioRxAvgFpp();
 
     @WamProperty(index = 1561, type = WamType.INTEGER)
-    OptionalInt audioStreamRecreations();
+    OptionalLong audioStreamRecreations();
 
     @WamProperty(index = 1322, type = WamType.TIMER)
     Optional<Instant> audioSwbDurationMs();
 
     @WamProperty(index = 1351, type = WamType.INTEGER)
-    OptionalInt audioTarget06Ms();
+    OptionalLong audioTarget06Ms();
 
     @WamProperty(index = 1352, type = WamType.INTEGER)
-    OptionalInt audioTarget1015Ms();
+    OptionalLong audioTarget1015Ms();
 
     @WamProperty(index = 1353, type = WamType.INTEGER)
-    OptionalInt audioTarget1520Ms();
+    OptionalLong audioTarget1520Ms();
 
     @WamProperty(index = 1354, type = WamType.INTEGER)
-    OptionalInt audioTarget2030Ms();
+    OptionalLong audioTarget2030Ms();
 
     @WamProperty(index = 1355, type = WamType.INTEGER)
-    OptionalInt audioTarget30PlusMs();
+    OptionalLong audioTarget30PlusMs();
 
     @WamProperty(index = 1356, type = WamType.INTEGER)
-    OptionalInt audioTarget610Ms();
+    OptionalLong audioTarget610Ms();
 
     @WamProperty(index = 1357, type = WamType.INTEGER)
-    OptionalInt audioTargetBitrateDrops();
+    OptionalLong audioTargetBitrateDrops();
 
     @WamProperty(index = 450, type = WamType.FLOAT)
     OptionalDouble audioTotalBytesOnNonDefCell();
 
     @WamProperty(index = 1748, type = WamType.FLOAT)
     OptionalDouble audioTxActiveBitrate();
+
+    @WamProperty(index = 2976, type = WamType.FLOAT)
+    OptionalDouble audioTxCrestFactorAvg();
+
+    @WamProperty(index = 2977, type = WamType.FLOAT)
+    OptionalDouble audioTxCrestFactorP5();
+
+    @WamProperty(index = 2978, type = WamType.FLOAT)
+    OptionalDouble audioTxCrestFactorP50();
+
+    @WamProperty(index = 2979, type = WamType.FLOAT)
+    OptionalDouble audioTxCrestFactorP95();
 
     @WamProperty(index = 1749, type = WamType.FLOAT)
     OptionalDouble audioTxInbandFecBitrate();
@@ -577,11 +588,59 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 1751, type = WamType.FLOAT)
     OptionalDouble audioTxPktCount();
 
+    @WamProperty(index = 2980, type = WamType.FLOAT)
+    OptionalDouble audioTxSiiSnrAvg();
+
+    @WamProperty(index = 2981, type = WamType.FLOAT)
+    OptionalDouble audioTxSiiSnrP5();
+
+    @WamProperty(index = 2982, type = WamType.FLOAT)
+    OptionalDouble audioTxSiiSnrP50();
+
+    @WamProperty(index = 2983, type = WamType.FLOAT)
+    OptionalDouble audioTxSiiSnrP95();
+
+    @WamProperty(index = 2984, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralCentroidAvg();
+
+    @WamProperty(index = 2985, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralCentroidP5();
+
+    @WamProperty(index = 2986, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralCentroidP50();
+
+    @WamProperty(index = 2987, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralCentroidP95();
+
+    @WamProperty(index = 2988, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralFlatnessAvg();
+
+    @WamProperty(index = 2989, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralFlatnessP5();
+
+    @WamProperty(index = 2990, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralFlatnessP50();
+
+    @WamProperty(index = 2991, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralFlatnessP95();
+
+    @WamProperty(index = 2992, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralRolloffAvg();
+
+    @WamProperty(index = 2993, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralRolloffP5();
+
+    @WamProperty(index = 2994, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralRolloffP50();
+
+    @WamProperty(index = 2995, type = WamType.FLOAT)
+    OptionalDouble audioTxSpectralRolloffP95();
+
     @WamProperty(index = 1359, type = WamType.INTEGER)
-    OptionalInt audioTxUlpFecPkts();
+    OptionalLong audioTxUlpFecPkts();
 
     @WamProperty(index = 1360, type = WamType.INTEGER)
-    OptionalInt audioUlpFecRecovered();
+    OptionalLong audioUlpFecRecovered();
 
     @WamProperty(index = 2268, type = WamType.TIMER)
     Optional<Instant> audioUnitSetupTime();
@@ -590,13 +649,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> audioUnitStopTime();
 
     @WamProperty(index = 2559, type = WamType.INTEGER)
-    OptionalInt autoeqAlgorithmUsed();
+    OptionalLong autoeqAlgorithmUsed();
 
     @WamProperty(index = 2875, type = WamType.INTEGER)
-    OptionalInt automosReceiverModelDownloadFailureCount();
+    OptionalLong automosReceiverModelDownloadFailureCount();
 
     @WamProperty(index = 2876, type = WamType.INTEGER)
-    OptionalInt automosSenderModelDownloadFailureCount();
+    OptionalLong automosSenderModelDownloadFailureCount();
 
     @WamProperty(index = 192, type = WamType.FLOAT)
     OptionalDouble avAvgDelta();
@@ -611,7 +670,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> avatarCanceled();
 
     @WamProperty(index = 1392, type = WamType.INTEGER)
-    OptionalInt avatarCanceledCount();
+    OptionalLong avatarCanceledCount();
 
     @WamProperty(index = 1393, type = WamType.TIMER)
     Optional<Instant> avatarDurationT();
@@ -620,13 +679,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> avatarEnabled();
 
     @WamProperty(index = 1395, type = WamType.INTEGER)
-    OptionalInt avatarEnabledCount();
+    OptionalLong avatarEnabledCount();
 
     @WamProperty(index = 1396, type = WamType.BOOLEAN)
     Optional<Boolean> avatarFailed();
 
     @WamProperty(index = 1397, type = WamType.INTEGER)
-    OptionalInt avatarFailedCount();
+    OptionalLong avatarFailedCount();
 
     @WamProperty(index = 1398, type = WamType.TIMER)
     Optional<Instant> avatarLoadingT();
@@ -641,7 +700,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> avgClockCbT();
 
     @WamProperty(index = 2099, type = WamType.INTEGER)
-    OptionalInt avgConsecutiveUdstPredictionLen();
+    OptionalLong avgConsecutiveUdstPredictionLen();
 
     @WamProperty(index = 2560, type = WamType.FLOAT)
     OptionalDouble avgCpuTimeMlProcessingMs();
@@ -653,13 +712,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> avgDecodeT();
 
     @WamProperty(index = 1700, type = WamType.INTEGER)
-    OptionalInt avgEchoConfidence();
+    OptionalLong avgEchoConfidence();
 
     @WamProperty(index = 2734, type = WamType.FLOAT)
     OptionalDouble avgEchoConfidenceAfter30sec();
 
     @WamProperty(index = 1988, type = WamType.INTEGER)
-    OptionalInt avgEchoConfidenceBeforeEc();
+    OptionalLong avgEchoConfidenceBeforeEc();
 
     @WamProperty(index = 2735, type = WamType.FLOAT)
     OptionalDouble avgEchoConfidenceFirst10sec();
@@ -683,10 +742,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble avgEchoLikelihoodFirst30sec();
 
     @WamProperty(index = 2710, type = WamType.INTEGER)
-    OptionalInt avgEncInputSampleRate();
+    OptionalLong avgEncInputSampleRate();
 
     @WamProperty(index = 2711, type = WamType.INTEGER)
-    OptionalInt avgEncInternalSampleRate();
+    OptionalLong avgEncInternalSampleRate();
 
     @WamProperty(index = 1048, type = WamType.TIMER)
     Optional<Instant> avgEncRestartAndKfGenT();
@@ -752,7 +811,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble avgTargetBitrate();
 
     @WamProperty(index = 413, type = WamType.INTEGER)
-    OptionalInt avgTcpConnCount();
+    OptionalLong avgTcpConnCount();
 
     @WamProperty(index = 414, type = WamType.TIMER)
     Optional<Instant> avgTcpConnLatencyInMsec();
@@ -785,19 +844,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> biDirRelayResetLatencyMs();
 
     @WamProperty(index = 1222, type = WamType.INTEGER)
-    OptionalInt boundSocketIpAddressIsInvalid();
+    OptionalLong boundSocketIpAddressIsInvalid();
 
     @WamProperty(index = 1814, type = WamType.INTEGER)
-    OptionalInt bridgeRecordCircularBufferFrameCount();
+    OptionalLong bridgeRecordCircularBufferFrameCount();
 
     @WamProperty(index = 2608, type = WamType.FLOAT)
     OptionalDouble brightnessEnhancedFramesPct();
 
     @WamProperty(index = 2609, type = WamType.INTEGER)
-    OptionalInt brightnessToggleCount();
+    OptionalLong brightnessToggleCount();
 
     @WamProperty(index = 2649, type = WamType.INTEGER)
-    OptionalInt browserAvgUsedJsHeapSizeMb();
+    OptionalLong browserAvgUsedJsHeapSizeMb();
 
     @WamProperty(index = 2676, type = WamType.BOOLEAN)
     Optional<Boolean> browserBatteryChargingAtEnd();
@@ -806,49 +865,49 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> browserBatteryChargingAtStart();
 
     @WamProperty(index = 2678, type = WamType.INTEGER)
-    OptionalInt browserBatteryChargingTimeSec();
+    OptionalLong browserBatteryChargingTimeSec();
 
     @WamProperty(index = 2679, type = WamType.INTEGER)
-    OptionalInt browserBatteryDischargingTimeSec();
+    OptionalLong browserBatteryDischargingTimeSec();
 
     @WamProperty(index = 2680, type = WamType.INTEGER)
-    OptionalInt browserBatteryDrainPct();
+    OptionalLong browserBatteryDrainPct();
 
     @WamProperty(index = 2681, type = WamType.INTEGER)
-    OptionalInt browserBatteryLevelEndPct();
+    OptionalLong browserBatteryLevelEndPct();
 
     @WamProperty(index = 2682, type = WamType.INTEGER)
-    OptionalInt browserBatteryLevelStartPct();
+    OptionalLong browserBatteryLevelStartPct();
 
     @WamProperty(index = 2683, type = WamType.BOOLEAN)
     Optional<Boolean> browserBatterySupported();
 
     @WamProperty(index = 2650, type = WamType.INTEGER)
-    OptionalInt browserCpuPressureCriticalPct();
+    OptionalLong browserCpuPressureCriticalPct();
 
     @WamProperty(index = 2651, type = WamType.INTEGER)
-    OptionalInt browserCpuPressureFairPct();
+    OptionalLong browserCpuPressureFairPct();
 
     @WamProperty(index = 2652, type = WamType.INTEGER)
-    OptionalInt browserCpuPressureNominalPct();
+    OptionalLong browserCpuPressureNominalPct();
 
     @WamProperty(index = 2653, type = WamType.INTEGER)
-    OptionalInt browserCpuPressureSeriousPct();
+    OptionalLong browserCpuPressureSeriousPct();
 
     @WamProperty(index = 2654, type = WamType.BOOLEAN)
     Optional<Boolean> browserCpuPressureSupported();
 
     @WamProperty(index = 2655, type = WamType.INTEGER)
-    OptionalInt browserJsHeapSizeLimitMb();
+    OptionalLong browserJsHeapSizeLimitMb();
 
     @WamProperty(index = 2656, type = WamType.BOOLEAN)
     Optional<Boolean> browserMemorySupported();
 
     @WamProperty(index = 2657, type = WamType.INTEGER)
-    OptionalInt browserPeakUsedJsHeapSizeMb();
+    OptionalLong browserPeakUsedJsHeapSizeMb();
 
     @WamProperty(index = 2658, type = WamType.INTEGER)
-    OptionalInt browserTotalJsHeapSizeMb();
+    OptionalLong browserTotalJsHeapSizeMb();
 
     @WamProperty(index = 33, type = WamType.BOOLEAN)
     Optional<Boolean> builtinAecAvailable();
@@ -872,10 +931,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<BusyReason> busyReason();
 
     @WamProperty(index = 2029, type = WamType.INTEGER)
-    OptionalInt bwaCountPrioritizeDomSpkrInSpeakerMode();
+    OptionalLong bwaCountPrioritizeDomSpkrInSpeakerMode();
 
     @WamProperty(index = 2537, type = WamType.INTEGER)
-    OptionalInt bwaStreamlineValidationFailure();
+    OptionalLong bwaStreamlineValidationFailure();
 
     @WamProperty(index = 1114, type = WamType.BOOLEAN)
     Optional<Boolean> bwaVidDisablingCandidate();
@@ -887,7 +946,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> bwaVidDisablingTxCandidateDuration();
 
     @WamProperty(index = 2461, type = WamType.INTEGER)
-    OptionalInt bweSlrOutputBps();
+    OptionalLong bweSlrOutputBps();
+
+    @WamProperty(index = 3001, type = WamType.BOOLEAN)
+    Optional<Boolean> c50Linked();
+
+    @WamProperty(index = 3034, type = WamType.TIMER)
+    Optional<Instant> ca2dExtensionAddT();
+
+    @WamProperty(index = 3035, type = WamType.ENUM)
+    Optional<Ca2dExtensionConnectionState> ca2dExtensionConnectionState();
+
+    @WamProperty(index = 3036, type = WamType.TIMER)
+    Optional<Instant> ca2dExtensionCreateT();
+
+    @WamProperty(index = 3037, type = WamType.TIMER)
+    Optional<Instant> ca2dPreviewT();
 
     @WamProperty(index = 132, type = WamType.TIMER)
     Optional<Instant> callAcceptFuncT();
@@ -902,10 +976,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<AecMode> callAecMode();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt callAecOffset();
+    OptionalLong callAecOffset();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt callAecTailLength();
+    OptionalLong callAecTailLength();
 
     @WamProperty(index = 52, type = WamType.ENUM)
     Optional<AgcMode> callAgcMode();
@@ -914,13 +988,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callAndrGcmFgEnabled();
 
     @WamProperty(index = 55, type = WamType.INTEGER)
-    OptionalInt callAndroidAudioMode();
+    OptionalLong callAndroidAudioMode();
 
     @WamProperty(index = 57, type = WamType.INTEGER)
-    OptionalInt callAndroidRecordAudioPreset();
+    OptionalLong callAndroidRecordAudioPreset();
 
     @WamProperty(index = 56, type = WamType.INTEGER)
-    OptionalInt callAndroidRecordAudioSource();
+    OptionalLong callAndroidRecordAudioSource();
 
     @WamProperty(index = 54, type = WamType.ENUM)
     Optional<AudioEngineType> callAudioEngineType();
@@ -953,10 +1027,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble callBatteryChangePct();
 
     @WamProperty(index = 50, type = WamType.INTEGER)
-    OptionalInt callCalculatedEcOffset();
+    OptionalLong callCalculatedEcOffset();
 
     @WamProperty(index = 51, type = WamType.INTEGER)
-    OptionalInt callCalculatedEcOffsetStddev();
+    OptionalLong callCalculatedEcOffsetStddev();
 
     @WamProperty(index = 1406, type = WamType.TIMER)
     Optional<Instant> callConnectionLatencyMs();
@@ -974,10 +1048,16 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble callEchoEnergy();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt callEchoLikelihood();
+    OptionalLong callEchoLikelihood();
 
     @WamProperty(index = 47, type = WamType.FLOAT)
     OptionalDouble callEchoLikelihoodBeforeEc();
+
+    @WamProperty(index = 2971, type = WamType.STRING)
+    Optional<String> callEligibleBucketIdList();
+
+    @WamProperty(index = 3005, type = WamType.STRING)
+    Optional<String> callEligibleBucketNameList();
 
     @WamProperty(index = 2527, type = WamType.FLOAT)
     OptionalDouble callEndBatteryPct();
@@ -1013,7 +1093,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callEndReconnectingE2eSignalingAccessible();
 
     @WamProperty(index = 1595, type = WamType.INTEGER)
-    OptionalInt callEndReconnectingExpectedBitmap();
+    OptionalLong callEndReconnectingExpectedBitmap();
 
     @WamProperty(index = 1385, type = WamType.BOOLEAN)
     Optional<Boolean> callEndReconnectingRelayPingable();
@@ -1037,13 +1117,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callEndReconnectingSoonAfterRelayReset();
 
     @WamProperty(index = 1950, type = WamType.INTEGER)
-    OptionalInt callEndReconnectingUnexpectedBitmap();
+    OptionalLong callEndReconnectingUnexpectedBitmap();
 
     @WamProperty(index = 2076, type = WamType.BOOLEAN)
     Optional<Boolean> callEndRelayBindsFailed();
 
     @WamProperty(index = 2538, type = WamType.INTEGER)
-    OptionalInt callEndThermalState();
+    OptionalLong callEndThermalState();
 
     @WamProperty(index = 1517, type = WamType.BOOLEAN)
     Optional<Boolean> callEndTxStopped();
@@ -1061,7 +1141,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callEndedPeersInterrupted();
 
     @WamProperty(index = 626, type = WamType.INTEGER)
-    OptionalInt callEnterPipModeCount();
+    OptionalLong callEnterPipModeCount();
 
     @WamProperty(index = 2458, type = WamType.BOOLEAN)
     Optional<Boolean> callFromReminder();
@@ -1091,13 +1171,13 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble callInitJbPlcCng();
 
     @WamProperty(index = 2312, type = WamType.INTEGER)
-    OptionalInt callInitReconnectingStateCount();
+    OptionalLong callInitReconnectingStateCount();
 
     @WamProperty(index = 1157, type = WamType.FLOAT)
     OptionalDouble callInitRxPktLossPct3s();
 
     @WamProperty(index = 2313, type = WamType.INTEGER)
-    OptionalInt callInitVideoRenderAvgFps();
+    OptionalLong callInitVideoRenderAvgFps();
 
     @WamProperty(index = 2581, type = WamType.FLOAT)
     OptionalDouble callInitialEchoLikelihood();
@@ -1124,7 +1204,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callMaxRxStoppedT();
 
     @WamProperty(index = 422, type = WamType.INTEGER)
-    OptionalInt callMessagesBufferedCount();
+    OptionalLong callMessagesBufferedCount();
 
     @WamProperty(index = 105, type = WamType.TIMER)
     Optional<Instant> callMinRtt();
@@ -1145,10 +1225,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<CallNetworkMedium> callNetwork();
 
     @WamProperty(index = 77, type = WamType.INTEGER)
-    OptionalInt callNetworkSubtype();
+    OptionalLong callNetworkSubtype();
 
     @WamProperty(index = 1632, type = WamType.INTEGER)
-    OptionalInt callNotificationState();
+    OptionalLong callNotificationState();
 
     @WamProperty(index = 53, type = WamType.ENUM)
     Optional<NsMode> callNsMode();
@@ -1163,7 +1243,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callOfferElapsedT();
 
     @WamProperty(index = 588, type = WamType.INTEGER)
-    OptionalInt callOfferFanoutCount();
+    OptionalLong callOfferFanoutCount();
 
     @WamProperty(index = 134, type = WamType.TIMER)
     Optional<Instant> callOfferReceiptDelay();
@@ -1175,7 +1255,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callP2pDisabled();
 
     @WamProperty(index = 2539, type = WamType.INTEGER)
-    OptionalInt callPeakThermalState();
+    OptionalLong callPeakThermalState();
 
     @WamProperty(index = 15, type = WamType.STRING)
     Optional<String> callPeerAppVersion();
@@ -1187,7 +1267,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> callPeerIpStr();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt callPeerIpv4();
+    OptionalLong callPeerIpv4();
 
     @WamProperty(index = 2462, type = WamType.BOOLEAN)
     Optional<Boolean> callPeerIsMvFrictionEligible();
@@ -1211,16 +1291,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callPeersInterrupted();
 
     @WamProperty(index = 501, type = WamType.INTEGER)
-    OptionalInt callPendingCallsAcceptedCount();
+    OptionalLong callPendingCallsAcceptedCount();
 
     @WamProperty(index = 498, type = WamType.INTEGER)
-    OptionalInt callPendingCallsCount();
+    OptionalLong callPendingCallsCount();
 
     @WamProperty(index = 499, type = WamType.INTEGER)
-    OptionalInt callPendingCallsRejectedCount();
+    OptionalLong callPendingCallsRejectedCount();
 
     @WamProperty(index = 500, type = WamType.INTEGER)
-    OptionalInt callPendingCallsTerminatedCount();
+    OptionalLong callPendingCallsTerminatedCount();
 
     @WamProperty(index = 627, type = WamType.TIMER)
     Optional<Instant> callPipModeT();
@@ -1244,22 +1324,22 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble callRecentRecordFramesPs();
 
     @WamProperty(index = 1492, type = WamType.INTEGER)
-    OptionalInt callReconnectingProbeState();
+    OptionalLong callReconnectingProbeState();
 
     @WamProperty(index = 438, type = WamType.INTEGER)
-    OptionalInt callReconnectingStateCount();
+    OptionalLong callReconnectingStateCount();
 
     @WamProperty(index = 24, type = WamType.BOOLEAN)
     Optional<Boolean> callRecordCallbackStopped();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt callRecordFramesPs();
+    OptionalLong callRecordFramesPs();
 
     @WamProperty(index = 98, type = WamType.FLOAT)
     OptionalDouble callRecordMaxEnergyRatio();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt callRecordSilenceRatio();
+    OptionalLong callRecordSilenceRatio();
 
     @WamProperty(index = 131, type = WamType.TIMER)
     Optional<Instant> callRejectFuncT();
@@ -1271,7 +1351,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callRelayCreateT();
 
     @WamProperty(index = 1300, type = WamType.INTEGER)
-    OptionalInt callRelayErrorCode();
+    OptionalLong callRelayErrorCode();
 
     @WamProperty(index = 17, type = WamType.STRING)
     Optional<String> callRelayServer();
@@ -1280,7 +1360,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> callRelayServers();
 
     @WamProperty(index = 1301, type = WamType.INTEGER)
-    OptionalInt callRelaysReceived();
+    OptionalLong callRelaysReceived();
 
     @WamProperty(index = 1155, type = WamType.STRING)
     Optional<String> callReplayerId();
@@ -1289,7 +1369,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<CallResultType> callResult();
 
     @WamProperty(index = 2077, type = WamType.INTEGER)
-    OptionalInt callResultAnc();
+    OptionalLong callResultAnc();
 
     @WamProperty(index = 2021, type = WamType.ENUM)
     Optional<CallResultType> callResultAtAppExit();
@@ -1303,11 +1383,38 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 2577, type = WamType.FLOAT)
     OptionalDouble callRxAutomosNoiseAvg();
 
+    @WamProperty(index = 3012, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosNoiseP5();
+
+    @WamProperty(index = 3013, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosNoiseP50();
+
+    @WamProperty(index = 3014, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosNoiseP95();
+
     @WamProperty(index = 2578, type = WamType.FLOAT)
     OptionalDouble callRxAutomosOverallAvg();
 
+    @WamProperty(index = 3015, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosOverallP5();
+
+    @WamProperty(index = 3016, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosOverallP50();
+
+    @WamProperty(index = 3017, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosOverallP95();
+
     @WamProperty(index = 2579, type = WamType.FLOAT)
     OptionalDouble callRxAutomosSpeechAvg();
+
+    @WamProperty(index = 3018, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosSpeechP5();
+
+    @WamProperty(index = 3019, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosSpeechP50();
+
+    @WamProperty(index = 3020, type = WamType.FLOAT)
+    OptionalDouble callRxAutomosSpeechP95();
 
     @WamProperty(index = 121, type = WamType.FLOAT)
     OptionalDouble callRxAvgBitrate();
@@ -1325,7 +1432,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callRxAvgLossPeriod();
 
     @WamProperty(index = 1329, type = WamType.INTEGER)
-    OptionalInt callRxBweCnt();
+    OptionalLong callRxBweCnt();
 
     @WamProperty(index = 124, type = WamType.TIMER)
     Optional<Instant> callRxMaxJitter();
@@ -1352,13 +1459,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callSampledForProbing();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt callSamplingRate();
+    OptionalLong callSamplingRate();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> callSelfIpStr();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt callSelfIpv4();
+    OptionalLong callSelfIpv4();
 
     @WamProperty(index = 2069, type = WamType.STRING)
     Optional<String> callSelfV4Ip();
@@ -1367,7 +1474,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> callSelfV6Ip();
 
     @WamProperty(index = 68, type = WamType.INTEGER)
-    OptionalInt callServerNackErrorCode();
+    OptionalLong callServerNackErrorCode();
 
     @WamProperty(index = 71, type = WamType.ENUM)
     Optional<CallSetupErrorType> callSetupErrorType();
@@ -1388,10 +1495,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callStartFuncT();
 
     @WamProperty(index = 2540, type = WamType.INTEGER)
-    OptionalInt callStartThermalState();
+    OptionalLong callStartThermalState();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt callSwAecMode();
+    OptionalLong callSwAecMode();
 
     @WamProperty(index = 40, type = WamType.ENUM)
     Optional<SwAecType> callSwAecType();
@@ -1403,7 +1510,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callT();
 
     @WamProperty(index = 2180, type = WamType.INTEGER)
-    OptionalInt callTDominantSpeaker();
+    OptionalLong callTDominantSpeaker();
 
     @WamProperty(index = 2352, type = WamType.TIMER)
     Optional<Instant> callTSelfDominantSpeaker();
@@ -1433,37 +1540,37 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble callTestDouble();
 
     @WamProperty(index = 318, type = WamType.INTEGER)
-    OptionalInt callTestEvent();
+    OptionalLong callTestEvent();
 
     @WamProperty(index = 1326, type = WamType.ENUM)
     Optional<CallTestInteger> callTestInteger();
 
     @WamProperty(index = 1327, type = WamType.INTEGER)
-    OptionalInt callTestLong();
+    OptionalLong callTestLong();
 
     @WamProperty(index = 1328, type = WamType.STRING)
     Optional<String> callTestString();
 
     @WamProperty(index = 78, type = WamType.INTEGER)
-    OptionalInt callTransitionCount();
+    OptionalLong callTransitionCount();
 
     @WamProperty(index = 72, type = WamType.ENUM)
     Optional<CallTransportType> callTransport();
 
     @WamProperty(index = 1268, type = WamType.INTEGER)
-    OptionalInt callTransportMaxAllocRetries();
+    OptionalLong callTransportMaxAllocRetries();
 
     @WamProperty(index = 80, type = WamType.INTEGER)
-    OptionalInt callTransportP2pToRelayFallbackCount();
+    OptionalLong callTransportP2pToRelayFallbackCount();
 
     @WamProperty(index = 79, type = WamType.INTEGER)
-    OptionalInt callTransportRelayToRelayFallbackCount();
+    OptionalLong callTransportRelayToRelayFallbackCount();
 
     @WamProperty(index = 1429, type = WamType.INTEGER)
-    OptionalInt callTransportTcpFallbackToUdpCount();
+    OptionalLong callTransportTcpFallbackToUdpCount();
 
     @WamProperty(index = 1430, type = WamType.INTEGER)
-    OptionalInt callTransportTcpUsedCount();
+    OptionalLong callTransportTcpUsedCount();
 
     @WamProperty(index = 1319, type = WamType.FLOAT)
     OptionalDouble callTransportTotalRxAllocBytes();
@@ -1472,7 +1579,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble callTransportTotalTxAllocBytes();
 
     @WamProperty(index = 1321, type = WamType.INTEGER)
-    OptionalInt callTransportTxAllocCnt();
+    OptionalLong callTransportTxAllocCnt();
 
     @WamProperty(index = 1990, type = WamType.ENUM)
     Optional<CallTrigger> callTrigger();
@@ -1480,11 +1587,38 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 2556, type = WamType.FLOAT)
     OptionalDouble callTxAutomosNoiseAvg();
 
+    @WamProperty(index = 3021, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosNoiseP5();
+
+    @WamProperty(index = 3022, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosNoiseP50();
+
+    @WamProperty(index = 3023, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosNoiseP95();
+
     @WamProperty(index = 2557, type = WamType.FLOAT)
     OptionalDouble callTxAutomosOverallAvg();
 
+    @WamProperty(index = 3024, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosOverallP5();
+
+    @WamProperty(index = 3025, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosOverallP50();
+
+    @WamProperty(index = 3026, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosOverallP95();
+
     @WamProperty(index = 2558, type = WamType.FLOAT)
     OptionalDouble callTxAutomosSpeechAvg();
+
+    @WamProperty(index = 3027, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosSpeechP5();
+
+    @WamProperty(index = 3028, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosSpeechP50();
+
+    @WamProperty(index = 3029, type = WamType.FLOAT)
+    OptionalDouble callTxAutomosSpeechP95();
 
     @WamProperty(index = 112, type = WamType.FLOAT)
     OptionalDouble callTxAvgBitrate();
@@ -1499,7 +1633,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callTxAvgLossPeriod();
 
     @WamProperty(index = 1330, type = WamType.INTEGER)
-    OptionalInt callTxBweCnt();
+    OptionalLong callTxBweCnt();
 
     @WamProperty(index = 115, type = WamType.TIMER)
     Optional<Instant> callTxMaxJitter();
@@ -1526,7 +1660,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> callUsedVpn();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt callUserRate();
+    OptionalLong callUserRate();
 
     @WamProperty(index = 156, type = WamType.ENUM)
     Optional<CallWakeupSource> callWakeupSource();
@@ -1553,70 +1687,70 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> callerVidRtpToDecodeT();
 
     @WamProperty(index = 2488, type = WamType.INTEGER)
-    OptionalInt callingHistoryQuickhdUsedBitrate();
+    OptionalLong callingHistoryQuickhdUsedBitrate();
 
     @WamProperty(index = 2489, type = WamType.INTEGER)
-    OptionalInt callingHistoryTpRecordBothMatchCount();
+    OptionalLong callingHistoryTpRecordBothMatchCount();
 
     @WamProperty(index = 2490, type = WamType.INTEGER)
-    OptionalInt callingHistoryTpRecordCount();
+    OptionalLong callingHistoryTpRecordCount();
 
     @WamProperty(index = 2491, type = WamType.INTEGER)
-    OptionalInt callingHistoryTpRecordPeerMatchCount();
+    OptionalLong callingHistoryTpRecordPeerMatchCount();
 
     @WamProperty(index = 2492, type = WamType.INTEGER)
-    OptionalInt callingHistoryTpRecordSelfMatchCount();
+    OptionalLong callingHistoryTpRecordSelfMatchCount();
 
     @WamProperty(index = 2877, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordAppliedBitrateBps();
+    OptionalLong callingHistoryUaqcRecordAppliedBitrateBps();
 
     @WamProperty(index = 2878, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordBitrateBps();
+    OptionalLong callingHistoryUaqcRecordBitrateBps();
 
     @WamProperty(index = 2879, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordBothMatchCount();
+    OptionalLong callingHistoryUaqcRecordBothMatchCount();
 
     @WamProperty(index = 2880, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordCount();
+    OptionalLong callingHistoryUaqcRecordCount();
 
     @WamProperty(index = 2881, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordFilteredCount();
+    OptionalLong callingHistoryUaqcRecordFilteredCount();
 
     @WamProperty(index = 2882, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordPeerMatchCount();
+    OptionalLong callingHistoryUaqcRecordPeerMatchCount();
 
     @WamProperty(index = 2883, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordPlrPct();
+    OptionalLong callingHistoryUaqcRecordPlrPct();
 
     @WamProperty(index = 2884, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordRembBps();
+    OptionalLong callingHistoryUaqcRecordRembBps();
 
     @WamProperty(index = 2885, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordRttMs();
+    OptionalLong callingHistoryUaqcRecordRttMs();
 
     @WamProperty(index = 2886, type = WamType.INTEGER)
-    OptionalInt callingHistoryUaqcRecordSelfMatchCount();
+    OptionalLong callingHistoryUaqcRecordSelfMatchCount();
 
     @WamProperty(index = 765, type = WamType.INTEGER)
-    OptionalInt cameraFormats();
+    OptionalLong cameraFormats();
 
     @WamProperty(index = 850, type = WamType.INTEGER)
-    OptionalInt cameraIssues();
+    OptionalLong cameraIssues();
 
     @WamProperty(index = 851, type = WamType.INTEGER)
-    OptionalInt cameraLastIssue();
+    OptionalLong cameraLastIssue();
 
     @WamProperty(index = 2480, type = WamType.INTEGER)
-    OptionalInt cameraMaxRetryCount();
+    OptionalLong cameraMaxRetryCount();
 
     @WamProperty(index = 2369, type = WamType.BOOLEAN)
     Optional<Boolean> cameraOffCallStart();
 
     @WamProperty(index = 331, type = WamType.INTEGER)
-    OptionalInt cameraOffCount();
+    OptionalLong cameraOffCount();
 
     @WamProperty(index = 2348, type = WamType.INTEGER)
-    OptionalInt cameraOnCount();
+    OptionalLong cameraOnCount();
 
     @WamProperty(index = 1131, type = WamType.TIMER)
     Optional<Instant> cameraPauseT();
@@ -1646,10 +1780,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> cameraStopDuration();
 
     @WamProperty(index = 858, type = WamType.INTEGER)
-    OptionalInt cameraStopFailureCount();
+    OptionalLong cameraStopFailureCount();
 
     @WamProperty(index = 855, type = WamType.INTEGER)
-    OptionalInt cameraSwitchCount();
+    OptionalLong cameraSwitchCount();
 
     @WamProperty(index = 854, type = WamType.TIMER)
     Optional<Instant> cameraSwitchDuration();
@@ -1670,13 +1804,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> captureDeviceCreateDuration();
 
     @WamProperty(index = 1437, type = WamType.INTEGER)
-    OptionalInt captureDriverNotifyCountSs();
+    OptionalLong captureDriverNotifyCountSs();
 
     @WamProperty(index = 2406, type = WamType.INTEGER)
-    OptionalInt cellIdAtEnd();
+    OptionalLong cellIdAtEnd();
 
     @WamProperty(index = 2407, type = WamType.INTEGER)
-    OptionalInt cellIdAtStart();
+    OptionalLong cellIdAtStart();
 
     @WamProperty(index = 2408, type = WamType.STRING)
     Optional<String> cellInfoAtEnd();
@@ -1700,7 +1834,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble combinedE2eMinRtt();
 
     @WamProperty(index = 623, type = WamType.INTEGER)
-    OptionalInt confBridgeSamplingRate();
+    OptionalLong confBridgeSamplingRate();
 
     @WamProperty(index = 1891, type = WamType.TIMER)
     Optional<Instant> connectToDecodeT();
@@ -1718,7 +1852,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> conservativeRampUpExploringT();
 
     @WamProperty(index = 643, type = WamType.INTEGER)
-    OptionalInt conservativeRampUpHeldCount();
+    OptionalLong conservativeRampUpHeldCount();
 
     @WamProperty(index = 741, type = WamType.TIMER)
     Optional<Instant> conservativeRampUpHoldingT();
@@ -1727,10 +1861,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> conservativeRampUpRampingUpT();
 
     @WamProperty(index = 2188, type = WamType.INTEGER)
-    OptionalInt countInMcp();
+    OptionalLong countInMcp();
 
     @WamProperty(index = 2189, type = WamType.INTEGER)
-    OptionalInt countInSru();
+    OptionalLong countInSru();
 
     @WamProperty(index = 1223, type = WamType.FLOAT)
     OptionalDouble cpuOverUtilizationPct();
@@ -1748,40 +1882,40 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> criticalGroupUpdateProcessT();
 
     @WamProperty(index = 1438, type = WamType.INTEGER)
-    OptionalInt croppedColumnsSs();
+    OptionalLong croppedColumnsSs();
 
     @WamProperty(index = 1439, type = WamType.INTEGER)
-    OptionalInt croppedRowsSs();
+    OptionalLong croppedRowsSs();
 
     @WamProperty(index = 2104, type = WamType.ENUM)
     Optional<DataChannelConnectionState> dataChannelConnectionState();
 
     @WamProperty(index = 2105, type = WamType.INTEGER)
-    OptionalInt dataChannelRxBytes();
+    OptionalLong dataChannelRxBytes();
 
     @WamProperty(index = 2106, type = WamType.INTEGER)
-    OptionalInt dataChannelRxBytesDropped();
+    OptionalLong dataChannelRxBytesDropped();
 
     @WamProperty(index = 2107, type = WamType.INTEGER)
-    OptionalInt dataChannelRxMsgs();
+    OptionalLong dataChannelRxMsgs();
 
     @WamProperty(index = 2108, type = WamType.TIMER)
     Optional<Instant> dataChannelSetupT();
 
     @WamProperty(index = 2109, type = WamType.INTEGER)
-    OptionalInt dataChannelTxBufferedMsgs();
+    OptionalLong dataChannelTxBufferedMsgs();
 
     @WamProperty(index = 2110, type = WamType.INTEGER)
-    OptionalInt dataChannelTxBytes();
+    OptionalLong dataChannelTxBytes();
 
     @WamProperty(index = 2111, type = WamType.INTEGER)
-    OptionalInt dataChannelTxBytesDropped();
+    OptionalLong dataChannelTxBytesDropped();
 
     @WamProperty(index = 2112, type = WamType.INTEGER)
-    OptionalInt dataChannelTxMsgs();
+    OptionalLong dataChannelTxMsgs();
 
     @WamProperty(index = 2113, type = WamType.INTEGER)
-    OptionalInt dataChannelTxReliableMsgs();
+    OptionalLong dataChannelTxReliableMsgs();
 
     @WamProperty(index = 537, type = WamType.BOOLEAN)
     Optional<Boolean> dataLimitOnAltNetworkReached();
@@ -1892,13 +2026,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> decVidStreamActiveTime();
 
     @WamProperty(index = 2647, type = WamType.INTEGER)
-    OptionalInt defaultMicMode();
+    OptionalLong defaultMicMode();
 
     @WamProperty(index = 2171, type = WamType.INTEGER)
-    OptionalInt delayResetCount();
+    OptionalLong delayResetCount();
 
     @WamProperty(index = 2031, type = WamType.INTEGER)
-    OptionalInt deviceArClass();
+    OptionalLong deviceArClass();
 
     @WamProperty(index = 1675, type = WamType.ENUM)
     Optional<DeviceArch> deviceArch();
@@ -1913,7 +2047,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> deviceHardware();
 
     @WamProperty(index = 1879, type = WamType.INTEGER)
-    OptionalInt deviceNativeSamplingRate();
+    OptionalLong deviceNativeSamplingRate();
 
     @WamProperty(index = 1364, type = WamType.FLOAT)
     OptionalDouble dlOnlyHighPlrPct();
@@ -1928,79 +2062,79 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> dontConnectForPausedVidTargetSample();
 
     @WamProperty(index = 1440, type = WamType.INTEGER)
-    OptionalInt downlinkOvershootCountSs();
+    OptionalLong downlinkOvershootCountSs();
 
     @WamProperty(index = 1969, type = WamType.INTEGER)
-    OptionalInt downlinkSbweRttSlopeCongestionCount();
+    OptionalLong downlinkSbweRttSlopeCongestionCount();
 
     @WamProperty(index = 2270, type = WamType.TIMER)
     Optional<Instant> driverInitTime();
 
     @WamProperty(index = 2005, type = WamType.INTEGER)
-    OptionalInt droppedNetEventCount();
+    OptionalLong droppedNetEventCount();
 
     @WamProperty(index = 2114, type = WamType.TIMER)
     Optional<Instant> dtlsConnectionSetupT();
 
     @WamProperty(index = 2115, type = WamType.INTEGER)
-    OptionalInt dtlsRxBytes();
+    OptionalLong dtlsRxBytes();
 
     @WamProperty(index = 2116, type = WamType.INTEGER)
-    OptionalInt dtlsRxPackets();
+    OptionalLong dtlsRxPackets();
 
     @WamProperty(index = 2117, type = WamType.INTEGER)
-    OptionalInt dtlsRxPacketsDropped();
+    OptionalLong dtlsRxPacketsDropped();
 
     @WamProperty(index = 2118, type = WamType.INTEGER)
-    OptionalInt dtlsTxBytes();
+    OptionalLong dtlsTxBytes();
 
     @WamProperty(index = 2119, type = WamType.INTEGER)
-    OptionalInt dtlsTxPackets();
+    OptionalLong dtlsTxPackets();
 
     @WamProperty(index = 2120, type = WamType.INTEGER)
-    OptionalInt dtlsTxPacketsDropped();
+    OptionalLong dtlsTxPacketsDropped();
 
     @WamProperty(index = 2600, type = WamType.INTEGER)
-    OptionalInt dtmfBytesSent();
+    OptionalLong dtmfBytesSent();
 
     @WamProperty(index = 2601, type = WamType.INTEGER)
-    OptionalInt dtmfBytesSentFailed();
+    OptionalLong dtmfBytesSentFailed();
 
     @WamProperty(index = 2602, type = WamType.INTEGER)
-    OptionalInt dtmfEventSent();
+    OptionalLong dtmfEventSent();
 
     @WamProperty(index = 2603, type = WamType.INTEGER)
-    OptionalInt dtmfEventSentFailed();
+    OptionalLong dtmfEventSentFailed();
 
     @WamProperty(index = 914, type = WamType.INTEGER)
-    OptionalInt dtxRxByteFrameCount();
+    OptionalLong dtxRxByteFrameCount();
 
     @WamProperty(index = 912, type = WamType.INTEGER)
-    OptionalInt dtxRxCount();
+    OptionalLong dtxRxCount();
 
     @WamProperty(index = 911, type = WamType.TIMER)
     Optional<Instant> dtxRxDurationT();
 
     @WamProperty(index = 913, type = WamType.INTEGER)
-    OptionalInt dtxRxTotalCount();
+    OptionalLong dtxRxTotalCount();
 
     @WamProperty(index = 1083, type = WamType.INTEGER)
-    OptionalInt dtxRxTotalFrameCount();
+    OptionalLong dtxRxTotalFrameCount();
 
     @WamProperty(index = 910, type = WamType.INTEGER)
-    OptionalInt dtxTxByteFrameCount();
+    OptionalLong dtxTxByteFrameCount();
 
     @WamProperty(index = 619, type = WamType.INTEGER)
-    OptionalInt dtxTxCount();
+    OptionalLong dtxTxCount();
 
     @WamProperty(index = 618, type = WamType.TIMER)
     Optional<Instant> dtxTxDurationT();
 
     @WamProperty(index = 909, type = WamType.INTEGER)
-    OptionalInt dtxTxTotalCount();
+    OptionalLong dtxTxTotalCount();
 
     @WamProperty(index = 1082, type = WamType.INTEGER)
-    OptionalInt dtxTxTotalFrameCount();
+    OptionalLong dtxTxTotalFrameCount();
 
     @WamProperty(index = 1882, type = WamType.BOOLEAN)
     Optional<Boolean> dualStackTransportEnabled();
@@ -2021,94 +2155,94 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> durationTSsSharer();
 
     @WamProperty(index = 1815, type = WamType.INTEGER)
-    OptionalInt dynamicBitrateCapFallbackTimes();
+    OptionalLong dynamicBitrateCapFallbackTimes();
 
     @WamProperty(index = 2231, type = WamType.INTEGER)
-    OptionalInt dynamicBitrateCapFirstFallbackTimeSinceStart();
+    OptionalLong dynamicBitrateCapFirstFallbackTimeSinceStart();
 
     @WamProperty(index = 2232, type = WamType.INTEGER)
-    OptionalInt dynamicBitrateCapLastFallbackTimeSinceStart();
+    OptionalLong dynamicBitrateCapLastFallbackTimeSinceStart();
 
     @WamProperty(index = 2088, type = WamType.INTEGER)
-    OptionalInt dynamicInitBweFallbackCount();
+    OptionalLong dynamicInitBweFallbackCount();
 
     @WamProperty(index = 1611, type = WamType.INTEGER)
-    OptionalInt dynamicTransportEventBitmap();
+    OptionalLong dynamicTransportEventBitmap();
 
     @WamProperty(index = 1752, type = WamType.INTEGER)
-    OptionalInt dynamicTransportFirstSwitchT();
+    OptionalLong dynamicTransportFirstSwitchT();
 
     @WamProperty(index = 1753, type = WamType.INTEGER)
-    OptionalInt dynamicTransportSwitchCnt();
+    OptionalLong dynamicTransportSwitchCnt();
 
     @WamProperty(index = 1682, type = WamType.INTEGER)
-    OptionalInt dynamicTransportTransportSwitchCnt();
+    OptionalLong dynamicTransportTransportSwitchCnt();
 
     @WamProperty(index = 2158, type = WamType.INTEGER)
-    OptionalInt e2eeRetryCount();
+    OptionalLong e2eeRetryCount();
 
     @WamProperty(index = 320, type = WamType.INTEGER)
-    OptionalInt echoCancellationMsPerSec();
+    OptionalLong echoCancellationMsPerSec();
 
     @WamProperty(index = 1264, type = WamType.INTEGER)
-    OptionalInt echoCancellationNumLoops();
+    OptionalLong echoCancellationNumLoops();
 
     @WamProperty(index = 940, type = WamType.INTEGER)
-    OptionalInt echoCancelledFrameCount();
+    OptionalLong echoCancelledFrameCount();
 
     @WamProperty(index = 1701, type = WamType.INTEGER)
-    OptionalInt echoConf2140();
+    OptionalLong echoConf2140();
 
     @WamProperty(index = 1702, type = WamType.INTEGER)
-    OptionalInt echoConf4160();
+    OptionalLong echoConf4160();
 
     @WamProperty(index = 1703, type = WamType.INTEGER)
-    OptionalInt echoConfGt60();
+    OptionalLong echoConfGt60();
 
     @WamProperty(index = 1704, type = WamType.INTEGER)
-    OptionalInt echoConfLt20();
+    OptionalLong echoConfLt20();
 
     @WamProperty(index = 1589, type = WamType.INTEGER)
-    OptionalInt echoConfidence();
+    OptionalLong echoConfidence();
 
     @WamProperty(index = 1989, type = WamType.INTEGER)
-    OptionalInt echoConfidenceBeforeEc();
+    OptionalLong echoConfidenceBeforeEc();
 
     @WamProperty(index = 1590, type = WamType.INTEGER)
-    OptionalInt echoDelay();
+    OptionalLong echoDelay();
 
     @WamProperty(index = 941, type = WamType.INTEGER)
-    OptionalInt echoEstimatedFrameCount();
+    OptionalLong echoEstimatedFrameCount();
 
     @WamProperty(index = 1724, type = WamType.INTEGER)
-    OptionalInt echoLikelihoodDiff();
+    OptionalLong echoLikelihoodDiff();
 
     @WamProperty(index = 1591, type = WamType.INTEGER)
-    OptionalInt echoLtDelay();
+    OptionalLong echoLtDelay();
 
     @WamProperty(index = 1265, type = WamType.INTEGER)
-    OptionalInt echoMaxConvergeFrameCount();
+    OptionalLong echoMaxConvergeFrameCount();
 
     @WamProperty(index = 1592, type = WamType.INTEGER)
-    OptionalInt echoPercentage();
+    OptionalLong echoPercentage();
 
     @WamProperty(index = 1387, type = WamType.INTEGER)
-    OptionalInt echoProbGte40FrmCnt();
+    OptionalLong echoProbGte40FrmCnt();
 
     @WamProperty(index = 1388, type = WamType.INTEGER)
-    OptionalInt echoProbGte50FrmCnt();
+    OptionalLong echoProbGte50FrmCnt();
 
     @WamProperty(index = 1389, type = WamType.INTEGER)
-    OptionalInt echoProbGte60FrmCnt();
+    OptionalLong echoProbGte60FrmCnt();
 
     @WamProperty(index = 1593, type = WamType.INTEGER)
-    OptionalInt echoReturnLoss();
+    OptionalLong echoReturnLoss();
 
     @WamProperty(index = 987, type = WamType.INTEGER)
-    OptionalInt echoSpeakerModeFrameCount();
+    OptionalLong echoSpeakerModeFrameCount();
 
     @WamProperty(index = 1779, type = WamType.INTEGER)
-    OptionalInt electedRelayIdx();
+    OptionalLong electedRelayIdx();
 
     @WamProperty(index = 2773, type = WamType.FLOAT)
     OptionalDouble encAspectRatioHqSs();
@@ -2129,7 +2263,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> encVidStreamActiveTimeHq();
 
     @WamProperty(index = 81, type = WamType.INTEGER)
-    OptionalInt encoderCompStepdowns();
+    OptionalLong encoderCompStepdowns();
 
     @WamProperty(index = 90, type = WamType.ENUM)
     Optional<EndCallConfirmationType> endCallAfterConfirmation();
@@ -2141,16 +2275,25 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> enterPipBeforeInflectionPoint();
 
     @WamProperty(index = 2402, type = WamType.INTEGER)
-    OptionalInt evQueueOverflowCount();
+    OptionalLong evQueueOverflowCount();
+
+    @WamProperty(index = 3038, type = WamType.INTEGER)
+    OptionalLong extensionType();
+
+    @WamProperty(index = 3039, type = WamType.INTEGER)
+    OptionalLong extensionTypeBitmask();
+
+    @WamProperty(index = 3040, type = WamType.STRING)
+    Optional<String> extensionUserRid();
 
     @WamProperty(index = 534, type = WamType.INTEGER)
-    OptionalInt failureToCreateAltSocket();
+    OptionalLong failureToCreateAltSocket();
 
     @WamProperty(index = 532, type = WamType.INTEGER)
-    OptionalInt failureToCreateTestAltSocket();
+    OptionalLong failureToCreateTestAltSocket();
 
     @WamProperty(index = 2610, type = WamType.INTEGER)
-    OptionalInt fgServiceTypesBitmap();
+    OptionalLong fgServiceTypesBitmap();
 
     @WamProperty(index = 328, type = WamType.ENUM)
     Optional<FieldStatsRowType> fieldStatsRowType();
@@ -2168,7 +2311,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> firstAssertFunc();
 
     @WamProperty(index = 2054, type = WamType.INTEGER)
-    OptionalInt firstNetworkMedium();
+    OptionalLong firstNetworkMedium();
 
     @WamProperty(index = 2067, type = WamType.ENUM)
     Optional<DeliveredPriority> firstOfferPushDeliveredPriority();
@@ -2182,23 +2325,26 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 2049, type = WamType.TIMER)
     Optional<Instant> firstOfferPushSentByPushdSinceCallInitiationMs();
 
+    @WamProperty(index = 3009, type = WamType.INTEGER)
+    OptionalLong foaSourceSurface();
+
     @WamProperty(index = 2529, type = WamType.INTEGER)
-    OptionalInt fpp1();
+    OptionalLong fpp1();
 
     @WamProperty(index = 2530, type = WamType.INTEGER)
-    OptionalInt fpp2();
+    OptionalLong fpp2();
 
     @WamProperty(index = 2531, type = WamType.INTEGER)
-    OptionalInt fpp3();
+    OptionalLong fpp3();
 
     @WamProperty(index = 2532, type = WamType.INTEGER)
-    OptionalInt fpp4();
+    OptionalLong fpp4();
 
     @WamProperty(index = 2533, type = WamType.INTEGER)
-    OptionalInt fpp5();
+    OptionalLong fpp5();
 
     @WamProperty(index = 2534, type = WamType.INTEGER)
-    OptionalInt fpp6();
+    OptionalLong fpp6();
 
     @WamProperty(index = 2535, type = WamType.FLOAT)
     OptionalDouble fppAvg();
@@ -2207,7 +2353,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble frameBrightnessAvg();
 
     @WamProperty(index = 2536, type = WamType.INTEGER)
-    OptionalInt frameLengthMs();
+    OptionalLong frameLengthMs();
 
     @WamProperty(index = 1051, type = WamType.FLOAT)
     OptionalDouble freezeAheadBweCongestionCorrPct();
@@ -2228,16 +2374,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> freezeDisableTotalDuration();
 
     @WamProperty(index = 2055, type = WamType.INTEGER)
-    OptionalInt gapRecoveredByP2pFallback();
+    OptionalLong gapRecoveredByP2pFallback();
 
     @WamProperty(index = 2056, type = WamType.INTEGER)
-    OptionalInt gapRecoveredByRebind();
+    OptionalLong gapRecoveredByRebind();
 
     @WamProperty(index = 2057, type = WamType.INTEGER)
-    OptionalInt gapRecoveredByRelayFailover();
+    OptionalLong gapRecoveredByRelayFailover();
 
     @WamProperty(index = 2058, type = WamType.INTEGER)
-    OptionalInt gapRecoveredByWeakWifi();
+    OptionalLong gapRecoveredByWeakWifi();
 
     @WamProperty(index = 1915, type = WamType.FLOAT)
     OptionalDouble gcBadStatusDuringVideoDisabling();
@@ -2252,16 +2398,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<GcRekeyMasterError> gcRekeyMasterError();
 
     @WamProperty(index = 2032, type = WamType.INTEGER)
-    OptionalInt gcUpgradeAttempts();
+    OptionalLong gcUpgradeAttempts();
 
     @WamProperty(index = 2033, type = WamType.TIMER)
     Optional<Instant> gcUpgradeOfferAckLatencyMs();
 
     @WamProperty(index = 2034, type = WamType.INTEGER)
-    OptionalInt gcUpgradeOfferErrorCode();
+    OptionalLong gcUpgradeOfferErrorCode();
 
     @WamProperty(index = 2035, type = WamType.INTEGER)
-    OptionalInt gcUpgradeOfferParticipantCount();
+    OptionalLong gcUpgradeOfferParticipantCount();
 
     @WamProperty(index = 2830, type = WamType.TIMER)
     Optional<Instant> genaiActivityCreateToFirstDrawMs();
@@ -2282,7 +2428,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<GenaiBotType> genaiBotType();
 
     @WamProperty(index = 2388, type = WamType.INTEGER)
-    OptionalInt genaiBufferedActiveSpeechPct();
+    OptionalLong genaiBufferedActiveSpeechPct();
 
     @WamProperty(index = 2370, type = WamType.TIMER)
     Optional<Instant> genaiConnectionReadyLatency();
@@ -2294,7 +2440,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<GenaiExitPoint> genaiExitPoint();
 
     @WamProperty(index = 2913, type = WamType.INTEGER)
-    OptionalInt genaiGroupCallBotInviteFailures();
+    OptionalLong genaiGroupCallBotInviteFailures();
 
     @WamProperty(index = 2914, type = WamType.BOOLEAN)
     Optional<Boolean> genaiGroupCallBotInviter();
@@ -2303,13 +2449,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> genaiGroupCallBotJoinLatency();
 
     @WamProperty(index = 2915, type = WamType.INTEGER)
-    OptionalInt genaiGroupCallBotRemoveFailures();
+    OptionalLong genaiGroupCallBotRemoveFailures();
 
     @WamProperty(index = 2916, type = WamType.BOOLEAN)
     Optional<Boolean> genaiGroupCallBotRemover();
 
     @WamProperty(index = 2389, type = WamType.INTEGER)
-    OptionalInt genaiInitialAudioBufferedMs();
+    OptionalLong genaiInitialAudioBufferedMs();
 
     @WamProperty(index = 2037, type = WamType.TIMER)
     Optional<Instant> genaiInitialConnectionLatencyMs();
@@ -2327,25 +2473,25 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> genaiNativePreOfferLatencyMs();
 
     @WamProperty(index = 2082, type = WamType.INTEGER)
-    OptionalInt genaiNumRequestsSent();
+    OptionalLong genaiNumRequestsSent();
 
     @WamProperty(index = 2083, type = WamType.INTEGER)
-    OptionalInt genaiNumResponseImages();
+    OptionalLong genaiNumResponseImages();
 
     @WamProperty(index = 2084, type = WamType.INTEGER)
-    OptionalInt genaiNumResponseReels();
+    OptionalLong genaiNumResponseReels();
 
     @WamProperty(index = 2085, type = WamType.INTEGER)
-    OptionalInt genaiNumResponseSearchResults();
+    OptionalLong genaiNumResponseSearchResults();
 
     @WamProperty(index = 2094, type = WamType.INTEGER)
-    OptionalInt genaiNumResponseTextResults();
+    OptionalLong genaiNumResponseTextResults();
 
     @WamProperty(index = 2086, type = WamType.INTEGER)
-    OptionalInt genaiNumResponsesReceived();
+    OptionalLong genaiNumResponsesReceived();
 
     @WamProperty(index = 2912, type = WamType.INTEGER)
-    OptionalInt genaiNumUserInterrupts();
+    OptionalLong genaiNumUserInterrupts();
 
     @WamProperty(index = 2832, type = WamType.TIMER)
     Optional<Instant> genaiPlatformToNativeCrossingMs();
@@ -2381,7 +2527,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> genaiVoipToUiListeningMs();
 
     @WamProperty(index = 2322, type = WamType.INTEGER)
-    OptionalInt goodputPeerDownlink();
+    OptionalLong goodputPeerDownlink();
 
     @WamProperty(index = 1967, type = WamType.ENUM)
     Optional<GooglePlayServicesStatus> googlePlayServicesStatus();
@@ -2393,7 +2539,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble gpuUtilizationPeak();
 
     @WamProperty(index = 1529, type = WamType.INTEGER)
-    OptionalInt greaterThanLowPlrIsRandomCount();
+    OptionalLong greaterThanLowPlrIsRandomCount();
 
     @WamProperty(index = 1013, type = WamType.BOOLEAN)
     Optional<Boolean> groupAcceptNoCriticalGroupUpdate();
@@ -2402,19 +2548,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> groupAcceptToCriticalGroupUpdateMs();
 
     @WamProperty(index = 2078, type = WamType.INTEGER)
-    OptionalInt groupCallAncFixPeerCount();
+    OptionalLong groupCallAncFixPeerCount();
 
     @WamProperty(index = 2079, type = WamType.INTEGER)
-    OptionalInt groupCallAncFixSelfCount();
+    OptionalLong groupCallAncFixSelfCount();
 
     @WamProperty(index = 439, type = WamType.INTEGER)
-    OptionalInt groupCallCallerParticipantCountAtCallStart();
+    OptionalLong groupCallCallerParticipantCountAtCallStart();
 
     @WamProperty(index = 1673, type = WamType.INTEGER)
-    OptionalInt groupCallInviteCountBeforeConnected();
+    OptionalLong groupCallInviteCountBeforeConnected();
 
     @WamProperty(index = 360, type = WamType.INTEGER)
-    OptionalInt groupCallInviteCountSinceCallStart();
+    OptionalLong groupCallInviteCountSinceCallStart();
 
     @WamProperty(index = 1578, type = WamType.BOOLEAN)
     Optional<Boolean> groupCallIsFirstSegment();
@@ -2426,19 +2572,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> groupCallIsLastSegment();
 
     @WamProperty(index = 1861, type = WamType.INTEGER)
-    OptionalInt groupCallMaximizedPeerCount();
+    OptionalLong groupCallMaximizedPeerCount();
 
     @WamProperty(index = 361, type = WamType.INTEGER)
-    OptionalInt groupCallNackCountSinceCallStart();
+    OptionalLong groupCallNackCountSinceCallStart();
 
     @WamProperty(index = 946, type = WamType.INTEGER)
-    OptionalInt groupCallReringCountSinceCallStart();
+    OptionalLong groupCallReringCountSinceCallStart();
 
     @WamProperty(index = 947, type = WamType.INTEGER)
-    OptionalInt groupCallReringNackCountSinceCallStart();
+    OptionalLong groupCallReringNackCountSinceCallStart();
 
     @WamProperty(index = 329, type = WamType.INTEGER)
-    OptionalInt groupCallSegmentIdx();
+    OptionalLong groupCallSegmentIdx();
 
     @WamProperty(index = 358, type = WamType.TIMER)
     Optional<Instant> groupCallTotalCallTSinceCallStart();
@@ -2447,7 +2593,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> groupCallTotalP3CallTSinceCallStart();
 
     @WamProperty(index = 592, type = WamType.INTEGER)
-    OptionalInt groupCallVideoMaximizedCount();
+    OptionalLong groupCallVideoMaximizedCount();
 
     @WamProperty(index = 1617, type = WamType.TIMER)
     Optional<Instant> groupCallVideoMaximizedDuration();
@@ -2477,88 +2623,88 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> hasWorkingDualStackP2p();
 
     @WamProperty(index = 1427, type = WamType.INTEGER)
-    OptionalInt hbhKeyInconsistencyCnt();
+    OptionalLong hbhKeyInconsistencyCnt();
 
     @WamProperty(index = 2459, type = WamType.INTEGER)
-    OptionalInt hbhSmlPacketCount();
+    OptionalLong hbhSmlPacketCount();
 
     @WamProperty(index = 1256, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxBytes();
+    OptionalLong hbhSrtcpRxBytes();
 
     @WamProperty(index = 1257, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxRejAuthFail();
+    OptionalLong hbhSrtcpRxRejAuthFail();
 
     @WamProperty(index = 1258, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxRejEinval();
+    OptionalLong hbhSrtcpRxRejEinval();
 
     @WamProperty(index = 1219, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxRejectedPktCntFromOldRelay();
+    OptionalLong hbhSrtcpRxRejectedPktCntFromOldRelay();
 
     @WamProperty(index = 1248, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessNackPktCnt();
+    OptionalLong hbhSrtcpRxSuccessNackPktCnt();
 
     @WamProperty(index = 1646, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessPliPktCnt();
+    OptionalLong hbhSrtcpRxSuccessPliPktCnt();
 
     @WamProperty(index = 1249, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessRembPktCnt();
+    OptionalLong hbhSrtcpRxSuccessRembPktCnt();
 
     @WamProperty(index = 2646, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessRxsbPktCnt();
+    OptionalLong hbhSrtcpRxSuccessRxsbPktCnt();
 
     @WamProperty(index = 1250, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessSbwaPktCnt();
+    OptionalLong hbhSrtcpRxSuccessSbwaPktCnt();
 
     @WamProperty(index = 1251, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessSpPktCnt();
+    OptionalLong hbhSrtcpRxSuccessSpPktCnt();
 
     @WamProperty(index = 1904, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessSrtpAfbBatchPktCnt();
+    OptionalLong hbhSrtcpRxSuccessSrtpAfbBatchPktCnt();
 
     @WamProperty(index = 1685, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpRxSuccessSrtpAfbPktCnt();
+    OptionalLong hbhSrtcpRxSuccessSrtpAfbPktCnt();
 
     @WamProperty(index = 1259, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpTxBytes();
+    OptionalLong hbhSrtcpTxBytes();
 
     @WamProperty(index = 1254, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpTxNackPktCnt();
+    OptionalLong hbhSrtcpTxNackPktCnt();
 
     @WamProperty(index = 1905, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpTxSrtpAfbBatchPktCnt();
+    OptionalLong hbhSrtcpTxSrtpAfbBatchPktCnt();
 
     @WamProperty(index = 1686, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpTxSrtpAfbPktCnt();
+    OptionalLong hbhSrtcpTxSrtpAfbPktCnt();
 
     @WamProperty(index = 2126, type = WamType.INTEGER)
-    OptionalInt hbhSrtcpTxWarpTfPktCnt();
+    OptionalLong hbhSrtcpTxWarpTfPktCnt();
 
     @WamProperty(index = 1849, type = WamType.INTEGER)
-    OptionalInt hbhSrtpRxE2eEncCnt();
+    OptionalLong hbhSrtpRxE2eEncCnt();
 
     @WamProperty(index = 1850, type = WamType.INTEGER)
-    OptionalInt hbhSrtpRxE2eEncErrCnt();
+    OptionalLong hbhSrtpRxE2eEncErrCnt();
 
     @WamProperty(index = 1585, type = WamType.INTEGER)
-    OptionalInt hbhSrtpRxPktCnt();
+    OptionalLong hbhSrtpRxPktCnt();
 
     @WamProperty(index = 1586, type = WamType.INTEGER)
-    OptionalInt hbhSrtpRxRejAuthFail();
+    OptionalLong hbhSrtpRxRejAuthFail();
 
     @WamProperty(index = 1587, type = WamType.INTEGER)
-    OptionalInt hbhSrtpRxRejEinval();
+    OptionalLong hbhSrtpRxRejEinval();
 
     @WamProperty(index = 1907, type = WamType.INTEGER)
-    OptionalInt hbhSrtpRxWarpRocCnt();
+    OptionalLong hbhSrtpRxWarpRocCnt();
 
     @WamProperty(index = 1588, type = WamType.INTEGER)
-    OptionalInt hbhSrtpTxPktCnt();
+    OptionalLong hbhSrtpTxPktCnt();
 
     @WamProperty(index = 1851, type = WamType.INTEGER)
-    OptionalInt hbhSrtpTxPktErrorCnt();
+    OptionalLong hbhSrtpTxPktErrorCnt();
 
     @WamProperty(index = 1279, type = WamType.INTEGER)
-    OptionalInt hbweHistoryBasedAvgVideoTxBitrate();
+    OptionalLong hbweHistoryBasedAvgVideoTxBitrate();
 
     @WamProperty(index = 1280, type = WamType.BOOLEAN)
     Optional<Boolean> hbweHistoryBasedBweInstantRampUpDone();
@@ -2573,7 +2719,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> highPeerBweT();
 
     @WamProperty(index = 342, type = WamType.INTEGER)
-    OptionalInt hisBasedInitialTxBitrate();
+    OptionalLong hisBasedInitialTxBitrate();
 
     @WamProperty(index = 339, type = WamType.BOOLEAN)
     Optional<Boolean> hisInfoCouldBeUsedForInitBwe();
@@ -2588,22 +2734,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> historyBasedBweSuccess();
 
     @WamProperty(index = 809, type = WamType.INTEGER)
-    OptionalInt historyBasedBweVideoTxBitrate();
+    OptionalLong historyBasedBweVideoTxBitrate();
 
     @WamProperty(index = 1431, type = WamType.BOOLEAN)
     Optional<Boolean> historyBasedMinRttAvailable();
 
     @WamProperty(index = 1432, type = WamType.INTEGER)
-    OptionalInt historyBasedMinRttCongestionCount();
+    OptionalLong historyBasedMinRttCongestionCount();
 
     @WamProperty(index = 1433, type = WamType.FLOAT)
     OptionalDouble historyBasedMinRttDividedByRuntimeMinRtt();
 
     @WamProperty(index = 1971, type = WamType.INTEGER)
-    OptionalInt historyRansportSelectionSockAddrFamily();
+    OptionalLong historyRansportSelectionSockAddrFamily();
 
     @WamProperty(index = 1972, type = WamType.INTEGER)
-    OptionalInt historyTransportSelectionMatchedRecordCount();
+    OptionalLong historyTransportSelectionMatchedRecordCount();
 
     @WamProperty(index = 2323, type = WamType.BOOLEAN)
     Optional<Boolean> historyVideoRecordBySelfAndPeerIpMatching();
@@ -2612,19 +2758,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> historyVideoRecordBySelfOnlyIpMatching();
 
     @WamProperty(index = 2290, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordEncoderAvgQp();
+    OptionalLong historyVideoRecordEncoderAvgQp();
 
     @WamProperty(index = 2291, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordEncoderLatency();
+    OptionalLong historyVideoRecordEncoderLatency();
 
     @WamProperty(index = 2292, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordEncoderOvershoot();
+    OptionalLong historyVideoRecordEncoderOvershoot();
 
     @WamProperty(index = 2293, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordEncoderUndershoot();
+    OptionalLong historyVideoRecordEncoderUndershoot();
 
     @WamProperty(index = 2294, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordFreezePct();
+    OptionalLong historyVideoRecordFreezePct();
 
     @WamProperty(index = 2295, type = WamType.TIMER)
     Optional<Instant> historyVideoRecordGood480pDecoding();
@@ -2639,31 +2785,31 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> historyVideoRecordGood720pEncoding();
 
     @WamProperty(index = 2299, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordInitDownlinkBwe();
+    OptionalLong historyVideoRecordInitDownlinkBwe();
 
     @WamProperty(index = 2300, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordInitUplinkBwe();
+    OptionalLong historyVideoRecordInitUplinkBwe();
 
     @WamProperty(index = 2301, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordStableMaxTargetBitrate();
+    OptionalLong historyVideoRecordStableMaxTargetBitrate();
 
     @WamProperty(index = 2302, type = WamType.INTEGER)
-    OptionalInt historyVideoRecordTxPktLossPct();
+    OptionalLong historyVideoRecordTxPktLossPct();
 
     @WamProperty(index = 1951, type = WamType.INTEGER)
-    OptionalInt hscrollInteractCount();
+    OptionalLong hscrollInteractCount();
 
     @WamProperty(index = 2377, type = WamType.INTEGER)
-    OptionalInt hwDecReach1sCount();
+    OptionalLong hwDecReach1sCount();
 
     @WamProperty(index = 2378, type = WamType.INTEGER)
-    OptionalInt hwDecReach5sCount();
+    OptionalLong hwDecReach5sCount();
 
     @WamProperty(index = 2379, type = WamType.INTEGER)
-    OptionalInt hwEncReach1sCount();
+    OptionalLong hwEncReach1sCount();
 
     @WamProperty(index = 2380, type = WamType.INTEGER)
-    OptionalInt hwEncReach5sCount();
+    OptionalLong hwEncReach5sCount();
 
     @WamProperty(index = 2684, type = WamType.TIMER)
     Optional<Instant> iceRttAvg();
@@ -2675,25 +2821,34 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> iceRttMin();
 
     @WamProperty(index = 1944, type = WamType.INTEGER)
-    OptionalInt igluEffectAttemptedCount();
+    OptionalLong igluEffectAttemptedCount();
 
     @WamProperty(index = 1945, type = WamType.INTEGER)
-    OptionalInt igluEffectCanceledCount();
+    OptionalLong igluEffectCanceledCount();
 
     @WamProperty(index = 1946, type = WamType.TIMER)
     Optional<Instant> igluEffectDurationT();
 
     @WamProperty(index = 1947, type = WamType.INTEGER)
-    OptionalInt igluEffectEnabledCount();
+    OptionalLong igluEffectEnabledCount();
 
     @WamProperty(index = 1948, type = WamType.INTEGER)
-    OptionalInt igluEffectFailedCount();
+    OptionalLong igluEffectFailedCount();
 
     @WamProperty(index = 1949, type = WamType.TIMER)
     Optional<Instant> igluEffectLoadingT();
 
     @WamProperty(index = 1350, type = WamType.FLOAT)
     OptionalDouble imbalancedDlPlrTPct();
+
+    @WamProperty(index = 3041, type = WamType.INTEGER)
+    OptionalLong imuTxBitrate();
+
+    @WamProperty(index = 3042, type = WamType.INTEGER)
+    OptionalLong imuTxDroppedCount();
+
+    @WamProperty(index = 3043, type = WamType.INTEGER)
+    OptionalLong imuTxFrameCount();
 
     @WamProperty(index = 1728, type = WamType.TIMER)
     Optional<Instant> inboundVideoDisablingDuration();
@@ -2717,13 +2872,13 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble initialEstimatedTxBitrate();
 
     @WamProperty(index = 1683, type = WamType.INTEGER)
-    OptionalInt invalidDataPacketCnt();
+    OptionalLong invalidDataPacketCnt();
 
     @WamProperty(index = 1575, type = WamType.INTEGER)
-    OptionalInt invalidRelayMessageCnt();
+    OptionalLong invalidRelayMessageCnt();
 
     @WamProperty(index = 1770, type = WamType.INTEGER)
-    OptionalInt iosHwLtrAckMiss();
+    OptionalLong iosHwLtrAckMiss();
 
     @WamProperty(index = 2611, type = WamType.BOOLEAN)
     Optional<Boolean> isAppInBackgroundAtCallEnd();
@@ -2806,6 +2961,9 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 2614, type = WamType.BOOLEAN)
     Optional<Boolean> isTelecomFallbackPath();
 
+    @WamProperty(index = 3006, type = WamType.BOOLEAN)
+    Optional<Boolean> isTransferRejoin();
+
     @WamProperty(index = 2371, type = WamType.BOOLEAN)
     Optional<Boolean> isUgcCall();
 
@@ -2879,13 +3037,13 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble jbGets();
 
     @WamProperty(index = 2217, type = WamType.INTEGER)
-    OptionalInt jbGetsDominantSpeaker();
+    OptionalLong jbGetsDominantSpeaker();
 
     @WamProperty(index = 149, type = WamType.FLOAT)
     OptionalDouble jbLastDelay();
 
     @WamProperty(index = 2372, type = WamType.INTEGER)
-    OptionalInt jbLastTotalPlcMs();
+    OptionalLong jbLastTotalPlcMs();
 
     @WamProperty(index = 277, type = WamType.FLOAT)
     OptionalDouble jbLost();
@@ -2948,34 +3106,34 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> jbPlcCngBeforeFirstDecodeInclude();
 
     @WamProperty(index = 2219, type = WamType.INTEGER)
-    OptionalInt jbPlcCngDominantSpeaker();
+    OptionalLong jbPlcCngDominantSpeaker();
 
     @WamProperty(index = 2220, type = WamType.INTEGER)
-    OptionalInt jbPlcDominantSpeaker();
+    OptionalLong jbPlcDominantSpeaker();
 
     @WamProperty(index = 153, type = WamType.FLOAT)
     OptionalDouble jbPuts();
 
     @WamProperty(index = 2221, type = WamType.INTEGER)
-    OptionalInt jbPutsDominantSpeaker();
+    OptionalLong jbPutsDominantSpeaker();
 
     @WamProperty(index = 996, type = WamType.FLOAT)
     OptionalDouble jbTotalEmptyPeriods();
 
     @WamProperty(index = 2373, type = WamType.INTEGER)
-    OptionalInt jbTotalPlc1xMs();
+    OptionalLong jbTotalPlc1xMs();
 
     @WamProperty(index = 2374, type = WamType.INTEGER)
-    OptionalInt jbTotalPlc2xMs();
+    OptionalLong jbTotalPlc2xMs();
 
     @WamProperty(index = 2375, type = WamType.INTEGER)
-    OptionalInt jbTotalPlc4xMs();
+    OptionalLong jbTotalPlc4xMs();
 
     @WamProperty(index = 2376, type = WamType.INTEGER)
-    OptionalInt jbTotalPlc8xMs();
+    OptionalLong jbTotalPlc8xMs();
 
     @WamProperty(index = 1081, type = WamType.INTEGER)
-    OptionalInt jbVoiceFrames();
+    OptionalLong jbVoiceFrames();
 
     @WamProperty(index = 894, type = WamType.BOOLEAN)
     Optional<Boolean> joinableDuringCall();
@@ -2984,13 +3142,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> joinableNewUi();
 
     @WamProperty(index = 2718, type = WamType.INTEGER)
-    OptionalInt jsHaltCount();
+    OptionalLong jsHaltCount();
 
     @WamProperty(index = 2719, type = WamType.TIMER)
     Optional<Instant> jsHaltTotalMsT();
 
     @WamProperty(index = 2349, type = WamType.INTEGER)
-    OptionalInt knownContactVideoUpgradeCount();
+    OptionalLong knownContactVideoUpgradeCount();
 
     @WamProperty(index = 986, type = WamType.STRING)
     Optional<String> l1Locations();
@@ -2999,25 +3157,25 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> landscapeModeDurationT();
 
     @WamProperty(index = 1516, type = WamType.INTEGER)
-    OptionalInt landscapeModeEnabled();
+    OptionalLong landscapeModeEnabled();
 
     @WamProperty(index = 1511, type = WamType.TIMER)
     Optional<Instant> landscapeModeLockedDurationT();
 
     @WamProperty(index = 1512, type = WamType.INTEGER)
-    OptionalInt landscapeModeLockedSwitchCount();
+    OptionalLong landscapeModeLockedSwitchCount();
 
     @WamProperty(index = 1513, type = WamType.TIMER)
     Optional<Instant> landscapeModePipMixedDurationT();
 
     @WamProperty(index = 1514, type = WamType.INTEGER)
-    OptionalInt landscapeModeSwitchCount();
+    OptionalLong landscapeModeSwitchCount();
 
     @WamProperty(index = 415, type = WamType.INTEGER)
-    OptionalInt lastConnErrorStatus();
+    OptionalLong lastConnErrorStatus();
 
     @WamProperty(index = 2665, type = WamType.INTEGER)
-    OptionalInt lastMicMode();
+    OptionalLong lastMicMode();
 
     @WamProperty(index = 1607, type = WamType.FLOAT)
     OptionalDouble lastMinJbAvgDelay();
@@ -3035,10 +3193,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble lastMinJbMeanWaitTime();
 
     @WamProperty(index = 1865, type = WamType.INTEGER)
-    OptionalInt lastMinJbPlc();
+    OptionalLong lastMinJbPlc();
 
     @WamProperty(index = 1866, type = WamType.INTEGER)
-    OptionalInt lastMinJbPlcCng();
+    OptionalLong lastMinJbPlcCng();
 
     @WamProperty(index = 1619, type = WamType.TIMER)
     Optional<Instant> lastMinVideoRenderEnableDuration();
@@ -3071,22 +3229,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> lastMinuteCallAvgRtt();
 
     @WamProperty(index = 2223, type = WamType.INTEGER)
-    OptionalInt lastPpDuringPip();
+    OptionalLong lastPpDuringPip();
 
     @WamProperty(index = 1684, type = WamType.INTEGER)
-    OptionalInt lastRelayCnt();
+    OptionalLong lastRelayCnt();
 
     @WamProperty(index = 2667, type = WamType.STRING)
     Optional<String> lastVoipActivity();
 
     @WamProperty(index = 2705, type = WamType.INTEGER)
-    OptionalInt lastVoipActivityTimestampSec();
+    OptionalLong lastVoipActivityTimestampSec();
 
     @WamProperty(index = 2675, type = WamType.STRING)
     Optional<String> lastVoipUiActivity();
 
     @WamProperty(index = 2706, type = WamType.INTEGER)
-    OptionalInt lastVoipUiActivityTimestampSec();
+    OptionalLong lastVoipUiActivityTimestampSec();
 
     @WamProperty(index = 2144, type = WamType.ENUM)
     Optional<LobbyEntryPointType> lobbyEntryPoint();
@@ -3098,7 +3256,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> localIpPrefix();
 
     @WamProperty(index = 1120, type = WamType.INTEGER)
-    OptionalInt logSampleRatio();
+    OptionalLong logSampleRatio();
 
     @WamProperty(index = 1331, type = WamType.TIMER)
     Optional<Instant> lonelyT();
@@ -3107,22 +3265,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> longConnect();
 
     @WamProperty(index = 535, type = WamType.INTEGER)
-    OptionalInt lossOfAltSocket();
+    OptionalLong lossOfAltSocket();
 
     @WamProperty(index = 1933, type = WamType.INTEGER)
-    OptionalInt loudnessOutputNoiseFrames2650();
+    OptionalLong loudnessOutputNoiseFrames2650();
 
     @WamProperty(index = 1934, type = WamType.INTEGER)
-    OptionalInt loudnessOutputNoiseFrames5175();
+    OptionalLong loudnessOutputNoiseFrames5175();
 
     @WamProperty(index = 1935, type = WamType.INTEGER)
-    OptionalInt loudnessOutputNoiseFrames76100();
+    OptionalLong loudnessOutputNoiseFrames76100();
 
     @WamProperty(index = 1936, type = WamType.INTEGER)
-    OptionalInt loudnessOutputNoiseFramesGt100();
+    OptionalLong loudnessOutputNoiseFramesGt100();
 
     @WamProperty(index = 1937, type = WamType.INTEGER)
-    OptionalInt loudnessOutputNoiseFramesLeq25();
+    OptionalLong loudnessOutputNoiseFramesLeq25();
 
     @WamProperty(index = 157, type = WamType.FLOAT)
     OptionalDouble lowDataUsageBitrate();
@@ -3134,13 +3292,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> lowToHighPeerBweT();
 
     @WamProperty(index = 1771, type = WamType.INTEGER)
-    OptionalInt ltrAcksAcked();
+    OptionalLong ltrAcksAcked();
 
     @WamProperty(index = 1772, type = WamType.INTEGER)
-    OptionalInt ltrAcksReceived();
+    OptionalLong ltrAcksReceived();
 
     @WamProperty(index = 1773, type = WamType.INTEGER)
-    OptionalInt ltrFrameCount();
+    OptionalLong ltrFrameCount();
 
     @WamProperty(index = 2720, type = WamType.TIMER)
     Optional<Instant> mainTabHiddenMsT();
@@ -3155,25 +3313,28 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> manuallyDisabledPeerCameraPauseT();
 
     @WamProperty(index = 1530, type = WamType.INTEGER)
-    OptionalInt mathPlcRemoveHighPktLossCongCount();
+    OptionalLong mathPlcRemoveHighPktLossCongCount();
 
     @WamProperty(index = 1085, type = WamType.INTEGER)
-    OptionalInt maxConnectedParticipants();
+    OptionalLong maxConnectedParticipants();
 
     @WamProperty(index = 2742, type = WamType.FLOAT)
     OptionalDouble maxEchoConfidenceAfter30sec();
 
     @WamProperty(index = 1725, type = WamType.INTEGER)
-    OptionalInt maxEchoLikelihood();
+    OptionalLong maxEchoLikelihood();
 
     @WamProperty(index = 2743, type = WamType.FLOAT)
     OptionalDouble maxEchoLikelihoodAfter30sec();
 
     @WamProperty(index = 558, type = WamType.INTEGER)
-    OptionalInt maxEventQueueDepth();
+    OptionalLong maxEventQueueDepth();
 
     @WamProperty(index = 2631, type = WamType.INTEGER)
-    OptionalInt maxFieldStatStructEntries();
+    OptionalLong maxFieldStatStructEntries();
+
+    @WamProperty(index = 3044, type = WamType.INTEGER)
+    OptionalLong maxNumConnectedExtensions();
 
     @WamProperty(index = 1745, type = WamType.TIMER)
     Optional<Instant> maxPktProcessLatencyMs();
@@ -3197,19 +3358,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> maxTargetBitrateVidReaches500kbpsDuration();
 
     @WamProperty(index = 1746, type = WamType.INTEGER)
-    OptionalInt maxUnboundRelayCount();
+    OptionalLong maxUnboundRelayCount();
 
     @WamProperty(index = 2192, type = WamType.INTEGER)
-    OptionalInt mcpDisabledCountClampingPp();
+    OptionalLong mcpDisabledCountClampingPp();
 
     @WamProperty(index = 2193, type = WamType.INTEGER)
-    OptionalInt mcpDisabledCountClampingRbe();
+    OptionalLong mcpDisabledCountClampingRbe();
 
     @WamProperty(index = 2194, type = WamType.INTEGER)
-    OptionalInt mcpDisabledCountCongestion();
+    OptionalLong mcpDisabledCountCongestion();
 
     @WamProperty(index = 2195, type = WamType.INTEGER)
-    OptionalInt mcpDisabledCountReachMcpStop();
+    OptionalLong mcpDisabledCountReachMcpStop();
 
     @WamProperty(index = 1747, type = WamType.TIMER)
     Optional<Instant> meanPktProcessLatencyMs();
@@ -3224,16 +3385,16 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble memUtilizationPeak();
 
     @WamProperty(index = 2744, type = WamType.INTEGER)
-    OptionalInt memoryAvailableMb();
+    OptionalLong memoryAvailableMb();
 
     @WamProperty(index = 253, type = WamType.INTEGER)
-    OptionalInt micAvgPower();
+    OptionalLong micAvgPower();
 
     @WamProperty(index = 252, type = WamType.INTEGER)
-    OptionalInt micMaxPower();
+    OptionalLong micMaxPower();
 
     @WamProperty(index = 251, type = WamType.INTEGER)
-    OptionalInt micMinPower();
+    OptionalLong micMinPower();
 
     @WamProperty(index = 859, type = WamType.BOOLEAN)
     Optional<Boolean> micPermission();
@@ -3260,13 +3421,13 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble mlCongModelAvgPredLen();
 
     @WamProperty(index = 2346, type = WamType.INTEGER)
-    OptionalInt mlCongModelAvgProbInt();
+    OptionalLong mlCongModelAvgProbInt();
 
     @WamProperty(index = 2130, type = WamType.INTEGER)
-    OptionalInt mlCongModelDownloadFailureCount();
+    OptionalLong mlCongModelDownloadFailureCount();
 
     @WamProperty(index = 2131, type = WamType.INTEGER)
-    OptionalInt mlCongModelInferenceFailureCount();
+    OptionalLong mlCongModelInferenceFailureCount();
 
     @WamProperty(index = 2132, type = WamType.TIMER)
     Optional<Instant> mlCongModelMaxInferenceTime();
@@ -3275,70 +3436,70 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlCongModelMinInferenceTime();
 
     @WamProperty(index = 2134, type = WamType.INTEGER)
-    OptionalInt mlCongModelNumCongPredictions();
+    OptionalLong mlCongModelNumCongPredictions();
 
     @WamProperty(index = 2135, type = WamType.INTEGER)
-    OptionalInt mlCongModelNumNonCongPredictions();
+    OptionalLong mlCongModelNumNonCongPredictions();
 
     @WamProperty(index = 2136, type = WamType.INTEGER)
-    OptionalInt mlCongModelStartBitrate();
+    OptionalLong mlCongModelStartBitrate();
 
     @WamProperty(index = 2137, type = WamType.TIMER)
     Optional<Instant> mlCongShimAvgCreationTime();
 
     @WamProperty(index = 2138, type = WamType.INTEGER)
-    OptionalInt mlCongShimCreationFailureCount();
+    OptionalLong mlCongShimCreationFailureCount();
 
     @WamProperty(index = 2196, type = WamType.INTEGER)
-    OptionalInt mlDisabledCountCloseToCap();
+    OptionalLong mlDisabledCountCloseToCap();
 
     @WamProperty(index = 2197, type = WamType.INTEGER)
-    OptionalInt mlDisabledCountLowBitrate();
+    OptionalLong mlDisabledCountLowBitrate();
 
     @WamProperty(index = 2198, type = WamType.INTEGER)
-    OptionalInt mlDisabledCountMediaUndershoot();
+    OptionalLong mlDisabledCountMediaUndershoot();
 
     @WamProperty(index = 2199, type = WamType.INTEGER)
-    OptionalInt mlDisabledCountRecentRampUp();
+    OptionalLong mlDisabledCountRecentRampUp();
 
     @WamProperty(index = 2200, type = WamType.INTEGER)
-    OptionalInt mlDisabledCountRecentRd();
+    OptionalLong mlDisabledCountRecentRd();
 
     @WamProperty(index = 2544, type = WamType.INTEGER)
-    OptionalInt mlHdTargeting2ModelDownloadFailureCount();
+    OptionalLong mlHdTargeting2ModelDownloadFailureCount();
 
     @WamProperty(index = 2545, type = WamType.INTEGER)
-    OptionalInt mlHdTargeting2ModelHdCapableCount();
+    OptionalLong mlHdTargeting2ModelHdCapableCount();
 
     @WamProperty(index = 2546, type = WamType.INTEGER)
-    OptionalInt mlHdTargeting2ModelInferenceFailureCount();
+    OptionalLong mlHdTargeting2ModelInferenceFailureCount();
 
     @WamProperty(index = 2547, type = WamType.TIMER)
     Optional<Instant> mlHdTargeting2ModelInferenceTime();
 
     @WamProperty(index = 2549, type = WamType.INTEGER)
-    OptionalInt mlHdTargeting2ModelProbInt();
+    OptionalLong mlHdTargeting2ModelProbInt();
 
     @WamProperty(index = 2550, type = WamType.TIMER)
     Optional<Instant> mlHdTargeting2ShimAvgCreationTime();
 
     @WamProperty(index = 2551, type = WamType.INTEGER)
-    OptionalInt mlHdTargeting2ShimCreationFailureCount();
+    OptionalLong mlHdTargeting2ShimCreationFailureCount();
 
     @WamProperty(index = 2284, type = WamType.INTEGER)
-    OptionalInt mlHdTargetingModelDownloadFailureCount();
+    OptionalLong mlHdTargetingModelDownloadFailureCount();
 
     @WamProperty(index = 2320, type = WamType.INTEGER)
-    OptionalInt mlHdTargetingModelHdCapableCount();
+    OptionalLong mlHdTargetingModelHdCapableCount();
 
     @WamProperty(index = 2285, type = WamType.INTEGER)
-    OptionalInt mlHdTargetingModelInferenceFailureCount();
+    OptionalLong mlHdTargetingModelInferenceFailureCount();
 
     @WamProperty(index = 2286, type = WamType.TIMER)
     Optional<Instant> mlHdTargetingModelInferenceTime();
 
     @WamProperty(index = 2340, type = WamType.INTEGER)
-    OptionalInt mlHdTargetingModelProbInt();
+    OptionalLong mlHdTargetingModelProbInt();
 
     @WamProperty(index = 2627, type = WamType.BOOLEAN)
     Optional<Boolean> mlHdTargetingServerMlEnabled();
@@ -3347,7 +3508,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlHdTargetingShimAvgCreationTime();
 
     @WamProperty(index = 2289, type = WamType.INTEGER)
-    OptionalInt mlHdTargetingShimCreationFailureCount();
+    OptionalLong mlHdTargetingShimCreationFailureCount();
 
     @WamProperty(index = 2455, type = WamType.TIMER)
     Optional<Instant> mlHdTargetingSmlDelayMs();
@@ -3356,19 +3517,19 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> mlHdTargetingSmlReceived();
 
     @WamProperty(index = 2457, type = WamType.INTEGER)
-    OptionalInt mlHdTargetingSmlValue();
+    OptionalLong mlHdTargetingSmlValue();
 
     @WamProperty(index = 2616, type = WamType.FLOAT)
     OptionalDouble mlNadlAudioDupEnabledRatio();
 
     @WamProperty(index = 2617, type = WamType.INTEGER)
-    OptionalInt mlNadlDifferentResultCount();
+    OptionalLong mlNadlDifferentResultCount();
 
     @WamProperty(index = 2618, type = WamType.INTEGER)
-    OptionalInt mlNadlModelDownloadFailureCount();
+    OptionalLong mlNadlModelDownloadFailureCount();
 
     @WamProperty(index = 2619, type = WamType.INTEGER)
-    OptionalInt mlNadlModelInferenceFailureCount();
+    OptionalLong mlNadlModelInferenceFailureCount();
 
     @WamProperty(index = 2620, type = WamType.TIMER)
     Optional<Instant> mlNadlModelInferenceTime();
@@ -3377,13 +3538,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlNadlShimAvgCreationTime();
 
     @WamProperty(index = 2622, type = WamType.INTEGER)
-    OptionalInt mlNadlShimCreationFailureCount();
+    OptionalLong mlNadlShimCreationFailureCount();
 
     @WamProperty(index = 2582, type = WamType.BOOLEAN)
     Optional<Boolean> mlNsAspInitFailed();
 
     @WamProperty(index = 2712, type = WamType.INTEGER)
-    OptionalInt mlNsAspInitFailureReason();
+    OptionalLong mlNsAspInitFailureReason();
 
     @WamProperty(index = 2583, type = WamType.BOOLEAN)
     Optional<Boolean> mlNsGetModelPathFailed();
@@ -3398,37 +3559,37 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> mlNsStoppedInitFailure();
 
     @WamProperty(index = 2864, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweActionFallbackCount();
+    OptionalLong mlOfflineRlBweActionFallbackCount();
 
     @WamProperty(index = 2865, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweActionPassCount();
+    OptionalLong mlOfflineRlBweActionPassCount();
 
     @WamProperty(index = 2866, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweCheckNotReadyCount();
+    OptionalLong mlOfflineRlBweCheckNotReadyCount();
 
     @WamProperty(index = 2867, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweCheckRangeCount();
+    OptionalLong mlOfflineRlBweCheckRangeCount();
 
     @WamProperty(index = 2868, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweCheckRocCount();
+    OptionalLong mlOfflineRlBweCheckRocCount();
 
     @WamProperty(index = 2869, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweCheckTfrcDivCount();
+    OptionalLong mlOfflineRlBweCheckTfrcDivCount();
 
     @WamProperty(index = 2870, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweCheckVarianceCount();
+    OptionalLong mlOfflineRlBweCheckVarianceCount();
 
     @WamProperty(index = 2567, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweModelAvgSbwe();
+    OptionalLong mlOfflineRlBweModelAvgSbwe();
 
     @WamProperty(index = 2568, type = WamType.FLOAT)
     OptionalDouble mlOfflineRlBweModelAvgStd();
 
     @WamProperty(index = 2569, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweModelDownloadFailureCount();
+    OptionalLong mlOfflineRlBweModelDownloadFailureCount();
 
     @WamProperty(index = 2570, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweModelInferenceFailureCount();
+    OptionalLong mlOfflineRlBweModelInferenceFailureCount();
 
     @WamProperty(index = 2571, type = WamType.TIMER)
     Optional<Instant> mlOfflineRlBweModelInferenceTime();
@@ -3437,10 +3598,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlOfflineRlBweShimAvgCreationTime();
 
     @WamProperty(index = 2573, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweShimCreationFailureCount();
+    OptionalLong mlOfflineRlBweShimCreationFailureCount();
 
     @WamProperty(index = 2871, type = WamType.INTEGER)
-    OptionalInt mlOfflineRlBweTotalChecks();
+    OptionalLong mlOfflineRlBweTotalChecks();
 
     @WamProperty(index = 2872, type = WamType.FLOAT)
     OptionalDouble mlOfflineRlBweUsagePct();
@@ -3455,16 +3616,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlPlcModelAvgExtractionTime();
 
     @WamProperty(index = 1534, type = WamType.INTEGER)
-    OptionalInt mlPlcModelAvgInferenceInterval();
+    OptionalLong mlPlcModelAvgInferenceInterval();
 
     @WamProperty(index = 1535, type = WamType.TIMER)
     Optional<Instant> mlPlcModelAvgInferenceTime();
 
     @WamProperty(index = 1536, type = WamType.INTEGER)
-    OptionalInt mlPlcModelDownloadFailureCount();
+    OptionalLong mlPlcModelDownloadFailureCount();
 
     @WamProperty(index = 1537, type = WamType.INTEGER)
-    OptionalInt mlPlcModelInferenceFailureCount();
+    OptionalLong mlPlcModelInferenceFailureCount();
 
     @WamProperty(index = 1538, type = WamType.TIMER)
     Optional<Instant> mlPlcModelMaxInferenceTime();
@@ -3473,16 +3634,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlPlcModelMinInferenceTime();
 
     @WamProperty(index = 1540, type = WamType.INTEGER)
-    OptionalInt mlPlcModelShortInferenceIntervalCount();
+    OptionalLong mlPlcModelShortInferenceIntervalCount();
 
     @WamProperty(index = 1541, type = WamType.INTEGER)
-    OptionalInt mlPlcRemoveHighPktLossCongCount();
+    OptionalLong mlPlcRemoveHighPktLossCongCount();
 
     @WamProperty(index = 1542, type = WamType.TIMER)
     Optional<Instant> mlShimAvgCreationTime();
 
     @WamProperty(index = 1543, type = WamType.INTEGER)
-    OptionalInt mlShimCreationFailureCount();
+    OptionalLong mlShimCreationFailureCount();
 
     @WamProperty(index = 2038, type = WamType.TIMER)
     Optional<Instant> mlTrModelAvgInferenceTime();
@@ -3491,16 +3652,16 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble mlTrModelAvgPredLen();
 
     @WamProperty(index = 2347, type = WamType.INTEGER)
-    OptionalInt mlTrModelAvgProbInt();
+    OptionalLong mlTrModelAvgProbInt();
 
     @WamProperty(index = 2024, type = WamType.INTEGER)
-    OptionalInt mlTrModelBweAction();
+    OptionalLong mlTrModelBweAction();
 
     @WamProperty(index = 2039, type = WamType.INTEGER)
-    OptionalInt mlTrModelDownloadFailureCount();
+    OptionalLong mlTrModelDownloadFailureCount();
 
     @WamProperty(index = 2040, type = WamType.INTEGER)
-    OptionalInt mlTrModelInferenceFailureCount();
+    OptionalLong mlTrModelInferenceFailureCount();
 
     @WamProperty(index = 2041, type = WamType.TIMER)
     Optional<Instant> mlTrModelMaxInferenceTime();
@@ -3509,22 +3670,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlTrModelMinInferenceTime();
 
     @WamProperty(index = 2025, type = WamType.INTEGER)
-    OptionalInt mlTrModelNumNonTrPredictions();
+    OptionalLong mlTrModelNumNonTrPredictions();
 
     @WamProperty(index = 2026, type = WamType.INTEGER)
-    OptionalInt mlTrModelNumSkippedTrPredictions();
+    OptionalLong mlTrModelNumSkippedTrPredictions();
 
     @WamProperty(index = 2027, type = WamType.INTEGER)
-    OptionalInt mlTrModelNumTrPredictions();
+    OptionalLong mlTrModelNumTrPredictions();
 
     @WamProperty(index = 2028, type = WamType.INTEGER)
-    OptionalInt mlTrModelStartBitrate();
+    OptionalLong mlTrModelStartBitrate();
 
     @WamProperty(index = 2043, type = WamType.TIMER)
     Optional<Instant> mlTrShimAvgCreationTime();
 
     @WamProperty(index = 2044, type = WamType.INTEGER)
-    OptionalInt mlTrShimCreationFailureCount();
+    OptionalLong mlTrShimCreationFailureCount();
 
     @WamProperty(index = 1633, type = WamType.BOOLEAN)
     Optional<Boolean> mlUndershootModelAvailableInCall();
@@ -3536,16 +3697,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlUndershootModelAvgExtractionTime();
 
     @WamProperty(index = 1636, type = WamType.INTEGER)
-    OptionalInt mlUndershootModelAvgInferenceInterval();
+    OptionalLong mlUndershootModelAvgInferenceInterval();
 
     @WamProperty(index = 1637, type = WamType.TIMER)
     Optional<Instant> mlUndershootModelAvgInferenceTime();
 
     @WamProperty(index = 1638, type = WamType.INTEGER)
-    OptionalInt mlUndershootModelDownloadFailureCount();
+    OptionalLong mlUndershootModelDownloadFailureCount();
 
     @WamProperty(index = 1639, type = WamType.INTEGER)
-    OptionalInt mlUndershootModelInferenceFailureCount();
+    OptionalLong mlUndershootModelInferenceFailureCount();
 
     @WamProperty(index = 1640, type = WamType.TIMER)
     Optional<Instant> mlUndershootModelMaxInferenceTime();
@@ -3554,7 +3715,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlUndershootModelMinInferenceTime();
 
     @WamProperty(index = 1642, type = WamType.INTEGER)
-    OptionalInt mlUndershootModelShortInferenceIntervalCount();
+    OptionalLong mlUndershootModelShortInferenceIntervalCount();
 
     @WamProperty(index = 1654, type = WamType.ENUM)
     Optional<MlUndershootPytorchEdgeLibLoadErrorCode> mlUndershootPytorchEdgeLibLoadErrorCode();
@@ -3566,40 +3727,55 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> mlUndershootShimAvgCreationTime();
 
     @WamProperty(index = 1644, type = WamType.INTEGER)
-    OptionalInt mlUndershootShimCreationFailureCount();
+    OptionalLong mlUndershootShimCreationFailureCount();
 
     @WamProperty(index = 1645, type = WamType.INTEGER)
-    OptionalInt mlUndershootTriggerMcpCount();
+    OptionalLong mlUndershootTriggerMcpCount();
+
+    @WamProperty(index = 3048, type = WamType.INTEGER)
+    OptionalLong mlowDnnComplexityTriggerCount();
+
+    @WamProperty(index = 3049, type = WamType.BOOLEAN)
+    Optional<Boolean> mlowDnnLoaded();
+
+    @WamProperty(index = 3050, type = WamType.BOOLEAN)
+    Optional<Boolean> mlowDnnPermanentlyDisabled();
+
+    @WamProperty(index = 3051, type = WamType.INTEGER)
+    OptionalLong mlowDnnWarmupCount();
+
+    @WamProperty(index = 3052, type = WamType.BOOLEAN)
+    Optional<Boolean> mlowDnnWeightsUsed();
 
     @WamProperty(index = 838, type = WamType.BOOLEAN)
     Optional<Boolean> multipleTxRxRelaysInUse();
 
     @WamProperty(index = 1169, type = WamType.INTEGER)
-    OptionalInt muteNotSupportedCount();
+    OptionalLong muteNotSupportedCount();
 
     @WamProperty(index = 1170, type = WamType.INTEGER)
-    OptionalInt muteReqAlreadyMutedCount();
+    OptionalLong muteReqAlreadyMutedCount();
 
     @WamProperty(index = 1171, type = WamType.INTEGER)
-    OptionalInt muteReqTimeoutsCount();
+    OptionalLong muteReqTimeoutsCount();
 
     @WamProperty(index = 2713, type = WamType.INTEGER)
-    OptionalInt nativeDriverFramesPerBuffer();
+    OptionalLong nativeDriverFramesPerBuffer();
 
     @WamProperty(index = 31, type = WamType.STRING)
     Optional<String> nativeSamplingRate();
 
     @WamProperty(index = 1498, type = WamType.INTEGER)
-    OptionalInt netHealthAverageCount();
+    OptionalLong netHealthAverageCount();
 
     @WamProperty(index = 1499, type = WamType.INTEGER)
-    OptionalInt netHealthGoodCount();
+    OptionalLong netHealthGoodCount();
 
     @WamProperty(index = 1500, type = WamType.INTEGER)
-    OptionalInt netHealthMeasuringCount();
+    OptionalLong netHealthMeasuringCount();
 
     @WamProperty(index = 1501, type = WamType.INTEGER)
-    OptionalInt netHealthNonetworkCount();
+    OptionalLong netHealthNonetworkCount();
 
     @WamProperty(index = 1502, type = WamType.FLOAT)
     OptionalDouble netHealthPercentInAverage();
@@ -3617,61 +3793,61 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble netHealthPercentInPoor();
 
     @WamProperty(index = 1507, type = WamType.INTEGER)
-    OptionalInt netHealthPoorCount();
+    OptionalLong netHealthPoorCount();
 
     @WamProperty(index = 1508, type = WamType.INTEGER)
-    OptionalInt netHealthSlowPoorByReconnect();
+    OptionalLong netHealthSlowPoorByReconnect();
 
     @WamProperty(index = 1509, type = WamType.INTEGER)
-    OptionalInt netHealthSlowPoorByRxStop();
+    OptionalLong netHealthSlowPoorByRxStop();
 
     @WamProperty(index = 653, type = WamType.INTEGER)
-    OptionalInt neteqAcceleratedFrames();
+    OptionalLong neteqAcceleratedFrames();
 
     @WamProperty(index = 1721, type = WamType.INTEGER)
-    OptionalInt neteqBufferFlushCount();
+    OptionalLong neteqBufferFlushCount();
 
     @WamProperty(index = 652, type = WamType.INTEGER)
-    OptionalInt neteqExpandedFrames();
+    OptionalLong neteqExpandedFrames();
 
     @WamProperty(index = 1722, type = WamType.INTEGER)
-    OptionalInt neteqPreemptiveExpandedFrames();
+    OptionalLong neteqPreemptiveExpandedFrames();
 
     @WamProperty(index = 1723, type = WamType.FLOAT)
     OptionalDouble neteqTargetDelayMs();
 
     @WamProperty(index = 2282, type = WamType.INTEGER)
-    OptionalInt networkEventCriticalEventsRetainedCount();
+    OptionalLong networkEventCriticalEventsRetainedCount();
 
     @WamProperty(index = 1135, type = WamType.INTEGER)
-    OptionalInt networkFailoverTriggeredCount();
+    OptionalLong networkFailoverTriggeredCount();
 
     @WamProperty(index = 1911, type = WamType.INTEGER)
-    OptionalInt networkMediumTransitionBitmap();
+    OptionalLong networkMediumTransitionBitmap();
 
     @WamProperty(index = 2159, type = WamType.STRING)
     Optional<String> networkReachabilityResult();
 
     @WamProperty(index = 1361, type = WamType.INTEGER)
-    OptionalInt newEndCallSurveyVersion();
+    OptionalLong newEndCallSurveyVersion();
 
     @WamProperty(index = 2412, type = WamType.STRING)
     Optional<String> niCallId();
 
     @WamProperty(index = 2125, type = WamType.INTEGER)
-    OptionalInt noAudioDuration();
+    OptionalLong noAudioDuration();
 
     @WamProperty(index = 2693, type = WamType.BOOLEAN)
     Optional<Boolean> noiseSuppressionUiStatus();
 
     @WamProperty(index = 1796, type = WamType.INTEGER)
-    OptionalInt nonUdstNumPredictions();
+    OptionalLong nonUdstNumPredictions();
 
     @WamProperty(index = 1912, type = WamType.TIMER)
     Optional<Instant> noneNetTransitionDurationMs();
 
     @WamProperty(index = 1846, type = WamType.INTEGER)
-    OptionalInt nsAlgorithmUsed();
+    OptionalLong nsAlgorithmUsed();
 
     @WamProperty(index = 1128, type = WamType.BOOLEAN)
     Optional<Boolean> nseEnabled();
@@ -3680,145 +3856,148 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> nseOfflineQueueMs();
 
     @WamProperty(index = 2564, type = WamType.INTEGER)
-    OptionalInt num10msFrames();
+    OptionalLong num10msFrames();
 
     @WamProperty(index = 2565, type = WamType.INTEGER)
-    OptionalInt num10msMlProcessedFrames();
+    OptionalLong num10msMlProcessedFrames();
 
     @WamProperty(index = 2666, type = WamType.INTEGER)
-    OptionalInt numAnrs();
+    OptionalLong numAnrs();
 
     @WamProperty(index = 933, type = WamType.INTEGER)
-    OptionalInt numAsserts();
+    OptionalLong numAsserts();
 
     @WamProperty(index = 1800, type = WamType.INTEGER)
-    OptionalInt numAudRcDynCondTrue();
+    OptionalLong numAudRcDynCondTrue();
+
+    @WamProperty(index = 3045, type = WamType.INTEGER)
+    OptionalLong numConnectedExtensions();
 
     @WamProperty(index = 330, type = WamType.INTEGER)
-    OptionalInt numConnectedParticipants();
+    OptionalLong numConnectedParticipants();
 
     @WamProperty(index = 1052, type = WamType.INTEGER)
-    OptionalInt numConnectedPeers();
+    OptionalLong numConnectedPeers();
 
     @WamProperty(index = 2010, type = WamType.INTEGER)
-    OptionalInt numCpuCores();
+    OptionalLong numCpuCores();
 
     @WamProperty(index = 567, type = WamType.INTEGER)
-    OptionalInt numCriticalGroupUpdateDropped();
+    OptionalLong numCriticalGroupUpdateDropped();
 
     @WamProperty(index = 1442, type = WamType.INTEGER)
-    OptionalInt numCropCaptureContentSs();
+    OptionalLong numCropCaptureContentSs();
 
     @WamProperty(index = 1729, type = WamType.INTEGER)
-    OptionalInt numDecResolutionSwitches();
+    OptionalLong numDecResolutionSwitches();
 
     @WamProperty(index = 985, type = WamType.INTEGER)
-    OptionalInt numDirPjAsserts();
+    OptionalLong numDirPjAsserts();
 
     @WamProperty(index = 2555, type = WamType.INTEGER)
-    OptionalInt numFppChanges();
+    OptionalLong numFppChanges();
 
     @WamProperty(index = 1695, type = WamType.INTEGER)
-    OptionalInt numHbhFecPktReceived();
+    OptionalLong numHbhFecPktReceived();
 
     @WamProperty(index = 1696, type = WamType.INTEGER)
-    OptionalInt numHbhFecPktSent();
+    OptionalLong numHbhFecPktSent();
 
     @WamProperty(index = 1958, type = WamType.INTEGER)
-    OptionalInt numHbhFecSrtpPktReceived();
+    OptionalLong numHbhFecSrtpPktReceived();
 
     @WamProperty(index = 1959, type = WamType.INTEGER)
-    OptionalInt numHbhFecSrtpPktSent();
+    OptionalLong numHbhFecSrtpPktSent();
 
     @WamProperty(index = 1054, type = WamType.INTEGER)
-    OptionalInt numInvitedParticipants();
+    OptionalLong numInvitedParticipants();
 
     @WamProperty(index = 929, type = WamType.INTEGER)
-    OptionalInt numL1Errors();
+    OptionalLong numL1Errors();
 
     @WamProperty(index = 1697, type = WamType.INTEGER)
-    OptionalInt numMediaPktRecoveredByHbhFec();
+    OptionalLong numMediaPktRecoveredByHbhFec();
 
     @WamProperty(index = 1960, type = WamType.INTEGER)
-    OptionalInt numMediaPktRecoveredByHbhFecSrtp();
+    OptionalLong numMediaPktRecoveredByHbhFecSrtp();
 
     @WamProperty(index = 2381, type = WamType.INTEGER)
-    OptionalInt numMediaPktRecoveredByRsHbhFec();
+    OptionalLong numMediaPktRecoveredByRsHbhFec();
 
     @WamProperty(index = 2694, type = WamType.INTEGER)
-    OptionalInt numNoiseSuppressionUiStatusTransitions();
+    OptionalLong numNoiseSuppressionUiStatusTransitions();
 
     @WamProperty(index = 625, type = WamType.INTEGER)
-    OptionalInt numOutOfOrderCriticalGroupUpdate();
+    OptionalLong numOutOfOrderCriticalGroupUpdate();
 
     @WamProperty(index = 1053, type = WamType.INTEGER)
-    OptionalInt numOutgoingRingingPeers();
+    OptionalLong numOutgoingRingingPeers();
 
     @WamProperty(index = 1583, type = WamType.INTEGER)
-    OptionalInt numProcessedNoiseFrames();
+    OptionalLong numProcessedNoiseFrames();
 
     @WamProperty(index = 1584, type = WamType.INTEGER)
-    OptionalInt numProcessedSpeechFrames();
+    OptionalLong numProcessedSpeechFrames();
 
     @WamProperty(index = 2008, type = WamType.INTEGER)
-    OptionalInt numRelayLatenciesAcked();
+    OptionalLong numRelayLatenciesAcked();
 
     @WamProperty(index = 2009, type = WamType.INTEGER)
-    OptionalInt numRelayLatenciesSent();
+    OptionalLong numRelayLatenciesSent();
 
     @WamProperty(index = 1029, type = WamType.INTEGER)
-    OptionalInt numRenderSkipGreenFrame();
+    OptionalLong numRenderSkipGreenFrame();
 
     @WamProperty(index = 2366, type = WamType.INTEGER)
-    OptionalInt numResRampdowns();
+    OptionalLong numResRampdowns();
 
     @WamProperty(index = 993, type = WamType.INTEGER)
-    OptionalInt numResSwitch();
+    OptionalLong numResSwitch();
 
     @WamProperty(index = 2245, type = WamType.INTEGER)
-    OptionalInt numRsHbhFecSrtpPktReceived();
+    OptionalLong numRsHbhFecSrtpPktReceived();
 
     @WamProperty(index = 2246, type = WamType.INTEGER)
-    OptionalInt numRsHbhFecSrtpPktSent();
+    OptionalLong numRsHbhFecSrtpPktSent();
 
     @WamProperty(index = 1647, type = WamType.FLOAT)
     OptionalDouble numRxSubscribers();
 
     @WamProperty(index = 574, type = WamType.INTEGER)
-    OptionalInt numVidDlAutoPause();
+    OptionalLong numVidDlAutoPause();
 
     @WamProperty(index = 576, type = WamType.INTEGER)
-    OptionalInt numVidDlAutoResume();
+    OptionalLong numVidDlAutoResume();
 
     @WamProperty(index = 579, type = WamType.INTEGER)
-    OptionalInt numVidDlAutoResumeRejectBadAudio();
+    OptionalLong numVidDlAutoResumeRejectBadAudio();
 
     @WamProperty(index = 717, type = WamType.INTEGER)
-    OptionalInt numVidRcDynCondTrue();
+    OptionalLong numVidRcDynCondTrue();
 
     @WamProperty(index = 559, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoPause();
+    OptionalLong numVidUlAutoPause();
 
     @WamProperty(index = 560, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoPauseFail();
+    OptionalLong numVidUlAutoPauseFail();
 
     @WamProperty(index = 564, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoPauseRejectHighSendingRate();
+    OptionalLong numVidUlAutoPauseRejectHighSendingRate();
 
     @WamProperty(index = 565, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoPauseRejectTooEarly();
+    OptionalLong numVidUlAutoPauseRejectTooEarly();
 
     @WamProperty(index = 566, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoPauseUserAction();
+    OptionalLong numVidUlAutoPauseUserAction();
 
     @WamProperty(index = 561, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoResume();
+    OptionalLong numVidUlAutoResume();
 
     @WamProperty(index = 562, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoResumeFail();
+    OptionalLong numVidUlAutoResumeFail();
 
     @WamProperty(index = 563, type = WamType.INTEGER)
-    OptionalInt numVidUlAutoResumeRejectAudioLqm();
+    OptionalLong numVidUlAutoResumeRejectAudioLqm();
 
     @WamProperty(index = 1648, type = WamType.FLOAT)
     OptionalDouble numVideoStreamsDisabled();
@@ -3851,31 +4030,31 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> onWifiAtStart();
 
     @WamProperty(index = 2229, type = WamType.INTEGER)
-    OptionalInt onePopToXpopFallbackCount();
+    OptionalLong onePopToXpopFallbackCount();
 
     @WamProperty(index = 507, type = WamType.INTEGER)
-    OptionalInt oneSideInitRxBitrate();
+    OptionalLong oneSideInitRxBitrate();
 
     @WamProperty(index = 506, type = WamType.INTEGER)
-    OptionalInt oneSideInitTxBitrate();
+    OptionalLong oneSideInitTxBitrate();
 
     @WamProperty(index = 509, type = WamType.INTEGER)
-    OptionalInt oneSideMinPeerInitRxBitrate();
+    OptionalLong oneSideMinPeerInitRxBitrate();
 
     @WamProperty(index = 1489, type = WamType.INTEGER)
-    OptionalInt oneSideNumRelaysGroupOffer();
+    OptionalLong oneSideNumRelaysGroupOffer();
 
     @WamProperty(index = 508, type = WamType.BOOLEAN)
     Optional<Boolean> oneSideRcvdPeerRxBitrate();
 
     @WamProperty(index = 1490, type = WamType.INTEGER)
-    OptionalInt oneSideRelayTransactionIdFirstAllocResp();
+    OptionalLong oneSideRelayTransactionIdFirstAllocResp();
 
     @WamProperty(index = 2103, type = WamType.INTEGER)
-    OptionalInt oneToOneTerminateCount();
+    OptionalLong oneToOneTerminateCount();
 
     @WamProperty(index = 287, type = WamType.INTEGER)
-    OptionalInt opusVersion();
+    OptionalLong opusVersion();
 
     @WamProperty(index = 2305, type = WamType.STRING)
     Optional<String> p2pCandPairStat();
@@ -3893,10 +4072,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> p2pRtpPktCnts();
 
     @WamProperty(index = 522, type = WamType.INTEGER)
-    OptionalInt p2pSuccessCount();
+    OptionalLong p2pSuccessCount();
 
     @WamProperty(index = 1733, type = WamType.INTEGER)
-    OptionalInt packetPairAvgBitrate();
+    OptionalLong packetPairAvgBitrate();
 
     @WamProperty(index = 1734, type = WamType.FLOAT)
     OptionalDouble packetPairReliableRatio();
@@ -3905,7 +4084,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble packetPairUnderestimateRatio();
 
     @WamProperty(index = 1285, type = WamType.INTEGER)
-    OptionalInt pausedRtcpCount();
+    OptionalLong pausedRtcpCount();
 
     @WamProperty(index = 599, type = WamType.FLOAT)
     OptionalDouble pcntPoorAudLqmAfterPause();
@@ -3917,7 +4096,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble pctPeersOnCellular();
 
     @WamProperty(index = 2367, type = WamType.INTEGER)
-    OptionalInt peerBusyHours();
+    OptionalLong peerBusyHours();
 
     @WamProperty(index = 264, type = WamType.ENUM)
     Optional<PeerCallNetworkMedium> peerCallNetwork();
@@ -3932,7 +4111,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> peerDeviceName();
 
     @WamProperty(index = 2325, type = WamType.INTEGER)
-    OptionalInt peerHistoryDownlinkSignal();
+    OptionalLong peerHistoryDownlinkSignal();
 
     @WamProperty(index = 1922, type = WamType.BOOLEAN)
     Optional<Boolean> peerIsMultiDevice();
@@ -3944,10 +4123,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> peerNoiseSuppressionUiStatus();
 
     @WamProperty(index = 2006, type = WamType.INTEGER)
-    OptionalInt peerReconnectingStateCount();
+    OptionalLong peerReconnectingStateCount();
 
     @WamProperty(index = 2899, type = WamType.INTEGER)
-    OptionalInt peerRenderFailureReason();
+    OptionalLong peerRenderFailureReason();
 
     @WamProperty(index = 1340, type = WamType.FLOAT)
     OptionalDouble peerRxForErrorRelayBytes();
@@ -3965,28 +4144,31 @@ public interface CallEvent extends WamEventSpec {
     Optional<CallTransportType> peerTransport();
 
     @WamProperty(index = 191, type = WamType.INTEGER)
-    OptionalInt peerVideoHeight();
+    OptionalLong peerVideoHeight();
 
     @WamProperty(index = 190, type = WamType.INTEGER)
-    OptionalInt peerVideoWidth();
+    OptionalLong peerVideoWidth();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<XmppStatus> peerXmppStatus();
 
     @WamProperty(index = 1957, type = WamType.INTEGER)
-    OptionalInt peerYearClass2016();
+    OptionalLong peerYearClass2016();
 
     @WamProperty(index = 1172, type = WamType.INTEGER)
-    OptionalInt peersMuteSuccCount();
+    OptionalLong peersMuteSuccCount();
 
     @WamProperty(index = 1173, type = WamType.INTEGER)
-    OptionalInt peersRejectedMuteReqCount();
+    OptionalLong peersRejectedMuteReqCount();
 
     @WamProperty(index = 1618, type = WamType.ENUM)
     Optional<CallNetworkMedium> perPeerCallNetwork();
 
     @WamProperty(index = 1649, type = WamType.INTEGER)
-    OptionalInt perPeerVideoDisablingEventCount();
+    OptionalLong perPeerVideoDisablingEventCount();
+
+    @WamProperty(index = 3002, type = WamType.ENUM)
+    Optional<PeripheralDeviceType> peripheralDeviceOrigin();
 
     @WamProperty(index = 2413, type = WamType.STRING)
     Optional<String> phoneStateAtEnd();
@@ -3998,46 +4180,46 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble pingsSent();
 
     @WamProperty(index = 2505, type = WamType.INTEGER)
-    OptionalInt pinningViewDuration();
+    OptionalLong pinningViewDuration();
 
     @WamProperty(index = 2506, type = WamType.INTEGER)
-    OptionalInt pinningViewPeerDuration();
+    OptionalLong pinningViewPeerDuration();
 
     @WamProperty(index = 2722, type = WamType.TIMER)
     Optional<Instant> pipWebWindowMsT();
 
     @WamProperty(index = 1786, type = WamType.INTEGER)
-    OptionalInt plcAvgPredProb();
+    OptionalLong plcAvgPredProb();
 
     @WamProperty(index = 1787, type = WamType.INTEGER)
-    OptionalInt plcAvgRandomPredictionLength();
+    OptionalLong plcAvgRandomPredictionLength();
 
     @WamProperty(index = 1788, type = WamType.INTEGER)
-    OptionalInt plcNumBurstyPredictions();
+    OptionalLong plcNumBurstyPredictions();
 
     @WamProperty(index = 1789, type = WamType.INTEGER)
-    OptionalInt plcNumRandomPredictions();
+    OptionalLong plcNumRandomPredictions();
 
     @WamProperty(index = 1790, type = WamType.INTEGER)
-    OptionalInt plcNumSkippedPredictions();
+    OptionalLong plcNumSkippedPredictions();
 
     @WamProperty(index = 161, type = WamType.FLOAT)
     OptionalDouble pongsReceived();
 
     @WamProperty(index = 510, type = WamType.INTEGER)
-    OptionalInt poolMemUsage();
+    OptionalLong poolMemUsage();
 
     @WamProperty(index = 2723, type = WamType.TIMER)
     Optional<Instant> popoutWebWindowMsT();
 
     @WamProperty(index = 2224, type = WamType.INTEGER)
-    OptionalInt postPipBitrate();
+    OptionalLong postPipBitrate();
 
     @WamProperty(index = 2225, type = WamType.INTEGER)
-    OptionalInt postPipStartBitrate();
+    OptionalLong postPipStartBitrate();
 
     @WamProperty(index = 2226, type = WamType.INTEGER)
-    OptionalInt prePipBitrate();
+    OptionalLong prePipBitrate();
 
     @WamProperty(index = 89, type = WamType.ENUM)
     Optional<EndCallConfirmationType> presentEndCallConfirmation();
@@ -4073,10 +4255,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> previousCallVideoEnabled();
 
     @WamProperty(index = 2016, type = WamType.INTEGER)
-    OptionalInt previousCallWeakWifiSwitchDefIntSuccess();
+    OptionalLong previousCallWeakWifiSwitchDefIntSuccess();
 
     @WamProperty(index = 2017, type = WamType.INTEGER)
-    OptionalInt previousCallWifiSwitchNonDefIntSuccess();
+    OptionalLong previousCallWifiSwitchNonDefIntSuccess();
 
     @WamProperty(index = 267, type = WamType.BOOLEAN)
     Optional<Boolean> previousCallWithSamePeer();
@@ -4091,7 +4273,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble probeAvgBitrate();
 
     @WamProperty(index = 2501, type = WamType.INTEGER)
-    OptionalInt proxyBitmap();
+    OptionalLong proxyBitmap();
 
     @WamProperty(index = 2574, type = WamType.STRING)
     Optional<String> proxyReason();
@@ -4100,10 +4282,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> proxyReasonDynamic();
 
     @WamProperty(index = 2575, type = WamType.INTEGER)
-    OptionalInt proxyState();
+    OptionalLong proxyState();
 
     @WamProperty(index = 2585, type = WamType.INTEGER)
-    OptionalInt proxyStateDynamic();
+    OptionalLong proxyStateDynamic();
 
     @WamProperty(index = 2586, type = WamType.TIMER)
     Optional<Instant> proxyTimeDynamic();
@@ -4148,40 +4330,40 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> quickhdMlIsChecked();
 
     @WamProperty(index = 2699, type = WamType.INTEGER)
-    OptionalInt quickhdMlModelDownloadFailureCount();
+    OptionalLong quickhdMlModelDownloadFailureCount();
 
     @WamProperty(index = 2700, type = WamType.INTEGER)
-    OptionalInt quickhdMlModelInferenceFailureCount();
+    OptionalLong quickhdMlModelInferenceFailureCount();
 
     @WamProperty(index = 2701, type = WamType.TIMER)
     Optional<Instant> quickhdMlModelInferenceTime();
 
     @WamProperty(index = 2702, type = WamType.INTEGER)
-    OptionalInt quickhdMlPredictedBitrate();
+    OptionalLong quickhdMlPredictedBitrate();
 
     @WamProperty(index = 2703, type = WamType.TIMER)
     Optional<Instant> quickhdMlShimAvgCreationTime();
 
     @WamProperty(index = 2704, type = WamType.INTEGER)
-    OptionalInt quickhdMlShimCreationFailureCount();
+    OptionalLong quickhdMlShimCreationFailureCount();
 
     @WamProperty(index = 2201, type = WamType.INTEGER)
-    OptionalInt rampUpCountInAdditive();
+    OptionalLong rampUpCountInAdditive();
 
     @WamProperty(index = 2202, type = WamType.INTEGER)
-    OptionalInt rampUpCountInFr();
+    OptionalLong rampUpCountInFr();
 
     @WamProperty(index = 2203, type = WamType.INTEGER)
-    OptionalInt rampUpCountInMcp();
+    OptionalLong rampUpCountInMcp();
 
     @WamProperty(index = 2204, type = WamType.INTEGER)
-    OptionalInt rampUpCountInNormal();
+    OptionalLong rampUpCountInNormal();
 
     @WamProperty(index = 2205, type = WamType.INTEGER)
-    OptionalInt rampUpCountInSru();
+    OptionalLong rampUpCountInSru();
 
     @WamProperty(index = 2206, type = WamType.INTEGER)
-    OptionalInt rampUpCountInUdstTarget();
+    OptionalLong rampUpCountInUdstTarget();
 
     @WamProperty(index = 2207, type = WamType.TIMER)
     Optional<Instant> rampUpDurationInAdditive();
@@ -4205,136 +4387,136 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> randomPreferIpv6Enabled();
 
     @WamProperty(index = 1581, type = WamType.INTEGER)
-    OptionalInt randomScheduledId();
+    OptionalLong randomScheduledId();
 
     @WamProperty(index = 2928, type = WamType.INTEGER)
-    OptionalInt rbeCap();
+    OptionalLong rbeCap();
 
     @WamProperty(index = 2929, type = WamType.INTEGER)
-    OptionalInt rbeCapUpdateCount();
+    OptionalLong rbeCapUpdateCount();
 
     @WamProperty(index = 2930, type = WamType.INTEGER)
-    OptionalInt rbeCapUpdateMax();
+    OptionalLong rbeCapUpdateMax();
 
     @WamProperty(index = 2931, type = WamType.INTEGER)
-    OptionalInt rbeCapUpdateMin();
+    OptionalLong rbeCapUpdateMin();
 
     @WamProperty(index = 2932, type = WamType.INTEGER)
-    OptionalInt rbeGetIndexFromPlatformAndNetworkCount();
+    OptionalLong rbeGetIndexFromPlatformAndNetworkCount();
 
     @WamProperty(index = 2933, type = WamType.INTEGER)
-    OptionalInt rbeGetIndexFromPlatformAndNetworkSuccess();
+    OptionalLong rbeGetIndexFromPlatformAndNetworkSuccess();
 
     @WamProperty(index = 2934, type = WamType.INTEGER)
-    OptionalInt rbeGetMaxTargetBitrateCount();
+    OptionalLong rbeGetMaxTargetBitrateCount();
 
     @WamProperty(index = 2935, type = WamType.INTEGER)
-    OptionalInt rbeGetMaxTargetBitrateUseRbeCount();
+    OptionalLong rbeGetMaxTargetBitrateUseRbeCount();
 
     @WamProperty(index = 2936, type = WamType.INTEGER)
-    OptionalInt rbeInitCount();
+    OptionalLong rbeInitCount();
 
     @WamProperty(index = 2937, type = WamType.INTEGER)
-    OptionalInt rbeInitDone();
+    OptionalLong rbeInitDone();
 
     @WamProperty(index = 2938, type = WamType.INTEGER)
-    OptionalInt rbeInitSuccess();
+    OptionalLong rbeInitSuccess();
 
     @WamProperty(index = 2939, type = WamType.INTEGER)
-    OptionalInt rbeInitVectorDone();
+    OptionalLong rbeInitVectorDone();
 
     @WamProperty(index = 2940, type = WamType.INTEGER)
-    OptionalInt rbeInitVectorSuccess();
+    OptionalLong rbeInitVectorSuccess();
 
     @WamProperty(index = 2941, type = WamType.INTEGER)
-    OptionalInt rbeInstantRampUpCount();
+    OptionalLong rbeInstantRampUpCount();
 
     @WamProperty(index = 2942, type = WamType.INTEGER)
-    OptionalInt rbeInstantRampUpSuccess();
+    OptionalLong rbeInstantRampUpSuccess();
 
     @WamProperty(index = 2943, type = WamType.INTEGER)
-    OptionalInt rbeInstantRampUpValue();
+    OptionalLong rbeInstantRampUpValue();
 
     @WamProperty(index = 2944, type = WamType.INTEGER)
-    OptionalInt rbePeerNetworkMedium();
+    OptionalLong rbePeerNetworkMedium();
 
     @WamProperty(index = 2945, type = WamType.INTEGER)
-    OptionalInt rbePeerPlatformId();
+    OptionalLong rbePeerPlatformId();
 
     @WamProperty(index = 2946, type = WamType.INTEGER)
-    OptionalInt rbeSelfNetworkMedium();
+    OptionalLong rbeSelfNetworkMedium();
 
     @WamProperty(index = 2947, type = WamType.INTEGER)
-    OptionalInt rbeSelfPlatformId();
+    OptionalLong rbeSelfPlatformId();
 
     @WamProperty(index = 2948, type = WamType.BOOLEAN)
     Optional<Boolean> rbeShouldFallbackToVidDyn();
 
     @WamProperty(index = 2949, type = WamType.INTEGER)
-    OptionalInt rbeShouldFallbackToVidDynFlipCount();
+    OptionalLong rbeShouldFallbackToVidDynFlipCount();
 
     @WamProperty(index = 2950, type = WamType.INTEGER)
-    OptionalInt rbeTargetingHistoryCount();
+    OptionalLong rbeTargetingHistoryCount();
 
     @WamProperty(index = 2951, type = WamType.INTEGER)
-    OptionalInt rbeTargetingHistoryDone();
+    OptionalLong rbeTargetingHistoryDone();
 
     @WamProperty(index = 2952, type = WamType.INTEGER)
-    OptionalInt rbeTargetingHistorySuccess();
+    OptionalLong rbeTargetingHistorySuccess();
 
     @WamProperty(index = 2953, type = WamType.INTEGER)
-    OptionalInt rbeTargetingHistoryValue();
+    OptionalLong rbeTargetingHistoryValue();
 
     @WamProperty(index = 2954, type = WamType.INTEGER)
-    OptionalInt rbeTargetingMlCount();
+    OptionalLong rbeTargetingMlCount();
 
     @WamProperty(index = 2955, type = WamType.INTEGER)
-    OptionalInt rbeTargetingMlSuccess();
+    OptionalLong rbeTargetingMlSuccess();
 
     @WamProperty(index = 2956, type = WamType.INTEGER)
-    OptionalInt rbeTargetingMlValue();
+    OptionalLong rbeTargetingMlValue();
 
     @WamProperty(index = 2957, type = WamType.INTEGER)
-    OptionalInt rbeTargetingPpCount();
+    OptionalLong rbeTargetingPpCount();
 
     @WamProperty(index = 2958, type = WamType.INTEGER)
-    OptionalInt rbeTargetingPpHiCount();
+    OptionalLong rbeTargetingPpHiCount();
 
     @WamProperty(index = 2959, type = WamType.INTEGER)
-    OptionalInt rbeTargetingPpLoCount();
+    OptionalLong rbeTargetingPpLoCount();
 
     @WamProperty(index = 2960, type = WamType.INTEGER)
-    OptionalInt rbeTargetingPpSuccess();
+    OptionalLong rbeTargetingPpSuccess();
 
     @WamProperty(index = 2961, type = WamType.INTEGER)
-    OptionalInt rbeTargetingPpValueLast();
+    OptionalLong rbeTargetingPpValueLast();
 
     @WamProperty(index = 2962, type = WamType.INTEGER)
-    OptionalInt rbeTargetingPpValueMax();
+    OptionalLong rbeTargetingPpValueMax();
 
     @WamProperty(index = 2963, type = WamType.INTEGER)
-    OptionalInt rbeTargetingPpValueMin();
+    OptionalLong rbeTargetingPpValueMin();
 
     @WamProperty(index = 2964, type = WamType.INTEGER)
-    OptionalInt rbeUpdateBitmap();
+    OptionalLong rbeUpdateBitmap();
 
     @WamProperty(index = 2965, type = WamType.INTEGER)
-    OptionalInt rbeVidDynCondCount();
+    OptionalLong rbeVidDynCondCount();
 
     @WamProperty(index = 2966, type = WamType.INTEGER)
-    OptionalInt rbeVidDynCount();
+    OptionalLong rbeVidDynCount();
 
     @WamProperty(index = 2967, type = WamType.INTEGER)
-    OptionalInt rbeVidDynHdDynMaxTargetBitrateCount();
+    OptionalLong rbeVidDynHdDynMaxTargetBitrateCount();
 
     @WamProperty(index = 2968, type = WamType.INTEGER)
-    OptionalInt rbeVidDynMaxTargetBitrateCount();
+    OptionalLong rbeVidDynMaxTargetBitrateCount();
 
     @WamProperty(index = 2969, type = WamType.INTEGER)
-    OptionalInt rbeVidDynMaxTargetBitrateInvokeCount();
+    OptionalLong rbeVidDynMaxTargetBitrateInvokeCount();
 
     @WamProperty(index = 2970, type = WamType.INTEGER)
-    OptionalInt rbeVidDynMaxTargetBitrateOverwriteCount();
+    OptionalLong rbeVidDynMaxTargetBitrateOverwriteCount();
 
     @WamProperty(index = 155, type = WamType.FLOAT)
     OptionalDouble rcMaxrtt();
@@ -4343,73 +4525,73 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> receivedByNse();
 
     @WamProperty(index = 1443, type = WamType.INTEGER)
-    OptionalInt receiverVideoEncodedHeightSs();
+    OptionalLong receiverVideoEncodedHeightSs();
 
     @WamProperty(index = 1444, type = WamType.INTEGER)
-    OptionalInt receiverVideoEncodedWidthSs();
+    OptionalLong receiverVideoEncodedWidthSs();
 
     @WamProperty(index = 2233, type = WamType.INTEGER)
-    OptionalInt recentPlaybackFpsDiff1215();
+    OptionalLong recentPlaybackFpsDiff1215();
 
     @WamProperty(index = 2234, type = WamType.INTEGER)
-    OptionalInt recentPlaybackFpsDiff1619();
+    OptionalLong recentPlaybackFpsDiff1619();
 
     @WamProperty(index = 2235, type = WamType.INTEGER)
-    OptionalInt recentPlaybackFpsDiff47();
+    OptionalLong recentPlaybackFpsDiff47();
 
     @WamProperty(index = 2236, type = WamType.INTEGER)
-    OptionalInt recentPlaybackFpsDiff811();
+    OptionalLong recentPlaybackFpsDiff811();
 
     @WamProperty(index = 2237, type = WamType.INTEGER)
-    OptionalInt recentPlaybackFpsDiffGeq20();
+    OptionalLong recentPlaybackFpsDiffGeq20();
 
     @WamProperty(index = 2238, type = WamType.INTEGER)
-    OptionalInt recentPlaybackFpsDiffLt4();
+    OptionalLong recentPlaybackFpsDiffLt4();
 
     @WamProperty(index = 2239, type = WamType.INTEGER)
-    OptionalInt recentRecordFpsDiff1215();
+    OptionalLong recentRecordFpsDiff1215();
 
     @WamProperty(index = 2240, type = WamType.INTEGER)
-    OptionalInt recentRecordFpsDiff1619();
+    OptionalLong recentRecordFpsDiff1619();
 
     @WamProperty(index = 2241, type = WamType.INTEGER)
-    OptionalInt recentRecordFpsDiff47();
+    OptionalLong recentRecordFpsDiff47();
 
     @WamProperty(index = 2242, type = WamType.INTEGER)
-    OptionalInt recentRecordFpsDiff811();
+    OptionalLong recentRecordFpsDiff811();
 
     @WamProperty(index = 2243, type = WamType.INTEGER)
-    OptionalInt recentRecordFpsDiffGeq20();
+    OptionalLong recentRecordFpsDiffGeq20();
 
     @WamProperty(index = 2244, type = WamType.INTEGER)
-    OptionalInt recentRecordFpsDiffLt4();
+    OptionalLong recentRecordFpsDiffLt4();
 
     @WamProperty(index = 1974, type = WamType.INTEGER)
-    OptionalInt reconnectingWithE2eBindRspCount();
+    OptionalLong reconnectingWithE2eBindRspCount();
 
     @WamProperty(index = 1975, type = WamType.INTEGER)
-    OptionalInt reconnectingWithE2eRspCount();
+    OptionalLong reconnectingWithE2eRspCount();
 
     @WamProperty(index = 1901, type = WamType.INTEGER)
-    OptionalInt reconnectingWithP2pE2eBindRspCount();
+    OptionalLong reconnectingWithP2pE2eBindRspCount();
 
     @WamProperty(index = 1899, type = WamType.INTEGER)
-    OptionalInt reconnectingWithProbeRspCount();
+    OptionalLong reconnectingWithProbeRspCount();
 
     @WamProperty(index = 1902, type = WamType.INTEGER)
-    OptionalInt reconnectingWithRelayE2eBindRspCount();
+    OptionalLong reconnectingWithRelayE2eBindRspCount();
 
     @WamProperty(index = 1976, type = WamType.INTEGER)
-    OptionalInt reconnectingWithRelayPingableCount();
+    OptionalLong reconnectingWithRelayPingableCount();
 
     @WamProperty(index = 1977, type = WamType.INTEGER)
-    OptionalInt reconnectingWithSignalingAccessibleCount();
+    OptionalLong reconnectingWithSignalingAccessibleCount();
 
     @WamProperty(index = 84, type = WamType.INTEGER)
-    OptionalInt recordCircularBufferFrameCount();
+    OptionalLong recordCircularBufferFrameCount();
 
     @WamProperty(index = 1580, type = WamType.INTEGER)
-    OptionalInt recordNonSilenceFrameCountDuringMute();
+    OptionalLong recordNonSilenceFrameCountDuringMute();
 
     @WamProperty(index = 2393, type = WamType.FLOAT)
     OptionalDouble redAudioBytesDecoded();
@@ -4418,25 +4600,25 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble redAudioBytesSent();
 
     @WamProperty(index = 2395, type = WamType.INTEGER)
-    OptionalInt redPacketsDiscarded();
+    OptionalLong redPacketsDiscarded();
 
     @WamProperty(index = 2396, type = WamType.INTEGER)
-    OptionalInt redPacketsInserted();
+    OptionalLong redPacketsInserted();
 
     @WamProperty(index = 2397, type = WamType.INTEGER)
-    OptionalInt redPacketsReceived();
+    OptionalLong redPacketsReceived();
 
     @WamProperty(index = 2398, type = WamType.INTEGER)
-    OptionalInt redRtpPacketsReceived();
+    OptionalLong redRtpPacketsReceived();
 
     @WamProperty(index = 2399, type = WamType.INTEGER)
-    OptionalInt redRtpPacketsSent();
+    OptionalLong redRtpPacketsSent();
 
     @WamProperty(index = 2400, type = WamType.INTEGER)
-    OptionalInt redTotalRedundancyRequested();
+    OptionalLong redTotalRedundancyRequested();
 
     @WamProperty(index = 2401, type = WamType.INTEGER)
-    OptionalInt redTotalRedundancySent();
+    OptionalLong redTotalRedundancySent();
 
     @WamProperty(index = 1973, type = WamType.BOOLEAN)
     Optional<Boolean> redialAfterCer();
@@ -4445,10 +4627,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> redialIntervalSec();
 
     @WamProperty(index = 1174, type = WamType.INTEGER)
-    OptionalInt rejectMuteReqCount();
+    OptionalLong rejectMuteReqCount();
 
     @WamProperty(index = 1140, type = WamType.INTEGER)
-    OptionalInt rekeyTime();
+    OptionalLong rekeyTime();
 
     @WamProperty(index = 424, type = WamType.TIMER)
     Optional<Instant> relayBindTimeInMsec();
@@ -4460,13 +4642,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> relayElectionTimeInMsec();
 
     @WamProperty(index = 481, type = WamType.INTEGER)
-    OptionalInt relayFallbackOnRxDataFromRelay();
+    OptionalLong relayFallbackOnRxDataFromRelay();
 
     @WamProperty(index = 482, type = WamType.INTEGER)
-    OptionalInt relayFallbackOnStopRxDataOnP2p();
+    OptionalLong relayFallbackOnStopRxDataOnP2p();
 
     @WamProperty(index = 1908, type = WamType.INTEGER)
-    OptionalInt relayLatencyStanzasReceivedCount();
+    OptionalLong relayLatencyStanzasReceivedCount();
 
     @WamProperty(index = 2359, type = WamType.STRING)
     Optional<String> relayMeasuredC2rRttList();
@@ -4496,22 +4678,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> relayRtpPktCnts();
 
     @WamProperty(index = 1309, type = WamType.INTEGER)
-    OptionalInt relaySwapped();
+    OptionalLong relaySwapped();
 
     @WamProperty(index = 1378, type = WamType.INTEGER)
-    OptionalInt removePeerNackCount();
+    OptionalLong removePeerNackCount();
 
     @WamProperty(index = 1379, type = WamType.INTEGER)
-    OptionalInt removePeerNotInCallCount();
+    OptionalLong removePeerNotInCallCount();
 
     @WamProperty(index = 1380, type = WamType.INTEGER)
-    OptionalInt removePeerNotSupportedCount();
+    OptionalLong removePeerNotSupportedCount();
 
     @WamProperty(index = 1381, type = WamType.INTEGER)
-    OptionalInt removePeerRequestCount();
+    OptionalLong removePeerRequestCount();
 
     @WamProperty(index = 1382, type = WamType.INTEGER)
-    OptionalInt removePeerSuccessCount();
+    OptionalLong removePeerSuccessCount();
 
     @WamProperty(index = 780, type = WamType.TIMER)
     Optional<Instant> renderFreezeHighPeerBweT();
@@ -4529,13 +4711,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<RingerMode> ringerMode();
 
     @WamProperty(index = 1362, type = WamType.INTEGER)
-    OptionalInt rtcpRembInVideoCnt();
+    OptionalLong rtcpRembInVideoCnt();
 
     @WamProperty(index = 1168, type = WamType.INTEGER)
-    OptionalInt rxAllocRespNoMatchingTid();
+    OptionalLong rxAllocRespNoMatchingTid();
 
     @WamProperty(index = 1528, type = WamType.INTEGER)
-    OptionalInt rxBytesForP2p();
+    OptionalLong rxBytesForP2p();
 
     @WamProperty(index = 1408, type = WamType.FLOAT)
     OptionalDouble rxBytesForUnknownP2p();
@@ -4544,10 +4726,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble rxBytesForXpop();
 
     @WamProperty(index = 2172, type = WamType.INTEGER)
-    OptionalInt rxDelayHigherThanRttCount();
+    OptionalLong rxDelayHigherThanRttCount();
 
     @WamProperty(index = 2173, type = WamType.INTEGER)
-    OptionalInt rxDelayNegativeCount();
+    OptionalLong rxDelayNegativeCount();
 
     @WamProperty(index = 1310, type = WamType.FLOAT)
     OptionalDouble rxForErrorRelayBytes();
@@ -4559,31 +4741,31 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble rxForTxRelayBytes();
 
     @WamProperty(index = 1698, type = WamType.INTEGER)
-    OptionalInt rxHbhFecBitrateKbps();
+    OptionalLong rxHbhFecBitrateKbps();
 
     @WamProperty(index = 1961, type = WamType.INTEGER)
-    OptionalInt rxHbhFecSrtpBitrateKbps();
+    OptionalLong rxHbhFecSrtpBitrateKbps();
 
     @WamProperty(index = 2353, type = WamType.INTEGER)
-    OptionalInt rxLowerHandCount();
+    OptionalLong rxLowerHandCount();
 
     @WamProperty(index = 291, type = WamType.INTEGER)
-    OptionalInt rxProbeCountSuccess();
+    OptionalLong rxProbeCountSuccess();
 
     @WamProperty(index = 290, type = WamType.INTEGER)
-    OptionalInt rxProbeCountTotal();
+    OptionalLong rxProbeCountTotal();
 
     @WamProperty(index = 2354, type = WamType.INTEGER)
-    OptionalInt rxRaiseHandCount();
+    OptionalLong rxRaiseHandCount();
 
     @WamProperty(index = 2355, type = WamType.INTEGER)
-    OptionalInt rxRaiseOrLowerHandErrorCount();
+    OptionalLong rxRaiseOrLowerHandErrorCount();
 
     @WamProperty(index = 2336, type = WamType.INTEGER)
-    OptionalInt rxReactionCount();
+    OptionalLong rxReactionCount();
 
     @WamProperty(index = 2337, type = WamType.INTEGER)
-    OptionalInt rxReactionErrorCount();
+    OptionalLong rxReactionErrorCount();
 
     @WamProperty(index = 841, type = WamType.TIMER)
     Optional<Instant> rxRelayRebindLatencyMs();
@@ -4595,13 +4777,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> rxSubOnScreenDur();
 
     @WamProperty(index = 1370, type = WamType.INTEGER)
-    OptionalInt rxSubRequestSentCnt();
+    OptionalLong rxSubRequestSentCnt();
 
     @WamProperty(index = 1296, type = WamType.INTEGER)
-    OptionalInt rxSubRequestThrottledCnt();
+    OptionalLong rxSubRequestThrottledCnt();
 
     @WamProperty(index = 1297, type = WamType.INTEGER)
-    OptionalInt rxSubSwitchCnt();
+    OptionalLong rxSubSwitchCnt();
 
     @WamProperty(index = 1298, type = WamType.TIMER)
     Optional<Instant> rxSubVideoWaitDur();
@@ -4622,7 +4804,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble rxTpFbBitrate();
 
     @WamProperty(index = 1495, type = WamType.INTEGER)
-    OptionalInt sbweAbsRttOnHoldCount();
+    OptionalLong sbweAbsRttOnHoldCount();
 
     @WamProperty(index = 963, type = WamType.FLOAT)
     OptionalDouble sbweAvgDowntrend();
@@ -4631,76 +4813,76 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sbweAvgUptrend();
 
     @WamProperty(index = 783, type = WamType.INTEGER)
-    OptionalInt sbweCeilingCongestionCount();
+    OptionalLong sbweCeilingCongestionCount();
 
     @WamProperty(index = 781, type = WamType.INTEGER)
-    OptionalInt sbweCeilingCount();
+    OptionalLong sbweCeilingCount();
 
     @WamProperty(index = 2174, type = WamType.INTEGER)
-    OptionalInt sbweCeilingDelayCongestionCount();
+    OptionalLong sbweCeilingDelayCongestionCount();
 
     @WamProperty(index = 786, type = WamType.INTEGER)
-    OptionalInt sbweCeilingMissingRtcpCongestionCount();
+    OptionalLong sbweCeilingMissingRtcpCongestionCount();
 
     @WamProperty(index = 787, type = WamType.INTEGER)
-    OptionalInt sbweCeilingNoNewDataReceivedCongestionCount();
+    OptionalLong sbweCeilingNoNewDataReceivedCongestionCount();
 
     @WamProperty(index = 782, type = WamType.INTEGER)
-    OptionalInt sbweCeilingPktLossCount();
+    OptionalLong sbweCeilingPktLossCount();
 
     @WamProperty(index = 1106, type = WamType.INTEGER)
-    OptionalInt sbweCeilingReceiveSideCount();
+    OptionalLong sbweCeilingReceiveSideCount();
 
     @WamProperty(index = 2175, type = WamType.INTEGER)
-    OptionalInt sbweCeilingRttAndDelayCongestionCount();
+    OptionalLong sbweCeilingRttAndDelayCongestionCount();
 
     @WamProperty(index = 784, type = WamType.INTEGER)
-    OptionalInt sbweCeilingRttCongestionCount();
+    OptionalLong sbweCeilingRttCongestionCount();
 
     @WamProperty(index = 785, type = WamType.INTEGER)
-    OptionalInt sbweCeilingZeroRttCongestionCount();
+    OptionalLong sbweCeilingZeroRttCongestionCount();
 
     @WamProperty(index = 1103, type = WamType.INTEGER)
-    OptionalInt sbweGlobalMinRttCongestionCount();
+    OptionalLong sbweGlobalMinRttCongestionCount();
 
     @WamProperty(index = 1133, type = WamType.INTEGER)
-    OptionalInt sbweHighestRttCongestionCount();
+    OptionalLong sbweHighestRttCongestionCount();
 
     @WamProperty(index = 961, type = WamType.INTEGER)
-    OptionalInt sbweHoldCount();
+    OptionalLong sbweHoldCount();
 
     @WamProperty(index = 1347, type = WamType.TIMER)
     Optional<Instant> sbweHoldDuration();
 
     @WamProperty(index = 1104, type = WamType.INTEGER)
-    OptionalInt sbweMinRttEmaCongestionCount();
+    OptionalLong sbweMinRttEmaCongestionCount();
 
     @WamProperty(index = 1308, type = WamType.INTEGER)
-    OptionalInt sbweMinRttSlideWindowCount();
+    OptionalLong sbweMinRttSlideWindowCount();
 
     @WamProperty(index = 960, type = WamType.INTEGER)
-    OptionalInt sbweRampDownCount();
+    OptionalLong sbweRampDownCount();
 
     @WamProperty(index = 1348, type = WamType.TIMER)
     Optional<Instant> sbweRampDownDuration();
 
     @WamProperty(index = 959, type = WamType.INTEGER)
-    OptionalInt sbweRampUpCount();
+    OptionalLong sbweRampUpCount();
 
     @WamProperty(index = 1349, type = WamType.TIMER)
     Optional<Instant> sbweRampUpDuration();
 
     @WamProperty(index = 1134, type = WamType.INTEGER)
-    OptionalInt sbweRampUpPauseCount();
+    OptionalLong sbweRampUpPauseCount();
 
     @WamProperty(index = 1496, type = WamType.INTEGER)
-    OptionalInt sbweRttSlopeCongestionCount();
+    OptionalLong sbweRttSlopeCongestionCount();
 
     @WamProperty(index = 1497, type = WamType.INTEGER)
-    OptionalInt sbweRttSlopeOnHoldCount();
+    OptionalLong sbweRttSlopeOnHoldCount();
 
     @WamProperty(index = 1594, type = WamType.INTEGER)
-    OptionalInt scheduledCallJoinTimeDiffMs();
+    OptionalLong scheduledCallJoinTimeDiffMs();
 
     @WamProperty(index = 2121, type = WamType.TIMER)
     Optional<Instant> sctpConnectionSetupT();
@@ -4712,25 +4894,25 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> segmentStartToDecodeT();
 
     @WamProperty(index = 2648, type = WamType.INTEGER)
-    OptionalInt selectedMicMode();
+    OptionalLong selectedMicMode();
 
     @WamProperty(index = 2368, type = WamType.INTEGER)
-    OptionalInt selfBusyHours();
+    OptionalLong selfBusyHours();
 
     @WamProperty(index = 1175, type = WamType.INTEGER)
-    OptionalInt selfMuteSuccessCount();
+    OptionalLong selfMuteSuccessCount();
 
     @WamProperty(index = 1176, type = WamType.INTEGER)
-    OptionalInt selfUnmuteAfterMuteReqCount();
+    OptionalLong selfUnmuteAfterMuteReqCount();
 
     @WamProperty(index = 2386, type = WamType.INTEGER)
-    OptionalInt sendSelfStateVideoEnabledVideoCaptureStreamNotRunning();
+    OptionalLong sendSelfStateVideoEnabledVideoCaptureStreamNotRunning();
 
     @WamProperty(index = 2387, type = WamType.INTEGER)
-    OptionalInt sendSelfStateVideoEnabledVideoCaptureStreamNull();
+    OptionalLong sendSelfStateVideoEnabledVideoCaptureStreamNull();
 
     @WamProperty(index = 975, type = WamType.INTEGER)
-    OptionalInt senderBweInitBitrate();
+    OptionalLong senderBweInitBitrate();
 
     @WamProperty(index = 1754, type = WamType.BOOLEAN)
     Optional<Boolean> serverPreferRelay();
@@ -4745,7 +4927,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> serverRecommendedToElectedRelayMs();
 
     @WamProperty(index = 1376, type = WamType.INTEGER)
-    OptionalInt setIpVersionCount();
+    OptionalLong setIpVersionCount();
 
     @WamProperty(index = 1096, type = WamType.FLOAT)
     OptionalDouble sfuAvgDlPlrAtBalancedCongestion();
@@ -4760,22 +4942,22 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuAvgLqHqTargetBitrateDiff();
 
     @WamProperty(index = 1102, type = WamType.INTEGER)
-    OptionalInt sfuAvgPeerRttAtBalancedCongestion();
+    OptionalLong sfuAvgPeerRttAtBalancedCongestion();
 
     @WamProperty(index = 1100, type = WamType.INTEGER)
-    OptionalInt sfuAvgPeerRttAtHighPeerCongestion();
+    OptionalLong sfuAvgPeerRttAtHighPeerCongestion();
 
     @WamProperty(index = 1098, type = WamType.INTEGER)
-    OptionalInt sfuAvgPeerRttAtHighSelfCongestion();
+    OptionalLong sfuAvgPeerRttAtHighSelfCongestion();
 
     @WamProperty(index = 1101, type = WamType.INTEGER)
-    OptionalInt sfuAvgSelfRttAtBalancedCongestion();
+    OptionalLong sfuAvgSelfRttAtBalancedCongestion();
 
     @WamProperty(index = 1099, type = WamType.INTEGER)
-    OptionalInt sfuAvgSelfRttAtHighPeerCongestion();
+    OptionalLong sfuAvgSelfRttAtHighPeerCongestion();
 
     @WamProperty(index = 1097, type = WamType.INTEGER)
-    OptionalInt sfuAvgSelfRttAtHighSelfCongestion();
+    OptionalLong sfuAvgSelfRttAtHighSelfCongestion();
 
     @WamProperty(index = 673, type = WamType.FLOAT)
     OptionalDouble sfuAvgTargetBitrate();
@@ -4793,10 +4975,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuAvgUlPlrAtHighUlCongestion();
 
     @WamProperty(index = 1075, type = WamType.INTEGER)
-    OptionalInt sfuBalancedPktLossAtCongestion();
+    OptionalLong sfuBalancedPktLossAtCongestion();
 
     @WamProperty(index = 1079, type = WamType.INTEGER)
-    OptionalInt sfuBalancedRttAtCongestion();
+    OptionalLong sfuBalancedRttAtCongestion();
 
     @WamProperty(index = 919, type = WamType.FLOAT)
     OptionalDouble sfuBwaAllParticipantDlBwUsedPct();
@@ -4805,7 +4987,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuBwaAllParticipantUlBwUsedPct();
 
     @WamProperty(index = 928, type = WamType.INTEGER)
-    OptionalInt sfuBwaChangeNumStreamCount();
+    OptionalLong sfuBwaChangeNumStreamCount();
 
     @WamProperty(index = 1003, type = WamType.FLOAT)
     OptionalDouble sfuBwaSelfDlBwUsedPct();
@@ -4817,10 +4999,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> sfuBwaSimulcastCapabilityWaitTimeMs();
 
     @WamProperty(index = 920, type = WamType.INTEGER)
-    OptionalInt sfuBwaSimulcastDisabledCntReasonBattery();
+    OptionalLong sfuBwaSimulcastDisabledCntReasonBattery();
 
     @WamProperty(index = 921, type = WamType.INTEGER)
-    OptionalInt sfuBwaSimulcastDisabledCntReasonNetMedium();
+    OptionalLong sfuBwaSimulcastDisabledCntReasonNetMedium();
 
     @WamProperty(index = 926, type = WamType.TIMER)
     Optional<Instant> sfuBwaVidEncHqStreamScheduledT();
@@ -4832,7 +5014,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuDownlinkAvgCombinedBwe();
 
     @WamProperty(index = 2440, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkAvgConsecutiveUdstPredictionLen();
+    OptionalLong sfuDownlinkAvgConsecutiveUdstPredictionLen();
 
     @WamProperty(index = 667, type = WamType.FLOAT)
     OptionalDouble sfuDownlinkAvgPktLossPct();
@@ -4844,7 +5026,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuDownlinkAvgSenderBwe();
 
     @WamProperty(index = 1876, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkDynamicInitBweFallbackCount();
+    OptionalLong sfuDownlinkDynamicInitBweFallbackCount();
 
     @WamProperty(index = 1158, type = WamType.FLOAT)
     OptionalDouble sfuDownlinkInitCombinedBwe3s();
@@ -4865,10 +5047,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> sfuDownlinkMlUndershootModelAvgInferenceTime();
 
     @WamProperty(index = 2443, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkMlUndershootModelDownloadFailureCount();
+    OptionalLong sfuDownlinkMlUndershootModelDownloadFailureCount();
 
     @WamProperty(index = 2454, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkMlUndershootModelInferenceFailureCount();
+    OptionalLong sfuDownlinkMlUndershootModelInferenceFailureCount();
 
     @WamProperty(index = 2444, type = WamType.TIMER)
     Optional<Instant> sfuDownlinkMlUndershootModelMaxInferenceTime();
@@ -4886,13 +5068,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> sfuDownlinkMlUndershootShimAvgCreationTime();
 
     @WamProperty(index = 2449, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkMlUndershootShimCreationFailureCount();
+    OptionalLong sfuDownlinkMlUndershootShimCreationFailureCount();
 
     @WamProperty(index = 2450, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkNonUdstNumPredictions();
+    OptionalLong sfuDownlinkNonUdstNumPredictions();
 
     @WamProperty(index = 1999, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkPacketPairAvgBitrate();
+    OptionalLong sfuDownlinkPacketPairAvgBitrate();
 
     @WamProperty(index = 2000, type = WamType.FLOAT)
     OptionalDouble sfuDownlinkPacketPairReliableRatio();
@@ -4901,7 +5083,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuDownlinkPacketPairUnderestimateRatio();
 
     @WamProperty(index = 1981, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkRbweLowNoCongCnt();
+    OptionalLong sfuDownlinkRbweLowNoCongCnt();
 
     @WamProperty(index = 973, type = WamType.FLOAT)
     OptionalDouble sfuDownlinkSbweAvgDowntrend();
@@ -4910,40 +5092,40 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuDownlinkSbweAvgUptrend();
 
     @WamProperty(index = 797, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingCongestionCount();
+    OptionalLong sfuDownlinkSbweCeilingCongestionCount();
 
     @WamProperty(index = 795, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingCount();
+    OptionalLong sfuDownlinkSbweCeilingCount();
 
     @WamProperty(index = 2176, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingDelayCongestionCount();
+    OptionalLong sfuDownlinkSbweCeilingDelayCongestionCount();
 
     @WamProperty(index = 800, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingMissingRtcpCongestionCount();
+    OptionalLong sfuDownlinkSbweCeilingMissingRtcpCongestionCount();
 
     @WamProperty(index = 801, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingNoNewDataReceivedCongestionCount();
+    OptionalLong sfuDownlinkSbweCeilingNoNewDataReceivedCongestionCount();
 
     @WamProperty(index = 796, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingPktLossCount();
+    OptionalLong sfuDownlinkSbweCeilingPktLossCount();
 
     @WamProperty(index = 2177, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingRttAndDelayCongestionCount();
+    OptionalLong sfuDownlinkSbweCeilingRttAndDelayCongestionCount();
 
     @WamProperty(index = 798, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingRttCongestionCount();
+    OptionalLong sfuDownlinkSbweCeilingRttCongestionCount();
 
     @WamProperty(index = 799, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweCeilingZeroRttCongestionCount();
+    OptionalLong sfuDownlinkSbweCeilingZeroRttCongestionCount();
 
     @WamProperty(index = 971, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweHoldCount();
+    OptionalLong sfuDownlinkSbweHoldCount();
 
     @WamProperty(index = 970, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweRampDownCount();
+    OptionalLong sfuDownlinkSbweRampDownCount();
 
     @WamProperty(index = 969, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkSbweRampUpCount();
+    OptionalLong sfuDownlinkSbweRampUpCount();
 
     @WamProperty(index = 958, type = WamType.FLOAT)
     OptionalDouble sfuDownlinkSenderBweDiffStddev();
@@ -4952,22 +5134,22 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuDownlinkSenderBweStddev();
 
     @WamProperty(index = 2451, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkUdstAvgPredProb();
+    OptionalLong sfuDownlinkUdstAvgPredProb();
 
     @WamProperty(index = 2163, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkUdstMcpAvgStartBitrate();
+    OptionalLong sfuDownlinkUdstMcpAvgStartBitrate();
 
     @WamProperty(index = 2164, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkUdstMcpAvgStopBitrate();
+    OptionalLong sfuDownlinkUdstMcpAvgStopBitrate();
 
     @WamProperty(index = 2452, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkUdstNumPredictions();
+    OptionalLong sfuDownlinkUdstNumPredictions();
 
     @WamProperty(index = 2453, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkUdstSkippedPredictions();
+    OptionalLong sfuDownlinkUdstSkippedPredictions();
 
     @WamProperty(index = 2165, type = WamType.INTEGER)
-    OptionalInt sfuDownlinkUndershootTriggerMcpCount();
+    OptionalLong sfuDownlinkUndershootTriggerMcpCount();
 
     @WamProperty(index = 1111, type = WamType.TIMER)
     Optional<Instant> sfuFirstRxBandwidthReportTime();
@@ -4979,16 +5161,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> sfuFirstRxUplinkReportTime();
 
     @WamProperty(index = 1074, type = WamType.INTEGER)
-    OptionalInt sfuHighDlPktLossAtCongestion();
+    OptionalLong sfuHighDlPktLossAtCongestion();
 
     @WamProperty(index = 1078, type = WamType.INTEGER)
-    OptionalInt sfuHighDlRttAtCongestion();
+    OptionalLong sfuHighDlRttAtCongestion();
 
     @WamProperty(index = 1073, type = WamType.INTEGER)
-    OptionalInt sfuHighUlPktLossAtCongestion();
+    OptionalLong sfuHighUlPktLossAtCongestion();
 
     @WamProperty(index = 1077, type = WamType.INTEGER)
-    OptionalInt sfuHighUlRttAtCongestion();
+    OptionalLong sfuHighUlRttAtCongestion();
 
     @WamProperty(index = 674, type = WamType.FLOAT)
     OptionalDouble sfuMaxTargetBitrate();
@@ -5006,28 +5188,28 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuPeerDownlinkStddevAllCombinedBwe();
 
     @WamProperty(index = 1110, type = WamType.INTEGER)
-    OptionalInt sfuRxBandwidthReportCount();
+    OptionalLong sfuRxBandwidthReportCount();
 
     @WamProperty(index = 882, type = WamType.INTEGER)
-    OptionalInt sfuRxParticipantReportCount();
+    OptionalLong sfuRxParticipantReportCount();
 
     @WamProperty(index = 880, type = WamType.INTEGER)
-    OptionalInt sfuRxUplinkReportCount();
+    OptionalLong sfuRxUplinkReportCount();
 
     @WamProperty(index = 1260, type = WamType.INTEGER)
-    OptionalInt sfuServerBwaBrAdjustedForParticipantChange();
+    OptionalLong sfuServerBwaBrAdjustedForParticipantChange();
 
     @WamProperty(index = 1261, type = WamType.INTEGER)
-    OptionalInt sfuServerBwaBrCappedByUplink();
+    OptionalLong sfuServerBwaBrCappedByUplink();
 
     @WamProperty(index = 1262, type = WamType.INTEGER)
-    OptionalInt sfuServerBwaInvalidSimulcastResult();
+    OptionalLong sfuServerBwaInvalidSimulcastResult();
 
     @WamProperty(index = 1263, type = WamType.INTEGER)
-    OptionalInt sfuServerBwaLocalBwaRun();
+    OptionalLong sfuServerBwaLocalBwaRun();
 
     @WamProperty(index = 1337, type = WamType.INTEGER)
-    OptionalInt sfuServerBwaLocalBwaTransition();
+    OptionalLong sfuServerBwaLocalBwaTransition();
 
     @WamProperty(index = 1338, type = WamType.TIMER)
     Optional<Instant> sfuServerBwaLongestSbwaMissingMs();
@@ -5039,13 +5221,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> sfuSimulcastAvgEncSchedEventUpdateTime();
 
     @WamProperty(index = 923, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastBwaCandidateCnt();
+    OptionalLong sfuSimulcastBwaCandidateCnt();
 
     @WamProperty(index = 874, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastBwaDownlinkBottleneckCount();
+    OptionalLong sfuSimulcastBwaDownlinkBottleneckCount();
 
     @WamProperty(index = 873, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastBwaUplinkBottleneckCount();
+    OptionalLong sfuSimulcastBwaUplinkBottleneckCount();
 
     @WamProperty(index = 952, type = WamType.TIMER)
     Optional<Instant> sfuSimulcastDecAvgKfRecvTimeSinceFlip();
@@ -5057,31 +5239,31 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuSimulcastDecAvgNumSkippedCachedPkt();
 
     @WamProperty(index = 953, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastDecNumNoKf();
+    OptionalLong sfuSimulcastDecNumNoKf();
 
     @WamProperty(index = 744, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastDecSessFlipCount();
+    OptionalLong sfuSimulcastDecSessFlipCount();
 
     @WamProperty(index = 768, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastDecSessFlipErrorBitmap();
+    OptionalLong sfuSimulcastDecSessFlipErrorBitmap();
 
     @WamProperty(index = 767, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastDecSessFlipErrorCount();
+    OptionalLong sfuSimulcastDecSessFlipErrorCount();
 
     @WamProperty(index = 766, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastEncErrorBitmap();
+    OptionalLong sfuSimulcastEncErrorBitmap();
 
     @WamProperty(index = 735, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastEncSchedEventErrorCount();
+    OptionalLong sfuSimulcastEncSchedEventErrorCount();
 
     @WamProperty(index = 733, type = WamType.INTEGER)
-    OptionalInt sfuSimulcastEncSchedEventSuccessUpdateCount();
+    OptionalLong sfuSimulcastEncSchedEventSuccessUpdateCount();
 
     @WamProperty(index = 2257, type = WamType.TIMER)
     Optional<Instant> sfuTemporalScalabilityBaseLayerDuration();
 
     @WamProperty(index = 2258, type = WamType.INTEGER)
-    OptionalInt sfuTemporalScalabilityBaseLayerTriggered();
+    OptionalLong sfuTemporalScalabilityBaseLayerTriggered();
 
     @WamProperty(index = 2259, type = WamType.BOOLEAN)
     Optional<Boolean> sfuTemporalScalabilityRecvBaseLayerOnly();
@@ -5102,16 +5284,16 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuUplinkAvgSenderBwe();
 
     @WamProperty(index = 2252, type = WamType.INTEGER)
-    OptionalInt sfuUplinkFirstPpBitrate();
+    OptionalLong sfuUplinkFirstPpBitrate();
 
     @WamProperty(index = 2255, type = WamType.INTEGER)
-    OptionalInt sfuUplinkFirstRawPpBitrate();
+    OptionalLong sfuUplinkFirstRawPpBitrate();
 
     @WamProperty(index = 2256, type = WamType.INTEGER)
-    OptionalInt sfuUplinkFirstRawPpTime();
+    OptionalLong sfuUplinkFirstRawPpTime();
 
     @WamProperty(index = 2253, type = WamType.INTEGER)
-    OptionalInt sfuUplinkFirstReliablePpTime();
+    OptionalLong sfuUplinkFirstReliablePpTime();
 
     @WamProperty(index = 1160, type = WamType.FLOAT)
     OptionalDouble sfuUplinkInitCombinedBwe3s();
@@ -5132,7 +5314,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuUplinkMinRtt();
 
     @WamProperty(index = 2002, type = WamType.INTEGER)
-    OptionalInt sfuUplinkPacketPairAvgBitrate();
+    OptionalLong sfuUplinkPacketPairAvgBitrate();
 
     @WamProperty(index = 2003, type = WamType.FLOAT)
     OptionalDouble sfuUplinkPacketPairReliableRatio();
@@ -5141,7 +5323,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuUplinkPacketPairUnderestimateRatio();
 
     @WamProperty(index = 1982, type = WamType.INTEGER)
-    OptionalInt sfuUplinkRbweLowNoCongCnt();
+    OptionalLong sfuUplinkRbweLowNoCongCnt();
 
     @WamProperty(index = 968, type = WamType.FLOAT)
     OptionalDouble sfuUplinkSbweAvgDowntrend();
@@ -5150,40 +5332,40 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuUplinkSbweAvgUptrend();
 
     @WamProperty(index = 790, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingCongestionCount();
+    OptionalLong sfuUplinkSbweCeilingCongestionCount();
 
     @WamProperty(index = 788, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingCount();
+    OptionalLong sfuUplinkSbweCeilingCount();
 
     @WamProperty(index = 2178, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingDelayCongestionCount();
+    OptionalLong sfuUplinkSbweCeilingDelayCongestionCount();
 
     @WamProperty(index = 793, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingMissingRtcpCongestionCount();
+    OptionalLong sfuUplinkSbweCeilingMissingRtcpCongestionCount();
 
     @WamProperty(index = 794, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingNoNewDataReceivedCongestionCount();
+    OptionalLong sfuUplinkSbweCeilingNoNewDataReceivedCongestionCount();
 
     @WamProperty(index = 789, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingPktLossCount();
+    OptionalLong sfuUplinkSbweCeilingPktLossCount();
 
     @WamProperty(index = 2179, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingRttAndDelayCongestionCount();
+    OptionalLong sfuUplinkSbweCeilingRttAndDelayCongestionCount();
 
     @WamProperty(index = 791, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingRttCongestionCount();
+    OptionalLong sfuUplinkSbweCeilingRttCongestionCount();
 
     @WamProperty(index = 792, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweCeilingZeroRttCongestionCount();
+    OptionalLong sfuUplinkSbweCeilingZeroRttCongestionCount();
 
     @WamProperty(index = 966, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweHoldCount();
+    OptionalLong sfuUplinkSbweHoldCount();
 
     @WamProperty(index = 965, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweRampDownCount();
+    OptionalLong sfuUplinkSbweRampDownCount();
 
     @WamProperty(index = 964, type = WamType.INTEGER)
-    OptionalInt sfuUplinkSbweRampUpCount();
+    OptionalLong sfuUplinkSbweRampUpCount();
 
     @WamProperty(index = 956, type = WamType.FLOAT)
     OptionalDouble sfuUplinkSenderBweDiffStddev();
@@ -5192,37 +5374,37 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble sfuUplinkSenderBweStddev();
 
     @WamProperty(index = 2166, type = WamType.INTEGER)
-    OptionalInt sfuUplinkUdstMcpAvgStartBitrate();
+    OptionalLong sfuUplinkUdstMcpAvgStartBitrate();
 
     @WamProperty(index = 2167, type = WamType.INTEGER)
-    OptionalInt sfuUplinkUdstMcpAvgStopBitrate();
+    OptionalLong sfuUplinkUdstMcpAvgStopBitrate();
 
     @WamProperty(index = 2168, type = WamType.INTEGER)
-    OptionalInt sfuUplinkUndershootTriggerMcpCount();
+    OptionalLong sfuUplinkUndershootTriggerMcpCount();
 
     @WamProperty(index = 2493, type = WamType.TIMER)
     Optional<Instant> shortDec1280wDuration();
 
     @WamProperty(index = 2494, type = WamType.INTEGER)
-    OptionalInt shortDec1280wNum();
+    OptionalLong shortDec1280wNum();
 
     @WamProperty(index = 2495, type = WamType.TIMER)
     Optional<Instant> shortDec640wDuration();
 
     @WamProperty(index = 2496, type = WamType.INTEGER)
-    OptionalInt shortDec640wNum();
+    OptionalLong shortDec640wNum();
 
     @WamProperty(index = 2497, type = WamType.TIMER)
     Optional<Instant> shortEnc1280wDuration();
 
     @WamProperty(index = 2498, type = WamType.INTEGER)
-    OptionalInt shortEnc1280wNum();
+    OptionalLong shortEnc1280wNum();
 
     @WamProperty(index = 2499, type = WamType.TIMER)
     Optional<Instant> shortEnc640wDuration();
 
     @WamProperty(index = 2500, type = WamType.INTEGER)
-    OptionalInt shortEnc640wNum();
+    OptionalLong shortEnc640wNum();
 
     @WamProperty(index = 1780, type = WamType.STRING)
     Optional<String> signalingReflexiveIpPeer();
@@ -5243,43 +5425,43 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> simulcastReplayVideoRenderFreezeT();
 
     @WamProperty(index = 1985, type = WamType.INTEGER)
-    OptionalInt skipSetVidStreamActiveFromNoneCnt();
+    OptionalLong skipSetVidStreamActiveFromNoneCnt();
 
     @WamProperty(index = 1986, type = WamType.INTEGER)
-    OptionalInt skipSetVidStreamActiveFromPauseCnt();
+    OptionalLong skipSetVidStreamActiveFromPauseCnt();
 
     @WamProperty(index = 1987, type = WamType.INTEGER)
-    OptionalInt skipVidConnOnCreateCnt();
+    OptionalLong skipVidConnOnCreateCnt();
 
     @WamProperty(index = 748, type = WamType.INTEGER)
-    OptionalInt skippedBwaCycles();
+    OptionalLong skippedBwaCycles();
 
     @WamProperty(index = 747, type = WamType.INTEGER)
-    OptionalInt skippedBweCycles();
+    OptionalLong skippedBweCycles();
 
     @WamProperty(index = 2623, type = WamType.FLOAT)
     OptionalDouble smlNadlAudioDupEnabledRatio();
 
     @WamProperty(index = 2624, type = WamType.INTEGER)
-    OptionalInt smlNadlDifferentResultRcvdCount();
+    OptionalLong smlNadlDifferentResultRcvdCount();
 
     @WamProperty(index = 2625, type = WamType.TIMER)
     Optional<Instant> smlNadlFirstResultDelayMs();
 
     @WamProperty(index = 2626, type = WamType.INTEGER)
-    OptionalInt smlNadlResultRcvdCount();
+    OptionalLong smlNadlResultRcvdCount();
 
     @WamProperty(index = 2576, type = WamType.FLOAT)
     OptionalDouble snr();
 
     @WamProperty(index = 250, type = WamType.INTEGER)
-    OptionalInt speakerAvgPower();
+    OptionalLong speakerAvgPower();
 
     @WamProperty(index = 249, type = WamType.INTEGER)
-    OptionalInt speakerMaxPower();
+    OptionalLong speakerMaxPower();
 
     @WamProperty(index = 248, type = WamType.INTEGER)
-    OptionalInt speakerMinPower();
+    OptionalLong speakerMinPower();
 
     @WamProperty(index = 864, type = WamType.TIMER)
     Optional<Instant> speakerStartDuration();
@@ -5291,100 +5473,100 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> speakerStopDuration();
 
     @WamProperty(index = 1991, type = WamType.INTEGER)
-    OptionalInt speakerViewDuration();
+    OptionalLong speakerViewDuration();
 
     @WamProperty(index = 1313, type = WamType.INTEGER)
-    OptionalInt sreRecommendedDiff();
+    OptionalLong sreRecommendedDiff();
 
     @WamProperty(index = 1743, type = WamType.INTEGER)
-    OptionalInt srtpEncType();
+    OptionalLong srtpEncType();
 
     @WamProperty(index = 2247, type = WamType.INTEGER)
-    OptionalInt ssReceiverBweBeforeSs();
+    OptionalLong ssReceiverBweBeforeSs();
 
     @WamProperty(index = 2248, type = WamType.FLOAT)
     OptionalDouble ssReceiverPlrBeforeSs();
 
     @WamProperty(index = 1445, type = WamType.INTEGER)
-    OptionalInt ssReceiverStartFailCount();
+    OptionalLong ssReceiverStartFailCount();
 
     @WamProperty(index = 1446, type = WamType.INTEGER)
-    OptionalInt ssReceiverStartRequestCount();
+    OptionalLong ssReceiverStartRequestCount();
 
     @WamProperty(index = 1447, type = WamType.INTEGER)
-    OptionalInt ssReceiverStartSuccessCount();
+    OptionalLong ssReceiverStartSuccessCount();
 
     @WamProperty(index = 1448, type = WamType.INTEGER)
-    OptionalInt ssReceiverStopFailCount();
+    OptionalLong ssReceiverStopFailCount();
 
     @WamProperty(index = 1449, type = WamType.INTEGER)
-    OptionalInt ssReceiverStopRequestCount();
+    OptionalLong ssReceiverStopRequestCount();
 
     @WamProperty(index = 1450, type = WamType.INTEGER)
-    OptionalInt ssReceiverStopSuccessCount();
+    OptionalLong ssReceiverStopSuccessCount();
 
     @WamProperty(index = 1451, type = WamType.INTEGER)
-    OptionalInt ssReceiverVersion();
+    OptionalLong ssReceiverVersion();
 
     @WamProperty(index = 2249, type = WamType.INTEGER)
-    OptionalInt ssSharerBweBeforeSs();
+    OptionalLong ssSharerBweBeforeSs();
 
     @WamProperty(index = 1707, type = WamType.INTEGER)
-    OptionalInt ssSharerContentTypeChange();
+    OptionalLong ssSharerContentTypeChange();
 
     @WamProperty(index = 2250, type = WamType.FLOAT)
     OptionalDouble ssSharerPlrBeforeSs();
 
     @WamProperty(index = 1452, type = WamType.INTEGER)
-    OptionalInt ssSharerStartFailCount();
+    OptionalLong ssSharerStartFailCount();
 
     @WamProperty(index = 1453, type = WamType.INTEGER)
-    OptionalInt ssSharerStartRequestCount();
+    OptionalLong ssSharerStartRequestCount();
 
     @WamProperty(index = 1454, type = WamType.INTEGER)
-    OptionalInt ssSharerStartSuccessCount();
+    OptionalLong ssSharerStartSuccessCount();
 
     @WamProperty(index = 1455, type = WamType.INTEGER)
-    OptionalInt ssSharerStopFailCount();
+    OptionalLong ssSharerStopFailCount();
 
     @WamProperty(index = 1456, type = WamType.INTEGER)
-    OptionalInt ssSharerStopRequestCount();
+    OptionalLong ssSharerStopRequestCount();
 
     @WamProperty(index = 1457, type = WamType.INTEGER)
-    OptionalInt ssSharerStopSuccessCount();
+    OptionalLong ssSharerStopSuccessCount();
 
     @WamProperty(index = 1708, type = WamType.INTEGER)
-    OptionalInt ssSharerTextContentBytesEncoded();
+    OptionalLong ssSharerTextContentBytesEncoded();
 
     @WamProperty(index = 1709, type = WamType.TIMER)
     Optional<Instant> ssSharerTextContentDuration();
 
     @WamProperty(index = 1710, type = WamType.INTEGER)
-    OptionalInt ssSharerTextContentFrames();
+    OptionalLong ssSharerTextContentFrames();
 
     @WamProperty(index = 1711, type = WamType.INTEGER)
-    OptionalInt ssSharerTextContentPixelsEncoded();
+    OptionalLong ssSharerTextContentPixelsEncoded();
 
     @WamProperty(index = 1712, type = WamType.INTEGER)
-    OptionalInt ssSharerTextContentQp();
+    OptionalLong ssSharerTextContentQp();
 
     @WamProperty(index = 1458, type = WamType.INTEGER)
-    OptionalInt ssSharerVersion();
+    OptionalLong ssSharerVersion();
 
     @WamProperty(index = 1713, type = WamType.INTEGER)
-    OptionalInt ssSharerVideoContentBytesEncoded();
+    OptionalLong ssSharerVideoContentBytesEncoded();
 
     @WamProperty(index = 1714, type = WamType.TIMER)
     Optional<Instant> ssSharerVideoContentDuration();
 
     @WamProperty(index = 1715, type = WamType.INTEGER)
-    OptionalInt ssSharerVideoContentFrames();
+    OptionalLong ssSharerVideoContentFrames();
 
     @WamProperty(index = 1716, type = WamType.INTEGER)
-    OptionalInt ssSharerVideoContentPixelsEncoded();
+    OptionalLong ssSharerVideoContentPixelsEncoded();
 
     @WamProperty(index = 1717, type = WamType.INTEGER)
-    OptionalInt ssSharerVideoContentQp();
+    OptionalLong ssSharerVideoContentQp();
 
     @WamProperty(index = 1459, type = WamType.TIMER)
     Optional<Instant> ssTimeInStaticContentType();
@@ -5393,13 +5575,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> ssTimeInVideoContentType();
 
     @WamProperty(index = 1918, type = WamType.INTEGER)
-    OptionalInt startCallDurationMs();
+    OptionalLong startCallDurationMs();
 
     @WamProperty(index = 900, type = WamType.BOOLEAN)
     Optional<Boolean> startedInitBweProbing();
 
     @WamProperty(index = 1287, type = WamType.INTEGER)
-    OptionalInt streamDroppedPkts();
+    OptionalLong streamDroppedPkts();
 
     @WamProperty(index = 2777, type = WamType.TIMER)
     Optional<Instant> streamDurationDecSs();
@@ -5414,46 +5596,46 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> streamPausedTimeMs();
 
     @WamProperty(index = 1289, type = WamType.INTEGER)
-    OptionalInt streamTransitionsToPaused();
+    OptionalLong streamTransitionsToPaused();
 
     @WamProperty(index = 1923, type = WamType.INTEGER)
-    OptionalInt stsAfSwitchCnt();
+    OptionalLong stsAfSwitchCnt();
 
     @WamProperty(index = 1399, type = WamType.INTEGER)
-    OptionalInt switchToAvatarDisplayedCount();
+    OptionalLong switchToAvatarDisplayedCount();
 
     @WamProperty(index = 538, type = WamType.INTEGER)
-    OptionalInt switchToDefTriggeredByGoodDefNet();
+    OptionalLong switchToDefTriggeredByGoodDefNet();
 
     @WamProperty(index = 750, type = WamType.INTEGER)
-    OptionalInt switchToNonSfu();
+    OptionalLong switchToNonSfu();
 
     @WamProperty(index = 1057, type = WamType.INTEGER)
-    OptionalInt switchToNonSimulcast();
+    OptionalLong switchToNonSimulcast();
 
     @WamProperty(index = 749, type = WamType.INTEGER)
-    OptionalInt switchToSfu();
+    OptionalLong switchToSfu();
 
     @WamProperty(index = 1056, type = WamType.INTEGER)
-    OptionalInt switchToSimulcast();
+    OptionalLong switchToSimulcast();
 
     @WamProperty(index = 257, type = WamType.INTEGER)
-    OptionalInt symmetricNatPortGap();
+    OptionalLong symmetricNatPortGap();
 
     @WamProperty(index = 541, type = WamType.INTEGER)
-    OptionalInt systemNotificationOfNetChange();
+    OptionalLong systemNotificationOfNetChange();
 
     @WamProperty(index = 2271, type = WamType.FLOAT)
     OptionalDouble systemVolumeDuringIncomingCall();
 
     @WamProperty(index = 1557, type = WamType.INTEGER)
-    OptionalInt tcpAvailableCount();
+    OptionalLong tcpAvailableCount();
 
     @WamProperty(index = 1558, type = WamType.INTEGER)
-    OptionalInt tcpAvailableOnUdpCount();
+    OptionalLong tcpAvailableOnUdpCount();
 
     @WamProperty(index = 1900, type = WamType.INTEGER)
-    OptionalInt tcpConnectedCount();
+    OptionalLong tcpConnectedCount();
 
     @WamProperty(index = 1910, type = WamType.STRING)
     Optional<String> tcpFailureStatus();
@@ -5510,7 +5692,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> timeDec480w();
 
     @WamProperty(index = 2181, type = WamType.INTEGER)
-    OptionalInt timeDec480wDominantSpeaker();
+    OptionalLong timeDec480wDominantSpeaker();
 
     @WamProperty(index = 2515, type = WamType.TIMER)
     Optional<Instant> timeDec480wInPinningView();
@@ -5705,7 +5887,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> timeEncSs960pHq();
 
     @WamProperty(index = 2668, type = WamType.INTEGER)
-    OptionalInt timeFirstAnrSinceCallStartSec();
+    OptionalLong timeFirstAnrSinceCallStartSec();
 
     @WamProperty(index = 2468, type = WamType.TIMER)
     Optional<Instant> timeIn2xDownscaleSs();
@@ -5741,7 +5923,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> timeVidRcDynCondTrue();
 
     @WamProperty(index = 1126, type = WamType.INTEGER)
-    OptionalInt totalAqsMsgSent();
+    OptionalLong totalAqsMsgSent();
 
     @WamProperty(index = 723, type = WamType.TIMER)
     Optional<Instant> totalAudioFrameLossMs();
@@ -5750,19 +5932,19 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble totalBytesOnNonDefCell();
 
     @WamProperty(index = 1461, type = WamType.INTEGER)
-    OptionalInt totalFramesCapturedInLast10secSs();
+    OptionalLong totalFramesCapturedInLast10secSs();
 
     @WamProperty(index = 1462, type = WamType.INTEGER)
-    OptionalInt totalFramesCapturedSs();
+    OptionalLong totalFramesCapturedSs();
 
     @WamProperty(index = 1463, type = WamType.INTEGER)
-    OptionalInt totalFramesRenderedInLast10secSs();
+    OptionalLong totalFramesRenderedInLast10secSs();
 
     @WamProperty(index = 1464, type = WamType.INTEGER)
-    OptionalInt totalFramesRenderedSs();
+    OptionalLong totalFramesRenderedSs();
 
     @WamProperty(index = 2011, type = WamType.INTEGER)
-    OptionalInt totalMemoryGb();
+    OptionalLong totalMemoryGb();
 
     @WamProperty(index = 573, type = WamType.TIMER)
     Optional<Instant> totalTimeVidUlAutoPause();
@@ -5777,28 +5959,28 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> trafficShaperAvgVideoQueueMs();
 
     @WamProperty(index = 240, type = WamType.INTEGER)
-    OptionalInt trafficShaperMaxDelayViolations();
+    OptionalLong trafficShaperMaxDelayViolations();
 
     @WamProperty(index = 241, type = WamType.INTEGER)
-    OptionalInt trafficShaperMinDelayViolations();
+    OptionalLong trafficShaperMinDelayViolations();
 
     @WamProperty(index = 237, type = WamType.INTEGER)
-    OptionalInt trafficShaperOverflowCount();
+    OptionalLong trafficShaperOverflowCount();
 
     @WamProperty(index = 238, type = WamType.INTEGER)
-    OptionalInt trafficShaperQueueEmptyCount();
+    OptionalLong trafficShaperQueueEmptyCount();
 
     @WamProperty(index = 239, type = WamType.INTEGER)
-    OptionalInt trafficShaperQueuedPacketCount();
+    OptionalLong trafficShaperQueuedPacketCount();
 
     @WamProperty(index = 552, type = WamType.TIMER)
     Optional<Instant> transportCurTimeInMsecAsyncWriteWaitingInQueue();
 
     @WamProperty(index = 1867, type = WamType.INTEGER)
-    OptionalInt transportDebugBitmap();
+    OptionalLong transportDebugBitmap();
 
     @WamProperty(index = 555, type = WamType.INTEGER)
-    OptionalInt transportLastSendOsError();
+    OptionalLong transportLastSendOsError();
 
     @WamProperty(index = 1924, type = WamType.TIMER)
     Optional<Instant> transportMaxDnsResolveDelayMs();
@@ -5807,37 +5989,37 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> transportMaxNegRttMs();
 
     @WamProperty(index = 580, type = WamType.INTEGER)
-    OptionalInt transportNumAsyncWriteDispatched();
+    OptionalLong transportNumAsyncWriteDispatched();
 
     @WamProperty(index = 551, type = WamType.INTEGER)
-    OptionalInt transportNumAsyncWriteQueued();
+    OptionalLong transportNumAsyncWriteQueued();
 
     @WamProperty(index = 699, type = WamType.INTEGER)
-    OptionalInt transportOvershoot10PercCount();
+    OptionalLong transportOvershoot10PercCount();
 
     @WamProperty(index = 700, type = WamType.INTEGER)
-    OptionalInt transportOvershoot20PercCount();
+    OptionalLong transportOvershoot20PercCount();
 
     @WamProperty(index = 701, type = WamType.INTEGER)
-    OptionalInt transportOvershoot40PercCount();
+    OptionalLong transportOvershoot40PercCount();
 
     @WamProperty(index = 708, type = WamType.INTEGER)
-    OptionalInt transportOvershootLongestStreakS();
+    OptionalLong transportOvershootLongestStreakS();
 
     @WamProperty(index = 704, type = WamType.INTEGER)
-    OptionalInt transportOvershootSinceLast10sCount();
+    OptionalLong transportOvershootSinceLast10sCount();
 
     @WamProperty(index = 705, type = WamType.INTEGER)
-    OptionalInt transportOvershootSinceLast15sCount();
+    OptionalLong transportOvershootSinceLast15sCount();
 
     @WamProperty(index = 702, type = WamType.INTEGER)
-    OptionalInt transportOvershootSinceLast1sCount();
+    OptionalLong transportOvershootSinceLast1sCount();
 
     @WamProperty(index = 706, type = WamType.INTEGER)
-    OptionalInt transportOvershootSinceLast30sCount();
+    OptionalLong transportOvershootSinceLast30sCount();
 
     @WamProperty(index = 703, type = WamType.INTEGER)
-    OptionalInt transportOvershootSinceLast5sCount();
+    OptionalLong transportOvershootSinceLast5sCount();
 
     @WamProperty(index = 709, type = WamType.FLOAT)
     OptionalDouble transportOvershootStreakAvgS();
@@ -5846,133 +6028,133 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble transportOvershootTimeBetweenAvgS();
 
     @WamProperty(index = 2050, type = WamType.INTEGER)
-    OptionalInt transportP2pPeerMsgCnt();
+    OptionalLong transportP2pPeerMsgCnt();
 
     @WamProperty(index = 1886, type = WamType.INTEGER)
-    OptionalInt transportRestartCnt();
+    OptionalLong transportRestartCnt();
 
     @WamProperty(index = 1887, type = WamType.INTEGER)
-    OptionalInt transportRestartReasonBitmap();
+    OptionalLong transportRestartReasonBitmap();
 
     @WamProperty(index = 2326, type = WamType.INTEGER)
-    OptionalInt transportRtpCbNotAttachedPktSkipCnt();
+    OptionalLong transportRtpCbNotAttachedPktSkipCnt();
 
     @WamProperty(index = 2051, type = WamType.INTEGER)
-    OptionalInt transportRtpZeroPayloadCnt();
+    OptionalLong transportRtpZeroPayloadCnt();
 
     @WamProperty(index = 2052, type = WamType.INTEGER)
-    OptionalInt transportRxAllocTotalCnt();
+    OptionalLong transportRxAllocTotalCnt();
 
     @WamProperty(index = 2093, type = WamType.INTEGER)
-    OptionalInt transportRxHistoricalRelayPktCnt();
+    OptionalLong transportRxHistoricalRelayPktCnt();
 
     @WamProperty(index = 2053, type = WamType.BOOLEAN)
     Optional<Boolean> transportRxRelaySetImplictlyToTx();
 
     @WamProperty(index = 2418, type = WamType.INTEGER)
-    OptionalInt transportRxWarpPktOnInvalidRelayAddrCnt();
+    OptionalLong transportRxWarpPktOnInvalidRelayAddrCnt();
 
     @WamProperty(index = 556, type = WamType.INTEGER)
-    OptionalInt transportSendErrorCount();
+    OptionalLong transportSendErrorCount();
 
     @WamProperty(index = 2283, type = WamType.INTEGER)
-    OptionalInt transportSenderSubscriptionBaseLayerTriggered();
+    OptionalLong transportSenderSubscriptionBaseLayerTriggered();
 
     @WamProperty(index = 1059, type = WamType.INTEGER)
-    OptionalInt transportSplitterRxErrCnt();
+    OptionalLong transportSplitterRxErrCnt();
 
     @WamProperty(index = 1058, type = WamType.INTEGER)
-    OptionalInt transportSplitterTxErrCnt();
+    OptionalLong transportSplitterTxErrCnt();
 
     @WamProperty(index = 1141, type = WamType.INTEGER)
-    OptionalInt transportSrtcpRxRejectedPktCnt();
+    OptionalLong transportSrtcpRxRejectedPktCnt();
 
     @WamProperty(index = 1996, type = WamType.INTEGER)
-    OptionalInt transportSrtpRtpCbNotAttachedOnCgu();
+    OptionalLong transportSrtpRtpCbNotAttachedOnCgu();
 
     @WamProperty(index = 2419, type = WamType.INTEGER)
-    OptionalInt transportSrtpRxAuthFail();
+    OptionalLong transportSrtpRxAuthFail();
 
     @WamProperty(index = 1997, type = WamType.INTEGER)
-    OptionalInt transportSrtpRxAuthFailOnCgu();
+    OptionalLong transportSrtpRxAuthFailOnCgu();
 
     @WamProperty(index = 1570, type = WamType.INTEGER)
-    OptionalInt transportSrtpRxInitRejNoDupPktCnt();
+    OptionalLong transportSrtpRxInitRejNoDupPktCnt();
 
     @WamProperty(index = 1038, type = WamType.INTEGER)
-    OptionalInt transportSrtpRxMaxPktSize();
+    OptionalLong transportSrtpRxMaxPktSize();
 
     @WamProperty(index = 763, type = WamType.FLOAT)
     OptionalDouble transportSrtpRxRejectedBitrate();
 
     @WamProperty(index = 772, type = WamType.INTEGER)
-    OptionalInt transportSrtpRxRejectedDupPktCnt();
+    OptionalLong transportSrtpRxRejectedDupPktCnt();
 
     @WamProperty(index = 762, type = WamType.INTEGER)
-    OptionalInt transportSrtpRxRejectedPktCnt();
+    OptionalLong transportSrtpRxRejectedPktCnt();
 
     @WamProperty(index = 2019, type = WamType.INTEGER)
-    OptionalInt transportSrtpTxCtxNotFound();
+    OptionalLong transportSrtpTxCtxNotFound();
 
     @WamProperty(index = 774, type = WamType.INTEGER)
-    OptionalInt transportSrtpTxFailedPktCnt();
+    OptionalLong transportSrtpTxFailedPktCnt();
 
     @WamProperty(index = 773, type = WamType.INTEGER)
-    OptionalInt transportSrtpTxMaxPktSize();
+    OptionalLong transportSrtpTxMaxPktSize();
 
     @WamProperty(index = 1998, type = WamType.INTEGER)
-    OptionalInt transportSrtpUnknownSsrcOnCgu();
+    OptionalLong transportSrtpUnknownSsrcOnCgu();
 
     @WamProperty(index = 554, type = WamType.INTEGER)
-    OptionalInt transportTotalNumSendOsError();
+    OptionalLong transportTotalNumSendOsError();
 
     @WamProperty(index = 553, type = WamType.TIMER)
     Optional<Instant> transportTotalTimeInMsecAsyncWriteQueueToDispatch();
 
     @WamProperty(index = 710, type = WamType.INTEGER)
-    OptionalInt transportUndershoot10PercCount();
+    OptionalLong transportUndershoot10PercCount();
 
     @WamProperty(index = 711, type = WamType.INTEGER)
-    OptionalInt transportUndershoot20PercCount();
+    OptionalLong transportUndershoot20PercCount();
 
     @WamProperty(index = 712, type = WamType.INTEGER)
-    OptionalInt transportUndershoot40PercCount();
+    OptionalLong transportUndershoot40PercCount();
 
     @WamProperty(index = 536, type = WamType.INTEGER)
-    OptionalInt triggeredButDataLimitReached();
+    OptionalLong triggeredButDataLimitReached();
 
     @WamProperty(index = 1545, type = WamType.FLOAT)
     OptionalDouble txFailedEncCheckBytes();
 
     @WamProperty(index = 1546, type = WamType.INTEGER)
-    OptionalInt txFailedEncCheckPackets();
+    OptionalLong txFailedEncCheckPackets();
 
     @WamProperty(index = 1699, type = WamType.INTEGER)
-    OptionalInt txHbhFecBitrateKbps();
+    OptionalLong txHbhFecBitrateKbps();
 
     @WamProperty(index = 1962, type = WamType.INTEGER)
-    OptionalInt txHbhFecSrtpBitrateKbps();
+    OptionalLong txHbhFecSrtpBitrateKbps();
 
     @WamProperty(index = 2356, type = WamType.INTEGER)
-    OptionalInt txLowerHandCount();
+    OptionalLong txLowerHandCount();
 
     @WamProperty(index = 289, type = WamType.INTEGER)
-    OptionalInt txProbeCountSuccess();
+    OptionalLong txProbeCountSuccess();
 
     @WamProperty(index = 288, type = WamType.INTEGER)
-    OptionalInt txProbeCountTotal();
+    OptionalLong txProbeCountTotal();
 
     @WamProperty(index = 2357, type = WamType.INTEGER)
-    OptionalInt txRaiseHandCount();
+    OptionalLong txRaiseHandCount();
 
     @WamProperty(index = 2358, type = WamType.INTEGER)
-    OptionalInt txRaiseOrLowerHandErrorCount();
+    OptionalLong txRaiseOrLowerHandErrorCount();
 
     @WamProperty(index = 2338, type = WamType.INTEGER)
-    OptionalInt txReactionCount();
+    OptionalLong txReactionCount();
 
     @WamProperty(index = 2339, type = WamType.INTEGER)
-    OptionalInt txReactionErrorCount();
+    OptionalLong txReactionErrorCount();
 
     @WamProperty(index = 839, type = WamType.TIMER)
     Optional<Instant> txRelayRebindLatencyMs();
@@ -5981,10 +6163,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> txRelayResetLatencyMs();
 
     @WamProperty(index = 1519, type = WamType.INTEGER)
-    OptionalInt txStoppedCount();
+    OptionalLong txStoppedCount();
 
     @WamProperty(index = 1650, type = WamType.INTEGER)
-    OptionalInt txSubscriptionChangeCount();
+    OptionalLong txSubscriptionChangeCount();
 
     @WamProperty(index = 144, type = WamType.FLOAT)
     OptionalDouble txTotalBitrate();
@@ -5996,7 +6178,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble txTpFbBitrate();
 
     @WamProperty(index = 2471, type = WamType.INTEGER)
-    OptionalInt uaqcNumStateTransitions();
+    OptionalLong uaqcNumStateTransitions();
 
     @WamProperty(index = 2472, type = WamType.TIMER)
     Optional<Instant> uaqcTimeInBwManagedStateMs();
@@ -6014,28 +6196,28 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> uaqcTimeInProbingStateMs();
 
     @WamProperty(index = 1559, type = WamType.INTEGER)
-    OptionalInt udpAvailableCount();
+    OptionalLong udpAvailableCount();
 
     @WamProperty(index = 1560, type = WamType.INTEGER)
-    OptionalInt udpAvailableOnTcpCount();
+    OptionalLong udpAvailableOnTcpCount();
 
     @WamProperty(index = 1791, type = WamType.INTEGER)
-    OptionalInt udstAvgPredProb();
+    OptionalLong udstAvgPredProb();
 
     @WamProperty(index = 1792, type = WamType.INTEGER)
-    OptionalInt udstMcpAvgEndBitrate();
+    OptionalLong udstMcpAvgEndBitrate();
 
     @WamProperty(index = 1793, type = WamType.INTEGER)
-    OptionalInt udstMcpAvgStartBitrate();
+    OptionalLong udstMcpAvgStartBitrate();
 
     @WamProperty(index = 1794, type = WamType.INTEGER)
-    OptionalInt udstNumPredictions();
+    OptionalLong udstNumPredictions();
 
     @WamProperty(index = 1795, type = WamType.INTEGER)
-    OptionalInt udstSkippedPredictions();
+    OptionalLong udstSkippedPredictions();
 
     @WamProperty(index = 2060, type = WamType.INTEGER)
-    OptionalInt uiReconnecting();
+    OptionalLong uiReconnecting();
 
     @WamProperty(index = 1365, type = WamType.FLOAT)
     OptionalDouble ulOnlyHighPlrPct();
@@ -6047,40 +6229,40 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 2350, type = WamType.INTEGER)
-    OptionalInt unknownContactVideoUpgradeCount();
+    OptionalLong unknownContactVideoUpgradeCount();
 
     @WamProperty(index = 1576, type = WamType.INTEGER)
-    OptionalInt unknownRelayMessageCnt();
+    OptionalLong unknownRelayMessageCnt();
 
     @WamProperty(index = 1465, type = WamType.INTEGER)
-    OptionalInt uplinkOvershootCountSs();
+    OptionalLong uplinkOvershootCountSs();
 
     @WamProperty(index = 1970, type = WamType.INTEGER)
-    OptionalInt uplinkSbweRttSlopeCongestionCount();
+    OptionalLong uplinkSbweRttSlopeCongestionCount();
 
     @WamProperty(index = 1466, type = WamType.INTEGER)
-    OptionalInt uplinkUndershootCountSs();
+    OptionalLong uplinkUndershootCountSs();
 
     @WamProperty(index = 341, type = WamType.INTEGER)
-    OptionalInt usedInitTxBitrate();
+    OptionalLong usedInitTxBitrate();
 
     @WamProperty(index = 1150, type = WamType.INTEGER)
-    OptionalInt usedIpv4Count();
+    OptionalLong usedIpv4Count();
 
     @WamProperty(index = 1151, type = WamType.INTEGER)
-    OptionalInt usedIpv6Count();
+    OptionalLong usedIpv6Count();
 
     @WamProperty(index = 87, type = WamType.STRING)
     Optional<String> userDescription();
 
     @WamProperty(index = 88, type = WamType.INTEGER)
-    OptionalInt userProblems();
+    OptionalLong userProblems();
 
     @WamProperty(index = 86, type = WamType.INTEGER)
-    OptionalInt userRating();
+    OptionalLong userRating();
 
     @WamProperty(index = 1877, type = WamType.INTEGER)
-    OptionalInt userRedialCount();
+    OptionalLong userRedialCount();
 
     @WamProperty(index = 2415, type = WamType.STRING)
     Optional<String> uvmCellId();
@@ -6098,22 +6280,22 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble uvqAvgScore();
 
     @WamProperty(index = 2747, type = WamType.INTEGER)
-    OptionalInt uvqDownloadFailureCount();
+    OptionalLong uvqDownloadFailureCount();
 
     @WamProperty(index = 2748, type = WamType.INTEGER)
-    OptionalInt uvqDownloadSuccessCount();
+    OptionalLong uvqDownloadSuccessCount();
 
     @WamProperty(index = 2749, type = WamType.INTEGER)
-    OptionalInt uvqInferenceFailureCount();
+    OptionalLong uvqInferenceFailureCount();
 
     @WamProperty(index = 2750, type = WamType.INTEGER)
-    OptionalInt uvqInferenceSuccessCount();
+    OptionalLong uvqInferenceSuccessCount();
 
     @WamProperty(index = 2751, type = WamType.INTEGER)
-    OptionalInt uvqLoadFailureCount();
+    OptionalLong uvqLoadFailureCount();
 
     @WamProperty(index = 2752, type = WamType.INTEGER)
-    OptionalInt uvqLoadSuccessCount();
+    OptionalLong uvqLoadSuccessCount();
 
     @WamProperty(index = 2753, type = WamType.FLOAT)
     OptionalDouble uvqMaxScore();
@@ -6131,7 +6313,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble uvqP95Score();
 
     @WamProperty(index = 1777, type = WamType.INTEGER)
-    OptionalInt uwpCameraLastDeviceHresultError();
+    OptionalLong uwpCameraLastDeviceHresultError();
 
     @WamProperty(index = 1778, type = WamType.TIMER)
     Optional<Instant> uwpCameraMediacaptureTime();
@@ -6146,7 +6328,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> uwpVoipCameraLastErrorManufacturerName();
 
     @WamProperty(index = 1829, type = WamType.INTEGER)
-    OptionalInt uwpVoipCameraTotalErrors();
+    OptionalLong uwpVoipCameraTotalErrors();
 
     @WamProperty(index = 1830, type = WamType.TIMER)
     Optional<Instant> uwpVoipInitTime();
@@ -6164,22 +6346,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> uwpVoipMicLastErrorManufacturerName();
 
     @WamProperty(index = 1835, type = WamType.INTEGER)
-    OptionalInt uwpVoipMicTotalErrors();
+    OptionalLong uwpVoipMicTotalErrors();
 
     @WamProperty(index = 1836, type = WamType.INTEGER)
-    OptionalInt uwpVoipNumAnrEvents();
+    OptionalLong uwpVoipNumAnrEvents();
 
     @WamProperty(index = 1837, type = WamType.INTEGER)
-    OptionalInt uwpVoipNumCriticalEvents();
+    OptionalLong uwpVoipNumCriticalEvents();
 
     @WamProperty(index = 1838, type = WamType.INTEGER)
-    OptionalInt uwpVoipNumUnhandledExceptionEvents();
+    OptionalLong uwpVoipNumUnhandledExceptionEvents();
 
     @WamProperty(index = 1839, type = WamType.INTEGER)
-    OptionalInt uwpVoipTotalCameraDevices();
+    OptionalLong uwpVoipTotalCameraDevices();
 
     @WamProperty(index = 1840, type = WamType.INTEGER)
-    OptionalInt uwpVoipTotalMicDevices();
+    OptionalLong uwpVoipTotalMicDevices();
 
     @WamProperty(index = 1841, type = WamType.TIMER)
     Optional<Instant> uwpVoipWindowIncomingAcceptToCallLayoutTime();
@@ -6197,7 +6379,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> v2vAudioFrameLoss8xMs();
 
     @WamProperty(index = 1147, type = WamType.INTEGER)
-    OptionalInt v2vAudioLossPeriodCount();
+    OptionalLong v2vAudioLossPeriodCount();
 
     @WamProperty(index = 1148, type = WamType.TIMER)
     Optional<Instant> v2vTotalAudioFrameLossMs();
@@ -6227,13 +6409,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> vidBurstyPktLossTime();
 
     @WamProperty(index = 688, type = WamType.INTEGER)
-    OptionalInt vidCorrectRetxDetectPcnt();
+    OptionalLong vidCorrectRetxDetectPcnt();
 
     @WamProperty(index = 2589, type = WamType.INTEGER)
-    OptionalInt vidIsPausedOnCreateAndConnectFuncCnt();
+    OptionalLong vidIsPausedOnCreateAndConnectFuncCnt();
 
     @WamProperty(index = 2590, type = WamType.INTEGER)
-    OptionalInt vidIsPausedOnCreateFuncCnt();
+    OptionalLong vidIsPausedOnCreateFuncCnt();
 
     @WamProperty(index = 1063, type = WamType.FLOAT)
     OptionalDouble vidJbDiscards();
@@ -6254,19 +6436,19 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble vidJbResets();
 
     @WamProperty(index = 1124, type = WamType.INTEGER)
-    OptionalInt vidNumRandToBursty();
+    OptionalLong vidNumRandToBursty();
 
     @WamProperty(index = 698, type = WamType.INTEGER)
-    OptionalInt vidNumRetxDropped();
+    OptionalLong vidNumRetxDropped();
 
     @WamProperty(index = 757, type = WamType.INTEGER)
-    OptionalInt vidNumRxRetx();
+    OptionalLong vidNumRxRetx();
 
     @WamProperty(index = 693, type = WamType.STRING)
     Optional<String> vidPktRxState0();
 
     @WamProperty(index = 2591, type = WamType.INTEGER)
-    OptionalInt vidPortResumeSubCnt();
+    OptionalLong vidPortResumeSubCnt();
 
     @WamProperty(index = 1125, type = WamType.TIMER)
     Optional<Instant> vidRandomPktLossTime();
@@ -6278,25 +6460,25 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> vidUlTimeSinceAutoPauseAtCallEnd();
 
     @WamProperty(index = 716, type = WamType.INTEGER)
-    OptionalInt vidWrongRetxDetectPcnt();
+    OptionalLong vidWrongRetxDetectPcnt();
 
     @WamProperty(index = 276, type = WamType.TIMER)
     Optional<Instant> videoActiveTime();
 
     @WamProperty(index = 1039, type = WamType.INTEGER)
-    OptionalInt videoAheadNumAvSyncDiscardFrames();
+    OptionalLong videoAheadNumAvSyncDiscardFrames();
 
     @WamProperty(index = 1687, type = WamType.INTEGER)
-    OptionalInt videoAv1Time();
+    OptionalLong videoAv1Time();
 
     @WamProperty(index = 484, type = WamType.TIMER)
     Optional<Instant> videoAveDelayLtrp();
 
     @WamProperty(index = 1816, type = WamType.INTEGER)
-    OptionalInt videoAverageBitrateDiffSbwaToClientBwa();
+    OptionalLong videoAverageBitrateDiffSbwaToClientBwa();
 
     @WamProperty(index = 1817, type = WamType.INTEGER)
-    OptionalInt videoAverageLqBitrateFromSbwa();
+    OptionalLong videoAverageLqBitrateFromSbwa();
 
     @WamProperty(index = 390, type = WamType.FLOAT)
     OptionalDouble videoAvgCombPsnr();
@@ -6305,10 +6487,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoAvgCombPsnrSs();
 
     @WamProperty(index = 1467, type = WamType.INTEGER)
-    OptionalInt videoAvgEncKfQpSs();
+    OptionalLong videoAvgEncKfQpSs();
 
     @WamProperty(index = 1468, type = WamType.INTEGER)
-    OptionalInt videoAvgEncPFrameQpSs();
+    OptionalLong videoAvgEncPFrameQpSs();
 
     @WamProperty(index = 410, type = WamType.FLOAT)
     OptionalDouble videoAvgEncodingPsnr();
@@ -6344,40 +6526,40 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoAvgTotalTargetBitrateSs();
 
     @WamProperty(index = 1040, type = WamType.INTEGER)
-    OptionalInt videoBehindNumAvSyncDiscardFrames();
+    OptionalLong videoBehindNumAvSyncDiscardFrames();
 
     @WamProperty(index = 222, type = WamType.INTEGER)
-    OptionalInt videoCaptureAvgFps();
+    OptionalLong videoCaptureAvgFps();
 
     @WamProperty(index = 226, type = WamType.TIMER)
     Optional<Instant> videoCaptureConverterTs();
 
     @WamProperty(index = 496, type = WamType.INTEGER)
-    OptionalInt videoCaptureFrameOverwriteCount();
+    OptionalLong videoCaptureFrameOverwriteCount();
 
     @WamProperty(index = 228, type = WamType.INTEGER)
-    OptionalInt videoCaptureHeight();
+    OptionalLong videoCaptureHeight();
 
     @WamProperty(index = 1471, type = WamType.INTEGER)
-    OptionalInt videoCaptureHeightSs();
+    OptionalLong videoCaptureHeightSs();
 
     @WamProperty(index = 1863, type = WamType.INTEGER)
-    OptionalInt videoCapturePortRecreateCount();
+    OptionalLong videoCapturePortRecreateCount();
 
     @WamProperty(index = 227, type = WamType.INTEGER)
-    OptionalInt videoCaptureWidth();
+    OptionalLong videoCaptureWidth();
 
     @WamProperty(index = 1472, type = WamType.INTEGER)
-    OptionalInt videoCaptureWidthSs();
+    OptionalLong videoCaptureWidthSs();
 
     @WamProperty(index = 401, type = WamType.INTEGER)
-    OptionalInt videoCodecScheme();
+    OptionalLong videoCodecScheme();
 
     @WamProperty(index = 303, type = WamType.INTEGER)
-    OptionalInt videoCodecSubType();
+    OptionalLong videoCodecSubType();
 
     @WamProperty(index = 236, type = WamType.INTEGER)
-    OptionalInt videoCodecType();
+    OptionalLong videoCodecType();
 
     @WamProperty(index = 2430, type = WamType.FLOAT)
     OptionalDouble videoCombPsnrP5();
@@ -6388,6 +6570,9 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 2432, type = WamType.FLOAT)
     OptionalDouble videoCombPsnrP95();
 
+    @WamProperty(index = 3030, type = WamType.FLOAT)
+    OptionalDouble videoCompositeBrightnessAvg();
+
     @WamProperty(index = 207, type = WamType.FLOAT)
     OptionalDouble videoDecAvgFps();
 
@@ -6395,100 +6580,100 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoDecAvgFpsSs();
 
     @WamProperty(index = 205, type = WamType.INTEGER)
-    OptionalInt videoDecColorId();
+    OptionalLong videoDecColorId();
 
     @WamProperty(index = 419, type = WamType.INTEGER)
-    OptionalInt videoDecCrcMismatchFrames();
+    OptionalLong videoDecCrcMismatchFrames();
 
     @WamProperty(index = 174, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFrames();
+    OptionalLong videoDecErrorFrames();
 
     @WamProperty(index = 1688, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesAv1();
+    OptionalLong videoDecErrorFramesAv1();
 
     @WamProperty(index = 714, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesCodecSwitch();
+    OptionalLong videoDecErrorFramesCodecSwitch();
 
     @WamProperty(index = 713, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesDuplicate();
+    OptionalLong videoDecErrorFramesDuplicate();
 
     @WamProperty(index = 680, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesH264();
+    OptionalLong videoDecErrorFramesH264();
 
     @WamProperty(index = 2630, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesH265();
+    OptionalLong videoDecErrorFramesH265();
 
     @WamProperty(index = 478, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesIgnoreConsecutive();
+    OptionalLong videoDecErrorFramesIgnoreConsecutive();
 
     @WamProperty(index = 682, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesOutoforder();
+    OptionalLong videoDecErrorFramesOutoforder();
 
     @WamProperty(index = 810, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesSpsPpsMissingAfterResolutionSwitch();
+    OptionalLong videoDecErrorFramesSpsPpsMissingAfterResolutionSwitch();
 
     @WamProperty(index = 2260, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesVav1();
+    OptionalLong videoDecErrorFramesVav1();
 
     @WamProperty(index = 681, type = WamType.INTEGER)
-    OptionalInt videoDecErrorFramesVp8();
+    OptionalLong videoDecErrorFramesVp8();
 
     @WamProperty(index = 462, type = WamType.INTEGER)
-    OptionalInt videoDecErrorLtrpFramesVp8();
+    OptionalLong videoDecErrorLtrpFramesVp8();
 
     @WamProperty(index = 480, type = WamType.INTEGER)
-    OptionalInt videoDecErrorLtrpFramesVp8NoLtr();
+    OptionalLong videoDecErrorLtrpFramesVp8NoLtr();
 
     @WamProperty(index = 1084, type = WamType.INTEGER)
-    OptionalInt videoDecFatalErrorNum();
+    OptionalLong videoDecFatalErrorNum();
 
     @WamProperty(index = 172, type = WamType.INTEGER)
-    OptionalInt videoDecInputFrames();
+    OptionalLong videoDecInputFrames();
 
     @WamProperty(index = 175, type = WamType.INTEGER)
-    OptionalInt videoDecKeyframes();
+    OptionalLong videoDecKeyframes();
 
     @WamProperty(index = 223, type = WamType.TIMER)
     Optional<Instant> videoDecLatency();
 
     @WamProperty(index = 210, type = WamType.INTEGER)
-    OptionalInt videoDecLostPackets();
+    OptionalLong videoDecLostPackets();
 
     @WamProperty(index = 461, type = WamType.INTEGER)
-    OptionalInt videoDecLtrpFramesVp8();
+    OptionalLong videoDecLtrpFramesVp8();
 
     @WamProperty(index = 204, type = WamType.INTEGER)
-    OptionalInt videoDecName();
+    OptionalLong videoDecName();
 
     @WamProperty(index = 2729, type = WamType.INTEGER)
-    OptionalInt videoDecNoRtcpSessionNum();
+    OptionalLong videoDecNoRtcpSessionNum();
 
     @WamProperty(index = 616, type = WamType.INTEGER)
-    OptionalInt videoDecNumSkippedFramesVp8();
+    OptionalLong videoDecNumSkippedFramesVp8();
 
     @WamProperty(index = 173, type = WamType.INTEGER)
-    OptionalInt videoDecOutputFrames();
+    OptionalLong videoDecOutputFrames();
 
     @WamProperty(index = 1474, type = WamType.INTEGER)
-    OptionalInt videoDecOutputFramesInLast10secSs();
+    OptionalLong videoDecOutputFramesInLast10secSs();
 
     @WamProperty(index = 1475, type = WamType.INTEGER)
-    OptionalInt videoDecOutputFramesSs();
+    OptionalLong videoDecOutputFramesSs();
 
     @WamProperty(index = 206, type = WamType.INTEGER)
-    OptionalInt videoDecRestart();
+    OptionalLong videoDecRestart();
 
     @WamProperty(index = 209, type = WamType.INTEGER)
-    OptionalInt videoDecSkipPackets();
+    OptionalLong videoDecSkipPackets();
 
     @WamProperty(index = 232, type = WamType.INTEGER)
-    OptionalInt videoDecodePausedCount();
+    OptionalLong videoDecodePausedCount();
 
     @WamProperty(index = 1726, type = WamType.INTEGER)
-    OptionalInt videoDisablingActionReversalCount();
+    OptionalLong videoDisablingActionReversalCount();
 
     @WamProperty(index = 1652, type = WamType.INTEGER)
-    OptionalInt videoDisablingEventCount();
+    OptionalLong videoDisablingEventCount();
 
     @WamProperty(index = 1819, type = WamType.TIMER)
     Optional<Instant> videoDisablingPausedDurationNoSbwa();
@@ -6497,7 +6682,10 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoDisablingToCallEndDelay();
 
     @WamProperty(index = 273, type = WamType.INTEGER)
-    OptionalInt videoDowngradeCount();
+    OptionalLong videoDowngradeCount();
+
+    @WamProperty(index = 2972, type = WamType.INTEGER)
+    OptionalLong videoEdgeAvg();
 
     @WamProperty(index = 163, type = WamType.BOOLEAN)
     Optional<Boolean> videoEnabled();
@@ -6551,7 +6739,7 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoEncBitrateHqSs();
 
     @WamProperty(index = 213, type = WamType.INTEGER)
-    OptionalInt videoEncColorId();
+    OptionalLong videoEncColorId();
 
     @WamProperty(index = 686, type = WamType.FLOAT)
     OptionalDouble videoEncDeviationAllLtrpFrameVp8();
@@ -6560,49 +6748,49 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoEncDeviationPFramePrevRefVp8();
 
     @WamProperty(index = 217, type = WamType.INTEGER)
-    OptionalInt videoEncDiscardFrame();
+    OptionalLong videoEncDiscardFrame();
 
     @WamProperty(index = 938, type = WamType.INTEGER)
-    OptionalInt videoEncDiscardFrameHq();
+    OptionalLong videoEncDiscardFrameHq();
 
     @WamProperty(index = 179, type = WamType.INTEGER)
-    OptionalInt videoEncDropFrames();
+    OptionalLong videoEncDropFrames();
 
     @WamProperty(index = 937, type = WamType.INTEGER)
-    OptionalInt videoEncDropFramesHq();
+    OptionalLong videoEncDropFramesHq();
 
     @WamProperty(index = 178, type = WamType.INTEGER)
-    OptionalInt videoEncErrorFrames();
+    OptionalLong videoEncErrorFrames();
 
     @WamProperty(index = 936, type = WamType.INTEGER)
-    OptionalInt videoEncErrorFramesHq();
+    OptionalLong videoEncErrorFramesHq();
 
     @WamProperty(index = 1049, type = WamType.INTEGER)
-    OptionalInt videoEncFatalErrorNum();
+    OptionalLong videoEncFatalErrorNum();
 
     @WamProperty(index = 176, type = WamType.INTEGER)
-    OptionalInt videoEncInputFrames();
+    OptionalLong videoEncInputFrames();
 
     @WamProperty(index = 934, type = WamType.INTEGER)
-    OptionalInt videoEncInputFramesHq();
+    OptionalLong videoEncInputFramesHq();
 
     @WamProperty(index = 1477, type = WamType.INTEGER)
-    OptionalInt videoEncInputFramesInLast10secSs();
+    OptionalLong videoEncInputFramesInLast10secSs();
 
     @WamProperty(index = 1478, type = WamType.INTEGER)
-    OptionalInt videoEncInputFramesSs();
+    OptionalLong videoEncInputFramesSs();
 
     @WamProperty(index = 180, type = WamType.INTEGER)
-    OptionalInt videoEncKeyframes();
+    OptionalLong videoEncKeyframes();
 
     @WamProperty(index = 939, type = WamType.INTEGER)
-    OptionalInt videoEncKeyframesHq();
+    OptionalLong videoEncKeyframesHq();
 
     @WamProperty(index = 1479, type = WamType.INTEGER)
-    OptionalInt videoEncKeyframesSs();
+    OptionalLong videoEncKeyframesSs();
 
     @WamProperty(index = 463, type = WamType.INTEGER)
-    OptionalInt videoEncKeyframesVp8();
+    OptionalLong videoEncKeyframesVp8();
 
     @WamProperty(index = 731, type = WamType.TIMER)
     Optional<Instant> videoEncKfErrCodecSwitchT();
@@ -6614,16 +6802,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoEncLatencyHq();
 
     @WamProperty(index = 471, type = WamType.INTEGER)
-    OptionalInt videoEncLtrpFrameGenFailedVp8();
+    OptionalLong videoEncLtrpFrameGenFailedVp8();
 
     @WamProperty(index = 467, type = WamType.INTEGER)
-    OptionalInt videoEncLtrpFramesVp8();
+    OptionalLong videoEncLtrpFramesVp8();
 
     @WamProperty(index = 494, type = WamType.INTEGER)
-    OptionalInt videoEncLtrpToKfFallbackVp8();
+    OptionalLong videoEncLtrpToKfFallbackVp8();
 
     @WamProperty(index = 1050, type = WamType.INTEGER)
-    OptionalInt videoEncModifyNum();
+    OptionalLong videoEncModifyNum();
 
     @WamProperty(index = 1400, type = WamType.TIMER)
     Optional<Instant> videoEncMsInOpenh264HighComp();
@@ -6638,28 +6826,28 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoEncMsInOpenh264UltrahighComp();
 
     @WamProperty(index = 212, type = WamType.INTEGER)
-    OptionalInt videoEncName();
+    OptionalLong videoEncName();
 
     @WamProperty(index = 2730, type = WamType.INTEGER)
-    OptionalInt videoEncNoRtcpSessionNum();
+    OptionalLong videoEncNoRtcpSessionNum();
 
     @WamProperty(index = 2731, type = WamType.INTEGER)
-    OptionalInt videoEncNoRtcpSessionNumHq();
+    OptionalLong videoEncNoRtcpSessionNumHq();
 
     @WamProperty(index = 600, type = WamType.INTEGER)
-    OptionalInt videoEncNumErrorLtrHoldFailedVp8();
+    OptionalLong videoEncNumErrorLtrHoldFailedVp8();
 
     @WamProperty(index = 1480, type = WamType.INTEGER)
-    OptionalInt videoEncOutputFrameSs();
+    OptionalLong videoEncOutputFrameSs();
 
     @WamProperty(index = 177, type = WamType.INTEGER)
-    OptionalInt videoEncOutputFrames();
+    OptionalLong videoEncOutputFrames();
 
     @WamProperty(index = 935, type = WamType.INTEGER)
-    OptionalInt videoEncOutputFramesHq();
+    OptionalLong videoEncOutputFramesHq();
 
     @WamProperty(index = 472, type = WamType.INTEGER)
-    OptionalInt videoEncPFramePrevRefVp8();
+    OptionalLong videoEncPFramePrevRefVp8();
 
     @WamProperty(index = 2433, type = WamType.FLOAT)
     OptionalDouble videoEncPsnrP5();
@@ -6674,13 +6862,13 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoEncRegularLtrpTimeInMsec();
 
     @WamProperty(index = 214, type = WamType.INTEGER)
-    OptionalInt videoEncRestart();
+    OptionalLong videoEncRestart();
 
     @WamProperty(index = 1046, type = WamType.INTEGER)
-    OptionalInt videoEncRestartPresetChange();
+    OptionalLong videoEncRestartPresetChange();
 
     @WamProperty(index = 1045, type = WamType.INTEGER)
-    OptionalInt videoEncRestartResChange();
+    OptionalLong videoEncRestartResChange();
 
     @WamProperty(index = 1689, type = WamType.TIMER)
     Optional<Instant> videoEncTimeOvershoot10PercAv1();
@@ -6788,22 +6976,22 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoEncTimeUndershoot40PercVp8();
 
     @WamProperty(index = 1481, type = WamType.INTEGER)
-    OptionalInt videoEncoderHeightSs();
+    OptionalLong videoEncoderHeightSs();
 
     @WamProperty(index = 1482, type = WamType.INTEGER)
-    OptionalInt videoEncoderWidthSs();
+    OptionalLong videoEncoderWidthSs();
 
     @WamProperty(index = 183, type = WamType.INTEGER)
-    OptionalInt videoFecRecovered();
+    OptionalLong videoFecRecovered();
 
     @WamProperty(index = 334, type = WamType.INTEGER)
-    OptionalInt videoH264Time();
+    OptionalLong videoH264Time();
 
     @WamProperty(index = 335, type = WamType.INTEGER)
-    OptionalInt videoH265Time();
+    OptionalLong videoH265Time();
 
     @WamProperty(index = 189, type = WamType.INTEGER)
-    OptionalInt videoHeight();
+    OptionalLong videoHeight();
 
     @WamProperty(index = 904, type = WamType.FLOAT)
     OptionalDouble videoInitRxBitrate16s();
@@ -6818,10 +7006,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoInitRxBitrate8s();
 
     @WamProperty(index = 402, type = WamType.INTEGER)
-    OptionalInt videoInitialCodecScheme();
+    OptionalLong videoInitialCodecScheme();
 
     @WamProperty(index = 321, type = WamType.INTEGER)
-    OptionalInt videoInitialCodecType();
+    OptionalLong videoInitialCodecType();
 
     @WamProperty(index = 185, type = WamType.FLOAT)
     OptionalDouble videoLastSenderBwe();
@@ -6847,38 +7035,53 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 830, type = WamType.FLOAT)
     OptionalDouble videoMinTargetBitrateHq();
 
+    @WamProperty(index = 2973, type = WamType.INTEGER)
+    OptionalLong videoMotionAvg();
+
+    @WamProperty(index = 2974, type = WamType.INTEGER)
+    OptionalLong videoMotionP5();
+
+    @WamProperty(index = 2975, type = WamType.INTEGER)
+    OptionalLong videoMotionP95();
+
     @WamProperty(index = 1185, type = WamType.BOOLEAN)
     Optional<Boolean> videoNackHbhEnabled();
 
     @WamProperty(index = 1272, type = WamType.INTEGER)
-    OptionalInt videoNackRtpRetransmitRecvdCount();
+    OptionalLong videoNackRtpRetransmitRecvdCount();
 
     @WamProperty(index = 1373, type = WamType.INTEGER)
-    OptionalInt videoNackRtpRetransmitReqCount();
+    OptionalLong videoNackRtpRetransmitReqCount();
 
     @WamProperty(index = 2917, type = WamType.INTEGER)
-    OptionalInt videoNackRtpRetransmitRetryCount();
+    OptionalLong videoNackRtpRetransmitRetryCount();
 
     @WamProperty(index = 594, type = WamType.INTEGER)
-    OptionalInt videoNpsiGenFailed();
+    OptionalLong videoNpsiGenFailed();
 
     @WamProperty(index = 595, type = WamType.INTEGER)
-    OptionalInt videoNpsiNoNack();
+    OptionalLong videoNpsiNoNack();
 
     @WamProperty(index = 1010, type = WamType.INTEGER)
-    OptionalInt videoNumAvSyncDiscardFrames();
+    OptionalLong videoNumAvSyncDiscardFrames();
+
+    @WamProperty(index = 3031, type = WamType.FLOAT)
+    OptionalDouble videoOverexposureAvg();
 
     @WamProperty(index = 275, type = WamType.ENUM)
     Optional<CallVideoState> videoPeerState();
 
     @WamProperty(index = 654, type = WamType.INTEGER)
-    OptionalInt videoPeerTriggeredPauseCount();
+    OptionalLong videoPeerTriggeredPauseCount();
 
     @WamProperty(index = 1270, type = WamType.INTEGER)
-    OptionalInt videoQualityScore();
+    OptionalLong videoQualityScore();
 
     @WamProperty(index = 2315, type = WamType.FLOAT)
     OptionalDouble videoRecvPsnrAvg();
+
+    @WamProperty(index = 2996, type = WamType.FLOAT)
+    OptionalDouble videoRecvPsnrAvgSs();
 
     @WamProperty(index = 2316, type = WamType.FLOAT)
     OptionalDouble videoRecvPsnrP5();
@@ -6886,14 +7089,26 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 2317, type = WamType.FLOAT)
     OptionalDouble videoRecvPsnrP50();
 
+    @WamProperty(index = 2997, type = WamType.FLOAT)
+    OptionalDouble videoRecvPsnrP50Ss();
+
+    @WamProperty(index = 2998, type = WamType.FLOAT)
+    OptionalDouble videoRecvPsnrP5Ss();
+
     @WamProperty(index = 2318, type = WamType.FLOAT)
     OptionalDouble videoRecvPsnrP95();
 
+    @WamProperty(index = 2999, type = WamType.FLOAT)
+    OptionalDouble videoRecvPsnrP95Ss();
+
+    @WamProperty(index = 3033, type = WamType.TIMER)
+    Optional<Instant> videoRecvToRenderLatency();
+
     @WamProperty(index = 208, type = WamType.INTEGER)
-    OptionalInt videoRenderAvgFps();
+    OptionalLong videoRenderAvgFps();
 
     @WamProperty(index = 2182, type = WamType.INTEGER)
-    OptionalInt videoRenderAvgFpsDominantSpeaker();
+    OptionalLong videoRenderAvgFpsDominantSpeaker();
 
     @WamProperty(index = 225, type = WamType.TIMER)
     Optional<Instant> videoRenderConverterTs();
@@ -6905,7 +7120,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoRenderFreeze2xT();
 
     @WamProperty(index = 2183, type = WamType.INTEGER)
-    OptionalInt videoRenderFreeze2xTDominantSpeaker();
+    OptionalLong videoRenderFreeze2xTDominantSpeaker();
 
     @WamProperty(index = 2860, type = WamType.TIMER)
     Optional<Instant> videoRenderFreeze2xTDominantSpeakerV2();
@@ -6917,7 +7132,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoRenderFreeze4xT();
 
     @WamProperty(index = 2184, type = WamType.INTEGER)
-    OptionalInt videoRenderFreeze4xTDominantSpeaker();
+    OptionalLong videoRenderFreeze4xTDominantSpeaker();
 
     @WamProperty(index = 2861, type = WamType.TIMER)
     Optional<Instant> videoRenderFreeze4xTDominantSpeakerV2();
@@ -6929,7 +7144,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoRenderFreeze8xT();
 
     @WamProperty(index = 2185, type = WamType.INTEGER)
-    OptionalInt videoRenderFreeze8xTDominantSpeaker();
+    OptionalLong videoRenderFreeze8xTDominantSpeaker();
 
     @WamProperty(index = 2862, type = WamType.TIMER)
     Optional<Instant> videoRenderFreeze8xTDominantSpeakerV2();
@@ -6941,7 +7156,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoRenderFreezeT();
 
     @WamProperty(index = 2186, type = WamType.INTEGER)
-    OptionalInt videoRenderFreezeTDominantSpeaker();
+    OptionalLong videoRenderFreezeTDominantSpeaker();
 
     @WamProperty(index = 2863, type = WamType.TIMER)
     Optional<Instant> videoRenderFreezeTDominantSpeakerV2();
@@ -6992,16 +7207,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> videoRenderInitFreezeTV2();
 
     @WamProperty(index = 569, type = WamType.INTEGER)
-    OptionalInt videoRenderNumFreezes();
+    OptionalLong videoRenderNumFreezes();
 
     @WamProperty(index = 571, type = WamType.INTEGER)
-    OptionalInt videoRenderNumSinceLastFreeze10s();
+    OptionalLong videoRenderNumSinceLastFreeze10s();
 
     @WamProperty(index = 572, type = WamType.INTEGER)
-    OptionalInt videoRenderNumSinceLastFreeze30s();
+    OptionalLong videoRenderNumSinceLastFreeze30s();
 
     @WamProperty(index = 570, type = WamType.INTEGER)
-    OptionalInt videoRenderNumSinceLastFreeze5s();
+    OptionalLong videoRenderNumSinceLastFreeze5s();
 
     @WamProperty(index = 1132, type = WamType.TIMER)
     Optional<Instant> videoRenderPauseT();
@@ -7013,37 +7228,37 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoRenderedRxBitrate();
 
     @WamProperty(index = 1178, type = WamType.INTEGER)
-    OptionalInt videoRetxRtcpNack();
+    OptionalLong videoRetxRtcpNack();
 
     @WamProperty(index = 1179, type = WamType.INTEGER)
-    OptionalInt videoRetxRtcpPli();
+    OptionalLong videoRetxRtcpPli();
 
     @WamProperty(index = 1273, type = WamType.INTEGER)
-    OptionalInt videoRtcpNackProcessed();
+    OptionalLong videoRtcpNackProcessed();
 
     @WamProperty(index = 1274, type = WamType.INTEGER)
-    OptionalInt videoRtcpNackProcessedHq();
+    OptionalLong videoRtcpNackProcessedHq();
 
     @WamProperty(index = 169, type = WamType.FLOAT)
     OptionalDouble videoRxBitrate();
 
     @WamProperty(index = 2187, type = WamType.INTEGER)
-    OptionalInt videoRxBitrateDominantSpeaker();
+    OptionalLong videoRxBitrateDominantSpeaker();
 
     @WamProperty(index = 1992, type = WamType.INTEGER)
-    OptionalInt videoRxBitrateDominantSpeakerInSpeakerMode();
+    OptionalLong videoRxBitrateDominantSpeakerInSpeakerMode();
 
     @WamProperty(index = 1993, type = WamType.INTEGER)
-    OptionalInt videoRxBitrateDominantSpeakerWithPeerInSpeakerMode();
+    OptionalLong videoRxBitrateDominantSpeakerWithPeerInSpeakerMode();
 
     @WamProperty(index = 1994, type = WamType.INTEGER)
-    OptionalInt videoRxBitrateNonSpeakerInSpeakerMode();
+    OptionalLong videoRxBitrateNonSpeakerInSpeakerMode();
 
     @WamProperty(index = 1995, type = WamType.INTEGER)
-    OptionalInt videoRxBitrateNonSpeakerWithPeerInSpeakerMode();
+    OptionalLong videoRxBitrateNonSpeakerWithPeerInSpeakerMode();
 
     @WamProperty(index = 1483, type = WamType.INTEGER)
-    OptionalInt videoRxBitrateSs();
+    OptionalLong videoRxBitrateSs();
 
     @WamProperty(index = 187, type = WamType.BOOLEAN)
     Optional<Boolean> videoRxBweHitTxBwe();
@@ -7055,49 +7270,49 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoRxFecBitrate();
 
     @WamProperty(index = 182, type = WamType.INTEGER)
-    OptionalInt videoRxFecFrames();
+    OptionalLong videoRxFecFrames();
 
     @WamProperty(index = 485, type = WamType.INTEGER)
-    OptionalInt videoRxKfBeforeLtrpAfterRpsi();
+    OptionalLong videoRxKfBeforeLtrpAfterRpsi();
 
     @WamProperty(index = 721, type = WamType.INTEGER)
-    OptionalInt videoRxNumCodecSwitch();
+    OptionalLong videoRxNumCodecSwitch();
 
     @WamProperty(index = 201, type = WamType.INTEGER)
-    OptionalInt videoRxPackets();
+    OptionalLong videoRxPackets();
 
     @WamProperty(index = 170, type = WamType.FLOAT)
     OptionalDouble videoRxPktLossPct();
 
     @WamProperty(index = 487, type = WamType.INTEGER)
-    OptionalInt videoRxPktRtcpApp();
+    OptionalLong videoRxPktRtcpApp();
 
     @WamProperty(index = 2095, type = WamType.FLOAT)
     OptionalDouble videoRxRsFecBitrate();
 
     @WamProperty(index = 2096, type = WamType.INTEGER)
-    OptionalInt videoRxRsFecPkts();
+    OptionalLong videoRxRsFecPkts();
 
     @WamProperty(index = 621, type = WamType.INTEGER)
-    OptionalInt videoRxRtcpFir();
+    OptionalLong videoRxRtcpFir();
 
     @WamProperty(index = 203, type = WamType.INTEGER)
-    OptionalInt videoRxRtcpNack();
+    OptionalLong videoRxRtcpNack();
 
     @WamProperty(index = 1181, type = WamType.INTEGER)
-    OptionalInt videoRxRtcpNackDropped();
+    OptionalLong videoRxRtcpNackDropped();
 
     @WamProperty(index = 521, type = WamType.INTEGER)
-    OptionalInt videoRxRtcpNpsi();
+    OptionalLong videoRxRtcpNpsi();
 
     @WamProperty(index = 202, type = WamType.INTEGER)
-    OptionalInt videoRxRtcpPli();
+    OptionalLong videoRxRtcpPli();
 
     @WamProperty(index = 1182, type = WamType.INTEGER)
-    OptionalInt videoRxRtcpPliDropped();
+    OptionalLong videoRxRtcpPliDropped();
 
     @WamProperty(index = 459, type = WamType.INTEGER)
-    OptionalInt videoRxRtcpRpsi();
+    OptionalLong videoRxRtcpRpsi();
 
     @WamProperty(index = 168, type = WamType.FLOAT)
     OptionalDouble videoRxTotalBytes();
@@ -7120,8 +7335,11 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 348, type = WamType.FLOAT)
     OptionalDouble videoSenderBweStddev();
 
+    @WamProperty(index = 3000, type = WamType.INTEGER)
+    OptionalLong videoStateReorderDropCount();
+
     @WamProperty(index = 1562, type = WamType.INTEGER)
-    OptionalInt videoStreamRecreations();
+    OptionalLong videoStreamRecreations();
 
     @WamProperty(index = 351, type = WamType.TIMER)
     Optional<Instant> videoTargetBitrateReaches1000kbpsT();
@@ -7166,16 +7384,16 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoTxFecBitrate();
 
     @WamProperty(index = 181, type = WamType.INTEGER)
-    OptionalInt videoTxFecFrames();
+    OptionalLong videoTxFecFrames();
 
     @WamProperty(index = 720, type = WamType.INTEGER)
-    OptionalInt videoTxNumCodecSwitch();
+    OptionalLong videoTxNumCodecSwitch();
 
     @WamProperty(index = 197, type = WamType.INTEGER)
-    OptionalInt videoTxPackets();
+    OptionalLong videoTxPackets();
 
     @WamProperty(index = 818, type = WamType.INTEGER)
-    OptionalInt videoTxPacketsHq();
+    OptionalLong videoTxPacketsHq();
 
     @WamProperty(index = 167, type = WamType.FLOAT)
     OptionalDouble videoTxPktErrorPct();
@@ -7187,55 +7405,55 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoTxPktLossPct();
 
     @WamProperty(index = 486, type = WamType.INTEGER)
-    OptionalInt videoTxPktRtcpApp();
+    OptionalLong videoTxPktRtcpApp();
 
     @WamProperty(index = 1275, type = WamType.INTEGER)
-    OptionalInt videoTxResendCauseKf();
+    OptionalLong videoTxResendCauseKf();
 
     @WamProperty(index = 1276, type = WamType.INTEGER)
-    OptionalInt videoTxResendCauseKfHq();
+    OptionalLong videoTxResendCauseKfHq();
 
     @WamProperty(index = 1277, type = WamType.INTEGER)
-    OptionalInt videoTxResendFailures();
+    OptionalLong videoTxResendFailures();
 
     @WamProperty(index = 1278, type = WamType.INTEGER)
-    OptionalInt videoTxResendFailuresHq();
+    OptionalLong videoTxResendFailuresHq();
 
     @WamProperty(index = 2644, type = WamType.INTEGER)
-    OptionalInt videoTxResendLimitedPackets();
+    OptionalLong videoTxResendLimitedPackets();
 
     @WamProperty(index = 2645, type = WamType.INTEGER)
-    OptionalInt videoTxResendLimitedPacketsHq();
+    OptionalLong videoTxResendLimitedPacketsHq();
 
     @WamProperty(index = 198, type = WamType.INTEGER)
-    OptionalInt videoTxResendPackets();
+    OptionalLong videoTxResendPackets();
 
     @WamProperty(index = 819, type = WamType.INTEGER)
-    OptionalInt videoTxResendPacketsHq();
+    OptionalLong videoTxResendPacketsHq();
 
     @WamProperty(index = 2097, type = WamType.FLOAT)
     OptionalDouble videoTxRsFecBitrate();
 
     @WamProperty(index = 2098, type = WamType.INTEGER)
-    OptionalInt videoTxRsFecPkts();
+    OptionalLong videoTxRsFecPkts();
 
     @WamProperty(index = 620, type = WamType.INTEGER)
-    OptionalInt videoTxRtcpFirEmptyJb();
+    OptionalLong videoTxRtcpFirEmptyJb();
 
     @WamProperty(index = 200, type = WamType.INTEGER)
-    OptionalInt videoTxRtcpNack();
+    OptionalLong videoTxRtcpNack();
 
     @WamProperty(index = 520, type = WamType.INTEGER)
-    OptionalInt videoTxRtcpNpsi();
+    OptionalLong videoTxRtcpNpsi();
 
     @WamProperty(index = 199, type = WamType.INTEGER)
-    OptionalInt videoTxRtcpPli();
+    OptionalLong videoTxRtcpPli();
 
     @WamProperty(index = 820, type = WamType.INTEGER)
-    OptionalInt videoTxRtcpPliHq();
+    OptionalLong videoTxRtcpPliHq();
 
     @WamProperty(index = 458, type = WamType.INTEGER)
-    OptionalInt videoTxRtcpRpsi();
+    OptionalLong videoTxRtcpRpsi();
 
     @WamProperty(index = 164, type = WamType.FLOAT)
     OptionalDouble videoTxTotalBytes();
@@ -7244,37 +7462,34 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble videoTxTotalBytesHq();
 
     @WamProperty(index = 453, type = WamType.INTEGER)
-    OptionalInt videoUpdateEncoderFailureCount();
+    OptionalLong videoUpdateEncoderFailureCount();
 
     @WamProperty(index = 325, type = WamType.INTEGER)
-    OptionalInt videoUpgradeCancelByTimeoutCount();
+    OptionalLong videoUpgradeCancelByTimeoutCount();
 
     @WamProperty(index = 323, type = WamType.INTEGER)
-    OptionalInt videoUpgradeCancelCount();
+    OptionalLong videoUpgradeCancelCount();
 
     @WamProperty(index = 272, type = WamType.INTEGER)
-    OptionalInt videoUpgradeCount();
+    OptionalLong videoUpgradeCount();
 
     @WamProperty(index = 326, type = WamType.INTEGER)
-    OptionalInt videoUpgradeRejectByTimeoutCount();
+    OptionalLong videoUpgradeRejectByTimeoutCount();
 
     @WamProperty(index = 324, type = WamType.INTEGER)
-    OptionalInt videoUpgradeRejectCount();
+    OptionalLong videoUpgradeRejectCount();
 
     @WamProperty(index = 271, type = WamType.INTEGER)
-    OptionalInt videoUpgradeRequestCount();
-
-    @WamProperty(index = 2267, type = WamType.INTEGER)
-    OptionalInt videoVav1Time();
+    OptionalLong videoUpgradeRequestCount();
 
     @WamProperty(index = 2874, type = WamType.INTEGER)
-    OptionalInt videoWebcodecsDecFatalErrorNum();
+    OptionalLong videoWebcodecsDecFatalErrorNum();
 
     @WamProperty(index = 188, type = WamType.INTEGER)
-    OptionalInt videoWidth();
+    OptionalLong videoWidth();
 
     @WamProperty(index = 2351, type = WamType.INTEGER)
-    OptionalInt viewUnknownPeerVideoCount();
+    OptionalLong viewUnknownPeerVideoCount();
 
     @WamProperty(index = 2145, type = WamType.FLOAT)
     OptionalDouble vmosAvg();
@@ -7286,10 +7501,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble vmosAvgLoadTimeInMs();
 
     @WamProperty(index = 2635, type = WamType.INTEGER)
-    OptionalInt vmosDownloadFailureCount();
+    OptionalLong vmosDownloadFailureCount();
 
     @WamProperty(index = 2636, type = WamType.INTEGER)
-    OptionalInt vmosLoadFailureCount();
+    OptionalLong vmosLoadFailureCount();
 
     @WamProperty(index = 2146, type = WamType.FLOAT)
     OptionalDouble vmosP5();
@@ -7304,7 +7519,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> voipCameraLastErrorDeviceName();
 
     @WamProperty(index = 2273, type = WamType.INTEGER)
-    OptionalInt voipCameraTotalErrors();
+    OptionalLong voipCameraTotalErrors();
 
     @WamProperty(index = 2274, type = WamType.TIMER)
     Optional<Instant> voipInitTime();
@@ -7313,34 +7528,34 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> voipMicLastErrorDeviceName();
 
     @WamProperty(index = 2276, type = WamType.INTEGER)
-    OptionalInt voipMicTotalErrors();
+    OptionalLong voipMicTotalErrors();
 
     @WamProperty(index = 1136, type = WamType.INTEGER)
-    OptionalInt voipParamsCompressedSize();
+    OptionalLong voipParamsCompressedSize();
 
     @WamProperty(index = 1137, type = WamType.INTEGER)
-    OptionalInt voipParamsUncompressedSize();
+    OptionalLong voipParamsUncompressedSize();
 
     @WamProperty(index = 1615, type = WamType.ENUM)
     Optional<VoipSettingReleaseType> voipSettingReleaseType();
 
     @WamProperty(index = 1616, type = WamType.INTEGER)
-    OptionalInt voipSettingVersion();
+    OptionalLong voipSettingVersion();
 
     @WamProperty(index = 1571, type = WamType.INTEGER)
-    OptionalInt voipSettingsDictLookupFailure();
+    OptionalLong voipSettingsDictLookupFailure();
 
     @WamProperty(index = 1572, type = WamType.INTEGER)
-    OptionalInt voipSettingsDictLookupSuccess();
+    OptionalLong voipSettingsDictLookupSuccess();
 
     @WamProperty(index = 1573, type = WamType.INTEGER)
-    OptionalInt voipSettingsDictNoLookup();
+    OptionalLong voipSettingsDictNoLookup();
 
     @WamProperty(index = 2277, type = WamType.INTEGER)
-    OptionalInt voipTotalCameraDevices();
+    OptionalLong voipTotalCameraDevices();
 
     @WamProperty(index = 2278, type = WamType.INTEGER)
-    OptionalInt voipTotalMicDevices();
+    OptionalLong voipTotalMicDevices();
 
     @WamProperty(index = 2279, type = WamType.TIMER)
     Optional<Instant> voipWindowIncomingAcceptToCallLayoutTime();
@@ -7367,25 +7582,25 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble vsrAvgPreProcessLatencyMs();
 
     @WamProperty(index = 2728, type = WamType.INTEGER)
-    OptionalInt vsrDisableReason();
+    OptionalLong vsrDisableReason();
 
     @WamProperty(index = 2641, type = WamType.INTEGER)
-    OptionalInt vsrDownloadFailureCount();
+    OptionalLong vsrDownloadFailureCount();
 
     @WamProperty(index = 2836, type = WamType.BOOLEAN)
     Optional<Boolean> vsrDownloadSuccess();
 
     @WamProperty(index = 2391, type = WamType.INTEGER)
-    OptionalInt vsrInputFrames();
+    OptionalLong vsrInputFrames();
 
     @WamProperty(index = 2642, type = WamType.INTEGER)
-    OptionalInt vsrLoadFailureCount();
+    OptionalLong vsrLoadFailureCount();
 
     @WamProperty(index = 2837, type = WamType.BOOLEAN)
     Optional<Boolean> vsrLoadSuccess();
 
     @WamProperty(index = 2392, type = WamType.INTEGER)
-    OptionalInt vsrOutputFrames();
+    OptionalLong vsrOutputFrames();
 
     @WamProperty(index = 1665, type = WamType.BOOLEAN)
     Optional<Boolean> waBadCallDetectorFreqRttCycle();
@@ -7400,10 +7615,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble waBadCallDetectorInitRttStddev();
 
     @WamProperty(index = 1668, type = WamType.INTEGER)
-    OptionalInt waBadCallDetectorMteBadCombine();
+    OptionalLong waBadCallDetectorMteBadCombine();
 
     @WamProperty(index = 1657, type = WamType.INTEGER)
-    OptionalInt waCallingHistoryDlSbweBySelfIp();
+    OptionalLong waCallingHistoryDlSbweBySelfIp();
 
     @WamProperty(index = 1658, type = WamType.ENUM)
     Optional<WaCallingHistoryGroupCallRecordSaveConditionCheckStatus> waCallingHistoryGroupCallRecordSaveConditionCheckStatus();
@@ -7421,79 +7636,79 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> waCallingHistoryIsGroupCallRecordSaved();
 
     @WamProperty(index = 1669, type = WamType.INTEGER)
-    OptionalInt waCallingHistoryLastAvgRttBySelfAndPeerIp();
+    OptionalLong waCallingHistoryLastAvgRttBySelfAndPeerIp();
 
     @WamProperty(index = 1670, type = WamType.INTEGER)
-    OptionalInt waCallingHistoryLastMaxRttBySelfAndPeerIp();
+    OptionalLong waCallingHistoryLastMaxRttBySelfAndPeerIp();
 
     @WamProperty(index = 1671, type = WamType.INTEGER)
-    OptionalInt waCallingHistoryLastMinRttBySelfAndPeerIp();
+    OptionalLong waCallingHistoryLastMinRttBySelfAndPeerIp();
 
     @WamProperty(index = 1661, type = WamType.INTEGER)
-    OptionalInt waCallingHistoryNumOfGroupCallRecordLoaded();
+    OptionalLong waCallingHistoryNumOfGroupCallRecordLoaded();
 
     @WamProperty(index = 1662, type = WamType.INTEGER)
-    OptionalInt waCallingHistoryUlSbweBySelfIp();
+    OptionalLong waCallingHistoryUlSbweBySelfIp();
 
     @WamProperty(index = 1893, type = WamType.INTEGER)
-    OptionalInt waCallingInitDlBweReuse2p();
+    OptionalLong waCallingInitDlBweReuse2p();
 
     @WamProperty(index = 1894, type = WamType.INTEGER)
-    OptionalInt waCallingInitUlBweReuse2p();
+    OptionalLong waCallingInitUlBweReuse2p();
 
     @WamProperty(index = 1895, type = WamType.INTEGER)
-    OptionalInt waCallingSfuLast2pSegmentSbwe();
+    OptionalLong waCallingSfuLast2pSegmentSbwe();
 
     @WamProperty(index = 1896, type = WamType.INTEGER)
-    OptionalInt waCallingSfuLast2pSegmentTotalRxBitrate();
+    OptionalLong waCallingSfuLast2pSegmentTotalRxBitrate();
 
     @WamProperty(index = 891, type = WamType.INTEGER)
-    OptionalInt waLongFreezeCount();
+    OptionalLong waLongFreezeCount();
 
     @WamProperty(index = 890, type = WamType.INTEGER)
-    OptionalInt waReconnectFreezeCount();
+    OptionalLong waReconnectFreezeCount();
 
     @WamProperty(index = 1547, type = WamType.INTEGER)
-    OptionalInt waSframeAudioRxDupPktsCnt();
+    OptionalLong waSframeAudioRxDupPktsCnt();
 
     @WamProperty(index = 1548, type = WamType.INTEGER)
-    OptionalInt waSframeAudioRxErrorMissingKey();
+    OptionalLong waSframeAudioRxErrorMissingKey();
 
     @WamProperty(index = 1549, type = WamType.INTEGER)
-    OptionalInt waSframeAudioRxRejectPktsCnt();
+    OptionalLong waSframeAudioRxRejectPktsCnt();
 
     @WamProperty(index = 1550, type = WamType.INTEGER)
-    OptionalInt waSframeAudioTxErrorPktCnt();
+    OptionalLong waSframeAudioTxErrorPktCnt();
 
     @WamProperty(index = 1551, type = WamType.INTEGER)
-    OptionalInt waSframeVideoHqTxErrorPktCnt();
+    OptionalLong waSframeVideoHqTxErrorPktCnt();
 
     @WamProperty(index = 1552, type = WamType.INTEGER)
-    OptionalInt waSframeVideoLqTxErrorPktCnt();
+    OptionalLong waSframeVideoLqTxErrorPktCnt();
 
     @WamProperty(index = 1553, type = WamType.INTEGER)
-    OptionalInt waSframeVideoRxDupPktsCnt();
+    OptionalLong waSframeVideoRxDupPktsCnt();
 
     @WamProperty(index = 1554, type = WamType.INTEGER)
-    OptionalInt waSframeVideoRxErrorMissingKey();
+    OptionalLong waSframeVideoRxErrorMissingKey();
 
     @WamProperty(index = 1555, type = WamType.INTEGER)
-    OptionalInt waSframeVideoRxRejectPktsCnt();
+    OptionalLong waSframeVideoRxRejectPktsCnt();
 
     @WamProperty(index = 889, type = WamType.INTEGER)
-    OptionalInt waShortFreezeCount();
+    OptionalLong waShortFreezeCount();
 
     @WamProperty(index = 1346, type = WamType.ENUM)
     Optional<WaVoipHistoryCallRedialStatus> waVoipHistoryCallRedialStatus();
 
     @WamProperty(index = 1162, type = WamType.INTEGER)
-    OptionalInt waVoipHistoryGetVideoTxBitrateBySelfAndPeerIpStrResult();
+    OptionalLong waVoipHistoryGetVideoTxBitrateBySelfAndPeerIpStrResult();
 
     @WamProperty(index = 1163, type = WamType.BOOLEAN)
     Optional<Boolean> waVoipHistoryGetVideoTxBitrateBySelfAndPeerIpStrSuccess();
 
     @WamProperty(index = 1164, type = WamType.INTEGER)
-    OptionalInt waVoipHistoryGetVideoTxBitrateBySelfIpStrResult();
+    OptionalLong waVoipHistoryGetVideoTxBitrateBySelfIpStrResult();
 
     @WamProperty(index = 1165, type = WamType.BOOLEAN)
     Optional<Boolean> waVoipHistoryGetVideoTxBitrateBySelfIpStrSuccess();
@@ -7514,31 +7729,31 @@ public interface CallEvent extends WamEventSpec {
     Optional<Boolean> waVoipHistoryIsInitialized();
 
     @WamProperty(index = 1344, type = WamType.INTEGER)
-    OptionalInt waVoipHistoryNumOfCallParticipantRecordFound();
+    OptionalLong waVoipHistoryNumOfCallParticipantRecordFound();
 
     @WamProperty(index = 1166, type = WamType.INTEGER)
-    OptionalInt waVoipHistoryNumOfCallRecordFoundByMatchingSelfAndPeerIpStr();
+    OptionalLong waVoipHistoryNumOfCallRecordFoundByMatchingSelfAndPeerIpStr();
 
     @WamProperty(index = 1167, type = WamType.INTEGER)
-    OptionalInt waVoipHistoryNumOfCallRecordFoundByMatchingSelfIpStr();
+    OptionalLong waVoipHistoryNumOfCallRecordFoundByMatchingSelfIpStr();
 
     @WamProperty(index = 739, type = WamType.INTEGER)
-    OptionalInt waVoipHistoryNumOfCallRecordLoaded();
+    OptionalLong waVoipHistoryNumOfCallRecordLoaded();
 
     @WamProperty(index = 770, type = WamType.ENUM)
     Optional<WaVoipHistorySaveCallRecordConditionCheckStatus> waVoipHistorySaveCallRecordConditionCheckStatus();
 
     @WamProperty(index = 1601, type = WamType.INTEGER)
-    OptionalInt warpClientDupRtx();
+    OptionalLong warpClientDupRtx();
 
     @WamProperty(index = 1602, type = WamType.INTEGER)
-    OptionalInt warpClientNackRtx();
+    OptionalLong warpClientNackRtx();
 
     @WamProperty(index = 2140, type = WamType.INTEGER)
-    OptionalInt warpClientNackRtxAudio();
+    OptionalLong warpClientNackRtxAudio();
 
     @WamProperty(index = 2141, type = WamType.INTEGER)
-    OptionalInt warpClientNackRtxVideo();
+    OptionalLong warpClientNackRtxVideo();
 
     @WamProperty(index = 656, type = WamType.FLOAT)
     OptionalDouble warpHeaderRxTotalBytes();
@@ -7547,109 +7762,115 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble warpHeaderTxTotalBytes();
 
     @WamProperty(index = 1118, type = WamType.INTEGER)
-    OptionalInt warpMiRxPktErrorCount();
+    OptionalLong warpMiRxPktErrorCount();
 
     @WamProperty(index = 1117, type = WamType.INTEGER)
-    OptionalInt warpMiTxPktErrorCount();
+    OptionalLong warpMiTxPktErrorCount();
 
     @WamProperty(index = 1154, type = WamType.INTEGER)
-    OptionalInt warpRelayChangeDetectCount();
+    OptionalLong warpRelayChangeDetectCount();
 
     @WamProperty(index = 1852, type = WamType.INTEGER)
-    OptionalInt warpRxE2eSrtp();
+    OptionalLong warpRxE2eSrtp();
 
     @WamProperty(index = 1853, type = WamType.INTEGER)
-    OptionalInt warpRxHbhSrtp();
+    OptionalLong warpRxHbhSrtp();
 
     @WamProperty(index = 1854, type = WamType.INTEGER)
-    OptionalInt warpRxNoPdAttr();
+    OptionalLong warpRxNoPdAttr();
 
     @WamProperty(index = 746, type = WamType.INTEGER)
-    OptionalInt warpRxPktErrorCount();
+    OptionalLong warpRxPktErrorCount();
 
     @WamProperty(index = 1737, type = WamType.INTEGER)
-    OptionalInt warpServerDupAudioRtxUsed();
+    OptionalLong warpServerDupAudioRtxUsed();
 
     @WamProperty(index = 1603, type = WamType.INTEGER)
-    OptionalInt warpServerDupRtx();
+    OptionalLong warpServerDupRtx();
 
     @WamProperty(index = 1604, type = WamType.INTEGER)
-    OptionalInt warpServerNackRtx();
+    OptionalLong warpServerNackRtx();
 
     @WamProperty(index = 2142, type = WamType.INTEGER)
-    OptionalInt warpServerNackRtxAudio();
+    OptionalLong warpServerNackRtxAudio();
 
     @WamProperty(index = 2143, type = WamType.INTEGER)
-    OptionalInt warpServerNackRtxVideo();
+    OptionalLong warpServerNackRtxVideo();
 
     @WamProperty(index = 2150, type = WamType.INTEGER)
-    OptionalInt warpSnErrorBadCnt();
+    OptionalLong warpSnErrorBadCnt();
 
     @WamProperty(index = 2151, type = WamType.INTEGER)
-    OptionalInt warpSnErrorOooCnt();
+    OptionalLong warpSnErrorOooCnt();
 
     @WamProperty(index = 2152, type = WamType.INTEGER)
-    OptionalInt warpSnErrorResetCnt();
+    OptionalLong warpSnErrorResetCnt();
 
     @WamProperty(index = 2153, type = WamType.INTEGER)
-    OptionalInt warpSnRxCnt();
+    OptionalLong warpSnRxCnt();
 
     @WamProperty(index = 1855, type = WamType.INTEGER)
-    OptionalInt warpTxE2eSrtp();
+    OptionalLong warpTxE2eSrtp();
 
     @WamProperty(index = 1856, type = WamType.INTEGER)
-    OptionalInt warpTxHbhSrtp();
+    OptionalLong warpTxHbhSrtp();
 
     @WamProperty(index = 745, type = WamType.INTEGER)
-    OptionalInt warpTxPktErrorCount();
+    OptionalLong warpTxPktErrorCount();
 
     @WamProperty(index = 1089, type = WamType.TIMER)
     Optional<Instant> wavFileWriteMaxLatency();
 
     @WamProperty(index = 429, type = WamType.INTEGER)
-    OptionalInt weakCellularNetConditionDetected();
+    OptionalLong weakCellularNetConditionDetected();
 
     @WamProperty(index = 2321, type = WamType.INTEGER)
-    OptionalInt weakNetConditionByBadCallMl();
+    OptionalLong weakNetConditionByBadCallMl();
 
     @WamProperty(index = 2061, type = WamType.INTEGER)
-    OptionalInt weakNetConditionByJitter();
+    OptionalLong weakNetConditionByJitter();
 
     @WamProperty(index = 2062, type = WamType.INTEGER)
-    OptionalInt weakNetConditionByLossPeriod();
+    OptionalLong weakNetConditionByLossPeriod();
 
     @WamProperty(index = 2063, type = WamType.INTEGER)
-    OptionalInt weakNetConditionByPlr();
+    OptionalLong weakNetConditionByPlr();
 
     @WamProperty(index = 2064, type = WamType.INTEGER)
-    OptionalInt weakNoneNetConditionDetected();
+    OptionalLong weakNoneNetConditionDetected();
 
     @WamProperty(index = 430, type = WamType.INTEGER)
-    OptionalInt weakWifiNetConditionDetected();
+    OptionalLong weakWifiNetConditionDetected();
 
     @WamProperty(index = 397, type = WamType.INTEGER)
-    OptionalInt weakWifiSwitchToDefNetSuccess();
+    OptionalLong weakWifiSwitchToDefNetSuccess();
 
     @WamProperty(index = 395, type = WamType.INTEGER)
-    OptionalInt weakWifiSwitchToDefNetSuccessByPeriodicalCheck();
+    OptionalLong weakWifiSwitchToDefNetSuccessByPeriodicalCheck();
 
     @WamProperty(index = 396, type = WamType.INTEGER)
-    OptionalInt weakWifiSwitchToDefNetTriggered();
+    OptionalLong weakWifiSwitchToDefNetTriggered();
 
     @WamProperty(index = 394, type = WamType.INTEGER)
-    OptionalInt weakWifiSwitchToDefNetTriggeredByPeriodicalCheck();
+    OptionalLong weakWifiSwitchToDefNetTriggeredByPeriodicalCheck();
 
     @WamProperty(index = 399, type = WamType.INTEGER)
-    OptionalInt weakWifiSwitchToNonDefNetFalsePositive();
+    OptionalLong weakWifiSwitchToNonDefNetFalsePositive();
 
     @WamProperty(index = 400, type = WamType.INTEGER)
-    OptionalInt weakWifiSwitchToNonDefNetSuccess();
+    OptionalLong weakWifiSwitchToNonDefNetSuccess();
 
     @WamProperty(index = 398, type = WamType.INTEGER)
-    OptionalInt weakWifiSwitchToNonDefNetTriggered();
+    OptionalLong weakWifiSwitchToNonDefNetTriggered();
+
+    @WamProperty(index = 3008, type = WamType.BOOLEAN)
+    Optional<Boolean> wearableCallHaveUsedPov();
+
+    @WamProperty(index = 3004, type = WamType.STRING)
+    Optional<String> wearableDeviceTypes();
 
     @WamProperty(index = 2903, type = WamType.INTEGER)
-    OptionalInt webAudioCaptureOverrunCount();
+    OptionalLong webAudioCaptureOverrunCount();
 
     @WamProperty(index = 2904, type = WamType.TIMER)
     Optional<Instant> webAudioCaptureSabFillAvgMs();
@@ -7679,43 +7900,43 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> webAudioRbDelayMaxMs();
 
     @WamProperty(index = 2893, type = WamType.INTEGER)
-    OptionalInt webAudioRbFillMaxPct();
+    OptionalLong webAudioRbFillMaxPct();
 
     @WamProperty(index = 2894, type = WamType.INTEGER)
-    OptionalInt webAudioUnderrunTotal();
+    OptionalLong webAudioUnderrunTotal();
 
     @WamProperty(index = 2838, type = WamType.FLOAT)
     OptionalDouble webAvSyncAvgDeltaMs();
 
     @WamProperty(index = 2839, type = WamType.INTEGER)
-    OptionalInt webAvSyncCalibrationCount();
+    OptionalLong webAvSyncCalibrationCount();
 
     @WamProperty(index = 2840, type = WamType.INTEGER)
-    OptionalInt webAvSyncDeviceChangeResetCount();
+    OptionalLong webAvSyncDeviceChangeResetCount();
 
     @WamProperty(index = 2841, type = WamType.BOOLEAN)
     Optional<Boolean> webAvSyncEnabled();
 
     @WamProperty(index = 2842, type = WamType.INTEGER)
-    OptionalInt webAvSyncForceRecalibrationCount();
+    OptionalLong webAvSyncForceRecalibrationCount();
 
     @WamProperty(index = 2843, type = WamType.INTEGER)
-    OptionalInt webAvSyncFramesEvictedTotal();
+    OptionalLong webAvSyncFramesEvictedTotal();
 
     @WamProperty(index = 2844, type = WamType.INTEGER)
-    OptionalInt webAvSyncFramesHeldTotal();
+    OptionalLong webAvSyncFramesHeldTotal();
 
     @WamProperty(index = 2845, type = WamType.INTEGER)
-    OptionalInt webAvSyncFramesRenderedInSync();
+    OptionalLong webAvSyncFramesRenderedInSync();
 
     @WamProperty(index = 2846, type = WamType.INTEGER)
-    OptionalInt webAvSyncFramesRenderedLate();
+    OptionalLong webAvSyncFramesRenderedLate();
 
     @WamProperty(index = 2847, type = WamType.FLOAT)
     OptionalDouble webAvSyncMaxAbsDeltaMs();
 
     @WamProperty(index = 2848, type = WamType.INTEGER)
-    OptionalInt webAvSyncMaxQueueDepth();
+    OptionalLong webAvSyncMaxQueueDepth();
 
     @WamProperty(index = 2849, type = WamType.FLOAT)
     OptionalDouble webAvSyncP50DeltaMs();
@@ -7724,10 +7945,10 @@ public interface CallEvent extends WamEventSpec {
     OptionalDouble webAvSyncP95DeltaMs();
 
     @WamProperty(index = 2851, type = WamType.INTEGER)
-    OptionalInt webAvSyncRecalibrationCount();
+    OptionalLong webAvSyncRecalibrationCount();
 
     @WamProperty(index = 2852, type = WamType.INTEGER)
-    OptionalInt webAvSyncTimeOutOfSyncMs();
+    OptionalLong webAvSyncTimeOutOfSyncMs();
 
     @WamProperty(index = 2895, type = WamType.FLOAT)
     OptionalDouble webSctpBaPeakAvgBytes();
@@ -7750,6 +7971,9 @@ public interface CallEvent extends WamEventSpec {
     @WamProperty(index = 2908, type = WamType.TIMER)
     Optional<Instant> webVideoCapturePresentToConstructAvgMs();
 
+    @WamProperty(index = 3032, type = WamType.STRING)
+    Optional<String> webVideoEncoderType();
+
     @WamProperty(index = 1984, type = WamType.BOOLEAN)
     Optional<Boolean> webrtcCompatible();
 
@@ -7760,7 +7984,7 @@ public interface CallEvent extends WamEventSpec {
     Optional<String> wifiInfoAtStart();
 
     @WamProperty(index = 263, type = WamType.INTEGER)
-    OptionalInt wifiRssiAtCallStart();
+    OptionalLong wifiRssiAtCallStart();
 
     @WamProperty(index = 2688, type = WamType.BOOLEAN)
     Optional<Boolean> windowDragged();
@@ -7781,16 +8005,16 @@ public interface CallEvent extends WamEventSpec {
     Optional<Instant> xpopPop2popRttMs();
 
     @WamProperty(index = 1409, type = WamType.INTEGER)
-    OptionalInt xpopRelayCount();
+    OptionalLong xpopRelayCount();
 
     @WamProperty(index = 1410, type = WamType.INTEGER)
-    OptionalInt xpopRelayErrorBitmap();
+    OptionalLong xpopRelayErrorBitmap();
 
     @WamProperty(index = 1515, type = WamType.INTEGER)
-    OptionalInt xpopTo1popFallbackCnt();
+    OptionalLong xpopTo1popFallbackCnt();
 
     @WamProperty(index = 2230, type = WamType.INTEGER)
-    OptionalInt xpopTo1popFallbackCount();
+    OptionalLong xpopTo1popFallbackCount();
 
     @WamProperty(index = 1088, type = WamType.TIMER)
     Optional<Instant> zedFileWriteMaxLatency();

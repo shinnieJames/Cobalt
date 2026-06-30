@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BlockReason;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebThreadInteractionDataIntegrityWamEvent")
 @WamEvent(id = 6468)
@@ -24,10 +24,10 @@ public interface ThreadInteractionDataIntegrityEvent extends WamEventSpec {
     Optional<Boolean> isReported();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt smbMarketingMessagesSpamReports();
+    OptionalLong smbMarketingMessagesSpamReports();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt spamReports();
+    OptionalLong spamReports();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> threadCreationDate();

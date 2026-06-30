@@ -16,5 +16,7 @@ public enum EncryptionTypeCode {
     @WamEnumConstant(6) GUEST,
     @WamEnumConstant(7) TEE,
     @WamEnumConstant(8) BOT,
-    @WamEnumConstant(9) BOT_GROUP
+    @WamEnumConstant(9) BOT_GROUP,
+    @WamEnumConstant(10) COEX_V2,
+    @WamEnumConstant(11) SELF_COEX_V2
 }

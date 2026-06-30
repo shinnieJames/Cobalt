@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.ReportingTokenValidationFailureReason;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebReportingTokenValidationFailureSenderWamEvent")
 @WamEvent(id = 6094, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -63,7 +63,7 @@ public interface ReportingTokenValidationFailureSenderEvent extends WamEventSpec
     Optional<ReportingTokenValidationFailureReason> reportingTokenValidationFailureReason();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt reportingTokenVersion();
+    OptionalLong reportingTokenVersion();
 
     @WamProperty(index = 11, type = WamType.STRING)
     Optional<String> senderJid();

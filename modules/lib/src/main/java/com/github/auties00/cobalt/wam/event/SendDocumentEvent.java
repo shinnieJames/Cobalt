@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.DocumentType;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSendDocumentWamEvent")
 @WamEvent(id = 2172)
@@ -19,7 +19,7 @@ public interface SendDocumentEvent extends WamEventSpec {
     Optional<String> documentExt();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt documentPageSize();
+    OptionalLong documentPageSize();
 
     @WamProperty(index = 1, type = WamType.FLOAT)
     OptionalDouble documentSize();

@@ -11,22 +11,22 @@ import com.github.auties00.cobalt.wam.type.PmButtonEventType;
 import com.github.auties00.cobalt.wam.type.PmButtonType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSmbPaidMessagesButtonLoggerWamEvent")
 @WamEvent(id = 4508, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface SmbPaidMessagesButtonLoggerEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt businessPhoneNumber();
+    OptionalLong businessPhoneNumber();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt pmButtonCount();
+    OptionalLong pmButtonCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<PmButtonEventType> pmButtonEventType();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt pmButtonIndex();
+    OptionalLong pmButtonIndex();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<PmButtonType> pmButtonType();

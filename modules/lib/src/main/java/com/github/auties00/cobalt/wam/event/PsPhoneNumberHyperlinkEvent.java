@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.PhoneNumHyperlinkActionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPsPhoneNumberHyperlinkWamEvent")
 @WamEvent(id = 3266, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -25,5 +25,5 @@ public interface PsPhoneNumberHyperlinkEvent extends WamEventSpec {
     Optional<Boolean> phoneNumberStatusOnWa();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt sequenceNumber();
+    OptionalLong sequenceNumber();
 }

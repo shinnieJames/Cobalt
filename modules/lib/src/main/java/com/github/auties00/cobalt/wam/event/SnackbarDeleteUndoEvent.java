@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.SnackbarActionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSnackbarDeleteUndoWamEvent")
 @WamEvent(id = 3628)
@@ -22,7 +22,7 @@ public interface SnackbarDeleteUndoEvent extends WamEventSpec {
     Optional<MediaType> mediaType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt messagesUndeleted();
+    OptionalLong messagesUndeleted();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<SnackbarActionType> snackbarActionType();

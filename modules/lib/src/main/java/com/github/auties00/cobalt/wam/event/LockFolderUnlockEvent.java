@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.LandingSurface;
 import com.github.auties00.cobalt.wam.type.UnlockEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLockFolderUnlockWamEvent")
 @WamEvent(id = 4218)
@@ -19,7 +19,7 @@ public interface LockFolderUnlockEvent extends WamEventSpec {
     Optional<LandingSurface> landingSurface();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt totalChatCount();
+    OptionalLong totalChatCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<UnlockEntryPoint> unlockEntryPoint();

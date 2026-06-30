@@ -83,5 +83,6 @@ public enum MediaType {
     @WamEnumConstant(73) MEMBER_TAG,
     @WamEnumConstant(74) DOC_COLLECTION,
     @WamEnumConstant(75) VIDEO_COLLECTION,
-    @WamEnumConstant(76) MIXED_COLLECTION
+    @WamEnumConstant(76) MIXED_COLLECTION,
+    @WamEnumConstant(77) CONDITIONAL_REVEAL
 }

@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNullElseGet;
  * expirations (persisted), plus the transient in-flight call table, per-chat metadata, call history,
  * peer-message buffer, UTM read-tracking set and newsletter pins. The chat, newsletter, status and
  * message accessors are left abstract because each persistence strategy backs them differently:
- * {@code PersistentChatStore} routes message bodies to an LMDB facade while {@code TemporaryChatStore}
+ * {@code PersistentChatStore} routes message bodies to an MVStore facade while {@code TemporaryChatStore}
  * keeps everything in memory.
  *
  * @implNote

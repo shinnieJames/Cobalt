@@ -22,7 +22,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacyMode;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
@@ -313,14 +313,15 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private String resolveStatusSetting() {
-        var entry = store.settingsStore().findPrivacySetting(PrivacySettingType.STATUS)
+        var mode = store.settingsStore().statusPrivacy()
+                .flatMap(StatusPrivacySetting::mode)
                 .orElse(null);
-        if (entry == null) {
+        if (mode == null) {
             return null;
         }
-        return switch (entry.value()) {
+        return switch (mode) {
             case CONTACTS -> "contacts";
-            case CONTACTS_ONLY -> "allowlist";
+            case WHITELIST -> "allowlist";
             case CONTACTS_EXCEPT -> "denylist";
             default -> null;
         };

@@ -26,7 +26,7 @@ import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebE2eMessageSendWamEvent")
 @WamEvent(id = 476, betaWeight = 20, releaseWeight = 20)
@@ -44,7 +44,7 @@ public interface E2eMessageSendEvent extends WamEventSpec {
     Optional<E2eCiphertextType> e2eCiphertextType();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt e2eCiphertextVersion();
+    OptionalLong e2eCiphertextVersion();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<E2eDestination> e2eDestination();
@@ -65,7 +65,7 @@ public interface E2eMessageSendEvent extends WamEventSpec {
     Optional<EditType> editType();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt encRetryCount();
+    OptionalLong encRetryCount();
 
     @WamProperty(index = 23, type = WamType.ENUM)
     Optional<EncryptionTypeCode> encryptionType();
@@ -100,8 +100,11 @@ public interface E2eMessageSendEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<MediaType> messageMediaType();
 
+    @WamProperty(index = 28, type = WamType.STRING)
+    Optional<String> messageTypeStr();
+
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<RevokeType> revokeType();

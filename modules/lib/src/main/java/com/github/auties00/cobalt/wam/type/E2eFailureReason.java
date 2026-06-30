@@ -123,5 +123,6 @@ public enum E2eFailureReason {
     @WamEnumConstant(112) DSM_MISSING,
     @WamEnumConstant(113) INVALID_DSM_SENDER,
     @WamEnumConstant(114) INVALID_DSM,
-    @WamEnumConstant(115) REVOKE_STANZA_PROTOBUF_MISMATCH
+    @WamEnumConstant(115) REVOKE_STANZA_PROTOBUF_MISMATCH,
+    @WamEnumConstant(116) WASS_INVALID_ATTESTATION
 }

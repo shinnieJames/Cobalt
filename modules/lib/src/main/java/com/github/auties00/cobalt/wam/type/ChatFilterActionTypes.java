@@ -279,5 +279,7 @@ public enum ChatFilterActionTypes {
     @WamEnumConstant(274) SLASH_ICON_BUTTON_CLICK,
     @WamEnumConstant(275) SLASH_COMMAND_CLICK,
     @WamEnumConstant(276) SLASH_ICON_TYPED,
-    @WamEnumConstant(277) SLASH_COMMAND_PROMPT_SUBMIT
+    @WamEnumConstant(277) SLASH_COMMAND_PROMPT_SUBMIT,
+    @WamEnumConstant(278) DOUBLE_HEIGHT_COMPOSER_IMPRESSION,
+    @WamEnumConstant(279) MODE_SELECTION_BUTTON_IMPRESSION
 }

@@ -17,7 +17,7 @@ import java.util.HashSet;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 /**
  * Generates the companion {@code *Impl} class for a {@code @WamEvent}-annotated
@@ -36,9 +36,10 @@ public final class WamImplGenerator {
     private static final ClassName WAM_EVENT_SIZES = ClassName.get(WamEventSizes.class);
     private static final ClassName WAM_CHANNEL = ClassName.get(WamChannel.class);
     private static final ClassName OPTIONAL = ClassName.get(Optional.class);
-    private static final ClassName OPTIONAL_INT = ClassName.get(OptionalInt.class);
+    private static final ClassName OPTIONAL_LONG = ClassName.get(OptionalLong.class);
     private static final ClassName OPTIONAL_DOUBLE = ClassName.get(OptionalDouble.class);
     private static final ClassName INTEGER = ClassName.get(Integer.class);
+    private static final ClassName LONG = ClassName.get(Long.class);
     private static final ClassName BOOLEAN = ClassName.get(Boolean.class);
     private static final ClassName STRING = ClassName.get(String.class);
     private static final ClassName DOUBLE = ClassName.get(Double.class);
@@ -223,7 +224,7 @@ public final class WamImplGenerator {
         switch (prop.wamType()) {
             case INTEGER -> method.addStatement(
                     "return this.$N != null ? $T.of(this.$N) : $T.empty()",
-                    prop.fieldName(), OPTIONAL_INT, prop.fieldName(), OPTIONAL_INT);
+                    prop.fieldName(), OPTIONAL_LONG, prop.fieldName(), OPTIONAL_LONG);
             case FLOAT -> method.addStatement(
                     "return this.$N != null ? $T.of(this.$N) : $T.empty()",
                     prop.fieldName(), OPTIONAL_DOUBLE, prop.fieldName(), OPTIONAL_DOUBLE);
@@ -376,7 +377,7 @@ public final class WamImplGenerator {
         for (var prop : event.properties()) {
             switch (prop.wamType()) {
                 case INTEGER -> method.addStatement(
-                        "case $L -> $N = (int) decoder.readInt(header)",
+                        "case $L -> $N = decoder.readInt(header)",
                         prop.index(), prop.fieldName());
                 case BOOLEAN -> method.addStatement(
                         "case $L -> $N = decoder.readInt(header) != 0L",
@@ -441,8 +442,8 @@ public final class WamImplGenerator {
     private static void addMapGetterBody(MethodSpec.Builder method, WamPropertyElement prop) {
         switch (prop.wamType()) {
             case INTEGER -> method.addStatement(
-                    "return this.values.get($L) instanceof $T value ? $T.of((int) value.value()) : $T.empty()",
-                    prop.index(), WAM_WIRE_INT, OPTIONAL_INT, OPTIONAL_INT);
+                    "return this.values.get($L) instanceof $T value ? $T.of(value.value()) : $T.empty()",
+                    prop.index(), WAM_WIRE_INT, OPTIONAL_LONG, OPTIONAL_LONG);
             case BOOLEAN -> method.addStatement(
                     "return this.values.get($L) instanceof $T value ? $T.of(value.value() != 0L) : $T.empty()",
                     prop.index(), WAM_WIRE_INT, OPTIONAL, OPTIONAL);
@@ -558,7 +559,7 @@ public final class WamImplGenerator {
 
     private static TypeName rawFieldType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
-            case INTEGER -> INTEGER;
+            case INTEGER -> LONG;
             case BOOLEAN -> BOOLEAN;
             case STRING -> STRING;
             case FLOAT -> DOUBLE;
@@ -575,7 +576,7 @@ public final class WamImplGenerator {
 
     private static TypeName optionalReturnType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
-            case INTEGER -> OPTIONAL_INT;
+            case INTEGER -> OPTIONAL_LONG;
             case FLOAT -> OPTIONAL_DOUBLE;
             default -> ParameterizedTypeName.get(OPTIONAL, rawFieldType(prop));
         };

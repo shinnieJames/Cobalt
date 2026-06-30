@@ -10,37 +10,46 @@ import com.github.auties00.cobalt.wam.type.BizCatalogType;
 import com.github.auties00.cobalt.wam.type.ChatOriginsType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebThreadInteractionDataBizWamEvent")
 @WamEvent(id = 6464)
 public interface ThreadInteractionDataBizEvent extends WamEventSpec {
     @WamProperty(index = 51, type = WamType.INTEGER)
-    OptionalInt autoReplyFromIcebreakerSent();
+    OptionalLong autoReplyFromIcebreakerSent();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt awayMsgsSent();
+    OptionalLong awayMsgsSent();
+
+    @WamProperty(index = 52, type = WamType.INTEGER)
+    OptionalLong bizAiSuggestedRepliesSeen();
+
+    @WamProperty(index = 53, type = WamType.INTEGER)
+    OptionalLong bizAiSuggestedRepliesSentWithEdits();
+
+    @WamProperty(index = 54, type = WamType.INTEGER)
+    OptionalLong bizAiSuggestedRepliesSentWithoutEdits();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<BizCatalogType> bizCatalogType();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt bizConversationDepth();
+    OptionalLong bizConversationDepth();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt cartViews();
+    OptionalLong cartViews();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<ChatOriginsType> chatOrigins();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt collectionInquiriesSent();
+    OptionalLong collectionInquiriesSent();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt commerceMsgsReceived();
+    OptionalLong commerceMsgsReceived();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt commerceMsgsSent();
+    OptionalLong commerceMsgsSent();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> entryPointConversionApp();
@@ -49,25 +58,25 @@ public interface ThreadInteractionDataBizEvent extends WamEventSpec {
     Optional<String> entryPointConversionSource();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt firstResponseTime();
+    OptionalLong firstResponseTime();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt fmxNotMvBottomSheetDismissedCount();
+    OptionalLong fmxNotMvBottomSheetDismissedCount();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt fmxNotMvBottomSheetGetMvButtonClicks();
+    OptionalLong fmxNotMvBottomSheetGetMvButtonClicks();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt fmxNotMvBottomSheetGetMvButtonImpressions();
+    OptionalLong fmxNotMvBottomSheetGetMvButtonImpressions();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt fmxNotMvBottomSheetImpressions();
+    OptionalLong fmxNotMvBottomSheetImpressions();
 
     @WamProperty(index = 45, type = WamType.INTEGER)
-    OptionalInt fmxNotMvBottomSheetLearnMoreButtonClicks();
+    OptionalLong fmxNotMvBottomSheetLearnMoreButtonClicks();
 
     @WamProperty(index = 46, type = WamType.INTEGER)
-    OptionalInt fmxNotMvClicks();
+    OptionalLong fmxNotMvClicks();
 
     @WamProperty(index = 13, type = WamType.BOOLEAN)
     Optional<Boolean> groupContainsBiz();
@@ -100,10 +109,10 @@ public interface ThreadInteractionDataBizEvent extends WamEventSpec {
     Optional<Boolean> isUserCreatedAgent();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt labelledMsgs();
+    OptionalLong labelledMsgs();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
-    OptionalInt locationsSent();
+    OptionalLong locationsSent();
 
     @WamProperty(index = 49, type = WamType.STRING)
     Optional<String> matchedMessagesMarkedAsReadWithDeltaTime();
@@ -112,7 +121,7 @@ public interface ThreadInteractionDataBizEvent extends WamEventSpec {
     Optional<String> matchedMessagesReadWithDeltaTime();
 
     @WamProperty(index = 48, type = WamType.INTEGER)
-    OptionalInt notMvImpressions();
+    OptionalLong notMvImpressions();
 
     @WamProperty(index = 40, type = WamType.BOOLEAN)
     Optional<Boolean> oppositePartyHasBadge();
@@ -121,31 +130,31 @@ public interface ThreadInteractionDataBizEvent extends WamEventSpec {
     Optional<Boolean> oppositePartyHasBusinessIntent();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt ordersSent();
+    OptionalLong ordersSent();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt pdpInquiriesSent();
+    OptionalLong pdpInquiriesSent();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt pdpViews();
+    OptionalLong pdpViews();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt quickRepliesSent();
+    OptionalLong quickRepliesSent();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt smbMarketingMessagesReactionsSent();
+    OptionalLong smbMarketingMessagesReactionsSent();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt smbMarketingMessagesRepliesSent();
+    OptionalLong smbMarketingMessagesRepliesSent();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt smbMarketingMessagesSpamReports();
+    OptionalLong smbMarketingMessagesSpamReports();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt smbMarketingMsgsReceived();
+    OptionalLong smbMarketingMsgsReceived();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt smbMarketingMsgsSent();
+    OptionalLong smbMarketingMsgsSent();
 
     @WamProperty(index = 39, type = WamType.STRING)
     Optional<String> threadCreationDate();

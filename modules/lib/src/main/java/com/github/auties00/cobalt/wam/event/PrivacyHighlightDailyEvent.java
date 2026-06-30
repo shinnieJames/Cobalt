@@ -10,19 +10,19 @@ import com.github.auties00.cobalt.wam.type.PrivacyHighlightCategoryEnum;
 import com.github.auties00.cobalt.wam.type.PrivacyHighlightSurfaceEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPrivacyHighlightDailyWamEvent")
 @WamEvent(id = 3522)
 public interface PrivacyHighlightDailyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt dialogAppearCount();
+    OptionalLong dialogAppearCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt dialogSelectCount();
+    OptionalLong dialogSelectCount();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt narrativeAppearCount();
+    OptionalLong narrativeAppearCount();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<PrivacyHighlightCategoryEnum> privacyHighlightCategory();

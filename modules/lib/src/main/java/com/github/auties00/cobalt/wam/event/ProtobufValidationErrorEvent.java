@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.ProtobufCorrelationOutcome;
 import com.github.auties00.cobalt.wam.type.ProtobufValidationFlow;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebProtobufValidationErrorWamEvent")
 @WamEvent(id = 6110)
@@ -22,7 +22,7 @@ public interface ProtobufValidationErrorEvent extends WamEventSpec {
     Optional<Boolean> protobufLegacyValidationDropped();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt protobufValidationContext();
+    OptionalLong protobufValidationContext();
 
     @WamProperty(index = 1, type = WamType.BOOLEAN)
     Optional<Boolean> protobufValidationDropped();

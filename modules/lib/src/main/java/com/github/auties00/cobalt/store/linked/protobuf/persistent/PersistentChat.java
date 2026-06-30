@@ -22,18 +22,18 @@ import java.util.stream.Stream;
  * Cobalt embedders never construct this directly; {@link PersistentLinkedWhatsAppChatStore#addNewChat(Jid)} returns
  * one as a {@link Chat} and the protobuf builder produces one on deserialisation. Every message
  * accessor delegates to the owning store's {@link PersistentMessageStore} so that chat bodies stay
- * out of the protobuf snapshot and live in the LMDB env instead.
+ * out of the protobuf snapshot and live in the MVStore instead.
  *
  * @implNote
  * This implementation carries no in-memory message field. After construction or deserialisation
- * the owning {@link PersistentStore} calls {@link #attach(PersistentMessageStore)} to wire the LMDB
- * facade and seed {@link #messageCount} from a one-time cursor walk so subsequent
+ * the owning {@link PersistentStore} calls {@link #attach(PersistentMessageStore)} to wire the MVStore
+ * facade and seed {@link #messageCount} from a one-time range walk so subsequent
  * {@link #messageCount()} calls answer in {@code O(1)}.
  */
 @ProtobufMessage
 final class PersistentChat extends Chat {
     /**
-     * The LMDB facade backing every message accessor.
+     * The MVStore facade backing every message accessor.
      *
      * @implNote
      * This implementation is wired by {@link #attach(PersistentMessageStore)} after construction
@@ -47,7 +47,7 @@ final class PersistentChat extends Chat {
      * @implNote
      * This implementation is seeded once by {@link #attach(PersistentMessageStore)} and maintained
      * incrementally by {@link #addMessage(ChatMessageInfo)} and {@link #removeMessage(String)} so
-     * {@link #messageCount()} never re-walks the LMDB cursor.
+     * {@link #messageCount()} never re-walks the MVStore range.
      */
     private final AtomicInteger messageCount;
 
@@ -62,7 +62,7 @@ final class PersistentChat extends Chat {
      * @implNote
      * This implementation initialises {@link #messageCount} to zero. The owning
      * {@link PersistentStore} subsequently calls {@link #attach(PersistentMessageStore)} to wire the
-     * LMDB facade and reseed the count.
+     * MVStore facade and reseed the count.
      *
      * @param jid                            the chat JID
      * @param newJid                         the migrated JID if this chat has been relocated, else {@code null}
@@ -124,7 +124,7 @@ final class PersistentChat extends Chat {
     }
 
     /**
-     * Binds the given LMDB facade to this chat and reseeds the cached message count.
+     * Binds the given MVStore facade to this chat and reseeds the cached message count.
      *
      * @apiNote
      * Invoked by {@link PersistentStore#attachMessageStore(PersistentMessageStore)} immediately
@@ -136,7 +136,7 @@ final class PersistentChat extends Chat {
      * This implementation walks {@link PersistentMessageStore#countChatMessages(Jid)} once so that
      * subsequent {@link #messageCount()} calls answer in {@code O(1)}.
      *
-     * @param messageStore the LMDB facade owned by the parent store
+     * @param messageStore the MVStore facade owned by the parent store
      */
     void attach(PersistentMessageStore messageStore) {
         this.messageStore = messageStore;
@@ -147,9 +147,9 @@ final class PersistentChat extends Chat {
      * {@inheritDoc}
      *
      * @apiNote
-     * The returned stream owns an LMDB read transaction and a cursor; callers must consume it
-     * inside a try-with-resources block or the underlying read transaction stays in LMDB's reader
-     * table until the stream is garbage-collected.
+     * The returned stream walks a consistent MVStore snapshot taken when it is created and holds no
+     * native resources; callers continue to consume it inside a try-with-resources block for parity
+     * with the rest of the message API.
      *
      * @implNote
      * This implementation delegates to {@link PersistentMessageStore#streamChatMessages(Jid)}.
@@ -163,7 +163,7 @@ final class PersistentChat extends Chat {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the cached counter rather than re-walking LMDB.
+     * This implementation returns the cached counter rather than re-walking MVStore.
      */
     @Override
     public int messageCount() {
@@ -188,8 +188,8 @@ final class PersistentChat extends Chat {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation deletes the LMDB key {@code chatJid + 0x00 + id} and decrements
-     * {@link #messageCount} only when LMDB reports an entry was present.
+     * This implementation deletes the MVStore key {@code chatJid + 0x00 + id} and decrements
+     * {@link #messageCount} only when MVStore reports an entry was present.
      */
     @Override
     public boolean removeMessage(String id) {
@@ -208,7 +208,7 @@ final class PersistentChat extends Chat {
      *
      * @implNote
      * This implementation calls {@link PersistentMessageStore#removeChatMessages(Jid)} which deletes
-     * every entry in the LMDB range {@code [chatJid + 0x00, chatJid + 0x01)} and resets the cached
+     * every entry in the MVStore range {@code [chatJid + 0x00, chatJid + 0x01)} and resets the cached
      * counter to zero.
      */
     @Override
@@ -233,7 +233,7 @@ final class PersistentChat extends Chat {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the last entry in the LMDB chat range; with LMDB's
+     * This implementation returns the last entry in the MVStore chat range; with the store's
      * memcmp-ordered keys this is the message id that sorts highest, which for Cobalt's base64
      * message ids correlates with insertion order.
      */
@@ -246,7 +246,7 @@ final class PersistentChat extends Chat {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns the first entry in the LMDB chat range.
+     * This implementation returns the first entry in the MVStore chat range.
      */
     @Override
     public Optional<ChatMessageInfo> oldestMessage() {

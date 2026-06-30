@@ -14,6 +14,7 @@ import com.github.auties00.cobalt.model.business.MarketingMessage;
 import com.github.auties00.cobalt.model.business.MarketingMessageBroadcast;
 import com.github.auties00.cobalt.model.business.NoteState;
 import com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreference;
+import com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingSetting;
 import com.github.auties00.cobalt.model.chat.ChatAssignment;
 import com.github.auties00.cobalt.model.chat.InteractiveMessageState;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -257,6 +258,25 @@ public interface LinkedWhatsAppBusinessStore {
      * @return this store instance for method chaining
      */
     LinkedWhatsAppBusinessStore setBusinessPrivacySetting(String consent);
+
+    /**
+     * Returns the global Click-To-WhatsApp data-sharing setting.
+     *
+     * <p>This is the account-wide tri-state fetched by the business-settings privacy query; it
+     * gates whether the CTWA conversion-signal pipeline may emit. An empty result is treated as
+     * {@link CtwaDataSharingSetting#NOT_SET} by callers.
+     *
+     * @return the CTWA data-sharing setting, or empty if it has not been fetched
+     */
+    Optional<CtwaDataSharingSetting> ctwaDataSharingSetting();
+
+    /**
+     * Sets the global Click-To-WhatsApp data-sharing setting.
+     *
+     * @param setting the CTWA data-sharing setting, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppBusinessStore setCtwaDataSharingSetting(CtwaDataSharingSetting setting);
 
     /**
      * Returns the hash of the marketing-message opt-out list.

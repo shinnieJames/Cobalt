@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.ChatSearchResultType;
 import com.github.auties00.cobalt.wam.type.ListType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChatFilterEventWamEvent")
 @WamEvent(id = 1616)
@@ -31,10 +31,10 @@ public interface ChatFilterEventEvent extends WamEventSpec {
     Optional<String> labelName();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt listId();
+    OptionalLong listId();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt listIndex();
+    OptionalLong listIndex();
 
     @WamProperty(index = 14, type = WamType.ENUM)
     Optional<ListType> listType();
@@ -43,7 +43,7 @@ public interface ChatFilterEventEvent extends WamEventSpec {
     Optional<String> metadata();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt predefinedId();
+    OptionalLong predefinedId();
 
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> searchQueryId();
@@ -55,7 +55,7 @@ public interface ChatFilterEventEvent extends WamEventSpec {
     Optional<ChatSearchResultType> searchResultType();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt sessionId();
+    OptionalLong sessionId();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<ChatFilterTargetScreen> targetScreen();

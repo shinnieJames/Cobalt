@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.PeerDataRequestErrorCode;
 import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebNonMessagePeerDataRequestWamEvent")
 @WamEvent(id = 3906)
 public interface NonMessagePeerDataRequestEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt peerDataRequestCount();
+    OptionalLong peerDataRequestCount();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<PeerDataRequestErrorCode> peerDataRequestErrorCode();

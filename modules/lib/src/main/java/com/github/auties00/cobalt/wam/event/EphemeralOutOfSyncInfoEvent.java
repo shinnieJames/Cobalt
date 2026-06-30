@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ClientGroupSizeBucket;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebEphemeralOutOfSyncInfoWamEvent")
 @WamEvent(id = 3892)
@@ -18,7 +18,7 @@ public interface EphemeralOutOfSyncInfoEvent extends WamEventSpec {
     Optional<ClientGroupSizeBucket> groupSizeBucket();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt incomingMessageEphemeralityDuration();
+    OptionalLong incomingMessageEphemeralityDuration();
 
     @WamProperty(index = 3, type = WamType.BOOLEAN)
     Optional<Boolean> isAGroup();
@@ -27,14 +27,14 @@ public interface EphemeralOutOfSyncInfoEvent extends WamEventSpec {
     Optional<Boolean> isNewThreadForUser();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt otherDefaultModeDuration();
+    OptionalLong otherDefaultModeDuration();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt threadEphemeralityDuration();
+    OptionalLong threadEphemeralityDuration();
 
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> threadId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt userDefaultModeDuration();
+    OptionalLong userDefaultModeDuration();
 }

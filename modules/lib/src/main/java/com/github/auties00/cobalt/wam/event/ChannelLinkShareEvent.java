@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.ChannelLinkShareEntryPoint;
 import com.github.auties00.cobalt.wam.type.ChannelLinkShareScreen;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelLinkShareWamEvent")
 @WamEvent(id = 4728)
@@ -32,5 +32,5 @@ public interface ChannelLinkShareEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

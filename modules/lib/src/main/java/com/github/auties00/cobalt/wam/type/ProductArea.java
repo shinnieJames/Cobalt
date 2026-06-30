@@ -68,5 +68,6 @@ public enum ProductArea {
     @WamEnumConstant(59) PTT,
     @WamEnumConstant(60) CRITICAL_LOW_STORAGE,
     @WamEnumConstant(61) WAFFLE,
-    @WamEnumConstant(62) IN_APP_BROWSER
+    @WamEnumConstant(62) IN_APP_BROWSER,
+    @WamEnumConstant(63) AI_HATCH
 }

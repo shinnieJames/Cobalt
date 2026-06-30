@@ -21,7 +21,7 @@ import java.util.UUID;
  * Embedders pick a storage strategy through one of the static factory methods on this interface
  * and use the returned {@link LinkedWhatsAppStoreFactory} to either {@link #create create} fresh
  * sessions or {@link #load load} existing ones. The supplied implementations cover the
- * RAM-only and on-disk-snapshot-plus-LMDB variants; embedders should not depend on the concrete
+ * RAM-only and on-disk-snapshot-plus-MVStore variants; embedders should not depend on the concrete
  * factory types directly.
  *
  * @implSpec
@@ -46,7 +46,7 @@ public non-sealed interface LinkedWhatsAppStoreFactory extends WhatsAppStoreFact
 
     /**
      * Returns a factory that snapshots session metadata to a {@code store.proto} file and stores
-     * message bodies in an embedded LMDB env under the default Cobalt session directory.
+     * message bodies in an embedded MVStore under the default Cobalt session directory.
      *
      * @apiNote
      * The default directory is {@code $HOME/.cobalt/proto}; embedders that need a custom
@@ -60,7 +60,7 @@ public non-sealed interface LinkedWhatsAppStoreFactory extends WhatsAppStoreFact
 
     /**
      * Returns a factory that snapshots session metadata to a {@code store.proto} file and stores
-     * message bodies in an embedded LMDB env under the given directory.
+     * message bodies in an embedded MVStore under the given directory.
      *
      * @apiNote
      * Each session lives under {@code <directory>/<clientType>/<sessionId>/} so multiple sessions
@@ -75,18 +75,17 @@ public non-sealed interface LinkedWhatsAppStoreFactory extends WhatsAppStoreFact
 
     /**
      * Returns a factory that snapshots session metadata to a {@code store.proto} file and stores
-     * message bodies in an embedded LMDB env under the given directory, configured with the
-     * given initial map size.
+     * message bodies in an embedded MVStore under the given directory.
      *
      * @apiNote
-     * The {@code mapSize} is the maximum LMDB env file size in bytes; the env is automatically
-     * doubled on overflow so this value functions as a starting point rather than a hard cap.
-     * On Windows the file is preallocated as sparse so very large defaults can look alarming in
-     * Explorer.
+     * The {@code mapSize} parameter is a legacy of the former libmdbx backend, which preallocated a map
+     * of this size; the current MVStore backend grows its file on demand and ignores the value. It is
+     * retained for source compatibility and must still be positive. Prefer {@link #persistent(Path)}
+     * for new code.
      *
      * @param directory the root directory under which per-session folders are created
-     * @param mapSize   the initial LMDB map size in bytes; must be positive
-     * @return a persistent factory using the given storage directory and initial map size
+     * @param mapSize   the legacy map-size hint in bytes, ignored by the MVStore backend; must be positive
+     * @return a persistent factory using the given storage directory
      */
     static LinkedWhatsAppStoreFactory persistent(Path directory, long mapSize) {
         return new PersistentLinkedWhatsAppStoreFactory(directory, mapSize);
@@ -97,7 +96,7 @@ public non-sealed interface LinkedWhatsAppStoreFactory extends WhatsAppStoreFact
      *
      * @apiNote
      * Returns {@link Optional#empty()} when no session matches. The persistent variant runs the
-     * orphan-recovery pass during loading so chats and newsletters whose bodies landed in LMDB
+     * orphan-recovery pass during loading so chats and newsletters whose bodies landed in MVStore
      * after the last metadata snapshot still surface on the returned store.
      *
      * @implSpec

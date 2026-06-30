@@ -9,26 +9,26 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AboutEntrypointType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebAboutCreationDailyWamEvent")
 @WamEvent(id = 6820)
 public interface AboutCreationDailyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt aboutCreationStarted();
+    OptionalLong aboutCreationStarted();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt aboutCreationVisit();
+    OptionalLong aboutCreationVisit();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<AboutEntrypointType> aboutEntrypoint();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt aboutFailureCount();
+    OptionalLong aboutFailureCount();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> aboutLocale();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt aboutSuccessCount();
+    OptionalLong aboutSuccessCount();
 }

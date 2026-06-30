@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebTestAnonymousWeeklyIdWamEvent")
 @WamEvent(id = 2956, channel = WamChannel.PRIVATE, privateStatsId = 42196056)
@@ -21,5 +21,5 @@ public interface TestAnonymousWeeklyIdEvent extends WamEventSpec {
     Optional<String> psTestStringField();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt psTimeSinceLastEventInMin();
+    OptionalLong psTimeSinceLastEventInMin();
 }

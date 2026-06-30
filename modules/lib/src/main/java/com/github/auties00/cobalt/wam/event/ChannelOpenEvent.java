@@ -13,13 +13,13 @@ import com.github.auties00.cobalt.wam.type.DeeplinkSource;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelOpenWamEvent")
 @WamEvent(id = 4316)
 public interface ChannelOpenEvent extends WamEventSpec {
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt channelDirectorySessionId();
+    OptionalLong channelDirectorySessionId();
 
     @WamProperty(index = 18, type = WamType.STRING)
     Optional<String> channelDiscoveryQueryId();
@@ -34,7 +34,7 @@ public interface ChannelOpenEvent extends WamEventSpec {
     Optional<ChannelEntryPointMetadata> channelEntryPointMetadata();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt channelSessionId();
+    OptionalLong channelSessionId();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<ChannelUserType> channelUserType();
@@ -58,20 +58,20 @@ public interface ChannelOpenEvent extends WamEventSpec {
     Optional<Boolean> isPremium();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt similarChannelsSessionId();
+    OptionalLong similarChannelsSessionId();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt unreadMessages();
+    OptionalLong unreadMessages();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt unreadPremiumMessages();
+    OptionalLong unreadPremiumMessages();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

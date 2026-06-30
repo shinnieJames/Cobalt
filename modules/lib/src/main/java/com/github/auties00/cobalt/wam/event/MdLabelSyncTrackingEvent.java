@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.LabelSyncResultType;
 import com.github.auties00.cobalt.wam.type.LabelSyncTypeEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdLabelSyncTrackingWamEvent")
 @WamEvent(id = 7638)
@@ -36,13 +36,13 @@ public interface MdLabelSyncTrackingEvent extends WamEventSpec {
     Optional<Boolean> labelSyncIsLabeled();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt labelSyncPredefinedId();
+    OptionalLong labelSyncPredefinedId();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<LabelSyncResultType> labelSyncResult();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt labelSyncTimestamp();
+    OptionalLong labelSyncTimestamp();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<LabelSyncTypeEnum> labelSyncType();

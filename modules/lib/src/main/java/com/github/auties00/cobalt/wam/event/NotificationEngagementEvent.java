@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.GroupTypeClient;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebNotificationEngagementWamEvent")
 @WamEvent(id = 3796)
@@ -35,56 +35,56 @@ public interface NotificationEngagementEvent extends WamEventSpec {
     Optional<String> threadId();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt totalLinkReshareMessageNotifShown();
+    OptionalLong totalLinkReshareMessageNotifShown();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt totalLinkReshareMessageNotifShownFb();
+    OptionalLong totalLinkReshareMessageNotifShownFb();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt totalLinkReshareMessageNotifShownIg();
+    OptionalLong totalLinkReshareMessageNotifShownIg();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt totalLinkReshareMessageNotifTapToOpen();
+    OptionalLong totalLinkReshareMessageNotifTapToOpen();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt totalLinkReshareMessageNotifTapToOpenFb();
+    OptionalLong totalLinkReshareMessageNotifTapToOpenFb();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt totalLinkReshareMessageNotifTapToOpenIg();
+    OptionalLong totalLinkReshareMessageNotifTapToOpenIg();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt totalMessageReminderNotifShown();
+    OptionalLong totalMessageReminderNotifShown();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt totalMessageReminderNotifTapToOpen();
+    OptionalLong totalMessageReminderNotifTapToOpen();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt totalNotifMarkAsRead();
+    OptionalLong totalNotifMarkAsRead();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt totalNotifMissedCallVoipCallback();
+    OptionalLong totalNotifMissedCallVoipCallback();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt totalNotifMissedCallVoipMessage();
+    OptionalLong totalNotifMissedCallVoipMessage();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt totalNotifOthers();
+    OptionalLong totalNotifOthers();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt totalNotifReply();
+    OptionalLong totalNotifReply();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt totalNotifRtcVoipAccept();
+    OptionalLong totalNotifRtcVoipAccept();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt totalNotifRtcVoipDecline();
+    OptionalLong totalNotifRtcVoipDecline();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt totalNotifShowPreview();
+    OptionalLong totalNotifShowPreview();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt totalNotifShown();
+    OptionalLong totalNotifShown();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt totalNotifTapToOpen();
+    OptionalLong totalNotifTapToOpen();
 }

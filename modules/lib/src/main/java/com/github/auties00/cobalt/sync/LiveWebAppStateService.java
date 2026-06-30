@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync;
 
 import com.github.auties00.cobalt.client.linked.WhatsAppLinkedClientErrorHandler;
+import com.github.auties00.cobalt.listener.linked.LinkedWebAppStateActionListener;
 import com.github.auties00.cobalt.model.sync.action.SyncActionEntry;
 import com.github.auties00.cobalt.model.sync.action.SyncActionEntryBuilder;
 import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
@@ -59,7 +60,7 @@ import com.github.auties00.cobalt.sync.key.MissingSyncKeyTimeoutScheduler;
 import com.github.auties00.cobalt.sync.key.SyncKeyRotationService;
 import com.github.auties00.cobalt.sync.handler.SyncdIndexUtils;
 import com.github.auties00.cobalt.util.BufferedProtobufInputStream;
-import com.github.auties00.cobalt.util.SchedulerUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.MdAppStateMessageRangeEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdAppStateSyncMutationStatsEventBuilder;
@@ -91,7 +92,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -270,19 +270,19 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * The handle of the currently scheduled periodic sync job, or
      * {@code null} when no job is scheduled.
      */
-    private volatile CompletableFuture<?> periodicSyncJob;
+    private volatile ScheduledTask periodicSyncJob;
 
     /**
      * The handle of the currently scheduled daily syncd stats reporting
      * job, or {@code null} when no job is scheduled.
      */
-    private volatile CompletableFuture<?> periodicReportSyncdStatsJob;
+    private volatile ScheduledTask periodicReportSyncdStatsJob;
 
     /**
      * The handle of the currently scheduled daily syncd key stats
      * reporting job, or {@code null} when no job is scheduled.
      */
-    private volatile CompletableFuture<?> periodicReportSyncdKeyStatsJob;
+    private volatile ScheduledTask periodicReportSyncdKeyStatsJob;
 
     /**
      * Serializes every syncd state mutation and tracks which collections are
@@ -3049,6 +3049,9 @@ public final class LiveWebAppStateService implements WebAppStateService {
                         ? MutationApplicationResult.failed()
                         : batchResults.get(i);
                 recordMutationState(collectionName, mutation, entry.getKey(), result);
+                if (!handlerFailed) {
+                    notifyWebAppStateAction(mutation);
+                }
                 if (!handlerFailed && result.isOrphan()) {
                     store.syncStore().addOrphanMutation(
                             collectionName,
@@ -3353,6 +3356,37 @@ public final class LiveWebAppStateService implements WebAppStateService {
             entry.setActionState(result.actionState());
             entry.setModelType(result.modelType() != null ? result.modelType() : actionName);
             entry.setModelId(result.modelId() != null ? result.modelId() : fallbackModelId);
+        }
+    }
+
+    /**
+     * Fans a freshly-applied app-state action out to every registered
+     * {@link LinkedWebAppStateActionListener}.
+     *
+     * <p>Fires once per decoded mutation that carries a {@link com.github.auties00.cobalt.model.sync.action.SyncAction},
+     * as the mutation is applied from an incoming snapshot or patch, passing the decoded action together
+     * with the mutation's raw index. A mutation whose value carries no action (a bare remove keyed only by
+     * its index) surfaces nothing, since there is no action to deliver. Orphan retries do not re-fire the
+     * event, so a mutation parked as an orphan and replayed later still notifies listeners exactly once,
+     * at first receipt.
+     *
+     * @implNote
+     * This implementation is the generic action-callback analogue of WhatsApp Web's per-mutation
+     * dispatch: each listener is invoked on its own virtual thread so a slow or throwing listener can
+     * neither stall the sync pipeline nor block the fan-out to the other listeners.
+     *
+     * @param mutation the decoded, trusted mutation that was just applied
+     */
+    private void notifyWebAppStateAction(DecryptedMutation.Trusted mutation) {
+        var action = mutation.value().flatMap(sav -> sav.action()).orElse(null);
+        if (action == null) {
+            return;
+        }
+        var index = mutation.index();
+        for (var listener : whatsapp.store().listeners()) {
+            if (listener instanceof LinkedWebAppStateActionListener typed) {
+                Thread.startVirtualThread(() -> typed.onWebAppStateAction(whatsapp, action, index));
+            }
         }
     }
 
@@ -3916,7 +3950,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * {@link SyncKeyRotationService#startPeriodicRotationJob()} and the stats
      * jobs to {@link #startPeriodicReportSyncdStatsJob()} and
      * {@link #startPeriodicReportSyncdKeyStatsJob()}; the four jobs run on
-     * independent {@link SchedulerUtils} handles.
+     * independent {@link ScheduledTask} handles.
      */
     @Override
     public void startPeriodicSyncJob() {
@@ -3950,7 +3984,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
             return;
         }
 
-        periodicSyncJob = SchedulerUtils.scheduleDelayed(
+        periodicSyncJob = ScheduledTask.scheduleDelayed(
                 Duration.ofDays(days),
                 () -> {
                     try {
@@ -3972,16 +4006,16 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * disconnect.
      *
      * @implNote
-     * This implementation cancels the {@link CompletableFuture} handle
-     * non-interruptibly so an in-flight tick is allowed to complete; the field
-     * is then nulled to permit re-arming via
+     * This implementation cancels the {@link ScheduledTask} handle, waking a
+     * pending sweep so it never fires and interrupting one already running; the
+     * field is then nulled to permit re-arming via
      * {@link #scheduleNextPeriodicSync()}.
      */
     @Override
     public void stopPeriodicSyncJob() {
         var job = periodicSyncJob;
         if (job != null) {
-            job.cancel(false);
+            job.cancel();
             periodicSyncJob = null;
         }
     }
@@ -3995,41 +4029,32 @@ public final class LiveWebAppStateService implements WebAppStateService {
      *
      * @implNote
      * This implementation cancels any prior handle via
-     * {@link #stopPeriodicReportSyncdStatsJob()} before scheduling, so a
-     * second {@link #startPeriodicSyncJob()} call cannot leave two parallel
-     * stats tasks running.
+     * {@link #stopPeriodicReportSyncdStatsJob()} before scheduling on the fixed
+     * one-day cadence, so a second {@link #startPeriodicSyncJob()} call cannot
+     * leave two parallel stats tasks running.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdReportSyncdStatJob", exports = "reportSyncdStatsJob", adaptation = WhatsAppAdaptation.ADAPTED)
     private void startPeriodicReportSyncdStatsJob() {
         stopPeriodicReportSyncdStatsJob();
-        scheduleNextPeriodicReportSyncdStats();
+        periodicReportSyncdStatsJob = ScheduledTask.schedule(Duration.ofDays(1), this::runReportSyncdStats);
     }
 
     /**
-     * Schedules the next firing of the recurring action-stats job one day from
-     * now.
+     * Runs one action-stats tick, swallowing any failure so the recurrence
+     * survives it.
      *
-     * <p>The one-day cadence is fixed; there is no AB prop to widen or narrow
-     * the interval.
-     *
-     * @implNote
-     * This implementation self-reschedules from the {@code finally} branch of
-     * the task lambda so a {@link #reportSyncdStats()} failure still arms the
-     * next tick.
+     * <p>The body of the recurring action-stats job; the one-day cadence is
+     * fixed, with no AB prop to widen or narrow the interval. A
+     * {@link #reportSyncdStats()} failure is logged and dropped so a single bad
+     * tick does not halt the loop, which the scheduler keeps running until
+     * {@link #stopPeriodicReportSyncdStatsJob()} cancels it.
      */
-    private void scheduleNextPeriodicReportSyncdStats() {
-        periodicReportSyncdStatsJob = SchedulerUtils.scheduleDelayed(
-                Duration.ofDays(1),
-                () -> {
-                    try {
-                        reportSyncdStats();
-                    } catch (Exception e) {
-                        LOGGER.warning("Periodic syncd stats reporting job failed: " + e.getMessage());
-                    } finally {
-                        scheduleNextPeriodicReportSyncdStats();
-                    }
-                }
-        );
+    private void runReportSyncdStats() {
+        try {
+            reportSyncdStats();
+        } catch (Exception e) {
+            LOGGER.warning("Periodic syncd stats reporting job failed: " + e.getMessage());
+        }
     }
 
     /**
@@ -4130,41 +4155,32 @@ public final class LiveWebAppStateService implements WebAppStateService {
      *
      * @implNote
      * This implementation cancels any prior handle via
-     * {@link #stopPeriodicReportSyncdKeyStatsJob()} before scheduling so a
-     * second {@link #startPeriodicSyncJob()} call cannot leave two parallel
-     * key-stats tasks running.
+     * {@link #stopPeriodicReportSyncdKeyStatsJob()} before scheduling on the
+     * fixed one-day cadence so a second {@link #startPeriodicSyncJob()} call
+     * cannot leave two parallel key-stats tasks running.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdReportKeyStatsJob", exports = "reportSyncdKeyStatsJob", adaptation = WhatsAppAdaptation.ADAPTED)
     private void startPeriodicReportSyncdKeyStatsJob() {
         stopPeriodicReportSyncdKeyStatsJob();
-        scheduleNextPeriodicReportSyncdKeyStats();
+        periodicReportSyncdKeyStatsJob = ScheduledTask.schedule(Duration.ofDays(1), this::runReportSyncdKeyStats);
     }
 
     /**
-     * Schedules the next firing of the recurring key-stats job one day from
-     * now.
+     * Runs one key-stats tick, swallowing any failure so the recurrence
+     * survives it.
      *
-     * <p>Always uses a one-day cadence with no gatekeeper-driven stretch to a
-     * longer interval.
-     *
-     * @implNote
-     * This implementation self-reschedules from the {@code finally} branch of
-     * the task lambda so a {@link #reportSyncdKeyStats()} failure still arms
-     * the next tick.
+     * <p>The body of the recurring key-stats job; always uses a one-day cadence
+     * with no gatekeeper-driven stretch to a longer interval. A
+     * {@link #reportSyncdKeyStats()} failure is logged and dropped so a single
+     * bad tick does not halt the loop, which the scheduler keeps running until
+     * {@link #stopPeriodicReportSyncdKeyStatsJob()} cancels it.
      */
-    private void scheduleNextPeriodicReportSyncdKeyStats() {
-        periodicReportSyncdKeyStatsJob = SchedulerUtils.scheduleDelayed(
-                Duration.ofDays(1),
-                () -> {
-                    try {
-                        reportSyncdKeyStats();
-                    } catch (Exception e) {
-                        LOGGER.warning("Periodic syncd key stats reporting job failed: " + e.getMessage());
-                    } finally {
-                        scheduleNextPeriodicReportSyncdKeyStats();
-                    }
-                }
-        );
+    private void runReportSyncdKeyStats() {
+        try {
+            reportSyncdKeyStats();
+        } catch (Exception e) {
+            LOGGER.warning("Periodic syncd key stats reporting job failed: " + e.getMessage());
+        }
     }
 
     /**
@@ -4175,16 +4191,16 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * during disconnect.
      *
      * @implNote
-     * This implementation cancels the {@link CompletableFuture} handle
-     * non-interruptibly so an in-flight tick can complete; the field is then
-     * nulled so a subsequent
-     * {@link #scheduleNextPeriodicReportSyncdKeyStats()} can re-arm.
+     * This implementation cancels the {@link ScheduledTask} handle, waking a
+     * pending tick so it never fires and interrupting one already running; the
+     * field is then nulled so a subsequent
+     * {@link #startPeriodicReportSyncdKeyStatsJob()} can re-arm.
      */
     @Override
     public void stopPeriodicReportSyncdKeyStatsJob() {
         var job = periodicReportSyncdKeyStatsJob;
         if (job != null) {
-            job.cancel(false);
+            job.cancel();
             periodicReportSyncdKeyStatsJob = null;
         }
     }
@@ -4398,16 +4414,16 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * during disconnect.
      *
      * @implNote
-     * This implementation cancels the {@link CompletableFuture} handle
-     * non-interruptibly so an in-flight tick can complete; the field is then
-     * nulled so a subsequent {@link #scheduleNextPeriodicReportSyncdStats()}
-     * can re-arm.
+     * This implementation cancels the {@link ScheduledTask} handle, waking a
+     * pending tick so it never fires and interrupting one already running; the
+     * field is then nulled so a subsequent
+     * {@link #startPeriodicReportSyncdStatsJob()} can re-arm.
      */
     @Override
     public void stopPeriodicReportSyncdStatsJob() {
         var job = periodicReportSyncdStatsJob;
         if (job != null) {
-            job.cancel(false);
+            job.cancel();
             periodicReportSyncdStatsJob = null;
         }
     }

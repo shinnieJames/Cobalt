@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.CanonicalEntEventMarker;
 import com.github.auties00.cobalt.wam.type.CanonicalEntRecoveryCompanionEventType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCanonicalEntRecoveryCompanionWamEvent")
 @WamEvent(id = 7434)
@@ -28,7 +28,7 @@ public interface CanonicalEntRecoveryCompanionEvent extends WamEventSpec {
     Optional<String> canonicalEntRecoveryEventMetadata();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt canonicalEntRecoveryTimeoutSeconds();
+    OptionalLong canonicalEntRecoveryTimeoutSeconds();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> canonicalEntRegistrationTraceId();
@@ -37,7 +37,7 @@ public interface CanonicalEntRecoveryCompanionEvent extends WamEventSpec {
     Optional<String> canonicalEntRequestId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt canonicalEntSequenceNumberSinceLastRegistration();
+    OptionalLong canonicalEntSequenceNumberSinceLastRegistration();
 
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> canonicalEntStorageSource();
@@ -49,5 +49,5 @@ public interface CanonicalEntRecoveryCompanionEvent extends WamEventSpec {
     Optional<String> familyDeviceId();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 }

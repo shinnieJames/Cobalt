@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.SignCredentialResult;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSignCredentialWamEvent")
 @WamEvent(id = 2242)
@@ -30,7 +30,7 @@ public interface SignCredentialEvent extends WamEventSpec {
     Optional<ProjectCode> projectCode();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<SignCredentialResult> signCredentialResult();

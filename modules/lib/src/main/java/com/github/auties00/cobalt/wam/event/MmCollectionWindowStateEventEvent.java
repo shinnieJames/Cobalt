@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMmCollectionWindowStateEventWamEvent")
 @WamEvent(id = 6744, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -24,7 +24,7 @@ public interface MmCollectionWindowStateEventEvent extends WamEventSpec {
     Optional<Boolean> isUserDisclosed();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt mmDisclosureFlags();
+    OptionalLong mmDisclosureFlags();
 
     @WamProperty(index = 2, type = WamType.BOOLEAN)
     Optional<Boolean> mmHasDisclosedToken();

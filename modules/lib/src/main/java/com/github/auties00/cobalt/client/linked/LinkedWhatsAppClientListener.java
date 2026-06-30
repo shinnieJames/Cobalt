@@ -26,7 +26,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.privacy.AccountDisappearingMode;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
+import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
 import com.github.auties00.cobalt.model.setting.privacy.OptOutEntry;
 import com.github.auties00.cobalt.model.sync.action.SyncAction;
@@ -96,6 +96,7 @@ public non-sealed interface LinkedWhatsAppClientListener extends LinkedListener,
         LinkedBlockedContactsListener,
         LinkedNewContactListener,
         LinkedPrivacySettingChangedListener,
+        LinkedMessageQuarantinedListener,
         LinkedRegistrationCodeListener,
         LinkedCallListener,
         LinkedCallEndedListener,
@@ -248,7 +249,11 @@ public non-sealed interface LinkedWhatsAppClientListener extends LinkedListener,
     }
 
     @Override
-    default void onPrivacySettingChanged(LinkedWhatsAppClient whatsapp, PrivacySettingEntry newPrivacyEntry) {
+    default void onPrivacySettingChanged(LinkedWhatsAppClient whatsapp, PrivacySettingValue newPrivacyValue) {
+    }
+
+    @Override
+    default void onMessageQuarantined(LinkedWhatsAppClient whatsapp, ChatMessageInfo info) {
     }
 
     @Override

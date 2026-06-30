@@ -6,10 +6,9 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingEntryBuilder;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacyMode;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacySettingBuilder;
 import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.StatusPrivacyAction;
@@ -26,7 +25,7 @@ import java.util.List;
  *
  * <p>The sync dispatcher routes incoming {@code status_privacy} mutations here
  * whenever the user changes the status audience on another device. The handler
- * rewrites the {@link PrivacySettingType#STATUS} entry on
+ * rewrites the {@link StatusPrivacySetting status-privacy setting} on
  * {@link LinkedWhatsAppStore} so subsequent status
  * posts use the new audience.
  */
@@ -135,13 +134,13 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
 
     /**
      * Translates the decoded status-privacy mode into a
-     * {@link PrivacySettingEntry} and writes it to the store.
+     * {@link StatusPrivacySetting} and writes it to the store.
      *
      * <p>Validates the value and dispatches on the distribution mode:
-     * {@code CONTACTS} writes a {@link PrivacySettingValue#CONTACTS} entry with an
+     * {@code CONTACTS} writes a {@link StatusPrivacyMode#CONTACTS} setting with an
      * empty JID list; {@code ALLOW_LIST} and {@code DENY_LIST} write a
-     * {@link PrivacySettingValue#CONTACTS_ONLY} /
-     * {@link PrivacySettingValue#CONTACTS_EXCEPT} entry whose {@code excluded} list
+     * {@link StatusPrivacyMode#WHITELIST} /
+     * {@link StatusPrivacyMode#CONTACTS_EXCEPT} setting whose JID list
      * is the input {@link StatusPrivacyAction#userJid()} filtered through
      * {@link #filterUserJids(List)}; {@code CLOSE_FRIENDS} and {@code CUSTOM_LIST}
      * are accepted as no-ops. A missing value or mode is reported as malformed. The
@@ -171,37 +170,26 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
 
         var userJid = action.userJid();
 
-        PrivacySettingEntry entry = null;
+        StatusPrivacySetting setting = null;
         switch (mode) {
-            case CONTACTS -> {
-                entry = new PrivacySettingEntryBuilder()
-                        .type(PrivacySettingType.STATUS)
-                        .value(PrivacySettingValue.CONTACTS)
-                        .excluded(List.of())
-                        .build();
-            }
-            case ALLOW_LIST -> {
-                var allowList = filterUserJids(userJid);
-                entry = new PrivacySettingEntryBuilder()
-                        .type(PrivacySettingType.STATUS)
-                        .value(PrivacySettingValue.CONTACTS_ONLY)
-                        .excluded(allowList)
-                        .build();
-            }
-            case DENY_LIST -> {
-                var denyList = filterUserJids(userJid);
-                entry = new PrivacySettingEntryBuilder()
-                        .type(PrivacySettingType.STATUS)
-                        .value(PrivacySettingValue.CONTACTS_EXCEPT)
-                        .excluded(denyList)
-                        .build();
-            }
+            case CONTACTS -> setting = new StatusPrivacySettingBuilder()
+                    .mode(StatusPrivacyMode.CONTACTS)
+                    .jids(List.of())
+                    .build();
+            case ALLOW_LIST -> setting = new StatusPrivacySettingBuilder()
+                    .mode(StatusPrivacyMode.WHITELIST)
+                    .jids(filterUserJids(userJid))
+                    .build();
+            case DENY_LIST -> setting = new StatusPrivacySettingBuilder()
+                    .mode(StatusPrivacyMode.CONTACTS_EXCEPT)
+                    .jids(filterUserJids(userJid))
+                    .build();
             case CLOSE_FRIENDS, CUSTOM_LIST -> {
             }
         }
 
-        if (entry != null) {
-            client.store().settingsStore().addPrivacySetting(entry);
+        if (setting != null) {
+            client.store().settingsStore().setStatusPrivacy(setting);
         }
         return MutationApplicationResult.success();
     }

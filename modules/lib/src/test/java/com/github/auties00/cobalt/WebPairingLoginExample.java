@@ -2,7 +2,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
-import com.github.auties00.cobalt.util.SchedulerUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
 /**
  * Runnable example that logs a Web client in via a phone-number pairing code, prints the code to
@@ -19,7 +19,7 @@ void main() throws IOException {
             .addNodeSentListener((_, outgoing) -> System.out.printf("Sent stanza %s%n", outgoing))
             .addLoggedInListener(api -> {
                 System.out.println("COBALT_LOGGED_IN");
-                SchedulerUtils.scheduleDelayed(Duration.ofSeconds(10), () -> {
+                ScheduledTask.scheduleDelayed(Duration.ofSeconds(10), () -> {
                     try {
                         System.out.println("Sending message");
                         api.sendMessage(Jid.of(393495089819L), MessageContainer.of("Hello from Cobalt!"));

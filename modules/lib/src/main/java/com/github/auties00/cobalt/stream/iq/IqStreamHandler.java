@@ -24,6 +24,7 @@ import com.github.auties00.cobalt.stanza.smax.mdcompanion.SmaxMdSetRegEncryption
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.util.DataUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.Lid11MigrationLifecycleEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdLinkDeviceCompanionEventBuilder;
@@ -33,6 +34,7 @@ import com.github.auties00.cobalt.wam.type.MigrationStageEnum;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -40,10 +42,6 @@ import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Handles server-initiated {@code <iq>} (info/query) stanzas, covering the
@@ -61,9 +59,9 @@ import java.util.concurrent.TimeUnit;
  * @implNote
  * This implementation collapses the {@code WAWebHandlePairDevice} and
  * {@code WAWebHandlePairSuccess} entry points into a single handler keyed on
- * the {@code <iq>} child tag, and schedules the QR ref rotation on a dedicated
- * daemon {@link ScheduledExecutorService} rather than a sliding-deadline timer
- * primitive. The {@code mdSessionId} computation, the
+ * the {@code <iq>} child tag, and schedules the QR ref rotation as a one-shot
+ * {@link ScheduledTask} that re-arms itself for the next ref rather than a
+ * sliding-deadline timer primitive. The {@code mdSessionId} computation, the
  * {@link MdLinkDeviceCompanionStage} commits, and the
  * {@code Lid11MigrationLifecycle} commit on pair-success mirror the upstream
  * reporter logic so the device-link funnel reported to the WhatsApp dashboards
@@ -135,12 +133,6 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
     private final LidMigrationService lidMigrationService;
 
     /**
-     * The dedicated single-thread daemon executor that drives the QR ref
-     * rotation ticks.
-     */
-    private final ScheduledExecutorService rotationExecutor;
-
-    /**
      * The service that owns the alt-device-linking (phone-number pairing-code)
      * handshake state.
      *
@@ -161,7 +153,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * The currently scheduled rotation tick, or {@code null} when no rotation
      * is active.
      */
-    private ScheduledFuture<?> rotationTask;
+    private ScheduledTask rotationTask;
 
     /**
      * The service used to commit the {@link MdLinkDeviceCompanionStage}
@@ -211,12 +203,6 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
         this.deviceLinkingService = Objects.requireNonNull(deviceLinkingService, "altDeviceLinkingService cannot be null");
         this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
         this.rotationLock = new Object();
-        this.rotationExecutor = Executors.newSingleThreadScheduledExecutor(runnable ->
-                Thread.ofPlatform()
-                        .daemon()
-                        .name("CobaltPairDeviceRotation")
-                        .unstarted(runnable)
-        );
     }
 
     /**
@@ -423,8 +409,8 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      *
      * @implNote
      * This implementation reschedules by cancelling the previous
-     * {@link ScheduledFuture} and submitting a new one because the JDK has no
-     * native sliding-deadline scheduler.
+     * {@link ScheduledTask} and arming a fresh one because the JDK has no native
+     * sliding-deadline scheduler.
      *
      * @param queue the mutable ref queue shared across ticks
      */
@@ -453,10 +439,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
                 return;
             }
 
-            rotationTask = rotationExecutor.schedule(
-                    () -> runRotationTick(queue),
-                    rotationDelay,
-                    TimeUnit.MILLISECONDS);
+            rotationTask = ScheduledTask.scheduleDelayed(Duration.ofMillis(rotationDelay), () -> runRotationTick(queue));
         }
     }
 
@@ -936,7 +919,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
     private void cancelRotationLocked() {
         var task = rotationTask;
         if (task != null) {
-            task.cancel(false);
+            task.cancel();
             rotationTask = null;
         }
     }

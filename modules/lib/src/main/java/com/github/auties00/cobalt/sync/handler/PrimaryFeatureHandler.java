@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.listener.linked.LinkedWebAppPrimaryFeaturesListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -117,6 +118,7 @@ public final class PrimaryFeatureHandler implements WebAppStateActionHandler {
         if (latest != null) {
             var pfa = (PrimaryFeatureAction) latest.value().flatMap(sav -> sav.action()).orElseThrow();
             client.store().syncStore().setPrimaryFeatures(pfa.flags());
+            notifyPrimaryFeatures(client, pfa.flags());
         }
 
         return results;
@@ -147,6 +149,31 @@ public final class PrimaryFeatureHandler implements WebAppStateActionHandler {
         }
 
         client.store().syncStore().setPrimaryFeatures(action.flags());
+        notifyPrimaryFeatures(client, action.flags());
         return MutationApplicationResult.success();
+    }
+
+    /**
+     * Fans the newly-persisted primary feature flag set out to every registered
+     * {@link LinkedWebAppPrimaryFeaturesListener}.
+     *
+     * <p>Invoked from both apply paths after
+     * {@code LinkedWhatsAppSyncStore.setPrimaryFeatures} commits the latest flag set, so listeners observe
+     * the same union of feature strings the local store now holds. An empty flag set is still delivered,
+     * since the primary clearing its advertised features is itself an observable change.
+     *
+     * @implNote
+     * This implementation dispatches each listener on its own virtual thread so a slow or throwing
+     * listener never blocks the sync pipeline, matching the fan-out used by the other app-state handlers.
+     *
+     * @param client the {@link LinkedWhatsAppClient} emitting the event
+     * @param flags  the primary device's advertised feature flags that were just persisted
+     */
+    private void notifyPrimaryFeatures(LinkedWhatsAppClient client, List<String> flags) {
+        for (var listener : client.store().listeners()) {
+            if (listener instanceof LinkedWebAppPrimaryFeaturesListener typed) {
+                Thread.startVirtualThread(() -> typed.onWebAppPrimaryFeatures(client, flags));
+            }
+        }
     }
 }

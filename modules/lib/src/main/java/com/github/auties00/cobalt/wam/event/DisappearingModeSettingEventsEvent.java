@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.DisappearingModeEntryPointType;
 import com.github.auties00.cobalt.wam.type.DisappearingModeSettingEventNameType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebDisappearingModeSettingEventsWamEvent")
 @WamEvent(id = 3446)
@@ -25,11 +25,11 @@ public interface DisappearingModeSettingEventsEvent extends WamEventSpec {
     Optional<Boolean> isAfterRead();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt lastToggleTimestamp();
+    OptionalLong lastToggleTimestamp();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt newEphemeralityDuration();
+    OptionalLong newEphemeralityDuration();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt previousEphemeralityDuration();
+    OptionalLong previousEphemeralityDuration();
 }

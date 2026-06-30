@@ -12,13 +12,13 @@ import com.github.auties00.cobalt.wam.type.FmxEventType;
 import com.github.auties00.cobalt.wam.type.HighlightGroupType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPsFmxActionWamEvent")
 @WamEvent(id = 7054, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface PsFmxActionEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt commonGroupNum();
+    OptionalLong commonGroupNum();
 
     @WamProperty(index = 2, type = WamType.BOOLEAN)
     Optional<Boolean> countryShown();

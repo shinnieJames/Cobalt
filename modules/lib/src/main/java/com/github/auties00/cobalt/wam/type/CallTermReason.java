@@ -41,5 +41,10 @@ public enum CallTermReason {
     @WamEnumConstant(31) VC_LONELY_STATE_TIMEOUT,
     @WamEnumConstant(32) WAITING_ROOM_DENIED,
     @WamEnumConstant(33) WAITING_ROOM_TIMEOUT,
-    @WamEnumConstant(34) DEVICE_SWITCH
+    @WamEnumConstant(34) DEVICE_SWITCH,
+    @WamEnumConstant(35) VIDEO_PREVIEW_ERROR,
+    @WamEnumConstant(36) VIDEO_STREAM_CREATE_ERROR,
+    @WamEnumConstant(37) VIDEO_PORT_CREATE_ERROR,
+    @WamEnumConstant(38) FAILED_TO_SET_VIDEO_DISPLAY_SURFACE,
+    @WamEnumConstant(39) FATAL_NACK
 }

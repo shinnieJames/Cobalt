@@ -12,16 +12,16 @@ import com.github.auties00.cobalt.wam.type.SignupUserJourneyOperation;
 import com.github.auties00.cobalt.wam.type.ThreadCreationTime;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPsApiSignupFlowWamEvent")
 @WamEvent(id = 7628, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface PsApiSignupFlowEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt businessLid();
+    OptionalLong businessLid();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt businessPhoneNumber();
+    OptionalLong businessPhoneNumber();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> signupDeepLinkId();

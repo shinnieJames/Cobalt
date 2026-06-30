@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.BusinessToolsItemType;
 import com.github.auties00.cobalt.wam.type.BusinessToolsLinkedAccountType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebBusinessToolsClickWamEvent")
 @WamEvent(id = 2218)
@@ -20,13 +20,13 @@ public interface BusinessToolsClickEvent extends WamEventSpec {
     Optional<BusinessToolsEntryPointType> businessToolsEntryPoint();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt businessToolsEntryPointPlacement();
+    OptionalLong businessToolsEntryPointPlacement();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<BusinessToolsItemType> businessToolsItem();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt businessToolsSequenceNumber();
+    OptionalLong businessToolsSequenceNumber();
 
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> businessToolsSessionId();

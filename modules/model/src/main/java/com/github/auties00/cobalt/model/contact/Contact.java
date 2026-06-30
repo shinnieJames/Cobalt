@@ -1,7 +1,9 @@
 package com.github.auties00.cobalt.model.contact;
 
+import com.github.auties00.cobalt.model.business.BusinessHostStorageType;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import it.auties.protobuf.annotation.ProtobufMessage;
@@ -11,6 +13,7 @@ import it.auties.protobuf.model.ProtobufType;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * A model representing a WhatsApp contact.
@@ -169,6 +172,40 @@ public final class Contact implements JidProvider {
     boolean addedByUsername;
 
     /**
+     * The contact's privacy-mode host-storage classification, or {@code null}
+     * when it has never been observed.
+     *
+     * <p>This mirrors the {@code host_storage} attribute carried on the
+     * {@code <biz>} envelope of messages and notifications from this contact,
+     * decoded against the message-level {@link BusinessHostStorageType}
+     * encoding ({@link BusinessHostStorageType#ON_PREMISE} for
+     * WhatsApp-hosted, {@link BusinessHostStorageType#FACEBOOK} for
+     * Meta-hosted). The value is updated in-place from inbound traffic, with
+     * the newer {@link #privacyModeTimestamp timestamp} winning, and a
+     * {@link BusinessHostStorageType#FACEBOOK} value (see
+     * {@link #hostedOnFacebook()}) is read by the country and Terms-of-Service
+     * chat-gating checks.
+     */
+    @ProtobufProperty(index = 14, type = ProtobufType.ENUM)
+    BusinessHostStorageType privacyModeHostStorage;
+
+    /**
+     * The timestamp of the most recent privacy-mode update applied to
+     * {@link #privacyModeHostStorage}, or {@code null} when no privacy-mode
+     * value has ever been observed.
+     *
+     * <p>This is the {@code privacy_mode_ts} attribute carried alongside the
+     * {@code host_storage} attribute on the {@code <biz>} envelope, serialized
+     * as an epoch-second value via {@link InstantSecondsMixin}. It is the
+     * conflict-resolution key for
+     * {@link #setPrivacyMode(BusinessHostStorageType, Instant)}: a later
+     * update is ignored when its timestamp is not strictly after the stored
+     * one, so out-of-order delivery cannot regress the recorded host storage.
+     */
+    @ProtobufProperty(index = 15, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
+    Instant privacyModeTimestamp;
+
+    /**
      * Constructs a new contact with the given field values.
      *
      * @param jid                the non-{@code null} JID uniquely identifying
@@ -194,8 +231,12 @@ public final class Contact implements JidProvider {
      *                           number with this contact
      * @param addedByUsername    whether this contact was added through
      *                           username-based discovery
+     * @param privacyModeHostStorage the host-storage classification, or
+     *                               {@code null} if never observed
+     * @param privacyModeTimestamp   the timestamp of the last privacy-mode
+     *                               update, or {@code null} if never observed
      */
-    Contact(Jid jid, String chosenName, String fullName, String shortName, ContactStatus lastKnownPresence, Long lastSeenSeconds, boolean blocked, boolean statusMuted, Jid lid, String username, ADVEncryptionType encryptionType, boolean phoneNumberShared, boolean addedByUsername) {
+    Contact(Jid jid, String chosenName, String fullName, String shortName, ContactStatus lastKnownPresence, Long lastSeenSeconds, boolean blocked, boolean statusMuted, Jid lid, String username, ADVEncryptionType encryptionType, boolean phoneNumberShared, boolean addedByUsername, BusinessHostStorageType privacyModeHostStorage, Instant privacyModeTimestamp) {
         this.jid = Objects.requireNonNull(jid, "value cannot be null");
         this.chosenName = chosenName;
         this.fullName = fullName;
@@ -209,6 +250,74 @@ public final class Contact implements JidProvider {
         this.encryptionType = encryptionType;
         this.phoneNumberShared = phoneNumberShared;
         this.addedByUsername = addedByUsername;
+        this.privacyModeHostStorage = privacyModeHostStorage;
+        this.privacyModeTimestamp = privacyModeTimestamp;
+    }
+
+    /**
+     * Returns the contact's privacy-mode host-storage classification.
+     *
+     * <p>See {@link #hostedOnFacebook()} for the derived predicate the gating
+     * checks actually consume.
+     *
+     * @return an {@link Optional} carrying the host-storage classification, or
+     *         empty if it has never been observed
+     */
+    public Optional<BusinessHostStorageType> privacyModeHostStorage() {
+        return Optional.ofNullable(privacyModeHostStorage);
+    }
+
+    /**
+     * Returns whether this contact's data is hosted on Facebook (Meta) storage
+     * rather than on-premise WhatsApp storage.
+     *
+     * <p>This is {@code true} only when the observed
+     * {@link #privacyModeHostStorage() host storage} is
+     * {@link BusinessHostStorageType#FACEBOOK}; it is the cross-Meta
+     * interoperability signal consumed by the country and Terms-of-Service
+     * inbound-message gating checks.
+     *
+     * @return {@code true} when the contact is Facebook-hosted, {@code false}
+     *         otherwise or when the host storage has never been observed
+     */
+    public boolean hostedOnFacebook() {
+        return privacyModeHostStorage == BusinessHostStorageType.FACEBOOK;
+    }
+
+    /**
+     * Returns the timestamp of the most recent privacy-mode update applied to
+     * this contact.
+     *
+     * @return an {@link Optional} carrying the last privacy-mode update
+     *         instant, or empty if no privacy-mode value has ever been observed
+     */
+    public Optional<Instant> privacyModeTimestamp() {
+        return Optional.ofNullable(privacyModeTimestamp);
+    }
+
+    /**
+     * Applies an observed privacy-mode update to this contact, keeping the
+     * newer of the stored and incoming values.
+     *
+     * <p>The update is accepted only when no privacy-mode timestamp has been
+     * recorded yet, or when {@code timestamp} is strictly after the stored
+     * {@link #privacyModeTimestamp}. This mirrors WhatsApp's
+     * {@code privacy_mode_ts} conflict resolution so that out-of-order inbound
+     * delivery cannot regress the recorded host storage.
+     *
+     * @param hostStorage the observed host-storage classification
+     * @param timestamp   the {@code privacy_mode_ts} instant carried with the
+     *                    observation
+     * @return {@code true} when the update was applied, {@code false} when it
+     *         was discarded as stale
+     */
+    public boolean setPrivacyMode(BusinessHostStorageType hostStorage, Instant timestamp) {
+        if (privacyModeTimestamp != null && !timestamp.isAfter(privacyModeTimestamp)) {
+            return false;
+        }
+        this.privacyModeHostStorage = hostStorage;
+        this.privacyModeTimestamp = timestamp;
+        return true;
     }
 
     /**

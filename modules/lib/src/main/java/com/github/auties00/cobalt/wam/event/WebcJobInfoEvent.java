@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.WebcJobResultTypeCode;
 import com.github.auties00.cobalt.wam.type.WebcScenarioType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcJobInfoWamEvent")
 @WamEvent(id = 3054)
@@ -25,17 +25,17 @@ public interface WebcJobInfoEvent extends WamEventSpec {
     Optional<WebcJobResultTypeCode> jobResultType();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt pendingJobsCount();
+    OptionalLong pendingJobsCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<WebcScenarioType> scenario();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt webcJobAddedT();
+    OptionalLong webcJobAddedT();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt webcJobCompletedT();
+    OptionalLong webcJobCompletedT();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt webcJobStartedT();
+    OptionalLong webcJobStartedT();
 }

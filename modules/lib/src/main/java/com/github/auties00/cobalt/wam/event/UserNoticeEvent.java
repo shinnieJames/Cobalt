@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.UserNoticeEventType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebUserNoticeWamEvent")
 @WamEvent(id = 2472)
@@ -27,11 +27,11 @@ public interface UserNoticeEvent extends WamEventSpec {
     Optional<Instant> tsMs();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt userNoticeContentVersion();
+    OptionalLong userNoticeContentVersion();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<UserNoticeEventType> userNoticeEvent();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt userNoticeId();
+    OptionalLong userNoticeId();
 }

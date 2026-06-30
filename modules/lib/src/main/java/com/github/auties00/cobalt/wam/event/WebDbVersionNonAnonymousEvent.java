@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.WebDbNameType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebDbVersionNonAnonymousWamEvent")
 @WamEvent(id = 4816, releaseWeight = 20)
@@ -18,5 +18,5 @@ public interface WebDbVersionNonAnonymousEvent extends WamEventSpec {
     Optional<WebDbNameType> webDbName();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt webDbVersionNumber();
+    OptionalLong webDbVersionNumber();
 }

@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.GroupJoinRequestEntrypointType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWaFsGroupJoinRequestActionWamEvent")
 @WamEvent(id = 3944)
@@ -26,7 +26,7 @@ public interface WaFsGroupJoinRequestActionEvent extends WamEventSpec {
     Optional<GroupJoinRequestEntrypointType> groupJoinRequestEntrypoint();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt groupJoinRequestGroupsInCommon();
+    OptionalLong groupJoinRequestGroupsInCommon();
 
     @WamProperty(index = 3, type = WamType.BOOLEAN)
     Optional<Boolean> isSuccessful();

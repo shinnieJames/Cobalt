@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.ShareContentUserJourneyEntryPoint;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebShareContentUserJourneyWamEvent")
 @WamEvent(id = 5734)
@@ -53,13 +53,13 @@ public interface ShareContentUserJourneyEvent extends WamEventSpec {
     Optional<Boolean> isForwardFlow();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt mediaCount();
+    OptionalLong mediaCount();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt messageSelectedCount();
+    OptionalLong messageSelectedCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt numberOfRecipients();
+    OptionalLong numberOfRecipients();
 
     @WamProperty(index = 23, type = WamType.BOOLEAN)
     Optional<Boolean> prefilledCaptionRemoved();
@@ -80,7 +80,7 @@ public interface ShareContentUserJourneyEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 11, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

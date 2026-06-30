@@ -17,13 +17,13 @@ import com.github.auties00.cobalt.wam.type.StatusType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusPostWamEvent")
 @WamEvent(id = 1176)
 public interface StatusPostEvent extends WamEventSpec {
     @WamProperty(index = 57, type = WamType.INTEGER)
-    OptionalInt channelStatusId();
+    OptionalLong channelStatusId();
 
     @WamProperty(index = 58, type = WamType.STRING)
     Optional<String> cid();
@@ -41,7 +41,7 @@ public interface StatusPostEvent extends WamEventSpec {
     Optional<Boolean> editable();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt externalInteractables();
+    OptionalLong externalInteractables();
 
     @WamProperty(index = 17, type = WamType.STRING)
     Optional<String> externalPackageName();
@@ -65,7 +65,10 @@ public interface StatusPostEvent extends WamEventSpec {
     Optional<Boolean> hasFilters();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt individualMentionCount();
+    OptionalLong individualMentionCount();
+
+    @WamProperty(index = 59, type = WamType.BOOLEAN)
+    Optional<Boolean> isBatched();
 
     @WamProperty(index = 36, type = WamType.BOOLEAN)
     Optional<Boolean> isCropped();
@@ -128,13 +131,13 @@ public interface StatusPostEvent extends WamEventSpec {
     Optional<PrivacySettingsValueType> perPostStatusPrivacySetting();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 18, type = WamType.STRING)
     Optional<String> shareType();
 
     @WamProperty(index = 56, type = WamType.INTEGER)
-    OptionalInt statusAudienceSelected();
+    OptionalLong statusAudienceSelected();
 
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> statusAudienceSelectorClicked();
@@ -143,7 +146,7 @@ public interface StatusPostEvent extends WamEventSpec {
     Optional<Boolean> statusAudienceSelectorUpdated();
 
     @WamProperty(index = 39, type = WamType.INTEGER)
-    OptionalInt statusAudienceSize();
+    OptionalLong statusAudienceSize();
 
     @WamProperty(index = 53, type = WamType.ENUM)
     Optional<StatusCategory> statusCategory();
@@ -155,10 +158,13 @@ public interface StatusPostEvent extends WamEventSpec {
     Optional<String> statusId();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt statusMentionCount();
+    OptionalLong statusMentionCount();
 
     @WamProperty(index = 46, type = WamType.ENUM)
     Optional<StatusPairedMediaQuality> statusPairedMediaQuality();
+
+    @WamProperty(index = 60, type = WamType.STRING)
+    Optional<String> statusPartCode();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<StatusPostOrigin> statusPostOrigin();
@@ -167,13 +173,13 @@ public interface StatusPostEvent extends WamEventSpec {
     Optional<StatusPostResult> statusPostResult();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 30, type = WamType.ENUM)
     Optional<StatusType> statusType();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt stickersCount();
+    OptionalLong stickersCount();
 
     @WamProperty(index = 32, type = WamType.BOOLEAN)
     Optional<Boolean> textStatusColorChanged();
@@ -182,13 +188,13 @@ public interface StatusPostEvent extends WamEventSpec {
     Optional<Boolean> textStatusFontChanged();
 
     @WamProperty(index = 34, type = WamType.INTEGER)
-    OptionalInt textToolCount();
+    OptionalLong textToolCount();
 
     @WamProperty(index = 35, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 54, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 
     @WamProperty(index = 42, type = WamType.BOOLEAN)
     Optional<Boolean> urlHasAdditionalText();

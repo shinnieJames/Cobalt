@@ -14,13 +14,13 @@ import com.github.auties00.cobalt.wam.type.GroupMemberAddingMemberType;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupMemberAddingUserJourneyWamEvent")
 @WamEvent(id = 5336)
 public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt addSelectedContactsCount();
+    OptionalLong addSelectedContactsCount();
 
     @WamProperty(index = 2, type = WamType.STRING)
     Optional<String> appSessionId();
@@ -29,7 +29,7 @@ public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
     Optional<BundleSendSource> bundleSendSource();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt frequentlyContactedIndex();
+    OptionalLong frequentlyContactedIndex();
 
     @WamProperty(index = 28, type = WamType.ENUM)
     Optional<AddMembersEntrypointType> groupAddMemberEntryPoint();
@@ -41,16 +41,16 @@ public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
     Optional<String> groupCreationGroupId();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt groupHistoryMessagesCount();
+    OptionalLong groupHistoryMessagesCount();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt groupHistoryOutWindowPinsCount();
+    OptionalLong groupHistoryOutWindowPinsCount();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt groupHistoryPinsCount();
+    OptionalLong groupHistoryPinsCount();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt groupHistoryUncountedMessagesCount();
+    OptionalLong groupHistoryUncountedMessagesCount();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<GroupMemberAddingActionType> groupMemberAddingActionType();
@@ -59,7 +59,7 @@ public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
     Optional<GroupMemberAddingMemberType> groupMemberAddingMemberType();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt groupServerErrorCode();
+    OptionalLong groupServerErrorCode();
 
     @WamProperty(index = 19, type = WamType.STRING)
     Optional<String> groupServerErrorCodeMsg();
@@ -76,20 +76,23 @@ public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 22, type = WamType.BOOLEAN)
     Optional<Boolean> isGroupHistoryToggledOn();
 
+    @WamProperty(index = 30, type = WamType.BOOLEAN)
+    Optional<Boolean> isTeeBotNoticeOnly();
+
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt potentialTotalSuggestionCount();
+    OptionalLong potentialTotalSuggestionCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt recentlyContactedIndex();
+    OptionalLong recentlyContactedIndex();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt selectedMemberCnt();
+    OptionalLong selectedMemberCnt();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt suggestedContactsCount();
+    OptionalLong suggestedContactsCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt suggestedContactsIndex();
+    OptionalLong suggestedContactsIndex();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<TsSurface> uiSurface();
@@ -98,7 +101,7 @@ public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

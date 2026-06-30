@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.PreCallActionType;
 import com.github.auties00.cobalt.wam.type.SubSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPreCallUserJourneyCallsTabWamEvent")
 @WamEvent(id = 5680)
@@ -26,8 +26,11 @@ public interface PreCallUserJourneyCallsTabEvent extends WamEventSpec {
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<CallsTabSource> callsTabSource();
 
+    @WamProperty(index = 11, type = WamType.STRING)
+    Optional<String> genaiBots();
+
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt itemPosition();
+    OptionalLong itemPosition();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<PreCallActionType> preCallActionType();
@@ -39,7 +42,7 @@ public interface PreCallUserJourneyCallsTabEvent extends WamEventSpec {
     Optional<String> surfaceSessionId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 6, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

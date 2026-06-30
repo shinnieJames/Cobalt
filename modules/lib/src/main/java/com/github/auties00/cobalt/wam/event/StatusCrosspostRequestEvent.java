@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.PrivacySettingsValueType;
 import com.github.auties00.cobalt.wam.type.StatusCrosspostShareTypeEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusCrosspostRequestWamEvent")
 @WamEvent(id = 4994)
@@ -62,11 +62,11 @@ public interface StatusCrosspostRequestEvent extends WamEventSpec {
     Optional<StatusCrosspostShareTypeEnum> statusCrosspostShareType();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt statusCrosspostTraceId();
+    OptionalLong statusCrosspostTraceId();
 
     @WamProperty(index = 11, type = WamType.STRING)
     Optional<String> statusId();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 }

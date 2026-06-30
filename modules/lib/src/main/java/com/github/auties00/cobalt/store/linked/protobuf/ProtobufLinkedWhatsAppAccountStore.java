@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.client.linked.info.LinkedWhatsAppClientInfo;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
+import com.github.auties00.cobalt.model.contact.UsernameState;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload.ClientReleaseChannel;
 import com.github.auties00.cobalt.model.device.pairing.LinkedPrimaryPlatform;
@@ -221,6 +222,24 @@ public final class ProtobufLinkedWhatsAppAccountStore implements LinkedWhatsAppA
     private byte[] shareableChatLinkKey;
 
     /**
+     * The account's own assigned username, or {@code null} until one is reserved or set.
+     */
+    @ProtobufProperty(index = 29, type = ProtobufType.STRING)
+    private String username;
+
+    /**
+     * The registration state of the account's username, decoded from the GetUsername reply.
+     */
+    @ProtobufProperty(index = 30, type = ProtobufType.ENUM)
+    private UsernameState usernameState;
+
+    /**
+     * Whether a username recovery PIN is set on the account, or {@code null} when unknown.
+     */
+    @ProtobufProperty(index = 31, type = ProtobufType.BOOL)
+    private Boolean usernameHasRecoveryPin;
+
+    /**
      * The monitor guarding the lazy initialisation of {@link #clientVersion}; not persisted.
      */
     private final Object clientVersionLock;
@@ -292,8 +311,11 @@ public final class ProtobufLinkedWhatsAppAccountStore implements LinkedWhatsAppA
      * @param primaryPlatform         the linked-primary platform, or {@code null}
      * @param companionMmsAuthNonce   the MMS auth nonce, or {@code null}
      * @param shareableChatLinkKey    the shareable-chat-link key, or {@code null}
+     * @param username                the assigned username, or {@code null}
+     * @param usernameState           the username registration state, or {@code null}
+     * @param usernameHasRecoveryPin  whether a username recovery PIN is set, or {@code null} when unknown
      */
-    ProtobufLinkedWhatsAppAccountStore(UUID uuid, Long phoneNumber, LinkedWhatsAppClientType clientType, Instant initializationTimeStamp, LinkedWhatsAppClientDevice device, ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, List<URI> businessWebsites, String businessEmail, List<BusinessCategory> businessCategories, boolean registered, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, LinkedPrimaryPlatform primaryPlatform, String companionMmsAuthNonce, byte[] shareableChatLinkKey) {
+    ProtobufLinkedWhatsAppAccountStore(UUID uuid, Long phoneNumber, LinkedWhatsAppClientType clientType, Instant initializationTimeStamp, LinkedWhatsAppClientDevice device, ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, List<URI> businessWebsites, String businessEmail, List<BusinessCategory> businessCategories, boolean registered, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, LinkedPrimaryPlatform primaryPlatform, String companionMmsAuthNonce, byte[] shareableChatLinkKey, String username, UsernameState usernameState, Boolean usernameHasRecoveryPin) {
         this.uuid = Objects.requireNonNull(uuid, "uuid cannot be null");
         this.phoneNumber = phoneNumber;
         this.clientType = Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -322,6 +344,9 @@ public final class ProtobufLinkedWhatsAppAccountStore implements LinkedWhatsAppA
         this.primaryPlatform = primaryPlatform;
         this.companionMmsAuthNonce = companionMmsAuthNonce;
         this.shareableChatLinkKey = shareableChatLinkKey;
+        this.username = username;
+        this.usernameState = usernameState;
+        this.usernameHasRecoveryPin = usernameHasRecoveryPin;
         this.clientVersionLock = new Object();
     }
 
@@ -708,6 +733,39 @@ public final class ProtobufLinkedWhatsAppAccountStore implements LinkedWhatsAppA
     }
 
     @Override
+    public Optional<String> username() {
+        return Optional.ofNullable(username);
+    }
+
+    @Override
+    public LinkedWhatsAppAccountStore setUsername(String username) {
+        this.username = username;
+        return this;
+    }
+
+    @Override
+    public Optional<UsernameState> usernameState() {
+        return Optional.ofNullable(usernameState);
+    }
+
+    @Override
+    public LinkedWhatsAppAccountStore setUsernameState(UsernameState usernameState) {
+        this.usernameState = usernameState;
+        return this;
+    }
+
+    @Override
+    public Optional<Boolean> usernameHasRecoveryPin() {
+        return Optional.ofNullable(usernameHasRecoveryPin);
+    }
+
+    @Override
+    public LinkedWhatsAppAccountStore setUsernameHasRecoveryPin(Boolean usernameHasRecoveryPin) {
+        this.usernameHasRecoveryPin = usernameHasRecoveryPin;
+        return this;
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
@@ -743,6 +801,9 @@ public final class ProtobufLinkedWhatsAppAccountStore implements LinkedWhatsAppA
                && Objects.equals(primaryPlatform, that.primaryPlatform)
                && Objects.equals(companionMmsAuthNonce, that.companionMmsAuthNonce)
                && Arrays.equals(shareableChatLinkKey, that.shareableChatLinkKey)
+               && Objects.equals(username, that.username)
+               && Objects.equals(usernameState, that.usernameState)
+               && Objects.equals(usernameHasRecoveryPin, that.usernameHasRecoveryPin)
                && Objects.equals(linkedMetaAccountState, that.linkedMetaAccountState)
                && Objects.equals(linkedMetaAccountStateTimestamp, that.linkedMetaAccountStateTimestamp);
     }
@@ -754,6 +815,7 @@ public final class ProtobufLinkedWhatsAppAccountStore implements LinkedWhatsAppA
                 businessAddress, businessLongitude, businessLatitude, businessDescription, businessWebsites,
                 businessEmail, businessCategories, registered, clientVersion, companionVersion, lastAdvCheckTime,
                 primaryPlatform, companionMmsAuthNonce, Arrays.hashCode(shareableChatLinkKey),
+                username, usernameState, usernameHasRecoveryPin,
                 linkedMetaAccountState, linkedMetaAccountStateTimestamp);
     }
 }

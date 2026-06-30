@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.ParticipantActionSource;
 import com.github.auties00.cobalt.wam.type.PreCallActionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCallInfoUserJourneyWamEvent")
 @WamEvent(id = 6034)
@@ -30,8 +30,11 @@ public interface CallInfoUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<CallType> callType();
 
+    @WamProperty(index = 11, type = WamType.STRING)
+    Optional<String> genaiBots();
+
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt numParticipantsShown();
+    OptionalLong numParticipantsShown();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<ParticipantActionSource> participantActionSource();
@@ -43,7 +46,7 @@ public interface CallInfoUserJourneyEvent extends WamEventSpec {
     Optional<String> surfaceSessionId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

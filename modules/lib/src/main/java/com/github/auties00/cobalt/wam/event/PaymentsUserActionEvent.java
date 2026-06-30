@@ -21,7 +21,7 @@ import com.github.auties00.cobalt.wam.type.PaymentsVerifyCardResultType;
 import com.github.auties00.cobalt.wam.type.UpiPaymentsPspIdType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPaymentsUserActionWamEvent")
 @WamEvent(id = 2162)
@@ -36,7 +36,7 @@ public interface PaymentsUserActionEvent extends WamEventSpec {
     Optional<P2mTypeType> p2mType();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt paymentAccountRowSelected();
+    OptionalLong paymentAccountRowSelected();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<PaymentActionTypes> paymentActionType();
@@ -45,10 +45,10 @@ public interface PaymentsUserActionEvent extends WamEventSpec {
     Optional<PaymentModeTypes> paymentMode();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt paymentNumberOfAccountsAvailable();
+    OptionalLong paymentNumberOfAccountsAvailable();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt paymentNumberOfPeopleInvited();
+    OptionalLong paymentNumberOfPeopleInvited();
 
     @WamProperty(index = 33, type = WamType.BOOLEAN)
     Optional<Boolean> paymentPinSetUp();
@@ -69,7 +69,7 @@ public interface PaymentsUserActionEvent extends WamEventSpec {
     Optional<String> paymentsBankId();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt paymentsBanksRowSelected();
+    OptionalLong paymentsBanksRowSelected();
 
     @WamProperty(index = 21, type = WamType.BOOLEAN)
     Optional<Boolean> paymentsBanksScrolled();
@@ -129,19 +129,19 @@ public interface PaymentsUserActionEvent extends WamEventSpec {
     Optional<PaymentsRequestNameType> paymentsRequestName();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt paymentsRequestRetryCount();
+    OptionalLong paymentsRequestRetryCount();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt paymentsRequestRetryTimeDelaySeconds();
+    OptionalLong paymentsRequestRetryTimeDelaySeconds();
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<PaymentsResponseResultType> paymentsResponseResult();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt paymentsSmsProviderRetryCount();
+    OptionalLong paymentsSmsProviderRetryCount();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt paymentsSmsRequestRetryCount();
+    OptionalLong paymentsSmsRequestRetryCount();
 
     @WamProperty(index = 28, type = WamType.ENUM)
     Optional<PaymentsUpiCheckPinUserErrorReasonType> paymentsUpiCheckPinErrorReason();

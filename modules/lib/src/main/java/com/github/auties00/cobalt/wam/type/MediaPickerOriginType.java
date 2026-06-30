@@ -136,5 +136,7 @@ public enum MediaPickerOriginType {
     @WamEnumConstant(126) GROUP_STATUS_CHAT_HEADER_PROFILE_RING_DROPDOWN,
     @WamEnumConstant(127) CHANNEL_THREAD_SCREEN,
     @WamEnumConstant(128) CLOSE_SHARING_MIMICRY,
-    @WamEnumConstant(129) MEDIA_BROWSER_STATUS_MENU
+    @WamEnumConstant(129) MEDIA_BROWSER_STATUS_MENU,
+    @WamEnumConstant(130) ARCHIVE_STATUS_VIEWER,
+    @WamEnumConstant(131) AI_IMAGINE_MESSAGE_QUICK_EDIT
 }

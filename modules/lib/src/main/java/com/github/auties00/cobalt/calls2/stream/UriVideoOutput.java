@@ -7,12 +7,13 @@ import java.time.Duration;
  * Transmits the video track of a media stream addressed by a URI as the local video of a call.
  *
  * <p>This is the device-backed {@link BufferedVideoOutput} returned by
- * {@link BufferedVideoOutput#uri(URI, int, int, int, int, Duration)}. It generalizes {@link FileVideoOutput}
- * to any protocol the bundled FFmpeg build enables, opening the stream through {@link FfmpegUriOpener} and
- * handing the opened demuxer to {@link FfmpegVideoOutput}, which decodes its first video stream and
- * converts each picture to {@link VideoPixelFormat#I420 I420} at the advertised geometry. The geometry
- * passed to {@code super} is the resolution, frame rate, and bitrate the call engine advertises and
- * encodes at, independent of the stream's native video resolution.
+ * {@link BufferedVideoOutput#uri(URI, Duration)}. It generalizes {@link FileVideoOutput} to any protocol
+ * the bundled FFmpeg build enables, opening the stream through {@link FfmpegUriOpener} and handing the
+ * opened demuxer to {@link FfmpegVideoOutput}, which decodes its first video stream and converts each
+ * picture to {@link VideoPixelFormat#I420 I420} at the detected geometry. The geometry the call engine
+ * advertises and encodes at is the stream's own native video resolution, capped to {@code 1280} on the
+ * longer side and rounded to even, so a 16:9 stream is advertised as 16:9 rather than squished to a fixed
+ * default.
  *
  * <p>Because a network operation can stall, every blocking demux call is bounded by a
  * {@link FfmpegIoWatchdog}: the connect and stream probe inside the open and each subsequent read are
@@ -23,23 +24,20 @@ import java.time.Duration;
  */
 public final class UriVideoOutput extends FfmpegVideoOutput {
     /**
-     * Opens the given URI at the given advertised geometry and prepares the shared video decode pipeline,
-     * bounding every blocking demux call with the given timeout.
+     * Opens the given URI, detects its native video geometry, and prepares the shared video decode
+     * pipeline, bounding every blocking demux call with the given timeout.
      *
-     * @param uri        the media stream to open
-     * @param width      the advertised frame width in pixels; even and at least {@code 2}
-     * @param height     the advertised frame height in pixels; even and at least {@code 2}
-     * @param fps        the target frame rate; at least {@code 1}
-     * @param bitrateBps the target encoder bitrate in bits per second; at least {@code 1}
-     * @param ioTimeout  the maximum time any single connect, probe, or read may block; must be positive
+     * <p>Advertises the stream's detected video resolution, capped to {@code 1280} on the longer side and
+     * rounded to even, at the default 30 frames per second and the recovered initial bitrate.
+     *
+     * @param uri       the media stream to open
+     * @param ioTimeout the maximum time any single connect, probe, or read may block; must be positive
      * @throws NullPointerException     if {@code uri} or {@code ioTimeout} is {@code null}
-     * @throws IllegalArgumentException if {@code ioTimeout} is not positive, the scheme is not permitted,
-     *                                  {@code width} or {@code height} is odd or below {@code 2}, or
-     *                                  {@code fps} or {@code bitrateBps} is below {@code 1}
+     * @throws IllegalArgumentException if {@code ioTimeout} is not positive or the scheme is not permitted
      * @throws IllegalStateException    if the stream cannot be opened or has no video stream
      */
-    public UriVideoOutput(URI uri, int width, int height, int fps, int bitrateBps, Duration ioTimeout) {
-        super(width, height, fps, bitrateBps, ioTimeout,
-                (arena, watchdog) -> FfmpegUriOpener.open(arena, watchdog, uri, ioTimeout));
+    public UriVideoOutput(URI uri, Duration ioTimeout) {
+        super(openInput(ioTimeout, (arena, watchdog) -> FfmpegUriOpener.open(arena, watchdog, uri, ioTimeout)),
+                DEFAULT_BITRATE_BPS);
     }
 }

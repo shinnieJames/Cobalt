@@ -21,7 +21,7 @@ import com.github.auties00.cobalt.wam.type.StatusPrivacyType;
 import com.github.auties00.cobalt.wam.type.StickerType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusPosterActionsWamEvent")
 @WamEvent(id = 3546)
@@ -39,13 +39,13 @@ public interface StatusPosterActionsEvent extends WamEventSpec {
     Optional<String> cid();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt defaultTrimmedVideoDuration();
+    OptionalLong defaultTrimmedVideoDuration();
 
     @WamProperty(index = 14, type = WamType.BOOLEAN)
     Optional<Boolean> editable();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt externalInteractables();
+    OptionalLong externalInteractables();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> externalPackageName();
@@ -53,32 +53,35 @@ public interface StatusPosterActionsEvent extends WamEventSpec {
     @WamProperty(index = 33, type = WamType.BOOLEAN)
     Optional<Boolean> hasDraftAvailable();
 
+    @WamProperty(index = 37, type = WamType.BOOLEAN)
+    Optional<Boolean> isBatchedPost();
+
     @WamProperty(index = 28, type = WamType.BOOLEAN)
     Optional<Boolean> isFavoured();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt mediaIndex();
+    OptionalLong mediaIndex();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt originalVideoDuration();
+    OptionalLong originalVideoDuration();
 
     @WamProperty(index = 24, type = WamType.ENUM)
     Optional<PairedMediaType> pairedMediaType();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 21, type = WamType.ENUM)
     Optional<SelectedLayoutConfigId> selectedLayoutConfigId();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt selectedMediaCount();
+    OptionalLong selectedMediaCount();
 
     @WamProperty(index = 17, type = WamType.STRING)
     Optional<String> shareType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt statusAudienceSize();
+    OptionalLong statusAudienceSize();
 
     @WamProperty(index = 30, type = WamType.ENUM)
     Optional<StatusCategory> statusCategory();
@@ -93,7 +96,7 @@ public interface StatusPosterActionsEvent extends WamEventSpec {
     Optional<StatusCreationEntryPoint> statusCreationEntryPoint();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt statusDuration();
+    OptionalLong statusDuration();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<StatusEventType> statusEventType();
@@ -107,17 +110,20 @@ public interface StatusPosterActionsEvent extends WamEventSpec {
     @WamProperty(index = 25, type = WamType.ENUM)
     Optional<StatusPairedMediaQuality> statusPairedMediaQuality();
 
+    @WamProperty(index = 38, type = WamType.STRING)
+    Optional<String> statusPartCode();
+
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> statusPostFailureReason();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt statusPostingSessionId();
+    OptionalLong statusPostingSessionId();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<StatusPrivacyType> statusPrivacyType();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 18, type = WamType.ENUM)
     Optional<StickerType> stickerType();
@@ -126,5 +132,5 @@ public interface StatusPosterActionsEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

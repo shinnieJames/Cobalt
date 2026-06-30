@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.WebScenarioCode;
 import com.github.auties00.cobalt.wam.type.WebTableLogReasonCode;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebDbTableUsageWamEvent")
 @WamEvent(id = 5074, releaseWeight = 100)
@@ -28,8 +28,8 @@ public interface WebDbTableUsageEvent extends WamEventSpec {
     Optional<WebTableLogReasonCode> webTableLogReason();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt webTableReadCount();
+    OptionalLong webTableReadCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt webTableWriteCount();
+    OptionalLong webTableWriteCount();
 }

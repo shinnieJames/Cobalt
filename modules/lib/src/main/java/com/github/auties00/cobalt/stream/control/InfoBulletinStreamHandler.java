@@ -640,7 +640,7 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
                 .map(entry -> entry.getAttributeAsString("id", null))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        whatsapp.store().settingsStore().setTosNotices(notices);
+        whatsapp.store().settingsStore().setAcknowledgedTosNotices(notices);
         var snapshot = Set.copyOf(notices);
         for (var listener : whatsapp.store().listeners()) {
             if (listener instanceof LinkedTosNoticesChangedListener typed) {

@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.ChatAssignmentChatType;
 import com.github.auties00.cobalt.wam.type.ChatAssignmentEntryPointType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdChatAssignmentWamEvent")
 @WamEvent(id = 3752)
@@ -23,7 +23,7 @@ public interface MdChatAssignmentEvent extends WamEventSpec {
     Optional<String> assignerBrowserId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt assignerMdId();
+    OptionalLong assignerMdId();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<ChatAssignmentActionType> chatAssignmentAction();
@@ -41,8 +41,8 @@ public interface MdChatAssignmentEvent extends WamEventSpec {
     Optional<ChatAssignmentEntryPointType> chatAssignmentEntryPoint();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt chatAssignmentMdId();
+    OptionalLong chatAssignmentMdId();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt chatsCnt();
+    OptionalLong chatsCnt();
 }

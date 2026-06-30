@@ -23,7 +23,7 @@ import com.github.auties00.cobalt.wam.type.UploadSourceType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMediaUpload2WamEvent")
 @WamEvent(id = 1588)
@@ -32,10 +32,10 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 64, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 57, type = WamType.INTEGER)
-    OptionalInt batchSize();
+    OptionalLong batchSize();
 
     @WamProperty(index = 43, type = WamType.ENUM)
     Optional<ConnectionType> connectionType();
@@ -56,16 +56,16 @@ public interface MediaUpload2Event extends WamEventSpec {
     OptionalDouble estimatedBandwidthV2();
 
     @WamProperty(index = 55, type = WamType.INTEGER)
-    OptionalInt fileHeight();
+    OptionalLong fileHeight();
 
     @WamProperty(index = 56, type = WamType.INTEGER)
-    OptionalInt fileWidth();
+    OptionalLong fileWidth();
 
     @WamProperty(index = 28, type = WamType.TIMER)
     Optional<Instant> finalizeConnectT();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt finalizeHttpCode();
+    OptionalLong finalizeHttpCode();
 
     @WamProperty(index = 30, type = WamType.BOOLEAN)
     Optional<Boolean> finalizeIsReuse();
@@ -80,10 +80,10 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<Boolean> isViewOnce();
 
     @WamProperty(index = 60, type = WamType.INTEGER)
-    OptionalInt mediaCollectionId();
+    OptionalLong mediaCollectionId();
 
     @WamProperty(index = 46, type = WamType.INTEGER)
-    OptionalInt mediaId();
+    OptionalLong mediaId();
 
     @WamProperty(index = 58, type = WamType.STRING)
     Optional<String> messageKeyHash();
@@ -92,10 +92,10 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<NetworkStackType> networkStack();
 
     @WamProperty(index = 53, type = WamType.INTEGER)
-    OptionalInt originalSize();
+    OptionalLong originalSize();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt overallAttemptCount();
+    OptionalLong overallAttemptCount();
 
     @WamProperty(index = 10, type = WamType.TIMER)
     Optional<Instant> overallConnBlockFetchT();
@@ -137,7 +137,7 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<MediaType> overallMediaType();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt overallMmsVersion();
+    OptionalLong overallMmsVersion();
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<OptimisticFlagType> overallOptimisticFlag();
@@ -146,7 +146,7 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<Instant> overallQueueT();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt overallRetryCount();
+    OptionalLong overallRetryCount();
 
     @WamProperty(index = 8, type = WamType.TIMER)
     Optional<Instant> overallT();
@@ -176,7 +176,7 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<Instant> resumeConnectT();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt resumeHttpCode();
+    OptionalLong resumeHttpCode();
 
     @WamProperty(index = 19, type = WamType.BOOLEAN)
     Optional<Boolean> resumeIsReuse();
@@ -191,7 +191,7 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<Instant> uploadConnectT();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt uploadHttpCode();
+    OptionalLong uploadHttpCode();
 
     @WamProperty(index = 24, type = WamType.BOOLEAN)
     Optional<Boolean> uploadIsReuse();
@@ -203,7 +203,7 @@ public interface MediaUpload2Event extends WamEventSpec {
     Optional<Instant> uploadNetworkT();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt uploadResumePoint();
+    OptionalLong uploadResumePoint();
 
     @WamProperty(index = 48, type = WamType.ENUM)
     Optional<UploadSourceType> uploadSource();

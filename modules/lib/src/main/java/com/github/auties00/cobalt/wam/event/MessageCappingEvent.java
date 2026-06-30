@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.MessageCappingActionType;
 import com.github.auties00.cobalt.wam.type.SurfaceType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMessageCappingWamEvent")
 @WamEvent(id = 6854)
@@ -25,7 +25,7 @@ public interface MessageCappingEvent extends WamEventSpec {
     Optional<SurfaceType> messageCappingEntryPoint();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt messageCappingSequence();
+    OptionalLong messageCappingSequence();
 
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> messageCappingSession();

@@ -10,16 +10,16 @@ import com.github.auties00.cobalt.wam.type.GroupMemberUpdatesActionName;
 import com.github.auties00.cobalt.wam.type.GroupMemberUpdatesCurrentScreen;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupMemberUpdatesWamEvent")
 @WamEvent(id = 7768)
 public interface GroupMemberUpdatesEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt fetchedMessageCount();
+    OptionalLong fetchedMessageCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt fetchedMessageLatency();
+    OptionalLong fetchedMessageLatency();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<GroupMemberUpdatesActionName> groupMemberUpdatesActionName();

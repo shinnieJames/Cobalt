@@ -8,7 +8,7 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWamClientErrorsWamEvent")
 @WamEvent(id = 1144)
@@ -17,67 +17,67 @@ public interface WamClientErrorsEvent extends WamEventSpec {
     Optional<Boolean> isFromWamsys();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt wamClientBufferDropErrorCount();
+    OptionalLong wamClientBufferDropErrorCount();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt wamClientBufferFetchErrorCount();
+    OptionalLong wamClientBufferFetchErrorCount();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt wamClientBufferRotateErrorCount();
+    OptionalLong wamClientBufferRotateErrorCount();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt wamClientBufferStoreErrorCount();
+    OptionalLong wamClientBufferStoreErrorCount();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt wamClientCorruptedBuffersCount();
+    OptionalLong wamClientCorruptedBuffersCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt wamClientDroppedEventCount();
+    OptionalLong wamClientDroppedEventCount();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt wamClientDroppedEventCountNoEnoughStorage();
+    OptionalLong wamClientDroppedEventCountNoEnoughStorage();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt wamClientDroppedEventSize();
+    OptionalLong wamClientDroppedEventSize();
 
     @WamProperty(index = 1, type = WamType.BOOLEAN)
     Optional<Boolean> wamClientErrorFlags();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
-    OptionalInt wamClientMetadataReadErrorCount();
+    OptionalLong wamClientMetadataReadErrorCount();
 
     @WamProperty(index = 38, type = WamType.INTEGER)
-    OptionalInt wamClientMetadataWriteErrorCount();
+    OptionalLong wamClientMetadataWriteErrorCount();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt wamClientPrivateDroppedEventCount();
+    OptionalLong wamClientPrivateDroppedEventCount();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt wamClientPrivateDroppedEventSize();
+    OptionalLong wamClientPrivateDroppedEventSize();
 
     @WamProperty(index = 34, type = WamType.INTEGER)
-    OptionalInt wamClientPrivateRealtimeDroppedEventCount();
+    OptionalLong wamClientPrivateRealtimeDroppedEventCount();
 
     @WamProperty(index = 35, type = WamType.INTEGER)
-    OptionalInt wamClientPrivateRealtimeDroppedEventSize();
+    OptionalLong wamClientPrivateRealtimeDroppedEventSize();
 
     @WamProperty(index = 36, type = WamType.INTEGER)
-    OptionalInt wamClientPrivateRealtimeRejectedEventCount();
+    OptionalLong wamClientPrivateRealtimeRejectedEventCount();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt wamClientPrivateRejectedEventCount();
+    OptionalLong wamClientPrivateRejectedEventCount();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt wamClientRealtimeDroppedEventCount();
+    OptionalLong wamClientRealtimeDroppedEventCount();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt wamClientRealtimeDroppedEventSize();
+    OptionalLong wamClientRealtimeDroppedEventSize();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt wamClientRealtimeRejectedEventCount();
+    OptionalLong wamClientRealtimeRejectedEventCount();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt wamClientRejectedEventCount();
+    OptionalLong wamClientRejectedEventCount();
 
     @WamProperty(index = 18, type = WamType.BOOLEAN)
     Optional<Boolean> wamErrorBadCurrentEventBufferChecksum();

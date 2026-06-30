@@ -2,14 +2,11 @@ package com.github.auties00.cobalt.calls2.core.control;
 
 import com.github.auties00.cobalt.calls2.signaling.MuteV2Stanza;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -28,9 +25,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * {@link MuteByAnotherParticipant} unless the unmute lockout is active.
  *
  * <p>The controller is bound to one call's identity and its signaling and event seams at construction. Its
- * timers run on a virtual-thread scheduler; the lockout deadline and the live peer-mute retry are guarded
- * by a single lock so a timer callback never races an operation call. It is closed with {@link #close()},
- * which cancels the live retry and shuts the scheduler down.
+ * timers run on virtual-thread {@link ScheduledTask} recurrences; the lockout deadline and the live peer-mute
+ * retry are guarded by a single lock so a timer callback never races an operation call. It is closed with
+ * {@link #close()}, which cancels the live retry.
  *
  * @implNote This implementation reproduces the mute control of the wa-voip WASM module {@code ff-tScznZ8P}:
  * the self-mute path sends the {@code mute_v2} self-state element ({@code mute-state}) and emits event
@@ -42,7 +39,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * per-second watchdog ({@code periodic_call_timer_callback}, fn10932) expires once the deadline passes,
  * incrementing {@code mute_req_timeouts_count} and emitting event {@code 0x6c}
  * ({@code MuteRequestFailed}) through {@code send_mute_request_failed_event}. The
- * native call-timer heap is replaced by a virtual-thread {@link ScheduledExecutorService} and the
+ * native call-timer heap is replaced by a virtual-thread {@link ScheduledTask} and the
  * info-mutex by a {@link ReentrantLock} per the threading design. The legacy {@code <mute>} element (type
  * {@code 12}) is not emitted; calls2 emits only {@code mute_v2} (type {@code 26}).
  */
@@ -101,12 +98,6 @@ public final class MuteController implements AutoCloseable {
     private final CallEventSink events;
 
     /**
-     * The scheduler running the unmute-lockout expiry and the peer-mute retry, one task per virtual
-     * thread.
-     */
-    private final ScheduledExecutorService scheduler;
-
-    /**
      * Guards the lockout deadline and the live peer-mute retry state.
      */
     private final ReentrantLock lock = new ReentrantLock();
@@ -144,8 +135,6 @@ public final class MuteController implements AutoCloseable {
         this.context = Objects.requireNonNull(context, "context cannot be null");
         this.sender = Objects.requireNonNull(sender, "sender cannot be null");
         this.events = Objects.requireNonNull(events, "events cannot be null");
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(
-                Thread.ofVirtual().name("calls2-mute-timers", 0).factory());
     }
 
     /**
@@ -214,11 +203,7 @@ public final class MuteController implements AutoCloseable {
         try {
             cancelPeerMuteRetry();
             peerMuteRetry = new PeerMuteRetry(target);
-            peerMuteRetry.handle = scheduler.scheduleWithFixedDelay(
-                    () -> retryPeerMute(target),
-                    PEER_MUTE_RETRY_INTERVAL.toMillis(),
-                    PEER_MUTE_RETRY_INTERVAL.toMillis(),
-                    TimeUnit.MILLISECONDS);
+            peerMuteRetry.handle = ScheduledTask.schedule(PEER_MUTE_RETRY_INTERVAL, () -> retryPeerMute(target));
         } finally {
             lock.unlock();
         }
@@ -299,7 +284,7 @@ public final class MuteController implements AutoCloseable {
     }
 
     /**
-     * Cancels any outstanding peer-mute retry and shuts the scheduler down.
+     * Cancels any outstanding peer-mute retry.
      *
      * <p>Marks the controller closed so a late call or timer callback is a no-op; idempotent.
      */
@@ -315,13 +300,12 @@ public final class MuteController implements AutoCloseable {
         } finally {
             lock.unlock();
         }
-        scheduler.shutdownNow();
     }
 
     /**
      * Checks the peer-mute request deadline and emits a failure once it has elapsed.
      *
-     * <p>Runs on the scheduler. When the live request's {@linkplain PeerMuteRetry#deadlineNanos deadline}
+     * <p>Runs on the retry timer's virtual thread. When the live request's {@linkplain PeerMuteRetry#deadlineNanos deadline}
      * has passed the request is cancelled and a {@link MuteRequestFailed} is emitted, mirroring the engine
      * watchdog that expires an unanswered mute request once its five-second timeout passes. The deadline
      * coincides with the {@linkplain #PEER_MUTE_RETRY_INTERVAL scheduling period}, so the first tick
@@ -363,7 +347,7 @@ public final class MuteController implements AutoCloseable {
     private void cancelPeerMuteRetry() {
         if (peerMuteRetry != null) {
             if (peerMuteRetry.handle != null) {
-                peerMuteRetry.handle.cancel(false);
+                peerMuteRetry.handle.cancel();
             }
             peerMuteRetry = null;
         }
@@ -405,7 +389,7 @@ public final class MuteController implements AutoCloseable {
         /**
          * The scheduled retry handle, or {@code null} before it is armed.
          */
-        private ScheduledFuture<?> handle;
+        private ScheduledTask handle;
 
         /**
          * Constructs a retry record for a target, fixing its expiry deadline from the current clock.

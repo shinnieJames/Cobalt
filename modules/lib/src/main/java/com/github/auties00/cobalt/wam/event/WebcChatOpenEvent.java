@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcChatOpenWamEvent")
 @WamEvent(id = 864, releaseWeight = 5)
@@ -25,10 +25,10 @@ public interface WebcChatOpenEvent extends WamEventSpec {
     Optional<Instant> webcChatOpenT();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt webcFinalRenderedMessageCount();
+    OptionalLong webcFinalRenderedMessageCount();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt webcRenderedMessageCount();
+    OptionalLong webcRenderedMessageCount();
 
     @WamProperty(index = 1, type = WamType.FLOAT)
     OptionalDouble webcUnreadCount();

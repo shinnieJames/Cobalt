@@ -120,4 +120,31 @@ public enum ClientPlatformType {
     public int index() {
         return this.index;
     }
+
+    /**
+     * Returns whether this platform is one of the web environments Cobalt can impersonate.
+     *
+     * @return {@code true} for {@link #WEB}, {@code false} otherwise
+     */
+    public boolean isWeb() {
+        return this == WEB;
+    }
+
+    /**
+     * Returns whether this platform is one of the mobile environments Cobalt can impersonate.
+     *
+     * @return {@code true} for {@link #ANDROID}, {@link #ANDROID_BUSINESS}, {@link #IOS}, {@link #IOS_BUSINESS}, {@code false} otherwise
+     */
+    public boolean isMobile() {
+        return this == ANDROID || this == ANDROID_BUSINESS || this == IOS || this == IOS_BUSINESS;
+    }
+
+    /**
+     * Returns whether this platform is one of the desktop environments Cobalt can impersonate.
+     *
+     * @return {@code true} for {@link #WINDOWS} and {@link #MACOS}, {@code false} otherwise
+     */
+    public boolean isDesktop() {
+        return this == WINDOWS || this == MACOS;
+    }
 }

@@ -18,14 +18,14 @@ import static java.lang.System.Logger.Level.WARNING;
 
 /**
  * The {@link ProtobufWhatsAppStore} that persists session metadata to a single protobuf file on disk
- * and offloads every message body to an embedded {@link PersistentMessageStore LMDB} env.
+ * and offloads every message body to an embedded {@link PersistentMessageStore MVStore}.
  *
  * <p>Data layout under the session directory:
  * <ul>
  *   <li>{@code store.proto} holds the aggregate inherited from {@link ProtobufWhatsAppStore} (the five
  *       nested sub-stores, the retained runtime scalars) plus the {@link PersistentLinkedWhatsAppChatStore} at index
- *       82, whose chat and newsletter entries carry metadata only; message bodies live in LMDB.</li>
- *   <li>{@code messages.mdbx/} holds the LMDB env.</li>
+ *       82, whose chat and newsletter entries carry metadata only; message bodies live in MVStore.</li>
+ *   <li>{@code messages.mv} holds the MVStore message file.</li>
  * </ul>
  *
  * @apiNote
@@ -35,7 +35,7 @@ import static java.lang.System.Logger.Level.WARNING;
  *
  * @implNote
  * This implementation captures {@link #hashCode()} into {@link #storeHashCode} at the end of each
- * successful {@link #save()} and short-circuits subsequent saves when nothing has changed. The LMDB
+ * successful {@link #save()} and short-circuits subsequent saves when nothing has changed. The MVStore
  * facade is owned by the {@link PersistentLinkedWhatsAppChatStore} and attached after construction.
  */
 @SuppressWarnings({"unused", "UnusedReturnValue"})
@@ -47,12 +47,12 @@ final class PersistentStore extends ProtobufWhatsAppStore {
     private static final String STORE_FILE = "store.proto";
 
     /**
-     * The name of the libmdbx env sub-directory under the session directory.
+     * The name of the MVStore message file under the session directory.
      */
-    private static final String MESSAGES_DIRECTORY = "messages.mdbx";
+    private static final String MESSAGES_FILE = "messages.mv";
 
     /**
-     * The persistence-variant chat sub-store holding the LMDB-backed chats and newsletters.
+     * The persistence-variant chat sub-store holding the MVStore-backed chats and newsletters.
      */
     @ProtobufProperty(index = 82, type = ProtobufType.MESSAGE)
     final PersistentLinkedWhatsAppChatStore chatStore;
@@ -124,7 +124,7 @@ final class PersistentStore extends ProtobufWhatsAppStore {
      *
      * @apiNote
      * Package-private and intended for the generated {@code PersistentStoreBuilder} and the protobuf
-     * deserialiser. The LMDB facade is wired by {@link PersistentLinkedWhatsAppStoreFactory} via
+     * deserialiser. The MVStore facade is wired by {@link PersistentLinkedWhatsAppStoreFactory} via
      * {@link #attachMessageStore(PersistentMessageStore)} immediately after construction.
      *
      * @param signalStore           the signal sub-store
@@ -149,19 +149,19 @@ final class PersistentStore extends ProtobufWhatsAppStore {
     }
 
     /**
-     * Wires the LMDB facade into the persistent chat sub-store.
+     * Wires the MVStore facade into the persistent chat sub-store.
      *
      * @apiNote
      * Called by {@link PersistentLinkedWhatsAppStoreFactory} after construction or deserialisation.
      *
-     * @param messageStore the freshly opened LMDB facade
+     * @param messageStore the freshly opened MVStore facade
      */
     void attachMessageStore(PersistentMessageStore messageStore) {
         chatStore.attachMessageStore(messageStore);
     }
 
     /**
-     * Returns the LMDB facade owned by the persistent chat sub-store.
+     * Returns the MVStore facade owned by the persistent chat sub-store.
      *
      * @return the message store, or {@code null} if not yet attached
      */
@@ -170,17 +170,17 @@ final class PersistentStore extends ProtobufWhatsAppStore {
     }
 
     /**
-     * Returns the path to the LMDB env directory for the given session.
+     * Returns the path to the MVStore message file for the given session.
      *
      * @param clientType    the client type
      * @param baseDirectory the root directory under which per-session folders are created
      * @param sessionId     the session UUID string or phone-number string
-     * @return the LMDB env directory
+     * @return the MVStore message file
      * @throws IOException if the parent session directory cannot be created
      */
     static Path messagesEnvPath(LinkedWhatsAppClientType clientType, Path baseDirectory, String sessionId) throws IOException {
         return getSessionDirectory(clientType, baseDirectory, sessionId)
-                .resolve(MESSAGES_DIRECTORY);
+                .resolve(MESSAGES_FILE);
     }
 
     /**
@@ -200,7 +200,7 @@ final class PersistentStore extends ProtobufWhatsAppStore {
      * Deserializes a {@code store.proto} metadata snapshot into a {@code PersistentStore}.
      *
      * @apiNote
-     * Internal helper for {@link PersistentLinkedWhatsAppStoreFactory#load}; the LMDB facade is attached separately.
+     * Internal helper for {@link PersistentLinkedWhatsAppStoreFactory#load}; the MVStore facade is attached separately.
      *
      * @param storeFile the metadata file
      * @return the deserialized store
@@ -251,9 +251,9 @@ final class PersistentStore extends ProtobufWhatsAppStore {
      * Starts the daemon flusher exactly once.
      *
      * @implNote
-     * This implementation uses a dedicated platform daemon thread rather than a virtual thread,
-     * mirroring the single long-lived writer the LMDB message store uses; the thread spends nearly
-     * all of its life parked on {@link #flushLock}. The store registers no JVM shutdown hook of its
+     * This implementation uses a dedicated platform daemon thread rather than a virtual thread; the
+     * thread spends nearly all of its life parked on {@link #flushLock}. The store registers no JVM
+     * shutdown hook of its
      * own: the daemon nature keeps it from blocking exit, and durable teardown is driven by the
      * client lifecycle through {@link #await()}. The caller must hold {@link #flushLock}.
      */
@@ -390,8 +390,9 @@ final class PersistentStore extends ProtobufWhatsAppStore {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation closes the LMDB facade before recursively removing the session directory so
-     * the directory remove can succeed on Windows, where open mapped files cannot be unlinked.
+     * This implementation closes the message store, releasing its file handle, before recursively
+     * removing the session directory so the remove can succeed on Windows, where an open file cannot be
+     * unlinked.
      */
     @Override
     public void delete() throws IOException {
@@ -427,17 +428,23 @@ final class PersistentStore extends ProtobufWhatsAppStore {
      * @implNote
      * This implementation serialises any pending debounced snapshot synchronously via
      * {@link #flushNow()} so callers that need the store durable on disk (rather than within the
-     * next {@link #FLUSH_MAX_DELAY_MILLIS} window) can block on it. The metadata snapshot itself
-     * decodes synchronously in {@link PersistentLinkedWhatsAppStoreFactory#load}, so there is no load-time work
-     * to await.
+     * next {@link #FLUSH_MAX_DELAY_MILLIS} window) can block on it, then forces the message store to a
+     * durable checkpoint via {@link PersistentMessageStore#commit()} so message bodies written since the
+     * last background auto-commit are flushed on the same cadence (including from the client's JVM
+     * shutdown hook). The metadata snapshot itself decodes synchronously in
+     * {@link PersistentLinkedWhatsAppStoreFactory#load}, so there is no load-time work to await.
      */
     @Override
     public void await() {
         flushNow();
+        var messageStore = chatStore.messageStore();
+        if (messageStore != null) {
+            messageStore.commit();
+        }
     }
 
     /**
-     * Closes the LMDB env so the session can be shut down without being deleted.
+     * Closes the MVStore message store so the session can be shut down without being deleted.
      *
      * @apiNote
      * Called by the factory during ordinary shutdown.

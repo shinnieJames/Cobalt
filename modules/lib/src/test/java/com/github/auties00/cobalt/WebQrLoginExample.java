@@ -3,7 +3,6 @@ import com.github.auties00.cobalt.calls2.stream.AudioOutput;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
-import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
@@ -20,7 +19,7 @@ void main() throws IOException {
             .webClient(LinkedWhatsAppStoreFactory.persistent())
             .createConnection()
             .device(LinkedWhatsAppClientDevice.web())
-            .historySetting(WhatsAppWebClientHistory.standard(false))
+            .defaultHistory()
             .unregistered(19153544650L, LinkedWhatsAppClientVerificationHandler.Web.PairingCode.toTerminal())
             .addLoggedInListener(client -> {
                 System.out.printf("Connected: %s%n", client.store().settingsStore().privacySettings());

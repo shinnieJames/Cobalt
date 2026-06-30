@@ -1,10 +1,8 @@
 package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
-import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
-import com.github.auties00.cobalt.exception.WhatsAppConnectionException;
+import com.github.auties00.cobalt.exception.WhatsAppException;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
-import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -49,11 +47,14 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Objects;
+import java.util.OptionalInt;
 
 /**
  * Top-level WhatsApp socket client that performs the Noise XX
@@ -721,8 +722,9 @@ public sealed abstract class WhatsAppSocketClient {
      * @return the encoded companion device properties
      */
     private byte[] createCompanionProps() {
-        var historyLength = store.syncStore().webHistoryPolicy()
-                .orElse(WhatsAppWebClientHistory.standard(true));
+        var sync = store.syncStore();
+        var platform = store.accountStore().device().platform();
+        var desktop = platform.isDesktop();
         var config = new DevicePropsHistorySyncConfigBuilder()
                 .inlineInitialPayloadInE2EeMsg(true)
                 .supportBotUserAgentChatHistory(true)
@@ -732,34 +734,76 @@ public sealed abstract class WhatsAppSocketClient {
                 .supportBizHostedMsg(true)
                 .supportFbidBotChatHistory(true)
                 .supportMessageAssociation(true)
-                .supportCallLogHistory(store.accountStore().device().platform() == ClientPlatformType.WINDOWS)
-                .supportGroupHistory(true)
-                .storageQuotaMb(historyLength.size())
-                .fullSyncSizeMbLimit(historyLength.size())
-                .build();
-        var platformType = switch (store.accountStore().device().platform()) {
+                .supportCallLogHistory(true)
+                .supportGroupHistory(true);
+        if (desktop) {
+            config.onDemandReady(true)
+                    .completeOnDemandReady(true);
+        }
+        if (sync.isFullHistorySyncRequired()) {
+            sync.historyFullSyncDays().ifPresent(config::fullSyncDaysLimit);
+        } else {
+            var storageQuota = sync.historyStorageQuotaMb();
+            if (storageQuota.isEmpty()) {
+                storageQuota = estimateStorageQuotaMb();
+            }
+            storageQuota.ifPresent(config::storageQuotaMb);
+        }
+        sync.historyRecentSyncDays().ifPresent(config::recentSyncDaysLimit);
+        sync.historyThumbnailSyncDays().ifPresent(config::thumbnailSyncDaysLimit);
+        sync.historyMaxMessagesPerChat().ifPresent(config::initialSyncMaxMessagesPerChat);
+        var platformType = switch (platform) {
             case IOS, IOS_BUSINESS -> DevicePlatformType.IOS_PHONE;
             case ANDROID, ANDROID_BUSINESS -> DevicePlatformType.ANDROID_PHONE;
             case WINDOWS -> DevicePlatformType.UWP;
             case MACOS -> DevicePlatformType.IOS_CATALYST;
             case WEB -> DevicePlatformType.CHROME;
-            default -> throw new IllegalStateException("Unexpected value: " + store.accountStore().device().platform());
+            default -> throw new IllegalStateException("Unexpected value: " + platform);
         };
-        var os = switch (store.accountStore().device().platform()) {
+        var os = switch (platform) {
             case IOS, IOS_BUSINESS -> "iOS";
             case ANDROID, ANDROID_BUSINESS -> "Android";
             case WINDOWS, WEB -> "Windows";
             case MACOS -> "Mac OS";
-            default -> throw new IllegalStateException("Unexpected value: " + store.accountStore().device().platform());
+            default -> throw new IllegalStateException("Unexpected value: " + platform);
         };
         var props = new DevicePropsBuilder()
                 .os(os)
                 .platformType(platformType)
-                .requireFullSync(historyLength.isExtended())
-                .historySyncConfig(config)
+                .requireFullSync(sync.isFullHistorySyncRequired())
+                .historySyncConfig(config.build())
                 .version(store.accountStore().clientVersion())
                 .build();
         return DevicePropsSpec.encode(props);
+    }
+
+    /**
+     * Estimates the storage budget in megabytes the companion advertises in
+     * its {@code DeviceProps.historySyncConfig}.
+     *
+     * <p>Returns the usable space of the filesystem backing the host's home
+     * directory, truncated to whole megabytes, or {@link OptionalInt#empty()}
+     * when it cannot be determined.
+     *
+     * @return the storage budget in megabytes, or {@link OptionalInt#empty()}
+     *
+     * @implNote
+     * This implementation mirrors WhatsApp Web, which derives
+     * {@code storageQuotaMb} from {@code navigator.storage.estimate().quota}
+     * truncated to megabytes and omits the field when the estimate is
+     * unavailable. The usable space of the home filesystem is the closest
+     * faithful analog in a non-browser runtime.
+     */
+    private OptionalInt estimateStorageQuotaMb() {
+        try {
+            var usableBytes = Files.getFileStore(Path.of(System.getProperty("user.home"))).getUsableSpace();
+            if (usableBytes <= 0) {
+                return OptionalInt.empty();
+            }
+            return OptionalInt.of((int) Math.min(Integer.MAX_VALUE, usableBytes / (1024L * 1024L)));
+        } catch (Exception exception) {
+            return OptionalInt.empty();
+        }
     }
 
     /**
@@ -1088,10 +1132,11 @@ public sealed abstract class WhatsAppSocketClient {
      * and lets the underlying frame socket close drive the lifecycle.
      *
      * <p>A bad MAC tears down the connection through
-     * {@link WhatsAppSessionException.BadMac}; any other failure surfaces as
-     * {@link WhatsAppStreamException.MalformedNode}. Errors observed after
-     * {@link #disconnect()} are suppressed so orderly shutdown does not spam
-     * the listener with spurious failures.
+     * {@link WhatsAppSessionException.BadMac}; every other unsolicited drop (an abrupt transport
+     * reset or abort, the host network going down, or a corrupted frame) surfaces as
+     * {@link WhatsAppSessionException.Closed}, which the client treats as a reconnect. Errors
+     * observed after {@link #disconnect()} are suppressed so orderly shutdown does not spam the
+     * listener with spurious failures.
      *
      * @implNote
      * This implementation runs on a dedicated virtual thread so the
@@ -1109,32 +1154,50 @@ public sealed abstract class WhatsAppSocketClient {
                 }
                 listener.onNode(stanza);
             }
-        } catch (EOFException e) {
-            // Frame-boundary end-of-stream: an orderly server close (typically right after a
-            // terminal <xmlstreamend>). Not a malformed frame, so fall through to onClose without
-            // surfacing an error.
-        } catch (WhatsAppSessionException.BadMac e) {
+        } catch (Exception failure) {
             if (!closed) {
-                listener.onError(e);
-                disconnect();
-            }
-        } catch (SocketException e) {
-            if (!closed) {
-                listener.onError(new WhatsAppConnectionException("Connection failed", e));
-            }
-        } catch (IOException e) {
-            if (!closed) {
-                listener.onError(new WhatsAppStreamException.MalformedNode("Reader loop failed", e));
-            }
-        } catch (Exception e) {
-            if (!closed) {
-                listener.onError(new WhatsAppStreamException.MalformedNode("Failed to process inbound datagram", e));
+                var surfaced = classifyReaderFailure(failure);
+                if (surfaced != null) {
+                    listener.onError(surfaced);
+                }
+                // A bad MAC leaves the Noise cipher unusable, so the socket is torn down here; every
+                // other surfaced fault is reconnect-worthy and the client's failure handler drives
+                // the teardown off the verdict.
+                if (failure instanceof WhatsAppSessionException.BadMac) {
+                    disconnect();
+                }
             }
         } finally {
             if (!closed) {
                 listener.onClose();
             }
         }
+    }
+
+    /**
+     * Maps a fault caught by the reader loop to the {@link WhatsAppException} that should be
+     * surfaced through {@link WhatsAppSocketListener#onError(WhatsAppException)}, or {@code null}
+     * when the fault is an orderly end-of-stream that should fall through to
+     * {@link WhatsAppSocketListener#onClose()} without an error.
+     *
+     * <p>The classification is verdict-driven: because the reader thread is started only after the
+     * Noise handshake has established a session, every fault here is a mid-session event. An
+     * {@link EOFException} maps to {@code null} (orderly close); a {@link WhatsAppSessionException.BadMac}
+     * is passed through unchanged; every other fault (a transport drop such as a connection reset,
+     * abort, or the host network going down, as well as a corrupted frame) is reconnect-worthy and
+     * maps to {@link WhatsAppSessionException.Closed} rather than the initial-connection
+     * {@code WhatsAppConnectionException} (which classifies as a terminal disconnect and would
+     * strand the session).
+     *
+     * @param failure the exception caught by the reader loop
+     * @return the exception to surface via {@code onError}, or {@code null} for an orderly close
+     */
+    static WhatsAppException classifyReaderFailure(Exception failure) {
+        return switch (failure) {
+            case EOFException _ -> null;
+            case WhatsAppSessionException.BadMac badMac -> badMac;
+            default -> new WhatsAppSessionException.Closed("Connection dropped", failure);
+        };
     }
 
     /**

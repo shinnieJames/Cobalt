@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
  */
 public final class WamBuilderGenerator {
     private static final ClassName INTEGER = ClassName.get(Integer.class);
+    private static final ClassName LONG = ClassName.get(Long.class);
     private static final ClassName BOOLEAN = ClassName.get(Boolean.class);
     private static final ClassName STRING = ClassName.get(String.class);
     private static final ClassName DOUBLE = ClassName.get(Double.class);
@@ -62,7 +63,7 @@ public final class WamBuilderGenerator {
 
         // Fields
         for (var prop : event.properties()) {
-            var fieldType = resolveFieldType(prop);
+            var fieldType = builderFieldType(prop);
             builderBuilder.addField(FieldSpec.builder(fieldType, prop.fieldName(), Modifier.PRIVATE).build());
         }
 
@@ -222,7 +223,13 @@ public final class WamBuilderGenerator {
 
     private static void addMapSetterBody(MethodSpec.Builder setter, WamPropertyElement prop) {
         var name = prop.fieldName();
-        setter.beginControlFlow("if ($N != null)", name);
+        // INTEGER setters take a primitive long, which cannot be null-checked, so
+        // the value is stored unconditionally; the nullable boxed types only store
+        // when a non-null value is supplied.
+        var nullable = prop.wamType() != WamType.INTEGER;
+        if (nullable) {
+            setter.beginControlFlow("if ($N != null)", name);
+        }
         switch (prop.wamType()) {
             case INTEGER -> setter.addStatement("this.values.put($L, new $T($N))", prop.index(), WAM_WIRE_INT, name);
             case BOOLEAN -> setter.addStatement("this.values.put($L, new $T($N ? 1L : 0L))", prop.index(), WAM_WIRE_INT, name);
@@ -232,12 +239,33 @@ public final class WamBuilderGenerator {
             case ENUM -> setter.addStatement("this.values.put($L, new $T($N($N)))",
                     prop.index(), WAM_WIRE_INT, WamImplGenerator.enumEncoderName(prop), name);
         }
-        setter.endControlFlow();
+        if (nullable) {
+            setter.endControlFlow();
+        }
+    }
+
+    /**
+     * Returns the type of the builder's private backing field for the given
+     * property.
+     *
+     * <p>This matches {@link #resolveFieldType(WamPropertyElement)} for every
+     * type except {@link WamType#INTEGER}: the INTEGER setter parameter is a
+     * primitive {@code long} for caller ergonomics, but its backing field stays
+     * a boxed {@link Long} so that a property the caller never sets remains
+     * {@code null} (absent on the wire) instead of defaulting to {@code 0} and
+     * being encoded as a present zero. The boxed field also matches the boxed
+     * {@code Long} constructor parameter of the generated {@code *Impl}.
+     *
+     * @param prop the parsed property metadata
+     * @return the boxed backing-field type
+     */
+    private static TypeName builderFieldType(WamPropertyElement prop) {
+        return prop.wamType() == WamType.INTEGER ? LONG : resolveFieldType(prop);
     }
 
     private static TypeName resolveFieldType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
-            case INTEGER -> INTEGER;
+            case INTEGER -> TypeName.LONG;
             case BOOLEAN -> BOOLEAN;
             case STRING -> STRING;
             case FLOAT -> DOUBLE;

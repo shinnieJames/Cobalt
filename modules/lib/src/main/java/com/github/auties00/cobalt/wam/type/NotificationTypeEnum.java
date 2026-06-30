@@ -68,5 +68,6 @@ public enum NotificationTypeEnum {
     @WamEnumConstant(59) CALL_TRANSFER,
     @WamEnumConstant(60) AI_MESSAGE,
     @WamEnumConstant(61) PIN_MESSAGE,
-    @WamEnumConstant(62) ADMIN_GROUP_JOIN_REQUEST
+    @WamEnumConstant(62) ADMIN_GROUP_JOIN_REQUEST,
+    @WamEnumConstant(63) CHANNEL_STATUS_QUESTION_ANSWER_POST_RESHARE
 }

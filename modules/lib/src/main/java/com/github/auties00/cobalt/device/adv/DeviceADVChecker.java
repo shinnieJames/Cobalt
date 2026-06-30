@@ -16,6 +16,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.stanza.usync.UsyncContext;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.AdvStoredTimestampExpiredEventBuilder;
 
@@ -24,9 +25,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Keeps cached device lists fresh by periodically detecting expiration and triggering proactive
@@ -83,10 +81,9 @@ public final class DeviceADVChecker implements AutoCloseable {
     private final WamService wamService;
 
     /**
-     * Holds the scheduled executor running the periodic check, or {@code null} when the scheduler is
-     * stopped.
+     * Holds the running periodic check, or {@code null} when the check job is stopped.
      */
-    private volatile ScheduledExecutorService scheduler;
+    private volatile ScheduledTask checkJob;
 
     /**
      * Constructs an ADV check scheduler bound to the given collaborators.
@@ -118,31 +115,27 @@ public final class DeviceADVChecker implements AutoCloseable {
      * {@code Promise.resolve()}).
      *
      * @implNote
-     * This implementation runs the scheduler on a single virtual-thread executor whose threads are
-     * named {@code adv-check-N}. {@link #computeInitialDelay()} subtracts the elapsed time since the
-     * last check so a session that reconnects within the {@link #CHECK_INTERVAL} window does not get
-     * a fresh full delay.
+     * This implementation runs the periodic check as a single fixed-delay
+     * {@link ScheduledTask#schedule(Duration, Duration, Runnable)} recurrence on its own virtual
+     * thread. {@link #computeInitialDelay()} subtracts the elapsed time since the last check so a
+     * session that reconnects within the {@link #CHECK_INTERVAL} window does not get a fresh full
+     * delay.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "scheduleAdvDeviceInfoCheck",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void start() {
-        if (scheduler == null || scheduler.isShutdown()) {
-            synchronized (this) {
-                if (scheduler == null || scheduler.isShutdown()) {
-                    var factory = Thread.ofVirtual()
-                            .name("adv-check-", 0)
-                            .factory();
-                    scheduler = Executors.newSingleThreadScheduledExecutor(factory);
-
-                    var initialDelay = computeInitialDelay();
-                    LOGGER.log(Level.DEBUG, "ADV check scheduler starting with initial delay of {0} seconds",
-                            initialDelay.toSeconds());
-
-                    scheduler.scheduleWithFixedDelay(this::performCheck,
-                            initialDelay.toSeconds(), CHECK_INTERVAL.toSeconds(), TimeUnit.SECONDS);
-                }
+        if (checkJob != null && !checkJob.isCancelled()) {
+            return;
+        }
+        synchronized (this) {
+            if (checkJob != null && !checkJob.isCancelled()) {
+                return;
             }
+            var initialDelay = computeInitialDelay();
+            LOGGER.log(Level.DEBUG, "ADV check scheduler starting with initial delay of {0} seconds",
+                    initialDelay.toSeconds());
+            checkJob = ScheduledTask.schedule(initialDelay, CHECK_INTERVAL, this::performCheck);
         }
     }
 
@@ -414,20 +407,18 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Stops the ADV check scheduler and cancels pending checks.
+     * Stops the ADV check job and cancels any pending check.
      *
-     * <p>The call is invoked on client teardown and is idempotent: a second call once the scheduler
-     * is already shut down is a no-op. It must never be called from inside a scheduler tick, because
-     * the executor it shuts down is the one running the tick.
+     * <p>The call is invoked on client teardown and is idempotent: a second call once the job is
+     * already cancelled is a no-op. Cancelling wakes a pending check so it never fires and interrupts
+     * one already running, so it is safe to call from within a check tick.
      */
     @Override
     public void close() {
-        if (scheduler != null && !scheduler.isShutdown()) {
-            synchronized (this) {
-                if (scheduler != null) {
-                    scheduler.shutdownNow();
-                    scheduler = null;
-                }
+        synchronized (this) {
+            if (checkJob != null) {
+                checkJob.cancel();
+                checkJob = null;
             }
         }
     }

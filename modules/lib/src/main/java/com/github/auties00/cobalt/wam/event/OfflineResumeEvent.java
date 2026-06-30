@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.OfflineResumeResultType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebOfflineResumeWamEvent")
 @WamEvent(id = 3112)
@@ -22,16 +22,16 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 50, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 36, type = WamType.INTEGER)
-    OptionalInt attemptNumber();
+    OptionalLong attemptNumber();
 
     @WamProperty(index = 55, type = WamType.INTEGER)
-    OptionalInt chatQueueSize();
+    OptionalLong chatQueueSize();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt chatThreadCount();
+    OptionalLong chatThreadCount();
 
     @WamProperty(index = 39, type = WamType.TIMER)
     Optional<Instant> dbDurationT();
@@ -40,34 +40,34 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<Instant> dbMainThreadDurationT();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt dbMainThreadReadsCount();
+    OptionalLong dbMainThreadReadsCount();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt dbMainThreadWritesCount();
+    OptionalLong dbMainThreadWritesCount();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt dbReadsCount();
+    OptionalLong dbReadsCount();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt dbWritesCount();
+    OptionalLong dbWritesCount();
 
     @WamProperty(index = 45, type = WamType.BOOLEAN)
     Optional<Boolean> disconnected();
 
     @WamProperty(index = 56, type = WamType.INTEGER)
-    OptionalInt e2eeQueueSize();
+    OptionalLong e2eeQueueSize();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt expectedOfflineCallCount();
+    OptionalLong expectedOfflineCallCount();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt expectedOfflineMessageCount();
+    OptionalLong expectedOfflineMessageCount();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt expectedOfflineNotificationCount();
+    OptionalLong expectedOfflineNotificationCount();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt expectedOfflineReceiptCount();
+    OptionalLong expectedOfflineReceiptCount();
 
     @WamProperty(index = 2, type = WamType.BOOLEAN)
     Optional<Boolean> isOfflineCompleteMissed();
@@ -85,10 +85,10 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<Instant> lastStanzaT();
 
     @WamProperty(index = 38, type = WamType.INTEGER)
-    OptionalInt logoutSessionId();
+    OptionalLong logoutSessionId();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt mailboxAge();
+    OptionalLong mailboxAge();
 
     @WamProperty(index = 4, type = WamType.TIMER)
     Optional<Instant> mainScreenLoadT();
@@ -97,16 +97,16 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<Instant> nseMergeT();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt offlineCallCount();
+    OptionalLong offlineCallCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt offlineDecryptErrorCount();
+    OptionalLong offlineDecryptErrorCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt offlineMessageCount();
+    OptionalLong offlineMessageCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt offlineNotificationCount();
+    OptionalLong offlineNotificationCount();
 
     @WamProperty(index = 8, type = WamType.TIMER)
     Optional<Instant> offlinePreviewT();
@@ -115,7 +115,7 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<Instant> offlineProcessingT();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt offlineReceiptCount();
+    OptionalLong offlineReceiptCount();
 
     @WamProperty(index = 21, type = WamType.ENUM)
     Optional<OfflineResumeResultType> offlineResumeResult();
@@ -124,7 +124,7 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<Instant> offlineSessionT();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt offlineSizeBytes();
+    OptionalLong offlineSizeBytes();
 
     @WamProperty(index = 15, type = WamType.BOOLEAN)
     Optional<Boolean> onTrickleMode();
@@ -136,40 +136,40 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<Instant> passiveModeT();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt preackCallCount();
+    OptionalLong preackCallCount();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt preackMessageCount();
+    OptionalLong preackMessageCount();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt preackNotificationCount();
+    OptionalLong preackNotificationCount();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt preackReceiptCount();
+    OptionalLong preackReceiptCount();
 
     @WamProperty(index = 47, type = WamType.INTEGER)
-    OptionalInt preacksCount();
+    OptionalLong preacksCount();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt processedCallCount();
+    OptionalLong processedCallCount();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt processedMessageCount();
+    OptionalLong processedMessageCount();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt processedNotificationCount();
+    OptionalLong processedNotificationCount();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt processedReceiptCount();
+    OptionalLong processedReceiptCount();
 
     @WamProperty(index = 51, type = WamType.INTEGER)
-    OptionalInt queuedMessageCount();
+    OptionalLong queuedMessageCount();
 
     @WamProperty(index = 52, type = WamType.INTEGER)
-    OptionalInt queuedNotificationCount();
+    OptionalLong queuedNotificationCount();
 
     @WamProperty(index = 53, type = WamType.INTEGER)
-    OptionalInt queuedReceiptCount();
+    OptionalLong queuedReceiptCount();
 
     @WamProperty(index = 48, type = WamType.STRING)
     Optional<String> runningTasks();
@@ -181,5 +181,5 @@ public interface OfflineResumeEvent extends WamEventSpec {
     Optional<String> transientOfflineSessionId();
 
     @WamProperty(index = 57, type = WamType.INTEGER)
-    OptionalInt unorderedQueueSize();
+    OptionalLong unorderedQueueSize();
 }

@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.GroupBulkRemovalAction;
 import com.github.auties00.cobalt.wam.type.GroupBulkRemovalEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupBulkRemovalWamEvent")
 @WamEvent(id = 7222)
@@ -28,5 +28,5 @@ public interface GroupBulkRemovalEvent extends WamEventSpec {
     Optional<GroupBulkRemovalEntryPoint> groupBulkRemovalEntryPoint();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt removedMembersCount();
+    OptionalLong removedMembersCount();
 }

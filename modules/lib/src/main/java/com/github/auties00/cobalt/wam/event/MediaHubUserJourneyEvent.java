@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.EntryPointType;
 import com.github.auties00.cobalt.wam.type.SurfaceCode;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMediaHubUserJourneyWamEvent")
 @WamEvent(id = 7090)
@@ -26,7 +26,7 @@ public interface MediaHubUserJourneyEvent extends WamEventSpec {
     Optional<EntryPointType> mediaHubEntryPoint();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt mediaHubSequenceNumber();
+    OptionalLong mediaHubSequenceNumber();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> mediaHubSessionId();

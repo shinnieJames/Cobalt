@@ -3,7 +3,6 @@ import com.github.auties00.cobalt.calls2.stream.AudioOutput;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
-import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStoreFactory;
@@ -28,7 +27,7 @@ void main() throws IOException {
             .loadLatestOrCreateConnection()
             .device(LinkedWhatsAppClientDevice.web())
             .releaseChannel(ClientPayload.ClientReleaseChannel.BETA)
-            .historySetting(WhatsAppWebClientHistory.standard(false))
+            .defaultHistory()
             .unregistered(LinkedWhatsAppClientVerificationHandler.Web.QrCode.toTerminal())
             .addLoggedInListener(client -> {
                 System.out.printf("Calling %s, streaming %s%n", peer, track.getFileName());

@@ -14,13 +14,13 @@ import com.github.auties00.cobalt.wam.type.PeripheralDeviceType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebNotificationDeliveryWamEvent")
 @WamEvent(id = 3748)
 public interface NotificationDeliveryEvent extends WamEventSpec {
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt channelMilestoneValue();
+    OptionalLong channelMilestoneValue();
 
     @WamProperty(index = 15, type = WamType.STRING)
     Optional<String> cid();
@@ -35,7 +35,7 @@ public interface NotificationDeliveryEvent extends WamEventSpec {
     Optional<NotificationActionType> notificationAction();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt notificationDeliveryT();
+    OptionalLong notificationDeliveryT();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<NotificationDestinationType> notificationDestination();
@@ -59,7 +59,7 @@ public interface NotificationDeliveryEvent extends WamEventSpec {
     Optional<String> threadId();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 12, type = WamType.BOOLEAN)
     Optional<Boolean> triggeredByOfflineMessage();

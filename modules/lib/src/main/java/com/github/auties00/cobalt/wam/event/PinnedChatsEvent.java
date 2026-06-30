@@ -9,13 +9,13 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.PinnedChatsPremiumStatusType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPinnedChatsWamEvent")
 @WamEvent(id = 7630)
 public interface PinnedChatsEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt pinnedChatNumber();
+    OptionalLong pinnedChatNumber();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<PinnedChatsPremiumStatusType> pinnedChatsPremiumStatus();

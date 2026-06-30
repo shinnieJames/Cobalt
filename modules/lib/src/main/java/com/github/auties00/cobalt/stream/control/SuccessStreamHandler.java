@@ -25,12 +25,14 @@ import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.props.ABProp;
+import com.github.auties00.cobalt.model.tos.TosNotice;
 import com.github.auties00.cobalt.stanza.iq.media.IqQueryMediaConnsRequest;
 import com.github.auties00.cobalt.stanza.iq.media.IqQueryMediaConnsResponse;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.tos.TosService;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
-import com.github.auties00.cobalt.util.SchedulerUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.ClockSkewDifferenceTEventBuilder;
 
@@ -38,7 +40,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
@@ -107,6 +108,12 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
     private final MediaConnectionService mediaConnectionService;
 
     /**
+     * The {@link TosService} used at bootstrap to refresh the interoperability Terms-of-Service acceptance state when
+     * notice fetching is enabled.
+     */
+    private final TosService tosService;
+
+    /**
      * The one-shot guard ensuring the bootstrap runs at most once per connection; cleared by {@link #reset()} on
      * socket teardown.
      */
@@ -118,7 +125,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * <p>Held so {@link #reset()} can cancel the next refresh when the socket is torn down; re-armed at the end of
      * every {@link #refreshMediaConnection()} pass.
      */
-    private volatile CompletableFuture<Void> mediaConnectionRefreshJob;
+    private volatile ScheduledTask mediaConnectionRefreshJob;
 
     /**
      * Constructs a new success stream handler bound to the given services.
@@ -131,6 +138,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * @param wamService                       the {@link WamService}; must not be {@code null}
      * @param webAppStateService               the {@link WebAppStateService}; must not be {@code null}
      * @param mediaConnectionService           the {@link MediaConnectionService}; must not be {@code null}
+     * @param tosService                       the {@link TosService}; must not be {@code null}
      * @throws NullPointerException if any service is {@code null}
      */
     public SuccessStreamHandler(
@@ -141,7 +149,8 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
             InactiveGroupLidMigrationService inactiveGroupLidMigrationService,
             WamService wamService,
             WebAppStateService webAppStateService,
-            MediaConnectionService mediaConnectionService
+            MediaConnectionService mediaConnectionService,
+            TosService tosService
     ) {
         this.whatsapp = Objects.requireNonNull(whatsapp, "whatsapp cannot be null");
         this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
@@ -151,6 +160,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
         this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
         this.webAppStateService = Objects.requireNonNull(webAppStateService, "webAppStateService cannot be null");
         this.mediaConnectionService = Objects.requireNonNull(mediaConnectionService, "mediaConnectionService cannot be null");
+        this.tosService = Objects.requireNonNull(tosService, "tosService cannot be null");
         this.started = new AtomicBoolean();
     }
 
@@ -180,7 +190,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
         started.set(false);
         var job = mediaConnectionRefreshJob;
         if (job != null) {
-            job.cancel(false);
+            job.cancel();
             mediaConnectionRefreshJob = null;
         }
     }
@@ -261,6 +271,12 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
         }
 
         wamService.initialize();
+
+        // Pull the interoperability Terms-of-Service acceptance state so the inbound-message gating
+        // check has it; gated on the fetch flag and run off-thread so it does not delay bootstrap
+        if (abPropsService.getBool(ABProp.TOS_CLIENT_STATE_FETCH_ENABLED)) {
+            Thread.ofVirtual().start(() -> tosService.refresh(List.of(TosNotice.TOS_3)));
+        }
 
         deviceService.startAdvCheckScheduler();
         deviceService.retryPendingSyncs();
@@ -409,7 +425,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
      * Drives the one-shot newsletter metadata fetch that backfills the newsletter collection on first login.
      *
      * <p>Gated on three conditions: this is a web client (newsletters are a web-only companion feature), the configured
-     * {@link com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory} policy includes newsletters, and the
+     * history settings include newsletters (see {@link com.github.auties00.cobalt.store.linked.LinkedWhatsAppSyncStore#hasHistoryNewsletters()}), and the
      * newsletter sync gate is still false. The {@link LinkedWhatsAppClient#refreshNewsletters()} call sets the gate and fans
      * out {@link LinkedNewslettersListener#onNewsletters(LinkedWhatsAppClient, java.util.Collection)} internally.
      *
@@ -424,8 +440,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
         if (store.accountStore().clientType() != LinkedWhatsAppClientType.WEB || store.syncStore().syncedNewsletters()) {
             return;
         }
-        var policy = store.syncStore().webHistoryPolicy().orElse(null);
-        if (policy == null || !policy.hasNewsletters()) {
+        if (!store.syncStore().hasHistoryNewsletters()) {
             return;
         }
         Thread.startVirtualThread(() -> {
@@ -611,7 +626,7 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
                     MEDIA_CONNECTION_RETRY_DELAY.toSeconds(), throwable.getMessage());
             nextDelay = MEDIA_CONNECTION_RETRY_DELAY;
         }
-        mediaConnectionRefreshJob = SchedulerUtils.scheduleDelayed(nextDelay, this::refreshMediaConnection);
+        mediaConnectionRefreshJob = ScheduledTask.scheduleDelayed(nextDelay, this::refreshMediaConnection);
     }
 
     /**

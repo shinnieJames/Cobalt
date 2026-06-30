@@ -13,5 +13,6 @@ public enum CompanionInviteOriginType {
     @WamEnumConstant(2) CONTACT_PICKER_LIST,
     @WamEnumConstant(3) CONTACT_PICKER_SEARCH,
     @WamEnumConstant(4) GROUPS_CREATE_PARTICIPANT_SELECTOR,
-    @WamEnumConstant(5) GROUPS_ADD_PARTICIPANT_SELECTOR
+    @WamEnumConstant(5) GROUPS_ADD_PARTICIPANT_SELECTOR,
+    @WamEnumConstant(6) CONTACT_EDIT_DRAWER
 }

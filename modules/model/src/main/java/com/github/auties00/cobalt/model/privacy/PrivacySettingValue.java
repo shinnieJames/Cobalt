@@ -1,110 +1,127 @@
 package com.github.auties00.cobalt.model.privacy;
 
-import it.auties.protobuf.annotation.ProtobufEnum;
-import it.auties.protobuf.annotation.ProtobufEnumIndex;
+import com.github.auties00.cobalt.model.jid.Jid;
+import it.auties.protobuf.annotation.ProtobufDeserializer;
+import it.auties.protobuf.annotation.ProtobufSerializer;
+import it.auties.protobuf.model.ProtobufString;
 
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Enumerates the audiences that can be selected for a {@link PrivacySettingType}.
+ * The audience or enablement state selected for a {@link PrivacySettingType}.
  *
- * <p>Each constant describes a group of users that is allowed to see or interact with a
- * piece of information controlled by a privacy setting. Not every value is valid for every
- * setting: {@link PrivacySettingType#supportedValues()} exposes the subset of values that
- * can be configured for a given setting.
+ * <p>This is the root of a closed, two-level hierarchy: every constant in
+ * {@link PrivacySettingType} declares the concrete sub-interface of
+ * {@code PrivacySettingValue} that enumerates the values it accepts (for example
+ * {@link LastSeenPrivacyValue} for {@link PrivacySettingType#LAST_SEEN}), and every
+ * such sub-interface is sealed over the {@code record} variants that represent its
+ * legal values. Modelling the values as records rather than enum constants lets a
+ * value carry the data it needs: the {@code ContactsExcept} variant of a visibility
+ * setting holds the blocklist of {@link Jid} values inline through {@link #excluded()},
+ * so the audience and its refinement list travel together as one value.
  *
- * <p>The textual identifier returned by {@link #data()} matches the wire format used by the
- * WhatsApp servers and can be looked up with {@link #of(String)}.
+ * <p>A value is fully self-describing: {@link #type()} identifies the setting it
+ * configures and {@link #token()} is the wire token the server uses for it. Those two
+ * pieces, together with {@link #excluded()}, are encoded into a single
+ * {@code type:token[:jid,jid,...]} string for protobuf persistence by
+ * {@link #toEncodedValue()} and reconstructed by {@link #of(ProtobufString)}.
  */
-@ProtobufEnum
-public enum PrivacySettingValue {
+public sealed interface PrivacySettingValue
+        permits LastSeenPrivacyValue, OnlinePrivacyValue, ProfilePicturePrivacyValue, AboutPrivacyValue,
+        ReadReceiptsPrivacyValue, GroupAddPrivacyValue, CallAddPrivacyValue, MessagesPrivacyValue,
+        DefenseModePrivacyValue {
     /**
-     * Any WhatsApp user, including strangers that are not in the address book.
-     */
-    EVERYONE(0, "all"),
-    /**
-     * Every contact that is saved in the user's address book.
-     */
-    CONTACTS(1, "contacts"),
-    /**
-     * Every contact in the address book except for an explicit blocklist.
+     * Returns the setting that this value configures.
      *
-     * <p>When this value is used the associated blocklist of {@link com.github.auties00.cobalt.model.jid.Jid}
-     * values is stored in the corresponding {@link PrivacySettingEntry#excluded()} list.
+     * @return the owning {@link PrivacySettingType}, never {@code null}
      */
-    CONTACTS_EXCEPT(2, "contact_blacklist"),
-    /**
-     * An explicit allowlist of contacts.
-     *
-     * <p>Only the contacts listed in the corresponding {@link PrivacySettingEntry#excluded()}
-     * list can see the information. This value is currently used for
-     * {@link PrivacySettingType#STATUS}.
-     */
-    CONTACTS_ONLY(5, "contact_whitelist"),
-    /**
-     * No other user at all.
-     */
-    NOBODY(3, "none"),
-    /**
-     * Mirrors the audience configured for {@link PrivacySettingType#LAST_SEEN}.
-     *
-     * <p>Used exclusively by {@link PrivacySettingType#ONLINE} so that the online indicator
-     * cannot be seen by users that are not allowed to see the last seen timestamp.
-     */
-    MATCH_LAST_SEEN(4, "match_last_seen");
+    PrivacySettingType<?> type();
 
     /**
-     * The numeric identifier used for protobuf serialization.
+     * Returns the wire token the WhatsApp servers use for this value.
      *
-     * <p>Matches the index declared on the wire format of privacy related messages.
+     * <p>Examples include {@code "all"} for an everyone audience and
+     * {@code "contact_blacklist"} for a contacts-except audience.
+     *
+     * @return the server-side token, never {@code null}
      */
-    final int index;
+    String token();
 
     /**
-     * The textual identifier used by the WhatsApp servers to refer to this audience.
+     * Returns the contacts that refine this value.
      *
-     * <p>Examples include {@code "all"} for {@link #EVERYONE} and {@code "contact_blacklist"}
-     * for {@link #CONTACTS_EXCEPT}.
+     * <p>This list is non-empty only for the contacts-except variants, where it is the
+     * blocklist of contacts denied access; every other variant returns an empty list.
+     *
+     * @return an unmodifiable list of refining contacts, never {@code null}
      */
-    private final String data;
+    List<Jid> excluded();
 
     /**
-     * Creates a new privacy setting value constant.
+     * Encodes this value into the {@code type:token[:jid,jid,...]} string used for
+     * protobuf persistence.
      *
-     * @param index the protobuf index assigned to the constant
-     * @param data  the textual identifier used by the server
+     * <p>The leading {@link PrivacySettingType#wire()} makes the encoded form
+     * self-describing so {@link #of(ProtobufString)} can reconstruct the concrete
+     * variant without external context. The trailing comma-separated {@link Jid} list
+     * is appended only when {@link #excluded()} is non-empty.
+     *
+     * @return the encoded representation, never {@code null}
      */
-    PrivacySettingValue(@ProtobufEnumIndex int index, String data) {
-        this.index = index;
-        this.data = data;
+    @ProtobufSerializer
+    default String toEncodedValue() {
+        var encoded = new StringBuilder(type().wire()).append(':').append(token());
+        var excluded = excluded();
+        for (var i = 0; i < excluded.size(); i++) {
+            encoded.append(i == 0 ? ':' : ',').append(excluded.get(i));
+        }
+        return encoded.toString();
     }
 
     /**
-     * Resolves a privacy setting value from the textual identifier used by the server.
+     * Reconstructs a value from the {@code type:token[:jid,jid,...]} string produced by
+     * {@link #toEncodedValue()}.
      *
-     * <p>The identifier is compared case-sensitively against the value returned by
-     * {@link #data()} for each constant.
+     * <p>The wire prefix resolves the {@link PrivacySettingType}, which in turn resolves
+     * the token (and the parsed refinement list) to the concrete variant. An input that
+     * names an unknown setting or an unsupported token resolves to {@code null} so a
+     * stale persisted value never aborts deserialization.
      *
-     * @param id the identifier to resolve, for example {@code "all"} or {@code "contact_blacklist"}
-     * @return an {@link Optional} containing the matching constant, or empty if no constant
-     *         has the given identifier
+     * @param encoded the encoded representation, or {@code null}
+     * @return the reconstructed value, or {@code null} if the input is {@code null} or
+     *         does not resolve
      */
-    public static Optional<PrivacySettingValue> of(String id) {
-        return Arrays.stream(values())
-                .filter(entry -> Objects.equals(entry.data(), id))
-                .findFirst();
-    }
-
-    /**
-     * Returns the textual identifier used by the WhatsApp servers to refer to this audience.
-     *
-     * <p>This is the inverse of {@link #of(String)}.
-     *
-     * @return the server side identifier, never {@code null}
-     */
-    public String data() {
-        return this.data;
+    @ProtobufDeserializer
+    static PrivacySettingValue of(ProtobufString encoded) {
+        if (encoded == null) {
+            return null;
+        }
+        var raw = encoded.toString();
+        var firstColon = raw.indexOf(':');
+        if (firstColon < 0) {
+            return null;
+        }
+        var wire = raw.substring(0, firstColon);
+        var rest = raw.substring(firstColon + 1);
+        var secondColon = rest.indexOf(':');
+        String token;
+        List<Jid> excluded;
+        if (secondColon < 0) {
+            token = rest;
+            excluded = List.of();
+        } else {
+            token = rest.substring(0, secondColon);
+            excluded = new ArrayList<>();
+            for (var part : rest.substring(secondColon + 1).split(",")) {
+                if (!part.isEmpty()) {
+                    excluded.add(Jid.of(part));
+                }
+            }
+        }
+        return PrivacySettingType.of(wire)
+                .flatMap(type -> type.parse(token, excluded))
+                .map(PrivacySettingValue.class::cast)
+                .orElse(null);
     }
 }

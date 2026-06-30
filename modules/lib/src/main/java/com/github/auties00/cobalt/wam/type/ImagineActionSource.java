@@ -30,5 +30,7 @@ public enum ImagineActionSource {
     @WamEnumConstant(19) MIMICRY_ATTRIBUTION,
     @WamEnumConstant(20) MEDIA_VIEWER,
     @WamEnumConstant(21) EVENT_COVER_BOTTOM_SHEET,
-    @WamEnumConstant(22) FORWARD
+    @WamEnumConstant(22) FORWARD,
+    @WamEnumConstant(23) DEEP_LINK,
+    @WamEnumConstant(24) AI_TAB
 }

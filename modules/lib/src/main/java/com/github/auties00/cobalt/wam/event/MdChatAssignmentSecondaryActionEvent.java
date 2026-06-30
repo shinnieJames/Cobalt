@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.MdChatAssignmentSecondaryActionType;
 import com.github.auties00.cobalt.wam.type.MdChatAssignmentSourceType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdChatAssignmentSecondaryActionWamEvent")
 @WamEvent(id = 3716)
@@ -34,7 +34,7 @@ public interface MdChatAssignmentSecondaryActionEvent extends WamEventSpec {
     Optional<ErrorType> mdChatAssignmentSecondaryActionError();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt mdChatAssignmentSecondaryActionMdId();
+    OptionalLong mdChatAssignmentSecondaryActionMdId();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<MdChatAssignmentSourceType> mdChatAssignmentSecondaryActionSource();

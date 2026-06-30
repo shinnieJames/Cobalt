@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.MutationDirectionType;
 import com.github.auties00.cobalt.wam.type.SyncdCollectionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdSyncdMutationsSummaryWamEvent")
 @WamEvent(id = 6302)
@@ -41,7 +41,7 @@ public interface MdSyncdMutationsSummaryEvent extends WamEventSpec {
     Optional<String> removeMutations();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt seqNumber();
+    OptionalLong seqNumber();
 
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> setMutations();

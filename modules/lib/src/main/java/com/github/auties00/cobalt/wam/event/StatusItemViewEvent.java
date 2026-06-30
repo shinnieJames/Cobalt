@@ -23,7 +23,7 @@ import com.github.auties00.cobalt.wam.type.UrlStatusType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusItemViewWamEvent")
 @WamEvent(id = 1658)
@@ -65,7 +65,7 @@ public interface StatusItemViewEvent extends WamEventSpec {
     Optional<Boolean> isViewedInLandscape();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt mediaFileSize();
+    OptionalLong mediaFileSize();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<MediaType> mediaType();
@@ -80,7 +80,7 @@ public interface StatusItemViewEvent extends WamEventSpec {
     Optional<String> psaCampaignId();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt psaCampaignItemIndex();
+    OptionalLong psaCampaignItemIndex();
 
     @WamProperty(index = 19, type = WamType.BOOLEAN)
     Optional<Boolean> psaLinkAvailable();
@@ -113,13 +113,13 @@ public interface StatusItemViewEvent extends WamEventSpec {
     Optional<String> statusId();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt statusItem3sViewCount();
+    OptionalLong statusItem3sViewCount();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt statusItemImpressionCount();
+    OptionalLong statusItemImpressionCount();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt statusItemIndex();
+    OptionalLong statusItemIndex();
 
     @WamProperty(index = 7, type = WamType.TIMER)
     Optional<Instant> statusItemLength();
@@ -128,13 +128,13 @@ public interface StatusItemViewEvent extends WamEventSpec {
     Optional<Instant> statusItemLoadTime();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt statusItemReplied();
+    OptionalLong statusItemReplied();
 
     @WamProperty(index = 9, type = WamType.BOOLEAN)
     Optional<Boolean> statusItemUnread();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt statusItemViewCount();
+    OptionalLong statusItemViewCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<StatusItemViewResult> statusItemViewResult();
@@ -143,10 +143,10 @@ public interface StatusItemViewEvent extends WamEventSpec {
     Optional<Instant> statusItemViewTime();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt statusMediaHeight();
+    OptionalLong statusMediaHeight();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt statusMediaWidth();
+    OptionalLong statusMediaWidth();
 
     @WamProperty(index = 39, type = WamType.ENUM)
     Optional<StatusPairedMediaQuality> statusPairedMediaQuality();
@@ -155,7 +155,7 @@ public interface StatusItemViewEvent extends WamEventSpec {
     Optional<StatusPosterContactType> statusPosterContactType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt statusRowIndex();
+    OptionalLong statusRowIndex();
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<StatusRowSection> statusRowSection();
@@ -164,16 +164,16 @@ public interface StatusItemViewEvent extends WamEventSpec {
     Optional<StatusType> statusType();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt statusViewerSessionId();
+    OptionalLong statusViewerSessionId();
 
     @WamProperty(index = 58, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 54, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 55, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 
     @WamProperty(index = 26, type = WamType.ENUM)
     Optional<UrlStatusClicked> urlStatusClicked();

@@ -14,5 +14,6 @@ public enum ImagineActionThreadType {
     @WamEnumConstant(4) META_AI,
     @WamEnumConstant(5) TO_CHARACTER,
     @WamEnumConstant(6) TO_UGC,
-    @WamEnumConstant(7) STATUS
+    @WamEnumConstant(7) STATUS,
+    @WamEnumConstant(8) AR_SURFACE
 }

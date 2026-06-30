@@ -74,6 +74,8 @@ public final class BizCreateOrderJobWhatsAppGraphQlResponse implements WhatsAppG
             total = price.getLong("total_amount");
         }
         var order = new BusinessOrderBuilder()
+                .referenceId(orderObject.getString("order_id"))
+                .token(orderObject.getString("token"))
                 .currency(currency)
                 .subtotal(subtotal)
                 .total(total)
@@ -84,8 +86,9 @@ public final class BizCreateOrderJobWhatsAppGraphQlResponse implements WhatsAppG
     /**
      * Returns the parsed placed order.
      *
-     * <p>The returned {@link BusinessOrder} carries the order's currency and the subtotal and total
-     * amounts; the line items are not present in the placed-order projection.
+     * <p>The returned {@link BusinessOrder} carries the order's reference id, access token, currency
+     * and the subtotal and total amounts; the line items are not present in the placed-order
+     * projection.
      *
      * @return the parsed placed order, never {@code null}
      */

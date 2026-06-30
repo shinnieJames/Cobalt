@@ -15,7 +15,7 @@ import java.lang.annotation.Target;
  * <p>The annotated type must be a {@code public interface} that extends
  * {@link com.github.auties00.cobalt.wam.event.WamEventSpec WamEventSpec}
  * and declares getter methods annotated with {@link WamProperty}.
- * Each method must return an {@code Optional}, {@code OptionalInt},
+ * Each method must return an {@code Optional}, {@code OptionalLong},
  * or {@code OptionalDouble}.
  *
  * <p>At compile time an annotation processor generates a companion

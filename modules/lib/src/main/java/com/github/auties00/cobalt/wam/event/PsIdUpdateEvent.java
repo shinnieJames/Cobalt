@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.PsIdAction;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPsIdUpdateWamEvent")
 @WamEvent(id = 2862)
@@ -21,8 +21,8 @@ public interface PsIdUpdateEvent extends WamEventSpec {
     Optional<PsIdAction> psIdAction();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt psIdKey();
+    OptionalLong psIdKey();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt psIdRotationFrequence();
+    OptionalLong psIdRotationFrequence();
 }

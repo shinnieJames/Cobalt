@@ -536,9 +536,9 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
             }
         }
         if (!notices.isEmpty()) {
-            var currentNotices = new HashSet<>(whatsapp.store().settingsStore().tosNotices());
+            var currentNotices = new HashSet<>(whatsapp.store().settingsStore().acknowledgedTosNotices());
             currentNotices.addAll(notices);
-            whatsapp.store().settingsStore().setTosNotices(currentNotices);
+            whatsapp.store().settingsStore().setAcknowledgedTosNotices(currentNotices);
             var snapshot = Set.copyOf(currentNotices);
             fireListeners(LinkedTosNoticesChangedListener.class, listener -> listener.onTosNoticesChanged(whatsapp, snapshot));
         }
@@ -571,9 +571,9 @@ final class NotificationAccountStreamHandler extends SocketStreamHandler.Concurr
         var accepted = PDFN_ACCEPTED_STAGE.equals(noticeStage);
 
         if (accepted) {
-            var currentNotices = new HashSet<>(whatsapp.store().settingsStore().tosNotices());
+            var currentNotices = new HashSet<>(whatsapp.store().settingsStore().acknowledgedTosNotices());
             currentNotices.add(noticeId);
-            whatsapp.store().settingsStore().setTosNotices(currentNotices);
+            whatsapp.store().settingsStore().setAcknowledgedTosNotices(currentNotices);
             var snapshot = Set.copyOf(currentNotices);
             fireListeners(LinkedTosNoticesChangedListener.class, listener -> listener.onTosNoticesChanged(whatsapp, snapshot));
         }

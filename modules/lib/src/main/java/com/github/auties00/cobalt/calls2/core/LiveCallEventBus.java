@@ -14,6 +14,7 @@ import com.github.auties00.cobalt.listener.linked.LinkedCallParticipantsChangedL
 import com.github.auties00.cobalt.listener.linked.LinkedCallPeerStateChangedListener;
 import com.github.auties00.cobalt.listener.linked.LinkedCallPreacceptListener;
 import com.github.auties00.cobalt.listener.linked.LinkedCallVideoStateChangedListener;
+import com.github.auties00.cobalt.listener.linked.LinkedCallVideoUpgradeRequestListener;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -174,6 +175,8 @@ public final class LiveCallEventBus implements CallEventBus {
             case CallEvent.VideoStateChanged e -> dispatch(LinkedCallVideoStateChangedListener.class,
                     listener -> listener.onCallVideoStateChanged(
                             whatsapp, e.callId(), e.participantJid(), e.enabled()));
+            case CallEvent.VideoUpgradeRequest e -> dispatch(LinkedCallVideoUpgradeRequestListener.class,
+                    listener -> listener.onCallVideoUpgradeRequest(whatsapp, e.callId(), e.peerJid()));
             case CallEvent.Reaction e -> dispatch(LinkedCallInteractionListener.class,
                     listener -> listener.onCallInteraction(
                             whatsapp, e.callId(), e.participantJid(), e.toInteraction()));

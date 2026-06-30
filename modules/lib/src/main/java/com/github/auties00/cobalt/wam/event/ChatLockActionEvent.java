@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.AuthType;
 import com.github.auties00.cobalt.wam.type.ChatLockActionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChatLockActionWamEvent")
 @WamEvent(id = 4212)
@@ -20,7 +20,7 @@ public interface ChatLockActionEvent extends WamEventSpec {
     Optional<ActionEntryPoint> actionEntryPoint();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt actionFolderChatsCount();
+    OptionalLong actionFolderChatsCount();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<AuthType> authType();

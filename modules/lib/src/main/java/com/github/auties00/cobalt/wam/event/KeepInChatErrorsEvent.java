@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.KicActionType;
 import com.github.auties00.cobalt.wam.type.KicErrorCodeType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebKeepInChatErrorsWamEvent")
 @WamEvent(id = 3698)
@@ -31,5 +31,5 @@ public interface KeepInChatErrorsEvent extends WamEventSpec {
     Optional<KicErrorCodeType> kicErrorCode();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt kicMessageEphemeralityDuration();
+    OptionalLong kicMessageEphemeralityDuration();
 }

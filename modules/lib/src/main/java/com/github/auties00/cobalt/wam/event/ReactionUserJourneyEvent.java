@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import com.github.auties00.cobalt.wam.type.UserJourneyChatType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebReactionUserJourneyWamEvent")
 @WamEvent(id = 5752)
@@ -50,7 +50,7 @@ public interface ReactionUserJourneyEvent extends WamEventSpec {
     Optional<UserJourneyChatType> userJourneyChatType();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

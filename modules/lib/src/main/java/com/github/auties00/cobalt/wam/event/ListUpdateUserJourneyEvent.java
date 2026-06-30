@@ -12,19 +12,19 @@ import com.github.auties00.cobalt.wam.type.ListUpdateUserJourneyAction;
 import com.github.auties00.cobalt.wam.type.UpdateEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebListUpdateUserJourneyWamEvent")
 @WamEvent(id = 5958)
 public interface ListUpdateUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt customListCount();
+    OptionalLong customListCount();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<ListAction> listAction();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt listId();
+    OptionalLong listId();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<ListType> listType();
@@ -33,10 +33,10 @@ public interface ListUpdateUserJourneyEvent extends WamEventSpec {
     Optional<ListUpdateUserJourneyAction> listUpdateUserJourneyAction();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt predefinedId();
+    OptionalLong predefinedId();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt presetListCount();
+    OptionalLong presetListCount();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<UpdateEntryPoint> updateEntryPoint();

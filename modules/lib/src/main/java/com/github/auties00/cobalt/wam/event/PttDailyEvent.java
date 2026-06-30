@@ -7,158 +7,158 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPttDailyWamEvent")
 @WamEvent(id = 2938)
 public interface PttDailyEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt pttCancelBroadcast();
+    OptionalLong pttCancelBroadcast();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt pttCancelGroup();
+    OptionalLong pttCancelGroup();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt pttCancelIndividual();
+    OptionalLong pttCancelIndividual();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt pttCancelInterop();
+    OptionalLong pttCancelInterop();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt pttCancelNewsletter();
+    OptionalLong pttCancelNewsletter();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt pttDraftReviewBroadcast();
+    OptionalLong pttDraftReviewBroadcast();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt pttDraftReviewGroup();
+    OptionalLong pttDraftReviewGroup();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt pttDraftReviewIndividual();
+    OptionalLong pttDraftReviewIndividual();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt pttDraftReviewInterop();
+    OptionalLong pttDraftReviewInterop();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt pttDraftReviewNewsletter();
+    OptionalLong pttDraftReviewNewsletter();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt pttFastplaybackBroadcast();
+    OptionalLong pttFastplaybackBroadcast();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt pttFastplaybackGroup();
+    OptionalLong pttFastplaybackGroup();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt pttFastplaybackIndividual();
+    OptionalLong pttFastplaybackIndividual();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt pttFastplaybackInterop();
+    OptionalLong pttFastplaybackInterop();
 
     @WamProperty(index = 34, type = WamType.INTEGER)
-    OptionalInt pttFastplaybackNewsletter();
+    OptionalLong pttFastplaybackNewsletter();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt pttLockBroadcast();
+    OptionalLong pttLockBroadcast();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt pttLockGroup();
+    OptionalLong pttLockGroup();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt pttLockIndividual();
+    OptionalLong pttLockIndividual();
 
     @WamProperty(index = 45, type = WamType.INTEGER)
-    OptionalInt pttLockInterop();
+    OptionalLong pttLockInterop();
 
     @WamProperty(index = 35, type = WamType.INTEGER)
-    OptionalInt pttLockNewsletter();
+    OptionalLong pttLockNewsletter();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt pttOutOfChatBroadcast();
+    OptionalLong pttOutOfChatBroadcast();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt pttOutOfChatGroup();
+    OptionalLong pttOutOfChatGroup();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt pttOutOfChatIndividual();
+    OptionalLong pttOutOfChatIndividual();
 
     @WamProperty(index = 46, type = WamType.INTEGER)
-    OptionalInt pttOutOfChatInterop();
+    OptionalLong pttOutOfChatInterop();
 
     @WamProperty(index = 36, type = WamType.INTEGER)
-    OptionalInt pttOutOfChatNewsletter();
+    OptionalLong pttOutOfChatNewsletter();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt pttPausedRecordBroadcast();
+    OptionalLong pttPausedRecordBroadcast();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt pttPausedRecordGroup();
+    OptionalLong pttPausedRecordGroup();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt pttPausedRecordIndividual();
+    OptionalLong pttPausedRecordIndividual();
 
     @WamProperty(index = 47, type = WamType.INTEGER)
-    OptionalInt pttPausedRecordInterop();
+    OptionalLong pttPausedRecordInterop();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
-    OptionalInt pttPausedRecordNewsletter();
+    OptionalLong pttPausedRecordNewsletter();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt pttPlaybackBroadcast();
+    OptionalLong pttPlaybackBroadcast();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt pttPlaybackGroup();
+    OptionalLong pttPlaybackGroup();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt pttPlaybackIndividual();
+    OptionalLong pttPlaybackIndividual();
 
     @WamProperty(index = 48, type = WamType.INTEGER)
-    OptionalInt pttPlaybackInterop();
+    OptionalLong pttPlaybackInterop();
 
     @WamProperty(index = 38, type = WamType.INTEGER)
-    OptionalInt pttPlaybackNewsletter();
+    OptionalLong pttPlaybackNewsletter();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt pttRecordBroadcast();
+    OptionalLong pttRecordBroadcast();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt pttRecordGroup();
+    OptionalLong pttRecordGroup();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt pttRecordIndividual();
+    OptionalLong pttRecordIndividual();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt pttRecordInterop();
+    OptionalLong pttRecordInterop();
 
     @WamProperty(index = 39, type = WamType.INTEGER)
-    OptionalInt pttRecordNewsletter();
+    OptionalLong pttRecordNewsletter();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt pttSendBroadcast();
+    OptionalLong pttSendBroadcast();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt pttSendGroup();
+    OptionalLong pttSendGroup();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt pttSendIndividual();
+    OptionalLong pttSendIndividual();
 
     @WamProperty(index = 50, type = WamType.INTEGER)
-    OptionalInt pttSendInterop();
+    OptionalLong pttSendInterop();
 
     @WamProperty(index = 40, type = WamType.INTEGER)
-    OptionalInt pttSendNewsletter();
+    OptionalLong pttSendNewsletter();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt pttStopTapBroadcast();
+    OptionalLong pttStopTapBroadcast();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt pttStopTapGroup();
+    OptionalLong pttStopTapGroup();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt pttStopTapIndividual();
+    OptionalLong pttStopTapIndividual();
 
     @WamProperty(index = 51, type = WamType.INTEGER)
-    OptionalInt pttStopTapInterop();
+    OptionalLong pttStopTapInterop();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt pttStopTapNewsletter();
+    OptionalLong pttStopTapNewsletter();
 }

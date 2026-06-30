@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.model.preference.OnboardingHintState;
 import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.AccountDisappearingMode;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
+import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
 import com.github.auties00.cobalt.model.setting.AppTheme;
@@ -48,26 +48,29 @@ import java.util.Set;
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public interface LinkedWhatsAppSettingsStore {
     /**
-     * Returns the current value of every privacy setting.
+     * Returns the value of every configured privacy setting.
      *
-     * @return an unmodifiable copy of the privacy settings
+     * @return an unmodifiable copy of the privacy setting values
      */
-    Collection<PrivacySettingEntry> privacySettings();
+    Collection<PrivacySettingValue> privacySettings();
 
     /**
-     * Looks up a privacy setting by type.
+     * Looks up the configured value of a privacy setting by type.
      *
-     * @param type the setting type, or {@code null}
-     * @return the setting entry, or empty if unset
+     * @param <V>  the value sub-interface accepted by the setting
+     * @param type the setting to look up, or {@code null}
+     * @return the configured value, or empty if the setting is unset or {@code type} is
+     *         {@code null}
      */
-    Optional<PrivacySettingEntry> findPrivacySetting(PrivacySettingType type);
+    <V extends PrivacySettingValue> Optional<V> findPrivacySetting(PrivacySettingType<V> type);
 
     /**
-     * Stores a privacy setting.
+     * Stores the value of a privacy setting, replacing any previously stored value for the same
+     * {@linkplain PrivacySettingValue#type() setting}.
      *
-     * @param entry the setting entry, never {@code null}
+     * @param value the privacy setting value, never {@code null}
      */
-    void addPrivacySetting(PrivacySettingEntry entry);
+    void addPrivacySetting(PrivacySettingValue value);
 
     /**
      * Returns the status-privacy setting.
@@ -353,7 +356,7 @@ public interface LinkedWhatsAppSettingsStore {
      *
      * @return an unmodifiable copy of the acknowledged notice ids
      */
-    Set<String> tosNotices();
+    Set<String> acknowledgedTosNotices();
 
     /**
      * Replaces the acknowledged Terms-of-Service notice set.
@@ -361,7 +364,7 @@ public interface LinkedWhatsAppSettingsStore {
      * @param noticeIds the notice ids, or {@code null} to clear
      * @return this store instance for method chaining
      */
-    LinkedWhatsAppSettingsStore setTosNotices(Set<String> noticeIds);
+    LinkedWhatsAppSettingsStore setAcknowledgedTosNotices(Set<String> noticeIds);
 
     /**
      * Returns the content hash of a marketing opt-out list.

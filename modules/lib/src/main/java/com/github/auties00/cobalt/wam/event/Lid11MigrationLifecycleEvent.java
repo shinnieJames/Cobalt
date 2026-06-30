@@ -10,22 +10,22 @@ import com.github.auties00.cobalt.wam.type.MigrationStageEnum;
 import com.github.auties00.cobalt.wam.type.StageFailureReasonEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLid11MigrationLifecycleWamEvent")
 @WamEvent(id = 6154)
 public interface Lid11MigrationLifecycleEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt chatNotInMappingCount();
+    OptionalLong chatNotInMappingCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt companionHasADifferentMappingCount();
+    OptionalLong companionHasADifferentMappingCount();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt currentLocalTimeSeconds();
+    OptionalLong currentLocalTimeSeconds();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt fakeLidCount();
+    OptionalLong fakeLidCount();
 
     @WamProperty(index = 14, type = WamType.BOOLEAN)
     Optional<Boolean> isLocally1x1MigratedFromDb();
@@ -37,22 +37,22 @@ public interface Lid11MigrationLifecycleEvent extends WamEventSpec {
     Optional<Boolean> isSyncdLidSession();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt latestMappingCount();
+    OptionalLong latestMappingCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt mappingCount();
+    OptionalLong mappingCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt migratedThreadCount();
+    OptionalLong migratedThreadCount();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<MigrationStageEnum> migrationStage();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt peerMappingBytesLength();
+    OptionalLong peerMappingBytesLength();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt primaryMigrationTimeSeconds();
+    OptionalLong primaryMigrationTimeSeconds();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<StageFailureReasonEnum> stageFailureReason();

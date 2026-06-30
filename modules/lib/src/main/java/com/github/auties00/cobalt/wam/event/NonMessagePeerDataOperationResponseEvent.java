@@ -11,16 +11,16 @@ import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
 import com.github.auties00.cobalt.wam.type.PeerDataResponseApplyResultType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebNonMessagePeerDataOperationResponseWamEvent")
 @WamEvent(id = 3904)
 public interface NonMessagePeerDataOperationResponseEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt peerDataErrorCount();
+    OptionalLong peerDataErrorCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt peerDataNotFoundCount();
+    OptionalLong peerDataNotFoundCount();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<PeerDataRequestErrorCode> peerDataRequestErrorCode();
@@ -35,11 +35,11 @@ public interface NonMessagePeerDataOperationResponseEvent extends WamEventSpec {
     Optional<PeerDataResponseApplyResultType> peerDataResponseApplyResult();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt peerDataResponseCount();
+    OptionalLong peerDataResponseCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt peerDataSuccessProcessCount();
+    OptionalLong peerDataSuccessProcessCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt peerDataSuccessResponseCount();
+    OptionalLong peerDataSuccessResponseCount();
 }

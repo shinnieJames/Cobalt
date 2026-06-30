@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import com.github.auties00.cobalt.wam.type.UfadReportType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCrashLogWamEvent")
 @WamEvent(id = 494)
@@ -30,7 +30,7 @@ public interface CrashLogEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 34, type = WamType.STRING)
     Optional<String> callTestBucketIdList();
@@ -45,7 +45,7 @@ public interface CrashLogEvent extends WamEventSpec {
     Optional<String> crashContext();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt crashCount();
+    OptionalLong crashCount();
 
     @WamProperty(index = 28, type = WamType.ENUM)
     Optional<ProductArea> crashLogProductArea();
@@ -60,7 +60,7 @@ public interface CrashLogEvent extends WamEventSpec {
     Optional<String> crashReason();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt crashTimeout();
+    OptionalLong crashTimeout();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<CrashType> crashType();
@@ -78,13 +78,13 @@ public interface CrashLogEvent extends WamEventSpec {
     Optional<String> peripheralConnected();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt processIdentifier();
+    OptionalLong processIdentifier();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> runningTasks();
 
     @WamProperty(index = 35, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 29, type = WamType.ENUM)
     Optional<UfadReportType> ufadReportType();

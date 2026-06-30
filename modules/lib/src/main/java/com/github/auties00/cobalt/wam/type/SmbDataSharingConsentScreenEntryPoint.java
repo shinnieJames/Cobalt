@@ -17,5 +17,6 @@ public enum SmbDataSharingConsentScreenEntryPoint {
     @WamEnumConstant(6) CTWA_CHAT,
     @WamEnumConstant(7) DATA_SHARING_TOOLS,
     @WamEnumConstant(8) CONTACT_INFO_CARD,
-    @WamEnumConstant(9) DATA_SHARING_SYSTEM_MESSAGE
+    @WamEnumConstant(9) DATA_SHARING_SYSTEM_MESSAGE,
+    @WamEnumConstant(10) LISTS_MANAGEMENT
 }

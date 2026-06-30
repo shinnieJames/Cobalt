@@ -8,7 +8,7 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCanonicalEntRecoveryCriticalEventWamEvent")
 @WamEvent(id = 7442)
@@ -26,7 +26,7 @@ public interface CanonicalEntRecoveryCriticalEventEvent extends WamEventSpec {
     Optional<String> canonicalEntRequestId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt canonicalEntSequenceNumberSinceLastRegistration();
+    OptionalLong canonicalEntSequenceNumberSinceLastRegistration();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> deviceId();
@@ -35,5 +35,5 @@ public interface CanonicalEntRecoveryCriticalEventEvent extends WamEventSpec {
     Optional<String> familyDeviceId();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 }

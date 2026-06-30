@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcLoginWamEvent")
 @WamEvent(id = 1664)
@@ -18,10 +18,10 @@ public interface WebcLoginEvent extends WamEventSpec {
     Optional<String> webcBrowserNetworkType();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt webcBrowserStorageQuotaBytes();
+    OptionalLong webcBrowserStorageQuotaBytes();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt webcBrowserStorageQuotaUsedBytes();
+    OptionalLong webcBrowserStorageQuotaUsedBytes();
 
     @WamProperty(index = 3, type = WamType.TIMER)
     Optional<Instant> webcLoginT();
@@ -30,34 +30,34 @@ public interface WebcLoginEvent extends WamEventSpec {
     Optional<Boolean> webcPersistentLoginEnabled();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt webcQrCodes();
+    OptionalLong webcQrCodes();
 
     @WamProperty(index = 2, type = WamType.TIMER)
     Optional<Instant> webcQrLoadT();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt webcSyncChatCount();
+    OptionalLong webcSyncChatCount();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt webcSyncChatSize();
+    OptionalLong webcSyncChatSize();
 
     @WamProperty(index = 9, type = WamType.TIMER)
     Optional<Instant> webcSyncChatT();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt webcSyncContactCount();
+    OptionalLong webcSyncContactCount();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt webcSyncContactSize();
+    OptionalLong webcSyncContactSize();
 
     @WamProperty(index = 12, type = WamType.TIMER)
     Optional<Instant> webcSyncContactT();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt webcSyncMessageCount();
+    OptionalLong webcSyncMessageCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt webcSyncMessageSize();
+    OptionalLong webcSyncMessageSize();
 
     @WamProperty(index = 6, type = WamType.TIMER)
     Optional<Instant> webcSyncMessageT();

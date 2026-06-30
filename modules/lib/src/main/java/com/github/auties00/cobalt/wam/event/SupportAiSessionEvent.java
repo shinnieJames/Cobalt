@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.SupportAiEventType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSupportAiSessionWamEvent")
 @WamEvent(id = 4970)
@@ -18,7 +18,7 @@ public interface SupportAiSessionEvent extends WamEventSpec {
     Optional<String> citationCmsId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt supportAiErrorCode();
+    OptionalLong supportAiErrorCode();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> supportAiErrorMessage();

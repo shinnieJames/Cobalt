@@ -511,8 +511,7 @@ public abstract class StanzaWriter implements AutoCloseable {
      */
     private void writeContent(Stanza content) throws IOException {
         switch (content) {
-            case Stanza.EmptyStanza _ -> {
-            }
+            case Stanza.EmptyStanza _ -> {}
             case Stanza.BytesStanza(var _, var _, var buffer) -> writeBytesBlob(buffer);
             case Stanza.ContainerStanza(var _, var _, var children) -> writeChildren(children);
             case Stanza.JidStanza(var _, var _, var jid) -> writeJid(jid);

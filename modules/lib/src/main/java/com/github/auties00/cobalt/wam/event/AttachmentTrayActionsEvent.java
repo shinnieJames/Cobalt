@@ -13,13 +13,13 @@ import com.github.auties00.cobalt.wam.type.ClientGroupSizeBucket;
 import com.github.auties00.cobalt.wam.type.SendMediaTypeType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebAttachmentTrayActionsWamEvent")
 @WamEvent(id = 3980)
 public interface AttachmentTrayActionsEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt actionDurationMs();
+    OptionalLong actionDurationMs();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<ActionThreadTypeType> actionThreadType();
@@ -43,5 +43,5 @@ public interface AttachmentTrayActionsEvent extends WamEventSpec {
     Optional<SendMediaTypeType> sendMediaType();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt sendTime();
+    OptionalLong sendTime();
 }

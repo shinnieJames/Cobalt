@@ -13,6 +13,7 @@ import com.github.auties00.cobalt.model.business.MarketingMessage;
 import com.github.auties00.cobalt.model.business.MarketingMessageBroadcast;
 import com.github.auties00.cobalt.model.business.NoteState;
 import com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreference;
+import com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingSetting;
 import com.github.auties00.cobalt.model.chat.ChatAssignment;
 import com.github.auties00.cobalt.model.chat.InteractiveMessageState;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -156,6 +157,12 @@ final class ProtobufLinkedWhatsAppBusinessStore implements LinkedWhatsAppBusines
      * The Small-Business data-sharing consent string.
      */
     private String businessPrivacySetting;
+
+    /**
+     * The global Click-To-WhatsApp data-sharing setting; {@code null} until fetched, which callers
+     * treat as {@link CtwaDataSharingSetting#NOT_SET}.
+     */
+    private CtwaDataSharingSetting ctwaDataSharingSetting;
 
     /**
      * The hash of the marketing-message opt-out list.
@@ -392,6 +399,17 @@ final class ProtobufLinkedWhatsAppBusinessStore implements LinkedWhatsAppBusines
     @Override
     public LinkedWhatsAppBusinessStore setBusinessPrivacySetting(String consent) {
         this.businessPrivacySetting = consent;
+        return this;
+    }
+
+    @Override
+    public Optional<CtwaDataSharingSetting> ctwaDataSharingSetting() {
+        return Optional.ofNullable(ctwaDataSharingSetting);
+    }
+
+    @Override
+    public LinkedWhatsAppBusinessStore setCtwaDataSharingSetting(CtwaDataSharingSetting setting) {
+        this.ctwaDataSharingSetting = setting;
         return this;
     }
 

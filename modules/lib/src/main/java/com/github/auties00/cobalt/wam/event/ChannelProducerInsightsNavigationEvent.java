@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.ChannelProducerInsightsEntryPoint;
 import com.github.auties00.cobalt.wam.type.ChannelProducerInsightsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelProducerInsightsNavigationWamEvent")
 @WamEvent(id = 5626)
@@ -27,7 +27,7 @@ public interface ChannelProducerInsightsNavigationEvent extends WamEventSpec {
     Optional<ChannelProducerInsightsEntryPoint> channelProducerInsightsEntryPoint();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt channelProducerInsightsSequenceNumber();
+    OptionalLong channelProducerInsightsSequenceNumber();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<ChannelProducerInsightsSurface> channelProducerInsightsSurface();
@@ -36,11 +36,11 @@ public interface ChannelProducerInsightsNavigationEvent extends WamEventSpec {
     Optional<String> cid();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt producerInsightsSessionId();
+    OptionalLong producerInsightsSessionId();
 
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

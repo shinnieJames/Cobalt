@@ -120,17 +120,16 @@ public record VideoCodecParams(
     /**
      * The default maximum seconds between forced key frames.
      *
-     * <p>The recovered base {@code vid_rc.key_frame_interval} is {@code 60}
-     * (re/calls2-spec/captures/voip-settings-merged.json), but that field's unit on the wire is not
-     * confirmed (the codec-side {@code uiIntraPeriod}/{@code kf_max_dist} this maps to is in frames, and
-     * the per-condition {@code vid_rc_dyn} overrides carry both small positive values like {@code 4} and
-     * a negative {@code -6} sentinel that does not parse as a plain second count), so this constant keeps
-     * the {@code 10}-second SPEC default rather than adopting {@code 60} under an unconfirmed unit.
+     * <p>The recovered base {@code vid_rc.key_frame_interval} is {@code 60}, mapping to the codec-side
+     * {@code uiIntraPeriod}/{@code kf_max_dist} frame count (re/calls2-spec/captures/voip-settings-merged.json);
+     * sixty frames at the thirty-frame-per-second capture rate is two seconds. A live relay video call
+     * confirmed both the unit and the cost of the prior ten-second value: a mid-call-joining peer always
+     * misses the stream's first key frame, and with a ten-second interval it went without parameter sets long
+     * enough that its decoder never configured (it sat on a placeholder geometry at zero decoded frames) and
+     * the call fell back to audio. Two seconds reproduces the sixty-frame WhatsApp cadence so a joining peer
+     * recovers a decodable key frame within one interval.
      */
-    // TODO: confirm the wire unit and sentinel semantics of vid_rc.key_frame_interval (recovered base
-    //  value 60, with vid_rc_dyn overrides of 4 and -6) before seeding it as the keyFrameIntervalSeconds
-    //  default; the field maps to the frame-count uiIntraPeriod/kf_max_dist, so the unit is load-bearing
-    public static final int DEFAULT_KEY_FRAME_INTERVAL_SECONDS = 10;
+    public static final int DEFAULT_KEY_FRAME_INTERVAL_SECONDS = 2;
 
     /**
      * The default percentage by which a key frame's byte budget exceeds an inter frame's.

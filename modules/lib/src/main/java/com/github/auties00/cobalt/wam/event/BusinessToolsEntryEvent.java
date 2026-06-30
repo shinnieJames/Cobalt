@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BusinessToolsEntryPointType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebBusinessToolsEntryWamEvent")
 @WamEvent(id = 2216)
@@ -18,7 +18,7 @@ public interface BusinessToolsEntryEvent extends WamEventSpec {
     Optional<BusinessToolsEntryPointType> businessToolsEntryPoint();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt businessToolsSequenceNumber();
+    OptionalLong businessToolsSequenceNumber();
 
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> businessToolsSessionId();

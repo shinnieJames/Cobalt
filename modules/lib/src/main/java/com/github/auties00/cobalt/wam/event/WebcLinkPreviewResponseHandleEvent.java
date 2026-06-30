@@ -8,7 +8,7 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcLinkPreviewResponseHandleWamEvent")
 @WamEvent(id = 3860)
@@ -20,7 +20,7 @@ public interface WebcLinkPreviewResponseHandleEvent extends WamEventSpec {
     Optional<Boolean> isPreviewSuccess();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt previewDurationMs();
+    OptionalLong previewDurationMs();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> previewSessionId();

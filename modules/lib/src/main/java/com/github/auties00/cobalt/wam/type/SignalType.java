@@ -36,5 +36,6 @@ public enum SignalType {
     @WamEnumConstant(25) MESSAGE,
     @WamEnumConstant(26) USER_ARCHIVE,
     @WamEnumConstant(27) USER_BLOCK_REASON_DONT_RECOGNIZE,
-    @WamEnumConstant(28) IAB_LPV
+    @WamEnumConstant(28) IAB_LPV,
+    @WamEnumConstant(29) IAB_LPV_BODY
 }

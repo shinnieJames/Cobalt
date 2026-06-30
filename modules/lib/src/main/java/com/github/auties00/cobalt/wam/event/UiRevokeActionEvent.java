@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.UiRevokeActionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebUiRevokeActionWamEvent")
 @WamEvent(id = 3298)
@@ -18,7 +18,7 @@ public interface UiRevokeActionEvent extends WamEventSpec {
     Optional<UiRevokeActionType> messageAction();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt uiRevokeActionDuration();
+    OptionalLong uiRevokeActionDuration();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> uiRevokeActionSessionId();

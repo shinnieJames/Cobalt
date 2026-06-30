@@ -13,28 +13,28 @@ import com.github.auties00.cobalt.wam.type.VideoPlayType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelsVideoPlayWamEvent")
 @WamEvent(id = 6556)
 public interface ChannelsVideoPlayEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt autoPlayT();
+    OptionalLong autoPlayT();
 
     @WamProperty(index = 2, type = WamType.STRING)
     Optional<String> cid();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt finishCount();
+    OptionalLong finishCount();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt height();
+    OptionalLong height();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> postId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt videoDuration();
+    OptionalLong videoDuration();
 
     @WamProperty(index = 6, type = WamType.TIMER)
     Optional<Instant> videoInitialBufferingT();
@@ -46,7 +46,7 @@ public interface ChannelsVideoPlayEvent extends WamEventSpec {
     Optional<VideoPlayResult> videoPlayResult();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt videoPlayT();
+    OptionalLong videoPlayT();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<VideoPlayType> videoPlayType();
@@ -58,5 +58,5 @@ public interface ChannelsVideoPlayEvent extends WamEventSpec {
     Optional<String> watchingModule();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt width();
+    OptionalLong width();
 }

@@ -12,16 +12,16 @@ import com.github.auties00.cobalt.wam.type.MessageBodyTypeEnum;
 import com.github.auties00.cobalt.wam.type.QbmFlag;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPaidMessageVpvImpressionWamEvent")
 @WamEvent(id = 7652)
 public interface PaidMessageVpvImpressionEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt bodyUrlCountInt();
+    OptionalLong bodyUrlCountInt();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt bodyUrlUniqueCountInt();
+    OptionalLong bodyUrlUniqueCountInt();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> buttonValueJsonArray();
@@ -33,16 +33,16 @@ public interface PaidMessageVpvImpressionEvent extends WamEventSpec {
     Optional<ContactType> contactType();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt ctaUrlUniqueCountInt();
+    OptionalLong ctaUrlUniqueCountInt();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> decisionId();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt deltaTime();
+    OptionalLong deltaTime();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt deltaTimeReceived();
+    OptionalLong deltaTimeReceived();
 
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> hsmTagStr();
@@ -63,10 +63,10 @@ public interface PaidMessageVpvImpressionEvent extends WamEventSpec {
     Optional<MessageBodyTypeEnum> messageBodyType();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt messageBubbleHeightPx();
+    OptionalLong messageBubbleHeightPx();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt messageBubbleWidthPx();
+    OptionalLong messageBubbleWidthPx();
 
     @WamProperty(index = 15, type = WamType.STRING)
     Optional<String> messageFieldJsonArray();
@@ -75,7 +75,7 @@ public interface PaidMessageVpvImpressionEvent extends WamEventSpec {
     Optional<String> messageIdHmac();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt mmCarouselCardIndex();
+    OptionalLong mmCarouselCardIndex();
 
     @WamProperty(index = 17, type = WamType.ENUM)
     Optional<QbmFlag> qbmFlag();
@@ -93,10 +93,10 @@ public interface PaidMessageVpvImpressionEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt urlUniqueCountInt();
+    OptionalLong urlUniqueCountInt();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt vpvDwellTimeMs();
+    OptionalLong vpvDwellTimeMs();
 
     @WamProperty(index = 24, type = WamType.STRING)
     Optional<String> vpvJsonObject();

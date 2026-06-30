@@ -8,34 +8,34 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebTsBitArrayWamEvent")
 @WamEvent(id = 4332)
 public interface TsBitArrayEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt bitarrayHigh();
+    OptionalLong bitarrayHigh();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt bitarrayLength();
+    OptionalLong bitarrayLength();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt bitarrayLow();
+    OptionalLong bitarrayLow();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt cumulativeBits();
+    OptionalLong cumulativeBits();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt relativeTimestampMs();
+    OptionalLong relativeTimestampMs();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt sessionSeq();
+    OptionalLong sessionSeq();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt tsSessionId();
+    OptionalLong tsSessionId();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt tsTimestampMs();
+    OptionalLong tsTimestampMs();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> unifiedSessionId();

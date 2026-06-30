@@ -11,16 +11,16 @@ import com.github.auties00.cobalt.wam.type.OfflineResumeStages;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebOfflineResumeStageWamEvent")
 @WamEvent(id = 3536)
 public interface OfflineResumeStageEvent extends WamEventSpec {
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt attemptId();
+    OptionalLong attemptId();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt chatThreadCount();
+    OptionalLong chatThreadCount();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<OfflineResumeStages> currentOfflineStage();
@@ -32,25 +32,25 @@ public interface OfflineResumeStageEvent extends WamEventSpec {
     Optional<Boolean> isResumeStartedInForeground();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt lastPushTimestampMs();
+    OptionalLong lastPushTimestampMs();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt mailboxAge();
+    OptionalLong mailboxAge();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt offlineCallCount();
+    OptionalLong offlineCallCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt offlineDecryptErrorCount();
+    OptionalLong offlineDecryptErrorCount();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt offlineMessageCount();
+    OptionalLong offlineMessageCount();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt offlineNotificationCount();
+    OptionalLong offlineNotificationCount();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt offlineReceiptCount();
+    OptionalLong offlineReceiptCount();
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<OfflineResumeModes> offlineResumeMode();
@@ -59,10 +59,10 @@ public interface OfflineResumeStageEvent extends WamEventSpec {
     Optional<String> offlineSessionId();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt offlineSizeBytes();
+    OptionalLong offlineSizeBytes();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt offlineStageTimestampMs();
+    OptionalLong offlineStageTimestampMs();
 
     @WamProperty(index = 17, type = WamType.TIMER)
     Optional<Instant> passiveModeT();

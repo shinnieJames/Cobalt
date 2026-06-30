@@ -11,16 +11,16 @@ import com.github.auties00.cobalt.wam.type.LwiEntryPointImpressionAction;
 import com.github.auties00.cobalt.wam.type.LwiSubEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLwiEntryPointImpressionWamEvent")
 @WamEvent(id = 2906)
 public interface LwiEntryPointImpressionEvent extends WamEventSpec {
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt activeItemsCount();
+    OptionalLong activeItemsCount();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt archivedItemsCount();
+    OptionalLong archivedItemsCount();
 
     @WamProperty(index = 2, type = WamType.STRING)
     Optional<String> businessToolsSessionId();
@@ -29,7 +29,7 @@ public interface LwiEntryPointImpressionEvent extends WamEventSpec {
     Optional<String> catalogSessionId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt itemsCount();
+    OptionalLong itemsCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<LwiEntryPoint> lwiEntryPoint();
@@ -47,7 +47,7 @@ public interface LwiEntryPointImpressionEvent extends WamEventSpec {
     Optional<String> statusId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> userHasLinkedFbPage();

@@ -11,13 +11,13 @@ import com.github.auties00.cobalt.wam.type.OrderSignalType;
 import com.github.auties00.cobalt.wam.type.OrderStatus;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCtwaOrderSignalWamEvent")
 @WamEvent(id = 4264)
 public interface CtwaOrderSignalEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt ctwaOrderSignalVersion();
+    OptionalLong ctwaOrderSignalVersion();
 
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> ctwaSignalMetadata();

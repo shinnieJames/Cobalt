@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusRevokeWamEvent")
 @WamEvent(id = 1250)
@@ -21,14 +21,14 @@ public interface StatusRevokeEvent extends WamEventSpec {
     Optional<String> statusId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt statusLifeT();
+    OptionalLong statusLifeT();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

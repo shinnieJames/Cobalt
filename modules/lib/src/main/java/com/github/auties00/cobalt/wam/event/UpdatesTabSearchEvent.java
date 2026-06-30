@@ -11,25 +11,25 @@ import com.github.auties00.cobalt.wam.type.UpdatesTabSearchModeType;
 import com.github.auties00.cobalt.wam.type.UpdatesTabSearchResultType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebUpdatesTabSearchWamEvent")
 @WamEvent(id = 4838)
 public interface UpdatesTabSearchEvent extends WamEventSpec {
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt channelsAdminCount();
+    OptionalLong channelsAdminCount();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt channelsFollowedCount();
+    OptionalLong channelsFollowedCount();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt premiumChannelsFollowedCount();
+    OptionalLong premiumChannelsFollowedCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt recentStatusItemCount();
+    OptionalLong recentStatusItemCount();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt recentStatusRowCount();
+    OptionalLong recentStatusRowCount();
 
     @WamProperty(index = 12, type = WamType.STRING)
     Optional<String> unifiedSessionId();
@@ -47,11 +47,11 @@ public interface UpdatesTabSearchEvent extends WamEventSpec {
     Optional<String> updatesTabSearchSessionId();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt viewedStatusItemCount();
+    OptionalLong viewedStatusItemCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt viewedStatusRowCount();
+    OptionalLong viewedStatusRowCount();
 }

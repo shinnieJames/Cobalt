@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChannelDyiEventType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelDyiWamEvent")
 @WamEvent(id = 4726)
@@ -21,5 +21,5 @@ public interface ChannelDyiEvent extends WamEventSpec {
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

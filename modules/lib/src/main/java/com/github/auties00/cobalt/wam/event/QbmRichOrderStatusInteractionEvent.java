@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.EntryPoint;
 import com.github.auties00.cobalt.wam.type.QbmFlag;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebQbmRichOrderStatusInteractionWamEvent")
 @WamEvent(id = 6940)
@@ -30,10 +30,10 @@ public interface QbmRichOrderStatusInteractionEvent extends WamEventSpec {
     Optional<String> decisionId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt deltaTime();
+    OptionalLong deltaTime();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt deltaTimeReceived();
+    OptionalLong deltaTimeReceived();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<EntryPoint> entryPoint();

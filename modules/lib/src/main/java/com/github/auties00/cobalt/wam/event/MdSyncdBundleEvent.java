@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MutationDirectionType;
 import com.github.auties00.cobalt.wam.type.SyncdCollectionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdSyncdBundleWamEvent")
 @WamEvent(id = 5966)
@@ -21,7 +21,7 @@ public interface MdSyncdBundleEvent extends WamEventSpec {
     Optional<String> appSessionId();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt bundleVersion();
+    OptionalLong bundleVersion();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> companionSessionIds();
@@ -45,19 +45,19 @@ public interface MdSyncdBundleEvent extends WamEventSpec {
     Optional<String> patchMac();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt patchSize();
+    OptionalLong patchSize();
 
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> processingErrorMessage();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt seqNumber();
+    OptionalLong seqNumber();
 
     @WamProperty(index = 12, type = WamType.STRING)
     Optional<String> snapshotMac();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt snapshotSize();
+    OptionalLong snapshotSize();
 
     @WamProperty(index = 14, type = WamType.ENUM)
     Optional<SyncdCollectionType> syncdCollection();

@@ -19,7 +19,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.SyncdCoordinator;
 import com.github.auties00.cobalt.sync.WebAppStateService;
-import com.github.auties00.cobalt.util.SchedulerUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.MdAppStateKeyRotationEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateCriticalDataProcessingEventBuilder;
@@ -35,7 +35,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
 /**
@@ -126,7 +125,7 @@ public final class LiveSyncKeyRotationService implements SyncKeyRotationService 
      * Holds the handle of the periodic 27-day rotation check, or {@code null} until
      * {@link #startPeriodicRotationJob()} is called.
      */
-    private volatile CompletableFuture<?> periodicRotationJob;
+    private volatile ScheduledTask periodicRotationJob;
 
     /**
      * Constructs a new rotation service bound to the supplied dependencies.
@@ -745,33 +744,23 @@ public final class LiveSyncKeyRotationService implements SyncKeyRotationService 
     @Override
     public void startPeriodicRotationJob() {
         stopPeriodicRotationJob();
-        scheduleNextPeriodicRotation();
+        periodicRotationJob = ScheduledTask.schedule(PERIODIC_ROTATION_INTERVAL, this::runPeriodicRotation);
     }
 
     /**
-     * Re-arms the periodic rotation check after each tick, regardless of whether the rotation
-     * itself succeeded.
+     * Runs one periodic rotation check, swallowing any failure so the recurrence survives it.
      *
-     * <p>Schedules one rotation tick after {@link #PERIODIC_ROTATION_INTERVAL}, runs the
-     * rotation, and re-arms the next tick unconditionally.
-     *
-     * @implNote This implementation reuses the shared Cobalt scheduler executor via
-     * {@link SchedulerUtils#scheduleDelayed(Duration, Runnable)} and re-arms the next tick in a
-     * {@code finally} block so a single rotation failure does not halt the periodic loop.
+     * <p>The body of the recurring rotation tick: re-derives the active key, forcing a rotation when
+     * the device fingerprint demands one. A failure is logged and dropped so a single bad tick does
+     * not halt the {@link #PERIODIC_ROTATION_INTERVAL} loop, which the scheduler keeps running until
+     * {@link #stopPeriodicRotationJob()} cancels it.
      */
-    private void scheduleNextPeriodicRotation() {
-        periodicRotationJob = SchedulerUtils.scheduleDelayed(
-                PERIODIC_ROTATION_INTERVAL,
-                () -> {
-                    try {
-                        getActiveKey(true);
-                    } catch (Exception e) {
-                        LOGGER.warning("Periodic key rotation check failed: " + e.getMessage());
-                    } finally {
-                        scheduleNextPeriodicRotation();
-                    }
-                }
-        );
+    private void runPeriodicRotation() {
+        try {
+            getActiveKey(true);
+        } catch (Exception e) {
+            LOGGER.warning("Periodic key rotation check failed: " + e.getMessage());
+        }
     }
 
     /**
@@ -781,7 +770,7 @@ public final class LiveSyncKeyRotationService implements SyncKeyRotationService 
     public void stopPeriodicRotationJob() {
         var job = periodicRotationJob;
         if (job != null) {
-            job.cancel(false);
+            job.cancel();
             periodicRotationJob = null;
         }
     }

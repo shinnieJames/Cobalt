@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.InteractionEntryPoint;
 import com.github.auties00.cobalt.wam.type.InteractionSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebNewsletterEnforcementEventsWamEvent")
 @WamEvent(id = 7112)
@@ -33,7 +33,7 @@ public interface NewsletterEnforcementEventsEvent extends WamEventSpec {
     Optional<InteractionSurface> interactionSurface();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt newsletterEnforcementSessionId();
+    OptionalLong newsletterEnforcementSessionId();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> violationCategory();

@@ -26,7 +26,7 @@ import com.github.auties00.cobalt.wam.type.StanzaType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebE2eMessageRecvWamEvent")
 @WamEvent(id = 478, releaseWeight = 20)
@@ -41,7 +41,7 @@ public interface E2eMessageRecvEvent extends WamEventSpec {
     Optional<E2eCiphertextType> e2eCiphertextType();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt e2eCiphertextVersion();
+    OptionalLong e2eCiphertextVersion();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<E2eDestination> e2eDestination();
@@ -98,7 +98,7 @@ public interface E2eMessageRecvEvent extends WamEventSpec {
     Optional<Boolean> processingDeferred();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<RevokeType> revokeType();

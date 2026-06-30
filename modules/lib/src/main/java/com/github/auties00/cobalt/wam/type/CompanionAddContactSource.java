@@ -16,5 +16,6 @@ public enum CompanionAddContactSource {
     @WamEnumConstant(5) FMX_CARD,
     @WamEnumConstant(6) NEW_CHAT_DRAWER,
     @WamEnumConstant(7) CHAT_HEADER,
-    @WamEnumConstant(8) GROUP_MEMBER
+    @WamEnumConstant(8) GROUP_MEMBER,
+    @WamEnumConstant(9) CHAT_LIST_GLOBAL_SEARCH
 }

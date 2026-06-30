@@ -12,13 +12,13 @@ import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebEditMessageSendWamEvent")
 @WamEvent(id = 3990)
 public interface EditMessageSendEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt editDuration();
+    OptionalLong editDuration();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<EditType> editType();
@@ -36,10 +36,10 @@ public interface EditMessageSendEvent extends WamEventSpec {
     Optional<MessageType> messageType();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt resendCount();
+    OptionalLong resendCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

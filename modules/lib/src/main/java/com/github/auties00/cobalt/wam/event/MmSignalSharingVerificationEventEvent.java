@@ -20,7 +20,7 @@ import com.github.auties00.cobalt.wam.type.SignalType;
 import com.github.auties00.cobalt.wam.type.SpSignalNotSharedReason;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMmSignalSharingVerificationEventWamEvent")
 @WamEvent(id = 6554, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -38,7 +38,7 @@ public interface MmSignalSharingVerificationEventEvent extends WamEventSpec {
     Optional<ConsentSource> consentSource();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt deltaTimeReceived();
+    OptionalLong deltaTimeReceived();
 
     @WamProperty(index = 17, type = WamType.STRING)
     Optional<String> entSourceSubplatform();
@@ -62,10 +62,10 @@ public interface MmSignalSharingVerificationEventEvent extends WamEventSpec {
     Optional<Boolean> isUserDisclosed();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt mmConversationDepth();
+    OptionalLong mmConversationDepth();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt mmConversationRepeat();
+    OptionalLong mmConversationRepeat();
 
     @WamProperty(index = 27, type = WamType.ENUM)
     Optional<MmDirectionFrom> mmDirectionFrom();

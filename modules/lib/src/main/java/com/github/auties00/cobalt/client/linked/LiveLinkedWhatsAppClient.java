@@ -17,6 +17,8 @@ import com.github.auties00.cobalt.calls2.sync.Calls2CallLogSync;
 import com.github.auties00.cobalt.client.WhatsAppClientDisconnectReason;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.device.LiveDeviceService;
+import com.github.auties00.cobalt.ctwa.CtwaConversionSignalService;
+import com.github.auties00.cobalt.ctwa.LiveCtwaConversionSignalService;
 import com.github.auties00.cobalt.exception.*;
 import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.WhatsAppGraphQlClient;
@@ -88,6 +90,9 @@ import com.github.auties00.cobalt.model.business.linking.*;
 import com.github.auties00.cobalt.model.business.marketing.*;
 import com.github.auties00.cobalt.model.business.order.BusinessOrder;
 import com.github.auties00.cobalt.model.business.order.BusinessOrderItem;
+import com.github.auties00.cobalt.model.business.order.OrderLifecycleStatus;
+import com.github.auties00.cobalt.model.business.order.OrderPaymentStatus;
+import com.github.auties00.cobalt.model.message.interactive.*;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerification;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerificationBuilder;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerificationResult;
@@ -104,6 +109,8 @@ import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSe
 import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSessionBuilder;
 import com.github.auties00.cobalt.model.call.*;
 import com.github.auties00.cobalt.model.chat.*;
+import com.github.auties00.cobalt.export.ChatExporterService;
+import com.github.auties00.cobalt.export.LiveChatExporterService;
 import com.github.auties00.cobalt.model.chat.community.*;
 import com.github.auties00.cobalt.model.chat.group.*;
 import com.github.auties00.cobalt.model.contact.*;
@@ -125,11 +132,29 @@ import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.poll.PollEncValueBuilder;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessageBuilder;
 import com.github.auties00.cobalt.model.message.status.StatusPSA;
+import com.github.auties00.cobalt.model.message.status.StatusAttribution;
+import com.github.auties00.cobalt.model.message.status.StatusAttributionBuilder;
+import com.github.auties00.cobalt.model.message.status.StatusAttributionStatusReshareBuilder;
+import com.github.auties00.cobalt.model.message.status.StatusReshareStatusAttributionMetadataBuilder;
+import com.github.auties00.cobalt.model.message.context.ContextInfoBuilder;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessageBuilder;
 import com.github.auties00.cobalt.model.message.system.PinInChatMessage;
 import com.github.auties00.cobalt.model.message.system.PinInChatMessageBuilder;
+import com.github.auties00.cobalt.model.device.DeviceProps;
+import com.github.auties00.cobalt.model.device.DevicePropsHistorySyncConfigBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
+import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandConfigBuilder;
+import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandRequestMetadataBuilder;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessage;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageBuilder;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageFullHistorySyncOnDemandRequestBuilder;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageHistorySyncOnDemandRequestBuilder;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessagePlaceholderMessageResendRequestBuilder;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestType;
+import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
+import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessageBuilder;
 import com.github.auties00.cobalt.model.newsletter.*;
 import com.github.auties00.cobalt.model.payment.*;
@@ -272,6 +297,17 @@ import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
 import com.github.auties00.cobalt.privacy.TrustedContactTokenService;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.LiveABPropsService;
+import com.github.auties00.cobalt.tos.LiveTosService;
+import com.github.auties00.cobalt.quarantine.LiveQuarantineService;
+import com.github.auties00.cobalt.quarantine.QuarantineService;
+import com.github.auties00.cobalt.bot.BotCertificateRevocationService;
+import com.github.auties00.cobalt.bot.BotSignatureVerificationService;
+import com.github.auties00.cobalt.bot.LiveBotCertificateRevocationService;
+import com.github.auties00.cobalt.bot.LiveBotSignatureVerificationService;
+import com.github.auties00.cobalt.model.bot.BotMetadata;
+import com.github.auties00.cobalt.model.bot.response.AIRichResponseUnifiedResponse;
+import com.github.auties00.cobalt.model.message.bot.AIRichResponseMessage;
+import com.github.auties00.cobalt.tos.TosService;
 import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
 import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
 import com.github.auties00.cobalt.socket.WhatsAppSocketStanza;
@@ -295,6 +331,10 @@ import com.github.auties00.cobalt.wam.LiveWamService;
 import com.github.auties00.cobalt.wam.WamMsgUtils;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.*;
+import com.github.auties00.cobalt.wam.threadlogging.LiveThreadLoggingService;
+import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingActivity;
+import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingMessages;
+import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingService;
 import com.github.auties00.cobalt.wam.type.*;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -468,6 +508,27 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * feature-gating decisions.
      */
     private final ABPropsService abPropsService;
+
+    /**
+     * The Terms-of-Service acceptance-state service ({@link LiveTosService}) consulted by the
+     * inbound-message country and Terms-of-Service gating and refreshed at success bootstrap.
+     */
+    private final TosService tosService;
+
+    /**
+     * Classifies inbound messages against the Defense Mode quarantine policy.
+     */
+    private final QuarantineService quarantineService;
+
+    /**
+     * Verifies the cryptographic signature of forwarded AI bot messages.
+     */
+    private final BotSignatureVerificationService botSignatureVerificationService;
+
+    /**
+     * Maintains the bot-feature certificate revocation list consulted during verification.
+     */
+    private final BotCertificateRevocationService botCertificateRevocationService;
     /**
      * The service supplying the trusted-contact token sender-rotation and validity-window gates
      * that {@link #issueTrustedContactToken(JidProvider)} consults.
@@ -486,6 +547,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * events.
      */
     private final WamService wamService;
+    /**
+     * The service that writes chat export ZIP archives.
+     */
+    private final ChatExporterService chatExporterService;
+    /**
+     * The recurring task that emits the daily aggregate-stats telemetry heartbeat.
+     */
+    private final DailyStatsService dailyStatsService;
+    /**
+     * The per-thread interaction-stats aggregator and ctlv2 thread-logging uploader.
+     */
+    private final ThreadLoggingService threadLoggingService;
+    /**
+     * The Click-To-WhatsApp conversion-signal emitter for label and order changes.
+     */
+    private final CtwaConversionSignalService ctwaConversionSignalService;
     /**
      * The per-protocol backoff registry consulted before every USync
      * dispatch and updated when the relay returns an
@@ -840,10 +917,18 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var messageDecryption = new com.github.auties00.cobalt.message.receive.crypto.MessageDecryption(
                 store, sessionCipher, groupCipher, cryptoLocks);
         this.abPropsService = new LiveABPropsService(this);
+        this.tosService = new LiveTosService(this, abPropsService);
+        this.botCertificateRevocationService = new LiveBotCertificateRevocationService(this);
         this.trustedContactTokenService = new LiveTrustedContactTokenService(abPropsService);
         this.mediaConnectionService = new LiveMediaConnectionService(abPropsService);
         this.mediaTranscoderService = new LiveMediaTranscoderService(this, abPropsService, mediaConnectionService);
         this.wamService = new LiveWamService(this, abPropsService);
+        this.chatExporterService = new LiveChatExporterService(this, wamService);
+        this.dailyStatsService = new LiveDailyStatsService(this, wamService);
+        this.threadLoggingService = new LiveThreadLoggingService(this, wamService);
+        this.ctwaConversionSignalService = new LiveCtwaConversionSignalService(this, wamService, abPropsService);
+        this.botSignatureVerificationService = new LiveBotSignatureVerificationService(abPropsService, wamService, botCertificateRevocationService);
+        this.quarantineService = new LiveQuarantineService(this, abPropsService, wamService);
         this.snapshotRecoveryService = new LiveSnapshotRecoveryService(this, abPropsService, wamService);
         this.lidMigrationService = new LiveLidMigrationService(this, abPropsService, wamService);
         this.webAppStateService = new LiveWebAppStateService(this, abPropsService, lidMigrationService, snapshotRecoveryService, wamService, mediaConnectionService);
@@ -903,7 +988,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         this.calls2Service = liveCalls2Service;
         calls2Engine.bindResultSink(liveCalls2Service::recordCallResult);
         var ackSender = new AckSender(this);
-        this.nodeStreamService = new LiveNodeStreamService(this, calls2Service, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService, webAppStateService, companionPairingService, ackSender, mediaConnectionService);
+        this.nodeStreamService = new LiveNodeStreamService(this, calls2Service, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService, webAppStateService, companionPairingService, ackSender, mediaConnectionService, tosService, quarantineService);
         this.disconnecting = new AtomicBoolean();
         this.state = new AtomicReference<>(ConnectionState.ACTIVE);
         this.connectivityMonitor = NetworkConnectivityMonitors.systemDefault();
@@ -1049,6 +1134,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             return;
         }
         keepAliveService.start();
+        dailyStatsService.start();
+        threadLoggingService.start();
     }
 
     /**
@@ -1245,11 +1332,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         // Stop ADV check scheduler (will be restarted on successful reconnection)
         deviceService.stopAdvCheckScheduler();
 
+        // Stop the bot CRL refresh loop (re-armed lazily on the next forwarded-bot-message verification)
+        botCertificateRevocationService.stopPeriodicRefresh();
+
         // Stop the per-connection keepalive; a successful (re)connect starts a fresh one. The
         // connectivity monitor and reconnect supervisor are shared for the client's lifetime: a
         // terminal disconnect leaves them idle (the supervisor is gated by the TERMINATED state)
         // rather than tearing them down, so a later connect can resume reconnection.
         keepAliveService.stop();
+        dailyStatsService.stop();
+        threadLoggingService.stop();
 
         if (reason != WhatsAppClientDisconnectReason.RECONNECTING && shutdownHook != null && canRemoveShutdownHook) {
             Runtime.getRuntime().removeShutdownHook(shutdownHook);
@@ -4389,6 +4481,185 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
+    public void queryChatMessage(MessageKey key) {
+        Objects.requireNonNull(key, "key cannot be null");
+        var resend = new PeerDataOperationRequestMessagePlaceholderMessageResendRequestBuilder()
+                .messageKey(key)
+                .build();
+        var request = new PeerDataOperationRequestMessageBuilder()
+                .peerDataOperationRequestType(PeerDataOperationRequestType.PLACEHOLDER_MESSAGE_RESEND)
+                .placeholderMessageResendRequest(List.of(resend))
+                .build();
+        sendPeerDataOperationRequest(request);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void queryChatMessages(JidProvider chatProvider, int count) {
+        var chat = requireRegularChat(chatProvider);
+        if (count <= 0) {
+            throw new IllegalArgumentException("count must be positive: " + count);
+        }
+        var oldest = store.chatStore()
+                .findChatByJid(chat)
+                .flatMap(Chat::oldestMessage)
+                .orElse(null);
+        var boundary = oldest == null ? null : oldest.key();
+        var boundaryTimestamp = oldest == null ? null : oldest.timestamp().orElse(null);
+        sendPeerDataOperationRequest(buildOlderMessagesRequest(chat, boundary, boundaryTimestamp, count));
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void queryChatMessages(JidProvider chatProvider, MessageKey before, int count) {
+        var chat = requireRegularChat(chatProvider);
+        Objects.requireNonNull(before, "before cannot be null");
+        if (count <= 0) {
+            throw new IllegalArgumentException("count must be positive: " + count);
+        }
+        var boundaryTimestamp = store.chatStore()
+                .findChatByJid(chat)
+                .flatMap(localChat -> before.id().flatMap(localChat::getMessageById))
+                .flatMap(ChatMessageInfo::timestamp)
+                .orElse(null);
+        sendPeerDataOperationRequest(buildOlderMessagesRequest(chat, before, boundaryTimestamp, count));
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void queryFullChatsHistory(int days) {
+        if (days <= 0) {
+            throw new IllegalArgumentException("days must be positive: " + days);
+        }
+        if (!store.syncStore().isCompleteHistoryAccessGranted()) {
+            throw new IllegalStateException("The primary device has not granted complete history access for this device");
+        }
+        var self = store.accountStore().jid()
+                .orElseThrow(() -> new IllegalStateException("Cannot request full history before login"));
+        var metadata = new FullHistorySyncOnDemandRequestMetadataBuilder()
+                .requestId(MessageIdGenerator.generate(MessageIdVersion.V2, self))
+                .build();
+        var config = new FullHistorySyncOnDemandConfigBuilder()
+                .historyDurationDays(days)
+                .build();
+        var fullRequest = new PeerDataOperationRequestMessageFullHistorySyncOnDemandRequestBuilder()
+                .requestMetadata(metadata)
+                .historySyncConfig(onDemandHistorySyncConfig())
+                .fullHistorySyncOnDemandConfig(config)
+                .build();
+        var request = new PeerDataOperationRequestMessageBuilder()
+                .peerDataOperationRequestType(PeerDataOperationRequestType.FULL_HISTORY_SYNC_ON_DEMAND)
+                .fullHistorySyncOnDemandRequest(fullRequest)
+                .build();
+        sendPeerDataOperationRequest(request);
+    }
+
+    /**
+     * Resolves a chat provider to a regular-chat JID, rejecting newsletters.
+     *
+     * <p>The on-demand history sync pulls messages from the primary device and applies only to
+     * one-to-one and group chats; newsletter messages live on the channel server and are queried
+     * through {@link #queryNewsletterMessages(JidProvider, int)} instead.
+     *
+     * @param chatProvider the chat provider to resolve
+     * @return the resolved regular-chat JID
+     * @throws NullPointerException     if {@code chatProvider} is {@code null}
+     * @throws IllegalArgumentException if the resolved JID is a newsletter
+     */
+    private Jid requireRegularChat(JidProvider chatProvider) {
+        var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
+        if (chat.hasNewsletterServer()) {
+            throw new IllegalArgumentException("Newsletter messages must be queried with queryNewsletterMessages, not the on-demand history sync");
+        }
+        return chat;
+    }
+
+    /**
+     * Builds an on-demand history sync peer request for older messages of a chat.
+     *
+     * @param chat             the chat to page
+     * @param boundary         the boundary message key, or {@code null} to leave the boundary unset
+     * @param boundaryTimestamp the boundary message timestamp, or {@code null} when unknown
+     * @param count            the maximum number of older messages to request
+     * @return the assembled peer data operation request
+     */
+    private PeerDataOperationRequestMessage buildOlderMessagesRequest(Jid chat, MessageKey boundary, Instant boundaryTimestamp, int count) {
+        var onDemand = new PeerDataOperationRequestMessageHistorySyncOnDemandRequestBuilder()
+                .chatJid(chat)
+                .oldestMsgId(boundary == null ? null : boundary.id().orElse(null))
+                .oldestMsgFromMe(boundary != null && boundary.fromMe())
+                .oldestMsgTimestampMs(boundaryTimestamp)
+                .onDemandMsgCount(count)
+                .accountLid(store.accountStore().lid().map(Jid::toString).orElse(null))
+                .build();
+        return new PeerDataOperationRequestMessageBuilder()
+                .peerDataOperationRequestType(PeerDataOperationRequestType.HISTORY_SYNC_ON_DEMAND)
+                .historySyncOnDemandRequest(onDemand)
+                .build();
+    }
+
+    /**
+     * Builds the history-sync capability descriptor advertised inside a full on-demand history sync
+     * request, declaring which history content this companion can consume in the response.
+     *
+     * @return the capability descriptor
+     */
+    private DeviceProps.HistorySyncConfig onDemandHistorySyncConfig() {
+        return new DevicePropsHistorySyncConfigBuilder()
+                .inlineInitialPayloadInE2EeMsg(true)
+                .supportBotUserAgentChatHistory(true)
+                .supportCagReactionsAndPolls(true)
+                .supportRecentSyncChunkMessageCountTuning(true)
+                .supportHostedGroupMsg(true)
+                .supportBizHostedMsg(true)
+                .supportFbidBotChatHistory(true)
+                .supportMessageAssociation(true)
+                .supportCallLogHistory(true)
+                .supportGroupHistory(true)
+                .onDemandReady(true)
+                .completeOnDemandReady(true)
+                .build();
+    }
+
+    /**
+     * Wraps a peer data operation request in a protocol message and dispatches it to the primary
+     * device.
+     *
+     * @implNote This implementation mirrors WhatsApp Web's {@code sendPeerDataOperationRequest}: the
+     * request is carried by a {@link ProtocolMessage.Type#PEER_DATA_OPERATION_REQUEST_MESSAGE} inside
+     * a peer {@code <message>} addressed to the account's device-zero (primary) JID.
+     *
+     * @param request the peer data operation request to send
+     * @throws IllegalStateException if the local user's JID has not been set yet
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSendNonMessageDataRequest", exports = "sendPeerDataOperationRequest",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void sendPeerDataOperationRequest(PeerDataOperationRequestMessage request) {
+        var self = store.accountStore().jid()
+                .orElseThrow(() -> new IllegalStateException("Cannot send a peer data operation request before login"));
+        var primaryDevice = Jid.of(self.user(), self.server(), 0, 0);
+        var protocolMessage = new ProtocolMessageBuilder()
+                .type(ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_MESSAGE)
+                .peerDataOperationRequestMessage(request)
+                .build();
+        var container = new MessageContainerBuilder()
+                .protocolMessage(protocolMessage)
+                .build();
+        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, self);
+        var key = new MessageKeyBuilder()
+                .id(messageId)
+                .parentJid(self)
+                .senderJid(self)
+                .build();
+        var info = new ChatMessageInfoBuilder()
+                .key(key)
+                .message(container)
+                .build();
+        sendPeerMessage(primaryDevice, info);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncContact", exports = "USyncContactProtocol",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebUsync", exports = "USyncQuery",
@@ -5991,10 +6262,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<String> queryUsername() {
         var request = new GetUsernameMexRequest();
         var response = sendNode(request);
-        return GetUsernameMexResponse.of(response)
-                .flatMap(GetUsernameMexResponse::usernameInfo)
+        var info = GetUsernameMexResponse.of(response)
+                .flatMap(GetUsernameMexResponse::usernameInfo);
+        var username = info
                 .flatMap(GetUsernameMexResponse.UsernameInfo::username)
                 .filter(s -> !s.isEmpty());
+        var account = store.accountStore();
+        account.setUsername(username.orElse(null));
+        account.setUsernameState(info.flatMap(GetUsernameMexResponse.UsernameInfo::state).flatMap(UsernameState::ofToken).orElse(null));
+        account.setUsernameHasRecoveryPin(info.map(value -> value.pin().isPresent()).orElse(null));
+        return username;
     }
 
     /** {@inheritDoc} */
@@ -6004,9 +6281,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public boolean editUsername(String username) {
         var request = new SetUsernameMexRequest(username, null, null, null);
         var response = sendNode(request);
-        return SetUsernameMexResponse.of(response)
+        var success = SetUsernameMexResponse.of(response)
                 .map(SetUsernameMexResponse::isSuccess)
                 .orElse(false);
+        if (success) {
+            store.accountStore()
+                    .setUsername(username)
+                    .setUsernameState(UsernameState.ACTIVE);
+        }
+        return success;
     }
 
     /** {@inheritDoc} */
@@ -6023,6 +6306,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new WhatsAppServerRuntimeException(
                     "Change username recovery key rejected: " + parsed.result().orElse("(no result)"));
         }
+        store.accountStore().setUsernameHasRecoveryPin(true);
     }
 
     /** {@inheritDoc} */
@@ -6035,6 +6319,25 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         return UsernameAvailabilityMexResponse.of(response)
                 .map(UsernameAvailabilityMexResponse::isUsernameAvailable)
                 .orElse(false);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public boolean removeUsername() {
+        var request = new SetUsernameMexRequest(null, null, null, null);
+        var response = sendNode(request);
+        var success = SetUsernameMexResponse.of(response)
+                .map(SetUsernameMexResponse::isSuccess)
+                .orElse(false);
+        if (success) {
+            store.accountStore()
+                    .setUsername(null)
+                    .setUsernameState(null)
+                    .setUsernameHasRecoveryPin(null);
+        }
+        return success;
     }
 
     /** {@inheritDoc} */
@@ -7319,11 +7622,63 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = Objects.requireNonNull(jidProvider, "jid cannot be null").toJid();
         Objects.requireNonNull(container, "container cannot be null");
         var ack = messageService.send(jid, container);
+        recordSentMessageActivity(jid, container);
         return new MessageKeyBuilder()
                 .parentJid(jid)
                 .fromMe(true)
                 .id(ack.id())
                 .build();
+    }
+
+    /**
+     * Records a {@link ThreadLoggingActivity.MessageSent} against the ctlv2 thread-logging aggregator
+     * for an outbound message dispatched through {@link #sendMessage(JidProvider, MessageContainer)}.
+     *
+     * <p>Classifies the container the way WhatsApp Web's send logger does: a reaction send bumps only
+     * the reactions-sent counter, while any other content message bumps the messages-sent counter plus
+     * whichever of the view-once, reply, and forwarded sub-counters apply. Protocol and system messages
+     * (edits, revokes, and peer operations) are skipped here because their dedicated send paths
+     * ({@link #editMessage(MessageKey, MessageContainer)}, {@link #deleteMessage(MessageKey, boolean)})
+     * record their own activity. The reply flag is set only for one-on-one threads, matching the scope
+     * of the replies-sent counter.
+     *
+     * @implNote This implementation never reports forwards or edits even when the container carries a
+     * forwarding score or originates from an edit ceremony: those flow through
+     * {@link #forwardMessages(Collection, Collection)} and {@link #editMessage(MessageKey, MessageContainer)},
+     * which call {@code messageService.send} directly and report their own activity, so reporting them
+     * here too would double count. The commerce flag is sourced from
+     * {@link ThreadLoggingMessages#isCommerceMessage(MessageContainer)}.
+     *
+     * @param jid       the destination thread
+     * @param container the sent message container
+     */
+    private void recordSentMessageActivity(Jid jid, MessageContainer container) {
+        var content = container.content();
+        if (content instanceof ProtocolMessage) {
+            return;
+        }
+        if (content instanceof ReactionMessage || content instanceof EncReactionMessage) {
+            threadLoggingService.recordActivity(jid, new ThreadLoggingActivity.MessageSent(false, false, false, false, true, false));
+            return;
+        }
+        var contextInfo = content instanceof ContextualMessage contextual
+                ? contextual.contextInfo().orElse(null)
+                : null;
+        var viewOnce = container.futureProofContentType() == FutureProofMessageType.VIEW_ONCE;
+        var reply = contextInfo != null
+                && contextInfo.quotedMessageId().isPresent()
+                && !jid.hasGroupOrCommunityServer();
+        var forwarded = contextInfo != null && contextInfo.forwardingScore().orElse(0) > 1;
+        var commerce = ThreadLoggingMessages.isCommerceMessage(container);
+        threadLoggingService.recordActivity(jid, new ThreadLoggingActivity.MessageSent(viewOnce, reply, forwarded, false, false, commerce));
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void recordThreadActivity(JidProvider chat, ThreadLoggingActivity activity) {
+        Objects.requireNonNull(chat, "chat cannot be null");
+        Objects.requireNonNull(activity, "activity cannot be null");
+        threadLoggingService.recordActivity(chat, activity);
     }
 
     /** {@inheritDoc} */
@@ -7356,6 +7711,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         .build();
         var wrapper = MessageContainer.of(protocol);
         messageService.send(parentJid, wrapper);
+        threadLoggingService.recordActivity(parentJid, new ThreadLoggingActivity.MessageSent(false, false, false, true, false, false));
     }
 
     /** {@inheritDoc} */
@@ -7561,6 +7917,19 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public ChatMessageInfo sendStatus(MessageContainer content) {
         Objects.requireNonNull(content, "content cannot be null");
+        return sendStatus(content, null, newStatusPostingSessionId());
+    }
+
+    /**
+     * Posts a status message under the given creation entry point and posting session, committing
+     * the {@code StatusPosterActions} request, success and failure metrics.
+     *
+     * @param content                the status content
+     * @param entryPoint             the creation entry point, or {@code null} for a direct post
+     * @param statusPostingSessionId the posting-session identifier grouping the emitted metrics
+     * @return the posted status message
+     */
+    private ChatMessageInfo sendStatus(MessageContainer content, StatusCreationEntryPoint entryPoint, int statusPostingSessionId) {
         var statusJid = Jid.statusBroadcastAccount();
         var selfJid = store.accountStore().jid()
                 .orElseThrow(() -> new IllegalStateException("Not logged in"));
@@ -7579,36 +7948,146 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .timestamp(Instant.now())
                 .broadcast(true)
                 .build();
-        var statusPostingSessionId = newStatusPostingSessionId();
         var statusContentType = resolveStatusContentType(content);
         wamService.commit(new StatusPosterActionsEventBuilder()
                 .statusEventType(StatusEventType.POST_STATUS_REQUEST)
                 .statusContentType(statusContentType)
+                .statusCreationEntryPoint(entryPoint)
                 .retryCount(0)
                 .statusPostingSessionId(statusPostingSessionId)
                 .build());
         try {
-            // Route through MessageService.send(MessageInfo) -> StatusMessageSender.send.
-            // Reuses the public StatusMessageSender.send path per the delegation rule.
             messageService.send(messageInfo);
         } catch (RuntimeException error) {
             wamService.commit(new StatusPosterActionsEventBuilder()
                     .statusEventType(StatusEventType.POST_STATUS_FAILURE)
                     .statusContentType(statusContentType)
+                    .statusCreationEntryPoint(entryPoint)
                     .statusPostFailureReason(error.getMessage())
                     .retryCount(0)
                     .statusPostingSessionId(statusPostingSessionId)
                     .build());
             throw error;
         }
-        // is configured; Cobalt does not maintain such a secret so we follow the same fallback.
         wamService.commit(new StatusPosterActionsEventBuilder()
                 .statusEventType(StatusEventType.POST_STATUS_SUCCESS)
                 .statusContentType(statusContentType)
+                .statusCreationEntryPoint(entryPoint)
                 .statusId(messageId)
                 .statusPostingSessionId(statusPostingSessionId)
                 .build());
         return messageInfo;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebStatusReshareAction", exports = "openStatusReshareComposer",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public ChatMessageInfo reshareStatus(MessageKey sourceKey) {
+        Objects.requireNonNull(sourceKey, "sourceKey cannot be null");
+        var source = sourceKey.parentJid()
+                .flatMap(parent -> sourceKey.id().flatMap(id -> store.chatStore().findMessageById(parent, id)))
+                .filter(ChatMessageInfo.class::isInstance)
+                .map(ChatMessageInfo.class::cast)
+                .orElseThrow(() -> new IllegalArgumentException("Source status message not found"));
+        var statusPostingSessionId = newStatusPostingSessionId();
+        wamService.commit(new StatusPosterActionsEventBuilder()
+                .statusEventType(StatusEventType.STATUS_ENTRYPOINT_TAP)
+                .statusCreationEntryPoint(StatusCreationEntryPoint.STATUS_RESHARE)
+                .statusPostingSessionId(statusPostingSessionId)
+                .build());
+        var contextInfo = new ContextInfoBuilder()
+                .statusAttributions(buildReshareAttributions(source))
+                .build();
+        var resharedContent = buildResharedStatusContent(source, contextInfo);
+        return sendStatus(resharedContent, StatusCreationEntryPoint.STATUS_RESHARE, statusPostingSessionId);
+    }
+
+    /**
+     * Builds the reshare attributions that credit the source of a reshared status.
+     *
+     * <p>Every reshare carries an {@link StatusAttribution.StatusReshare.Source#INTERNAL_RESHARE}
+     * attribution; resharing a newsletter (channel) status adds a
+     * {@link StatusAttribution.StatusReshare.Source#CHANNEL_RESHARE} attribution identifying the
+     * originating channel and its server message id.
+     *
+     * @param source the message being reshared
+     * @return the attribution list
+     */
+    private List<StatusAttribution> buildReshareAttributions(ChatMessageInfo source) {
+        var attributions = new ArrayList<StatusAttribution>();
+        attributions.add(new StatusAttributionBuilder()
+                .type(StatusAttribution.Type.RESHARE)
+                .statusReshare(new StatusAttributionStatusReshareBuilder()
+                        .source(StatusAttribution.StatusReshare.Source.INTERNAL_RESHARE)
+                        .metadata(new StatusReshareStatusAttributionMetadataBuilder()
+                                .hasMultipleReshares(false)
+                                .build())
+                        .build())
+                .build());
+        var channelJid = source.key().parentJid()
+                .filter(Jid::hasNewsletterServer)
+                .orElse(null);
+        if (channelJid != null && source.newsletterServerId().isPresent()) {
+            attributions.add(new StatusAttributionBuilder()
+                    .type(StatusAttribution.Type.RESHARE)
+                    .statusReshare(new StatusAttributionStatusReshareBuilder()
+                            .source(StatusAttribution.StatusReshare.Source.CHANNEL_RESHARE)
+                            .metadata(new StatusReshareStatusAttributionMetadataBuilder()
+                                    .channelJid(channelJid)
+                                    .channelMessageId((int) source.newsletterServerId().getAsLong())
+                                    .build())
+                            .build())
+                    .build());
+        }
+        return attributions;
+    }
+
+    /**
+     * Builds the reshared status content, copying text directly and re-uploading media.
+     *
+     * @param source      the message being reshared
+     * @param contextInfo the context info carrying the reshare attributions
+     * @return the status message container
+     * @throws IllegalArgumentException if the message type cannot be reshared as a status
+     */
+    private MessageContainer buildResharedStatusContent(ChatMessageInfo source, ContextInfo contextInfo) {
+        return switch (source.message().content()) {
+            case ExtendedTextMessage text -> MessageContainer.of(new ExtendedTextMessageBuilder()
+                    .text(text.text().orElse(""))
+                    .contextInfo(contextInfo)
+                    .build());
+            case ImageMessage image -> MessageContainer.of(reshareMedia(new ImageMessageBuilder()
+                    .caption(image.caption().orElse(null))
+                    .mimetype(image.mimetype().orElse(null))
+                    .contextInfo(contextInfo)
+                    .build(), image));
+            case VideoMessage video -> MessageContainer.of(reshareMedia(new VideoMessageBuilder()
+                    .caption(video.caption().orElse(null))
+                    .mimetype(video.mimetype().orElse(null))
+                    .gifPlayback(video.gifPlayback())
+                    .contextInfo(contextInfo)
+                    .build(), video));
+            default -> throw new IllegalArgumentException(
+                    "Message type cannot be reshared as a status: " + source.message().content().getClass().getSimpleName());
+        };
+    }
+
+    /**
+     * Re-downloads the source media and uploads it as the reshared message's own media.
+     *
+     * @param reshared the freshly built media message to populate with uploaded media
+     * @param source   the source media message whose bytes are copied
+     * @param <T>      the media message type
+     * @return the reshared media message with its media fields populated
+     */
+    private <T extends MediaMessage> T reshareMedia(T reshared, MediaMessage source) {
+        try (var stream = downloadMedia(source)) {
+            uploadMedia(reshared, new ByteArrayInputStream(stream.readAllBytes()));
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+        return reshared;
     }
 
     /**
@@ -7819,17 +8298,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 StatusPrivacyAction.COLLECTION_NAME,
                 List.of(mutation));
 
-        var value = switch (mode) {
-            case CONTACTS -> PrivacySettingValue.CONTACTS;
-            case WHITELIST -> PrivacySettingValue.CONTACTS_ONLY;
-            case CONTACTS_EXCEPT -> PrivacySettingValue.CONTACTS_EXCEPT;
-        };
-        var entry = new PrivacySettingEntryBuilder()
-                .type(PrivacySettingType.STATUS)
-                .value(value)
-                .excluded(jidList)
-                .build();
-        store.settingsStore().addPrivacySetting(entry);
+        store.settingsStore().setStatusPrivacy(new StatusPrivacySettingBuilder()
+                .mode(mode)
+                .jids(jidList)
+                .build());
     }
 
     /** {@inheritDoc} */
@@ -7851,6 +8323,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         logPsaActionIfApplicable(source, PsaMessageActionType.FORWARD);
         emitForwardSendEvent(source, destination, container);
         messageService.send(destination, container);
+        threadLoggingService.recordActivity(destination, new ThreadLoggingActivity.MessageSent(false, false, true, false, false, false));
     }
 
     /** {@inheritDoc} */
@@ -7875,14 +8348,48 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
         for (var source : resolvedSources) {
             logPsaActionIfApplicable(source, PsaMessageActionType.FORWARD);
+            if (source instanceof ChatMessageInfo forwardedBotMessage) {
+                maybeVerifyForwardedBotMessage(forwardedBotMessage);
+            }
         }
         for (var destination : destinations) {
             for (var source : resolvedSources) {
                 var container = source.message();
                 emitForwardSendEvent(source, destination, container);
                 messageService.send(destination, container);
+                threadLoggingService.recordActivity(destination, new ThreadLoggingActivity.MessageSent(false, false, true, false, false, false));
             }
         }
+    }
+
+    /**
+     * Verifies the signature of a forwarded AI bot message when forwarding verification is enabled.
+     *
+     * <p>Mirrors WA Web's forward post-processor: a rich-response message that carries signature
+     * verification metadata is verified against its certificate chain, with the
+     * {@linkplain AIRichResponseUnifiedResponse#data() unified-response data} as the signed digest
+     * and the {@linkplain ChatMessageInfo#senderJid() sending bot} as the signer. The outcome is
+     * reported through a {@code CertificateValidationEvent} metric.
+     *
+     * @param info the chat message being forwarded
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBotSignatureVerificationPostProcessor", exports = "verifyForwardedBotMessage", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeVerifyForwardedBotMessage(ChatMessageInfo info) {
+        if (!botSignatureVerificationService.isForwardVerificationEnabled()
+                || !(info.message().content() instanceof AIRichResponseMessage richResponse)) {
+            return;
+        }
+        var digest = richResponse.unifiedResponse().flatMap(AIRichResponseUnifiedResponse::data).orElse(null);
+        var metadata = info.message().messageContextInfo()
+                .flatMap(ChatMessageContextInfo::botMetadata)
+                .flatMap(BotMetadata::verificationMetadata)
+                .orElse(null);
+        var botFbid = info.senderJid().map(Jid::user).orElse(null);
+        if (digest == null || metadata == null || botFbid == null) {
+            return;
+        }
+        botCertificateRevocationService.startPeriodicRefresh();
+        botSignatureVerificationService.verifyBotMessageSignature(botFbid, metadata, digest);
     }
 
     /** {@inheritDoc} */
@@ -7907,6 +8414,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         .build();
         // The preparer auto converts to EncReactionMessage for CAG groups.
         messageService.send(parentJid, MessageContainer.of(reaction));
+        threadLoggingService.recordActivity(parentJid, new ThreadLoggingActivity.MessageSent(false, false, false, false, true, false));
     }
 
     /**
@@ -8455,6 +8963,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         webAppStateService.pushPatches(MarkChatAsReadAction.COLLECTION_NAME, List.of(mutation));
         if (chatModel != null) {
             if (read) {
+                var unreadCount = chatModel.unreadCount().orElse(0);
+                if (unreadCount > 0) {
+                    threadLoggingService.recordActivity(chat, new ThreadLoggingActivity.MessagesRead(unreadCount));
+                }
                 chatModel.setMarkedAsUnread(false);
             chatModel.setUnreadCount(0);
             } else {
@@ -8750,6 +9262,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         Objects.requireNonNull(labelId, "labelId cannot be null");
         pushLabelAssociationMutation(labelId, chat, true);
+        store.settingsStore().findLabel(labelId)
+                .ifPresent(label -> ctwaConversionSignalService.emitLabelConversion(chat, label));
         }
 
     /** {@inheritDoc} */
@@ -9339,9 +9853,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                             .id(entry.id())
                             .accepted(entry.accepted())
                             .build());
-                    ids.add(entry.id());
+                    // The store holds only acknowledged notices, so an entry the relay reports as not accepted
+                    // is omitted (and removes any stale acknowledgement carried from a previous pull)
+                    if (entry.accepted()) {
+                        ids.add(entry.id());
+                    }
                 }
-                store.settingsStore().setTosNotices(ids);
+                store.settingsStore().setAcknowledgedTosNotices(ids);
                 var snapshot = Set.copyOf(ids);
                 for (var listener : store.listeners()) {
                     if (listener instanceof LinkedTosNoticesChangedListener typed) {
@@ -9410,7 +9928,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryPrivacySettingsJob", exports = "getPrivacySettings",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public Map<PrivacySettingType, PrivacySettingValue> refreshPrivacySettings() {
+    public Map<PrivacySettingType<?>, PrivacySettingValue> refreshPrivacySettings() {
         var privacyQuery = new StanzaBuilder()
                 .description("privacy")
                 .build();
@@ -9423,66 +9941,53 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var response = sendNode(iqNode);
         var privacyNode = response.getChild("privacy")
                 .orElseThrow(() -> new NoSuchElementException("Missing <privacy> in privacy settings response"));
-        var result = new EnumMap<PrivacySettingType, PrivacySettingValue>(PrivacySettingType.class);
+        var result = new LinkedHashMap<PrivacySettingType<?>, PrivacySettingValue>();
         for (var category : privacyNode.getChildren("category")) {
             var name = category.getAttributeAsString("name").orElse(null);
             var value = category.getAttributeAsString("value").orElse(null);
             if (name == null || value == null) {
                 continue;
             }
-            //          Cobalt drops unknowns because the enum is the public API surface.
+            // Cobalt drops unknown settings because the typed registry is the public API surface.
             var type = PrivacySettingType.of(name).orElse(null);
-            var audience = PrivacySettingValue.of(value).orElse(null);
-            if (type == null || audience == null) {
+            if (type == null) {
+                continue;
+            }
+            var audience = type.parse(value, List.of()).orElse(null);
+            if (audience == null) {
                 continue;
             }
             result.put(type, audience);
-            // subsequent reads via store.findPrivacySetting hit a warm entry.
-            store.settingsStore().addPrivacySetting(new PrivacySettingEntryBuilder()
-                    .type(type)
-                    .value(audience)
-                    .excluded(List.of())
-                    .build());
+            // subsequent reads via store.findPrivacySetting hit a warm value.
+            applyPrivacySetting(audience);
         }
         return Collections.unmodifiableMap(result);
     }
 
-    /** {@inheritDoc} */
-    @Override
-    @WhatsAppWebExport(moduleName = "WAWebSetPrivacyJob", exports = "setPrivacy",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    public void editPrivacySetting(PrivacySettingType type, PrivacySettingValue value) {
-        editPrivacySetting(type, value, null);
-    }
+    /**
+     * The privacy settings whose refinement-list members are LID-addressed on the wire.
+     */
+    private static final Set<PrivacySettingType<?>> LID_AWARE_PRIVACY_SETTINGS = Set.of(
+            PrivacySettingType.LAST_SEEN, PrivacySettingType.PROFILE_PICTURE,
+            PrivacySettingType.ABOUT, PrivacySettingType.GROUP_ADD);
 
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetPrivacyJob", exports = "setPrivacy",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public void editPrivacySetting(PrivacySettingType type, PrivacySettingValue value, Collection<? extends JidProvider> excludedOrIncludedProvider) {
-        var excludedOrIncluded = Objects.requireNonNull(excludedOrIncludedProvider, "excludedOrIncluded cannot be null").stream().map(JidProvider::toJid).toList();
-        Objects.requireNonNull(type, "type cannot be null");
+    public void editPrivacySetting(PrivacySettingValue value) {
         Objects.requireNonNull(value, "value cannot be null");
-        if (!type.isSupported(value)) {
-            throw new IllegalArgumentException("Privacy setting " + type + " does not support value " + value);
-        }
-
-        var hasList = excludedOrIncluded != null && !excludedOrIncluded.isEmpty();
-        var action = (value == PrivacySettingValue.CONTACTS_EXCEPT || value == PrivacySettingValue.CONTACTS_ONLY)
-                ? "add"
-                : "remove";
-
-        var lidAware = switch (type) {
-            case ADD_ME_TO_GROUPS, LAST_SEEN, PROFILE_PIC, STATUS -> true;
-            default -> false;
-        };
+        var type = value.type();
+        var excluded = value.excluded();
+        var hasList = !excluded.isEmpty();
+        var lidAware = LID_AWARE_PRIVACY_SETTINGS.contains(type);
 
         Stanza privacyStanza;
         if (!hasList) {
             var category = new StanzaBuilder()
                     .description("category")
-                    .attribute("name", type.data())
-                    .attribute("value", value.data())
+                    .attribute("name", type.wire())
+                    .attribute("value", value.token())
                     .build();
             privacyStanza = new StanzaBuilder()
                     .description("privacy")
@@ -9491,13 +9996,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         } else if (lidAware) {
             List<Stanza> userChildren;
             try {
-                userChildren = buildLidPrivacyUsers(excludedOrIncluded, action);
+                userChildren = buildLidPrivacyUsers(excluded, "add");
             } catch (Throwable throwable) {
-                userChildren = buildPnPrivacyUsers(excludedOrIncluded, action);
+                userChildren = buildPnPrivacyUsers(excluded, "add");
                 var category = new StanzaBuilder()
                         .description("category")
-                        .attribute("name", type.data())
-                        .attribute("value", value.data())
+                        .attribute("name", type.wire())
+                        .attribute("value", value.token())
                         .attribute("dhash", "none")
                         .content(userChildren)
                         .build();
@@ -9505,13 +10010,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                         .description("privacy")
                         .content(category)
                         .build();
-                dispatchPrivacyIq(privacyStanza, type, value, excludedOrIncluded);
+                dispatchPrivacyIq(privacyStanza, value);
                 return;
             }
             var category = new StanzaBuilder()
                     .description("category")
-                    .attribute("name", type.data())
-                    .attribute("value", value.data())
+                    .attribute("name", type.wire())
+                    .attribute("value", value.token())
                     .attribute("dhash", "none")
                     .content(userChildren)
                     .build();
@@ -9521,11 +10026,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     .content(category)
                     .build();
         } else {
-            var userChildren = buildPnPrivacyUsers(excludedOrIncluded, action);
+            var userChildren = buildPnPrivacyUsers(excluded, "add");
             var category = new StanzaBuilder()
                     .description("category")
-                    .attribute("name", type.data())
-                    .attribute("value", value.data())
+                    .attribute("name", type.wire())
+                    .attribute("value", value.token())
                     .attribute("dhash", "none")
                     .content(userChildren)
                     .build();
@@ -9535,19 +10040,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     .build();
         }
 
-        dispatchPrivacyIq(privacyStanza, type, value, excludedOrIncluded);
+        dispatchPrivacyIq(privacyStanza, value);
     }
 
     /**
-     * Sends the privacy IQ and refreshes the local store entry on success.
+     * Sends the privacy IQ and refreshes the local store value on success.
      *
-     * @param privacyStanza        the already-built {@code <privacy>} content stanza
-     * @param type               the setting being changed
-     * @param value              the newly selected audience
-     * @param excludedOrIncluded the refinement list applied to the setting,
-     *                           may be {@code null} or empty
+     * @param privacyStanza the already-built {@code <privacy>} content stanza
+     * @param value         the newly selected privacy value persisted locally on success
      */
-    private void dispatchPrivacyIq(Stanza privacyStanza, PrivacySettingType type, PrivacySettingValue value, Collection<Jid> excludedOrIncluded) {
+    private void dispatchPrivacyIq(Stanza privacyStanza, PrivacySettingValue value) {
         var iqNode = new StanzaBuilder()
                 .description("iq")
                 .attribute("xmlns", "privacy")
@@ -9555,15 +10057,47 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .attribute("type", "set")
                 .content(privacyStanza);
         sendNode(iqNode);
+        applyPrivacySetting(value);
+    }
 
-        var excludedSnapshot = excludedOrIncluded == null
-                ? List.<Jid>of()
-                : excludedOrIncluded.stream().filter(Objects::nonNull).toList();
-        store.settingsStore().addPrivacySetting(new PrivacySettingEntryBuilder()
-                .type(type)
-                .value(value)
-                .excluded(excludedSnapshot)
-                .build());
+    /**
+     * Persists a privacy setting value locally and fires its change side-effects.
+     *
+     * <p>The value is always stored; when it differs from a previously known value for its setting
+     * the {@link LinkedPrivacySettingChangedListener#onPrivacySettingChanged onPrivacySettingChanged}
+     * listeners are notified, and a Defense Mode transition from the standard tier to off
+     * additionally triggers a bulk restore of the messages it had withheld. An initial load (no
+     * previously known value) is not reported as a change so a fresh sync does not spuriously notify
+     * every setting.
+     *
+     * @param value the privacy setting value applied to the local store
+     */
+    private void applyPrivacySetting(PrivacySettingValue value) {
+        var previous = store.settingsStore().findPrivacySetting(value.type()).orElse(null);
+        store.settingsStore().addPrivacySetting(value);
+        if (previous == null || value.equals(previous)) {
+            return;
+        }
+        if (previous instanceof DefenseModePrivacyValue.OnStandard
+                && !(value instanceof DefenseModePrivacyValue.OnStandard)) {
+            quarantineService.restoreAll();
+        }
+        for (var listener : store.listeners()) {
+            if (listener instanceof LinkedPrivacySettingChangedListener typed) {
+                Thread.startVirtualThread(() -> typed.onPrivacySettingChanged(this, value));
+            }
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebUnquarantineMessageJob", exports = "unquarantineMessageJob", adaptation = WhatsAppAdaptation.ADAPTED)
+    public boolean restoreQuarantinedMessage(MessageKey key) {
+        Objects.requireNonNull(key, "key cannot be null");
+        if (!(store.chatStore().findMessageByKey(key).orElse(null) instanceof ChatMessageInfo info)) {
+            return false;
+        }
+        return quarantineService.restore(info);
     }
 
     /**
@@ -9638,7 +10172,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebSetReadReceiptJob", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void enableReadReceipts() {
-        editPrivacySetting(PrivacySettingType.READ_RECEIPTS, PrivacySettingValue.EVERYONE);
+        editPrivacySetting(new ReadReceiptsPrivacyValue.Everyone());
     }
 
     /** {@inheritDoc} */
@@ -9646,7 +10180,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebSetReadReceiptJob", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void disableReadReceipts() {
-        editPrivacySetting(PrivacySettingType.READ_RECEIPTS, PrivacySettingValue.NOBODY);
+        editPrivacySetting(new ReadReceiptsPrivacyValue.Nobody());
     }
 
     /** {@inheritDoc} */
@@ -10336,7 +10870,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .map("lid"::equalsIgnoreCase)
                 .orElse(false);
         var size = response.totalParticipantsCount().isPresent()
-                ? Integer.valueOf((int) response.totalParticipantsCount().getAsLong())
+                ? (int) response.totalParticipantsCount().getAsLong()
                 : null;
         return new GroupMetadataBuilder()
                 .jid(jid)
@@ -10896,7 +11430,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .pollAction(action)
                 .pollOptionsCount(optionsCount)
                 .pollCreationDs(pollCreationDsFromInstant(creationInstant))
-                .chatType(pollsWamChatType(chatJid));
+                .chatType(WamMsgUtils.getWamChatType(chatJid));
                 if (chatJid.hasGroupOrCommunityServer()) {
             var metadata = store.chatStore().findChatMetadata(chatJid).orElse(null);
             if (metadata instanceof GroupMetadata group) {
@@ -10933,57 +11467,122 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         return (int) (epochDays * 86400L);
     }
 
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebChatEagerlyEstablishE2EeSessionBridge",
+            exports = "eagerlyEstablishE2EESession", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void eagerlyEstablishSession(JidProvider chat) {
+        var chatJid = Objects.requireNonNull(chat, "chat cannot be null").toJid();
+        Collection<Jid> devices;
+        Integer deviceCount;
+        MessageType messageType;
+        if (chatJid.isStatusBroadcastAccount()) {
+            devices = deviceService.getStatusFanout(resolveStatusAudience());
+            deviceCount = null;
+            messageType = MessageType.INDIVIDUAL;
+        } else if (chatJid.hasGroupOrCommunityServer()) {
+            devices = deviceService.getGroupFanout(chatJid);
+            deviceCount = devices.size();
+            messageType = MessageType.GROUP;
+        } else {
+            devices = deviceService.getUserFanout(chatJid, null);
+            deviceCount = null;
+            messageType = MessageType.INDIVIDUAL;
+        }
+        int depletedPrekeyCount;
+        try {
+            depletedPrekeyCount = deviceService.ensureSessions(devices);
+        } catch (RuntimeException error) {
+            // Best-effort pre-establishment: a device whose pre-keys cannot be fetched (for example
+            // one that has since unregistered) is skipped without failing the chat open.
+            return;
+        }
+        emitPrekeysDepletionEvents(depletedPrekeyCount, messageType, deviceCount);
+    }
+
     /**
-     * Maps a chat JID to the {@link MessageChatType} classification used by
-     * {@link PollsActionsEvent#chatType()}.
+     * Commits one {@code PrekeysDepletion} metric per depleted one-time pre-key consumed while
+     * eagerly establishing sessions for a chat.
      *
-     * <p>Mirrors the cascaded ternary in
-     * {@code WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid}
-     * exactly, dispatching on the WA Web {@code Wid} predicates in the
-     * same order:
-     * <ol>
-     *     <li>{@code isUser()} (user/legacy-user/LID/bot/hosted/hosted.lid
-     *         domains) maps to {@code INDIVIDUAL};</li>
-     *     <li>{@code isGroup()} ({@code g.us} domain) maps to
-     *         {@code GROUP};</li>
-     *     <li>{@code isBroadcast()} ({@code broadcast} domain) maps to
-     *         {@code BROADCAST};</li>
-     *     <li>{@code isStatus()} ({@code status@broadcast}) maps to
-     *         {@code STATUS};</li>
-     *     <li>{@code isNewsletter()} ({@code newsletter} domain) maps to
-     *         {@code CHANNEL};</li>
-     *     <li>anything else maps to {@code OTHER}.</li>
-     * </ol>
-     *
-     * @param jid the chat JID to classify; must not be {@code null}
-     * @return the corresponding {@link MessageChatType}; never {@code null}
+     * @param depletedPrekeyCount the number of depleted one-time pre-keys
+     * @param messageType         the chat message-type classification
+     * @param deviceCount         the device count for the {@code deviceSizeBucket}, or {@code null}
+     *                            to omit the bucket (as for individual chats)
      */
-    @WhatsAppWebExport(moduleName = "WAWebGetMessageChatTypeFromWid",
-            exports = "getMessageChatTypeFromWid",
-            adaptation = WhatsAppAdaptation.DIRECT)
-    private static MessageChatType pollsWamChatType(Jid jid) {
-        if (jid.hasUserServer()
-                || jid.hasLidServer()
-                || jid.hasBotServer()
-                || jid.hasHostedServer()
-                || jid.hasHostedLidServer()) {
-            return MessageChatType.INDIVIDUAL;
+    @WhatsAppWebExport(moduleName = "WAWebPostPrekeysDepletionMetric",
+            exports = "maybePostPrekeysDepletionMetric", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitPrekeysDepletionEvents(int depletedPrekeyCount, MessageType messageType, Integer deviceCount) {
+        if (depletedPrekeyCount <= 0) {
+            return;
         }
-        if (jid.hasGroupOrCommunityServer()) {
-            return MessageChatType.GROUP;
+        var bucket = deviceCount == null ? null : numberToSizeBucket(deviceCount);
+        for (var i = 0; i < depletedPrekeyCount; i++) {
+            wamService.commit(new PrekeysDepletionEventBuilder()
+                    .prekeysFetchReason(PrekeysFetchContext.USER_INTENT_PREFETCH)
+                    .messageType(messageType)
+                    .deviceSizeBucket(bucket)
+                    .build());
         }
-        if (jid.hasBroadcastServer()) {
-            return MessageChatType.BROADCAST;
-        }
-        // (unreachable: isBroadcast above already catches status@broadcast; kept for
-        // structural parity with the JS ternary)
-        if (jid.isStatusBroadcastAccount()) {
-            return MessageChatType.STATUS;
-        }
-        if (jid.hasNewsletterServer()) {
-            return MessageChatType.CHANNEL;
-        }
-        return MessageChatType.OTHER;
+    }
+
+    /**
+     * Maps a fanout device count to the matching {@link SizeBucket} carried by the
+     * {@code deviceSizeBucket} WAM property.
+     *
+     * @param count the device count
+     * @return the matching size bucket
+     */
+    private static SizeBucket numberToSizeBucket(int count) {
+        if (count < 32) return SizeBucket.LT32;
+        if (count < 64) return SizeBucket.LT64;
+        if (count < 128) return SizeBucket.LT128;
+        if (count < 256) return SizeBucket.LT256;
+        if (count < 512) return SizeBucket.LT512;
+        if (count < 1024) return SizeBucket.LT1024;
+        if (count < 1500) return SizeBucket.LT1500;
+        if (count < 2000) return SizeBucket.LT2000;
+        if (count < 2500) return SizeBucket.LT2500;
+        if (count < 3000) return SizeBucket.LT3000;
+        if (count < 3500) return SizeBucket.LT3500;
+        if (count < 4000) return SizeBucket.LT4000;
+        if (count < 4500) return SizeBucket.LT4500;
+        if (count < 5000) return SizeBucket.LT5000;
+        return SizeBucket.LARGEST_BUCKET;
+    }
+
+    /**
+     * Resolves the status audience user JIDs from the user's status privacy preference, mirroring
+     * the audience the status sender fans out to.
+     *
+     * <p>{@link StatusPrivacyMode#CONTACTS} (the default when no preference is stored) returns every
+     * stored contact; {@link StatusPrivacyMode#WHITELIST} returns the configured allowlist; and
+     * {@link StatusPrivacyMode#CONTACTS_EXCEPT} returns every stored contact minus the configured
+     * blocklist.
+     *
+     * @return the resolved status audience user JIDs
+     */
+    @WhatsAppWebExport(moduleName = "WAWebUserPrefsStatus", exports = "getStatusList",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private List<Jid> resolveStatusAudience() {
+        var privacy = store.settingsStore().statusPrivacy().orElse(null);
+        var mode = privacy == null
+                ? StatusPrivacyMode.CONTACTS
+                : privacy.mode().orElse(StatusPrivacyMode.CONTACTS);
+        return switch (mode) {
+            case WHITELIST -> List.copyOf(privacy.jids());
+            case CONTACTS_EXCEPT -> {
+                var excluded = Set.copyOf(privacy.jids());
+                yield store.contactStore().contacts().stream()
+                        .map(Contact::jid)
+                        .filter(jid -> !excluded.contains(jid))
+                        .distinct()
+                        .toList();
+            }
+            case CONTACTS -> store.contactStore().contacts().stream()
+                    .map(Contact::jid)
+                    .distinct()
+                    .toList();
+        };
     }
 
     /**
@@ -11782,6 +12381,28 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case SmaxSetPrivacySettingResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException("Business privacy-setting change server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
         }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WASmaxBizSettingsGetPrivacySettingRPC",
+            exports = "sendGetPrivacySettingRPC", adaptation = WhatsAppAdaptation.ADAPTED)
+    public CtwaDataSharingSetting refreshBusinessDataSharingSetting() {
+        var request = new SmaxGetPrivacySettingRequest();
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        var parsed = SmaxGetPrivacySettingResponse.of(response, requestNode.build()).orElse(null);
+        var setting = switch (parsed) {
+            case null -> CtwaDataSharingSetting.NOT_SET;
+            case SmaxGetPrivacySettingResponse.Success success ->
+                    CtwaDataSharingSetting.ofWire(success.dataSharingConsent()).orElse(CtwaDataSharingSetting.NOT_SET);
+            case SmaxGetPrivacySettingResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("CTWA data-sharing-setting query rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case SmaxGetPrivacySettingResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("CTWA data-sharing-setting query server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+        };
+        store.businessStore().setCtwaDataSharingSetting(setting);
+        return setting;
     }
 
     /** {@inheritDoc} */
@@ -12805,6 +13426,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     public LinkedWhatsAppClient addPrivacySettingChangedListener(LinkedPrivacySettingChangedListener listener) {
+        Objects.requireNonNull(listener, "listener cannot be null");
+        addListener(listener);
+        return this;
+    }
+
+    public LinkedWhatsAppClient addMessageQuarantinedListener(LinkedMessageQuarantinedListener listener) {
         Objects.requireNonNull(listener, "listener cannot be null");
         addListener(listener);
         return this;
@@ -16780,10 +17407,182 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                                 .map(property -> new BizCreateOrderJobWhatsAppGraphQlRequest.VariantProperty(property.name(), property.value()))
                                 .toList()))
                 .toList();
+        emitSendOrderDetailsEvent(products);
         var request = new BizCreateOrderJobWhatsAppGraphQlRequest(sellerJid, wireProducts, directConnectionEncryptedInfo);
         var response = sendGraphQl(request);
         return BizCreateOrderJobWhatsAppGraphQlResponse.of(response)
                 .map(BizCreateOrderJobWhatsAppGraphQlResponse::order);
+    }
+
+    /**
+     * Commits the {@code OrderDetailsActions} metric for a merchant sending order details.
+     *
+     * <p>Records the {@link OrderDetailsCreationAction#SEND_ORDER_DETAILS} action with the
+     * item-derived attributes available to the headless client (catalog item count, currency and
+     * whether prices were attached). The composer-only fields (accepted payment methods, entry point,
+     * price configuration) carry no headless counterpart and are left unset.
+     *
+     * @param products the order line items, possibly {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebOrderDetailsCreationActionWamEventUtil", exports = "createSendOrderDetailsWamEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitSendOrderDetailsEvent(List<BusinessOrderItem> products) {
+        var items = products == null ? List.<BusinessOrderItem>of() : products;
+        var extraAttributes = new JSONObject();
+        items.stream()
+                .map(BusinessOrderItem::currency)
+                .flatMap(Optional::stream)
+                .findFirst()
+                .ifPresent(currency -> extraAttributes.put("currency", currency));
+        extraAttributes.put("num_catalog_items", items.size());
+        extraAttributes.put("num_custom_items", 0);
+        extraAttributes.put("p2m_flow", "ORDER");
+        wamService.commit(new OrderDetailsActionsSmbEventBuilder()
+                .orderDetailsCreationAction(OrderDetailsCreationAction.SEND_ORDER_DETAILS)
+                .actionCategory("order_details_creation")
+                .hasCatalog(!items.isEmpty())
+                .hasAddedPrice(items.stream().anyMatch(item -> item.price().isPresent()))
+                .extraAttributes(extraAttributes.toString())
+                .build());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebBizSendOrderAction", exports = "sendOrderStatusMessageAsMerchant",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public MessageKey updateOrderStatus(JidProvider chat, BusinessOrder order, OrderLifecycleStatus status, OrderPaymentStatus paymentStatus) {
+        Objects.requireNonNull(chat, "chat cannot be null");
+        Objects.requireNonNull(order, "order cannot be null");
+        Objects.requireNonNull(status, "status cannot be null");
+        Objects.requireNonNull(paymentStatus, "paymentStatus cannot be null");
+        var referenceId = order.referenceId()
+                .orElseThrow(() -> new IllegalArgumentException("order has no reference id"));
+        var params = buildOrderStatusParams(referenceId, order, status, paymentStatus);
+        var key = sendOrderNativeFlow(chat, "review_order", params);
+        emitOrderManagementEvent(OrderDetailsCreationAction.SEND_ORDER_STATUS);
+        ctwaConversionSignalService.emitOrderConversion(chat, CtwaOrderStatus.valueOf(status.name()), paymentStatus == OrderPaymentStatus.CAPTURED);
+        return key;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebBizSendOrderAction", exports = "sendOrderPaymentStatusMessageAsMerchant",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public MessageKey updateOrderPaymentStatus(JidProvider chat, BusinessOrder order, OrderLifecycleStatus status, OrderPaymentStatus paymentStatus) {
+        Objects.requireNonNull(chat, "chat cannot be null");
+        Objects.requireNonNull(order, "order cannot be null");
+        Objects.requireNonNull(status, "status cannot be null");
+        Objects.requireNonNull(paymentStatus, "paymentStatus cannot be null");
+        var referenceId = order.referenceId()
+                .orElseThrow(() -> new IllegalArgumentException("order has no reference id"));
+        var params = buildOrderStatusParams(referenceId, order, status, paymentStatus);
+        var key = sendOrderNativeFlow(chat, "payment_status", params);
+        emitOrderManagementEvent(paymentStatus == OrderPaymentStatus.CAPTURED
+                ? OrderDetailsCreationAction.SEND_MARK_AS_PAID
+                : OrderDetailsCreationAction.SEND_MARK_AS_UNPAID);
+        ctwaConversionSignalService.emitOrderConversion(chat, CtwaOrderStatus.PAID_CHANGE, paymentStatus == OrderPaymentStatus.CAPTURED);
+        return key;
+    }
+
+    /**
+     * Builds the order-status native-flow JSON payload describing the order, its lifecycle status
+     * and its payment status.
+     *
+     * @param referenceId   the order reference id linking back to the order-details message
+     * @param order         the order whose items and totals are serialized
+     * @param status        the order lifecycle status
+     * @param paymentStatus the order payment status
+     * @return the serialized JSON payload
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBizSendOrderAction", exports = "createOrderStatusPaymentInfo",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private String buildOrderStatusParams(String referenceId, BusinessOrder order, OrderLifecycleStatus status, OrderPaymentStatus paymentStatus) {
+        var items = new JSONArray();
+        for (var item : order.items()) {
+            var itemJson = new JSONObject();
+            itemJson.put("retailer_id", item.id());
+            itemJson.put("name", item.name());
+            itemJson.put("amount", amountJson(item.price().orElse(0L)));
+            item.quantity().ifPresent(quantity -> itemJson.put("quantity", quantity));
+            itemJson.put("isCustomItem", false);
+            itemJson.put("isQuantitySet", item.quantity().isPresent());
+            items.add(itemJson);
+        }
+        var orderJson = new JSONObject();
+        orderJson.put("status", status.value());
+        orderJson.put("items", items);
+        orderJson.put("subtotal", amountJson(order.subtotal().orElse(0L)));
+        var root = new JSONObject();
+        root.put("reference_id", referenceId);
+        root.put("payment_timestamp", Instant.now().getEpochSecond());
+        order.currency().ifPresent(currency -> root.put("currency", currency));
+        root.put("payment_status", paymentStatus.value());
+        root.put("total_amount", amountJson(order.total().orElse(0L)));
+        root.put("order", orderJson);
+        return root.toString();
+    }
+
+    /**
+     * Builds a WhatsApp money object pairing a value in thousandths with its {@code 1000} offset.
+     *
+     * @param value the amount in thousandths of a currency unit
+     * @return the money JSON object
+     */
+    private JSONObject amountJson(long value) {
+        var amount = new JSONObject();
+        amount.put("value", value);
+        amount.put("offset", 1000);
+        return amount;
+    }
+
+    /**
+     * Sends an order native-flow interactive message to a chat.
+     *
+     * @param chat        the recipient chat
+     * @param buttonName  the native-flow button name ({@code review_order}, {@code payment_status})
+     * @param paramsJson  the serialized button parameters
+     * @return the key of the sent message
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBizSendOrderAction", exports = "sendOrderMessage",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private MessageKey sendOrderNativeFlow(JidProvider chat, String buttonName, String paramsJson) {
+        var button = new NativeFlowMessageInteractiveMessageNativeFlowButtonBuilder()
+                .name(buttonName)
+                .buttonParamsJson(paramsJson)
+                .build();
+        var nativeFlow = new InteractiveMessageNativeFlowMessageBuilder()
+                .buttons(List.of(button))
+                .messageVersion(1)
+                .build();
+        var interactive = new InteractiveMessageBuilder()
+                .nativeFlowMessage(nativeFlow)
+                .build();
+        return sendMessage(chat, MessageContainer.of(interactive));
+    }
+
+    /**
+     * Commits the {@code OrderDetailsActions} metric for a merchant order-management action.
+     *
+     * @param action the management action performed
+     */
+    private void emitOrderManagementEvent(OrderDetailsCreationAction action) {
+        wamService.commit(new OrderDetailsActionsSmbEventBuilder()
+                .orderDetailsCreationAction(action)
+                .actionCategory("order_details_management")
+                .build());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebExportChatAction", exports = "exportChat",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public void exportChat(JidProvider chat, ChatExportOptions options, OutputStream output) {
+        var chatJid = Objects.requireNonNull(chat, "chat cannot be null").toJid();
+        Objects.requireNonNull(options, "options cannot be null");
+        Objects.requireNonNull(output, "output cannot be null");
+        var chatModel = store.chatStore().findChatByJid(chatJid)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found: " + chatJid));
+        chatExporterService.exportChat(chatModel, chatModel.name().orElse("Chat"), options, output);
     }
 
     /** {@inheritDoc} */

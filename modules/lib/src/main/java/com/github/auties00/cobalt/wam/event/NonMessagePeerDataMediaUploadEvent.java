@@ -10,22 +10,22 @@ import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
 import com.github.auties00.cobalt.wam.type.PeerDataResponseResultType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebNonMessagePeerDataMediaUploadWamEvent")
 @WamEvent(id = 3902)
 public interface NonMessagePeerDataMediaUploadEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt peerDataErrorCount();
+    OptionalLong peerDataErrorCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt peerDataExistingDataNoUploadCount();
+    OptionalLong peerDataExistingDataNoUploadCount();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt peerDataNotFoundCount();
+    OptionalLong peerDataNotFoundCount();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt peerDataRequestCount();
+    OptionalLong peerDataRequestCount();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> peerDataRequestSessionId();
@@ -37,8 +37,8 @@ public interface NonMessagePeerDataMediaUploadEvent extends WamEventSpec {
     Optional<PeerDataResponseResultType> peerDataResponseResult();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt peerDataSuccessInlineNoUploadCount();
+    OptionalLong peerDataSuccessInlineNoUploadCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt peerDataSuccessUploadCount();
+    OptionalLong peerDataSuccessUploadCount();
 }

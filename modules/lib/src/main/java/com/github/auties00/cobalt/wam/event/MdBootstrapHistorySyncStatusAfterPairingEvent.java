@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.MdBootstrapHistoryPayloadType;
 import com.github.auties00.cobalt.wam.type.MdHistorySyncStatusResult;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdBootstrapHistorySyncStatusAfterPairingWamEvent")
 @WamEvent(id = 4652)
@@ -23,10 +23,10 @@ public interface MdBootstrapHistorySyncStatusAfterPairingEvent extends WamEventS
     Optional<Boolean> isLoopRunning();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt lastProcessedNotificationChunkOrder();
+    OptionalLong lastProcessedNotificationChunkOrder();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt lastProcessedNotificationChunkProgress();
+    OptionalLong lastProcessedNotificationChunkProgress();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<MdBootstrapHistoryPayloadType> mdBootstrapHistoryPayloadType();
@@ -38,17 +38,17 @@ public interface MdBootstrapHistorySyncStatusAfterPairingEvent extends WamEventS
     Optional<String> mdSessionId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt mdTimestamp();
+    OptionalLong mdTimestamp();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt missingNotificationCount();
+    OptionalLong missingNotificationCount();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt nextNotificationChunkOrder();
+    OptionalLong nextNotificationChunkOrder();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt totalProcessedMessageCount();
+    OptionalLong totalProcessedMessageCount();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt unprocessedNotificationCount();
+    OptionalLong unprocessedNotificationCount();
 }

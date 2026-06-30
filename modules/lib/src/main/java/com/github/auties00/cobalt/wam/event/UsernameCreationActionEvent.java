@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.wam.type.UsernameLinkType;
 import com.github.auties00.cobalt.wam.type.UsernameSource;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebUsernameCreationActionWamEvent")
 @WamEvent(id = 5224)
@@ -25,13 +25,13 @@ public interface UsernameCreationActionEvent extends WamEventSpec {
     Optional<Boolean> eligibleToLink();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt linkedAccountsFb();
+    OptionalLong linkedAccountsFb();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt linkedAccountsIg();
+    OptionalLong linkedAccountsIg();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<UsernameCreationActionName> usernameCreationActionName();
@@ -49,7 +49,7 @@ public interface UsernameCreationActionEvent extends WamEventSpec {
     Optional<UsernameCreationEntrypoint> usernameCreationEntrypoint();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt usernameCreationErrorCd();
+    OptionalLong usernameCreationErrorCd();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<UsernameCreationErrorMessage> usernameCreationErrorMessage();

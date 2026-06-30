@@ -17,7 +17,7 @@ import com.github.auties00.cobalt.wam.type.StatusReplyMessageType;
 import com.github.auties00.cobalt.wam.type.StatusReplyResult;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusReplyWamEvent")
 @WamEvent(id = 1180)
@@ -44,10 +44,10 @@ public interface StatusReplyEvent extends WamEventSpec {
     Optional<Boolean> isSubscribed();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt mediaHeight();
+    OptionalLong mediaHeight();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt mediaWidth();
+    OptionalLong mediaWidth();
 
     @WamProperty(index = 20, type = WamType.ENUM)
     Optional<MessageSendResultType> messageSendResult();
@@ -83,14 +83,14 @@ public interface StatusReplyEvent extends WamEventSpec {
     Optional<StatusReplyResult> statusReplyResult();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt statusViewerSessionId();
+    OptionalLong statusViewerSessionId();
 
     @WamProperty(index = 21, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 }

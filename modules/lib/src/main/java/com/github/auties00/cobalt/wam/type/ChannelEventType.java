@@ -19,5 +19,10 @@ public enum ChannelEventType {
     @WamEnumConstant(9) HIDE,
     @WamEnumConstant(10) UNHIDE,
     @WamEnumConstant(11) CREATE,
-    @WamEnumConstant(12) DELETE
+    @WamEnumConstant(12) DELETE,
+    @WamEnumConstant(13) ADMIN_PROFILE_CREATE,
+    @WamEnumConstant(14) ADMIN_PROFILE_UPDATE,
+    @WamEnumConstant(15) ADMIN_PROFILE_DELETE,
+    @WamEnumConstant(16) ADMIN_PROFILE_SETTING_ENABLE,
+    @WamEnumConstant(17) ADMIN_PROFILE_SETTING_DISABLE
 }

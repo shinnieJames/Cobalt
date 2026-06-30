@@ -8,11 +8,11 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.cobalt.wam.model.WamType;
 
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebClockSkewDifferenceTWamEvent")
 @WamEvent(id = 3178, channel = WamChannel.PRIVATE, betaWeight = 1000, releaseWeight = 10000, privateStatsId = 37887164)
 public interface ClockSkewDifferenceTEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt clockSkewHourly();
+    OptionalLong clockSkewHourly();
 }

@@ -1,11 +1,11 @@
 package com.github.auties00.cobalt.sync;
 
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.util.SchedulerUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
 import java.io.Closeable;
 import java.time.Duration;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -56,11 +56,11 @@ public final class WebAppStateBackoffScheduler implements Closeable {
     private static final long FINITE_FAILURE_EXPIRY_MS = 2 * 24 * 60 * 60 * 1000L;
 
     /**
-     * The map of in-flight per-collection retry futures, used to cancel
+     * The map of in-flight per-collection retry handles, used to cancel
      * pending retries on {@link #cancelRetry(SyncPatchType)} or
      * {@link #close()}.
      */
-    private final ConcurrentHashMap<SyncPatchType, CompletableFuture<?>> pendingRetries;
+    private final ConcurrentHashMap<SyncPatchType, ScheduledTask> pendingRetries;
 
     /**
      * The global attempt counter shared across every collection.
@@ -121,11 +121,10 @@ public final class WebAppStateBackoffScheduler implements Closeable {
      * server backoff floor.
      *
      * <p>Called by the syncd retry loop after every transient failure. The
-     * action fires asynchronously on the {@link SchedulerUtils}
-     * virtual-thread scheduler once the computed backoff elapses, and can be
-     * cancelled through {@link #cancelRetry(SyncPatchType)}. Any pending retry
-     * on the same collection is cancelled before scheduling, so the second
-     * call wins.
+     * action fires asynchronously on a {@link ScheduledTask} virtual thread
+     * once the computed backoff elapses, and can be cancelled through
+     * {@link #cancelRetry(SyncPatchType)}. Any pending retry on the same
+     * collection is cancelled before scheduling, so the second call wins.
      *
      * @implNote This implementation reads-and-increments
      * {@link #globalAttemptCounter} atomically, then computes
@@ -151,11 +150,11 @@ public final class WebAppStateBackoffScheduler implements Closeable {
         var attempt = globalAttemptCounter.getAndIncrement();
         var delayMs = calculateBackoff(attempt, stickyServerBackoffMs.get());
 
-        var future = SchedulerUtils.scheduleDelayed(Duration.ofMillis(delayMs), () -> {
+        var handle = ScheduledTask.scheduleDelayed(Duration.ofMillis(delayMs), () -> {
             pendingRetries.remove(collectionName);
             retryAction.run();
         });
-        pendingRetries.put(collectionName, future);
+        pendingRetries.put(collectionName, handle);
 
         return true;
     }
@@ -208,9 +207,9 @@ public final class WebAppStateBackoffScheduler implements Closeable {
      *         {@code false} otherwise
      */
     public boolean cancelRetry(SyncPatchType collectionName) {
-        var future = pendingRetries.remove(collectionName);
-        if (future != null) {
-            future.cancel(false);
+        var handle = pendingRetries.remove(collectionName);
+        if (handle != null) {
+            handle.cancel();
             return true;
         }
         return false;
@@ -235,13 +234,13 @@ public final class WebAppStateBackoffScheduler implements Closeable {
      * <p>The method is safe to call repeatedly: subsequent invocations simply
      * find an empty map and idempotent counter assignments.
      *
-     * @implNote This implementation cancels each pending retry with
-     * {@code true} so already-running timers are interrupted.
+     * @implNote This implementation cancels each pending retry, which interrupts
+     * a retry whose backoff is still elapsing or whose action is already running.
      */
     @Override
     public void close() {
-        for (var future : pendingRetries.values()) {
-            future.cancel(true);
+        for (var handle : pendingRetries.values()) {
+            handle.cancel();
         }
         pendingRetries.clear();
         globalAttemptCounter.set(0);

@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.ApplicationState;
 import com.github.auties00.cobalt.wam.type.MdLinkDeviceCompanionStage;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdLinkDeviceCompanionWamEvent")
 @WamEvent(id = 2576)
@@ -19,7 +19,7 @@ public interface MdLinkDeviceCompanionEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<ApplicationState> applicationState();
@@ -28,16 +28,16 @@ public interface MdLinkDeviceCompanionEvent extends WamEventSpec {
     Optional<String> mdCompanionRefHash();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt mdDurationS();
+    OptionalLong mdDurationS();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt mdLinkDeviceCompanionErrorCode();
+    OptionalLong mdLinkDeviceCompanionErrorCode();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<MdLinkDeviceCompanionStage> mdLinkDeviceCompanionStage();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt mdLinkDeviceExperienceId();
+    OptionalLong mdLinkDeviceExperienceId();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> mdRegAttemptId();
@@ -46,7 +46,7 @@ public interface MdLinkDeviceCompanionEvent extends WamEventSpec {
     Optional<String> mdSessionId();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt mdTimestampS();
+    OptionalLong mdTimestampS();
 
     @WamProperty(index = 5, type = WamType.BOOLEAN)
     Optional<Boolean> mdWasUpgraded();

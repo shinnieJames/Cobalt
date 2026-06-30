@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.DisclosureSuppressionReason;
 import com.github.auties00.cobalt.wam.type.DisclosureSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMmDisclosureStateFsEventWamEvent")
 @WamEvent(id = 6796)
@@ -40,7 +40,7 @@ public interface MmDisclosureStateFsEventEvent extends WamEventSpec {
     Optional<Boolean> isUserDisclosed();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt mmDisclosureFlags();
+    OptionalLong mmDisclosureFlags();
 
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> mmHasDisclosedUrl();

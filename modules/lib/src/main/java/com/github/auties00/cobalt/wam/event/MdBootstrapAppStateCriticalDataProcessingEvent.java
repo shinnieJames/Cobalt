@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.BootstrapAppStateDataStageCode;
 import com.github.auties00.cobalt.wam.type.MdBootstrapPayloadType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdBootstrapAppStateCriticalDataProcessingWamEvent")
 @WamEvent(id = 3164)
@@ -28,5 +28,5 @@ public interface MdBootstrapAppStateCriticalDataProcessingEvent extends WamEvent
     Optional<String> mdSessionId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt mdTimestamp();
+    OptionalLong mdTimestamp();
 }

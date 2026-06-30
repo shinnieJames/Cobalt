@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.MdSyncdFatalErrorSource;
 import com.github.auties00.cobalt.wam.type.RecoveryStatusEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdFatalErrorWamEvent")
 @WamEvent(id = 2304)
@@ -24,7 +24,7 @@ public interface MdFatalErrorEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 47, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 41, type = WamType.STRING)
     Optional<String> appSessionId();
@@ -39,13 +39,13 @@ public interface MdFatalErrorEvent extends WamEventSpec {
     Optional<String> currentPrimaryAppVersion();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt daysSinceLastPeriodicSync();
+    OptionalLong daysSinceLastPeriodicSync();
 
     @WamProperty(index = 38, type = WamType.BOOLEAN)
     Optional<Boolean> didBootstrapFromSnapshot();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt hoursSinceFirstFiniteFailure();
+    OptionalLong hoursSinceFirstFiniteFailure();
 
     @WamProperty(index = 3, type = WamType.BOOLEAN)
     Optional<Boolean> isBootstrap();
@@ -108,10 +108,10 @@ public interface MdFatalErrorEvent extends WamEventSpec {
     Optional<Boolean> macFatalNumberHasOverrideMutation();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt macFatalNumberNumAddMutation();
+    OptionalLong macFatalNumberNumAddMutation();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt macFatalNumberNumRemoveMutation();
+    OptionalLong macFatalNumberNumRemoveMutation();
 
     @WamProperty(index = 32, type = WamType.BOOLEAN)
     Optional<Boolean> macFatalNumberOverrideMismatch();
@@ -129,7 +129,7 @@ public interface MdFatalErrorEvent extends WamEventSpec {
     Optional<Boolean> macFatalSenderCurrentLthashToLocalCalculatedCurrentLthashMismatch();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt mailboxAgeDays();
+    OptionalLong mailboxAgeDays();
 
     @WamProperty(index = 43, type = WamType.ENUM)
     Optional<MdCompanionDeviceAccountType> mdCompanionDeviceAccountType();
@@ -141,19 +141,19 @@ public interface MdFatalErrorEvent extends WamEventSpec {
     Optional<String> mdRegAttemptId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt patchSnapshotMutationCount();
+    OptionalLong patchSnapshotMutationCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt patchVersion();
+    OptionalLong patchVersion();
 
     @WamProperty(index = 50, type = WamType.INTEGER)
-    OptionalInt recoveryRequestDurationMs();
+    OptionalLong recoveryRequestDurationMs();
 
     @WamProperty(index = 51, type = WamType.ENUM)
     Optional<RecoveryStatusEnum> recoveryStatus();
 
     @WamProperty(index = 45, type = WamType.INTEGER)
-    OptionalInt seqNumber();
+    OptionalLong seqNumber();
 
     @WamProperty(index = 15, type = WamType.STRING)
     Optional<String> sessionStartPrimaryAppVersion();
@@ -162,11 +162,11 @@ public interface MdFatalErrorEvent extends WamEventSpec {
     Optional<MdSyncdFatalErrorSource> sourceType();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt timeSincePairingMs();
+    OptionalLong timeSincePairingMs();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt timeSinceRefreshMs();
+    OptionalLong timeSinceRefreshMs();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt timeSinceTabTakeoverMs();
+    OptionalLong timeSinceTabTakeoverMs();
 }

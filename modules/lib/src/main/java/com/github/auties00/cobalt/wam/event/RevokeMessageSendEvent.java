@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.RevokeType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebRevokeMessageSendWamEvent")
 @WamEvent(id = 3656)
@@ -22,13 +22,13 @@ public interface RevokeMessageSendEvent extends WamEventSpec {
     Optional<MessageType> messageType();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt resendCount();
+    OptionalLong resendCount();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt revokeDuration();
+    OptionalLong revokeDuration();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<RevokeType> revokeType();

@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSendRevokeMessageWamEvent")
 @WamEvent(id = 1348)
@@ -22,5 +22,5 @@ public interface SendRevokeMessageEvent extends WamEventSpec {
     Optional<MessageType> messageType();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt revokeSendDelay();
+    OptionalLong revokeSendDelay();
 }

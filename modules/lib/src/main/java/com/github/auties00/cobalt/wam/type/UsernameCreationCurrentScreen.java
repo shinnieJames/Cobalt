@@ -25,5 +25,6 @@ public enum UsernameCreationCurrentScreen {
     @WamEnumConstant(15) FOA_USERNAME_NOT_AVAILABLE_BOTTOMSHEET,
     @WamEnumConstant(16) ACCOUNT_CENTER_HELP_ARTICLE,
     @WamEnumConstant(17) FB_ACCOUNT_ALREADY_LINKED_DIALOG,
-    @WamEnumConstant(18) SMB_LINKING_BOTTOMSHEET
+    @WamEnumConstant(18) SMB_LINKING_BOTTOMSHEET,
+    @WamEnumConstant(19) USERNAME_PIN_GENERATOR
 }

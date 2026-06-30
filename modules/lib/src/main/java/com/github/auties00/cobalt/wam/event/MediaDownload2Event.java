@@ -23,13 +23,13 @@ import com.github.auties00.cobalt.wam.type.PairedMediaType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMediaDownload2WamEvent")
 @WamEvent(id = 1590, releaseWeight = 50)
 public interface MediaDownload2Event extends WamEventSpec {
     @WamProperty(index = 55, type = WamType.INTEGER)
-    OptionalInt activeThreadCount();
+    OptionalLong activeThreadCount();
 
     @WamProperty(index = 62, type = WamType.ENUM)
     Optional<AiFetchMediaType> aiFetchMediaType();
@@ -38,7 +38,7 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 65, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 50, type = WamType.STRING)
     Optional<String> clientMessageId();
@@ -47,7 +47,7 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<ConnectionType> connectionType();
 
     @WamProperty(index = 46, type = WamType.INTEGER)
-    OptionalInt daysSinceReceive();
+    OptionalLong daysSinceReceive();
 
     @WamProperty(index = 24, type = WamType.STRING)
     Optional<String> debugMediaException();
@@ -59,7 +59,7 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<String> debugUrl();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt deviceCount();
+    OptionalLong deviceCount();
 
     @WamProperty(index = 20, type = WamType.FLOAT)
     OptionalDouble downloadBytesTransferred();
@@ -68,7 +68,7 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<Instant> downloadConnectT();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt downloadHttpCode();
+    OptionalLong downloadHttpCode();
 
     @WamProperty(index = 17, type = WamType.BOOLEAN)
     Optional<Boolean> downloadIsReuse();
@@ -83,10 +83,10 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<DownloadQualityType> downloadQuality();
 
     @WamProperty(index = 68, type = WamType.INTEGER)
-    OptionalInt downloadQueueSize();
+    OptionalLong downloadQueueSize();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt downloadResumePoint();
+    OptionalLong downloadResumePoint();
 
     @WamProperty(index = 21, type = WamType.TIMER)
     Optional<Instant> downloadTimeToFirstByteT();
@@ -107,10 +107,10 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<Instant> expressPathTimeSavedMs();
 
     @WamProperty(index = 47, type = WamType.INTEGER)
-    OptionalInt fileHeight();
+    OptionalLong fileHeight();
 
     @WamProperty(index = 48, type = WamType.INTEGER)
-    OptionalInt fileWidth();
+    OptionalLong fileWidth();
 
     @WamProperty(index = 44, type = WamType.BOOLEAN)
     Optional<Boolean> hasLeveragedExpressPath();
@@ -131,16 +131,16 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<Boolean> isViewOnce();
 
     @WamProperty(index = 57, type = WamType.INTEGER)
-    OptionalInt maxThreadCount();
+    OptionalLong maxThreadCount();
 
     @WamProperty(index = 38, type = WamType.INTEGER)
-    OptionalInt mediaId();
+    OptionalLong mediaId();
 
     @WamProperty(index = 30, type = WamType.ENUM)
     Optional<NetworkStackType> networkStack();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt overallAttemptCount();
+    OptionalLong overallAttemptCount();
 
     @WamProperty(index = 39, type = WamType.ENUM)
     Optional<BackendStoreType> overallBackendStore();
@@ -191,13 +191,13 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<MediaType> overallMediaType();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt overallMmsVersion();
+    OptionalLong overallMmsVersion();
 
     @WamProperty(index = 9, type = WamType.TIMER)
     Optional<Instant> overallQueueT();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt overallRetryCount();
+    OptionalLong overallRetryCount();
 
     @WamProperty(index = 8, type = WamType.TIMER)
     Optional<Instant> overallT();
@@ -209,13 +209,16 @@ public interface MediaDownload2Event extends WamEventSpec {
     Optional<PairedMediaType> pairedMediaType();
 
     @WamProperty(index = 66, type = WamType.INTEGER)
-    OptionalInt prefetchOrder();
+    OptionalLong prefetchOrder();
 
     @WamProperty(index = 51, type = WamType.BOOLEAN)
     Optional<Boolean> sleepModeAffected();
 
     @WamProperty(index = 67, type = WamType.STRING)
     Optional<String> statusId();
+
+    @WamProperty(index = 70, type = WamType.BOOLEAN)
+    Optional<Boolean> streamingUsedNonStreamingFallback();
 
     @WamProperty(index = 54, type = WamType.TIMER)
     Optional<Instant> timeDelayed();

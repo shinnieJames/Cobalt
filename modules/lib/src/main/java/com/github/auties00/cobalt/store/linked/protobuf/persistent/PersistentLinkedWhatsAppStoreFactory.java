@@ -22,19 +22,19 @@ import java.util.UUID;
 
 /**
  * The {@link LinkedWhatsAppStoreFactory} that snapshots session metadata to {@code store.proto} and
- * offloads message bodies to an embedded {@link PersistentMessageStore LMDB} env per session.
+ * offloads message bodies to an embedded {@link PersistentMessageStore MVStore} per session.
  *
  * @apiNote
  * Cobalt embedders obtain instances through {@link LinkedWhatsAppStoreFactory#persistent()} and its
  * overloads; the class is package-private so the persistence strategy is not part of the public
  * API surface. Each session lives under {@code <baseDirectory>/<clientType>/<sessionId>/} with a
- * {@code store.proto} metadata snapshot beside a {@code messages.lmdb/} env directory.
+ * {@code store.proto} metadata snapshot beside a {@code messages.mv} file.
  *
  * @implNote
  * This implementation runs an orphan-recovery pass on {@link #load load}: after the metadata
- * snapshot deserialises, the factory walks the LMDB env once and inserts metadata stubs for any
- * chat or newsletter that holds bodies in LMDB but is missing from the snapshot. This bridges the
- * post-commit window where an LMDB write landed but the next metadata save never ran (process
+ * snapshot deserialises, the factory walks the MVStore once and inserts metadata stubs for any
+ * chat or newsletter that holds bodies in MVStore but is missing from the snapshot. This bridges the
+ * post-commit window where an MVStore write landed but the next metadata save never ran (process
  * killed in between). Recovered entries surface through the normal
  * {@link LinkedWhatsAppChatStore#chats()} and {@link LinkedWhatsAppChatStore#newsletters()} collections so callers
  * see a consistent shape regardless of whether the previous shutdown was clean or crashy.
@@ -51,12 +51,12 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
     private static final Path DEFAULT_DIRECTORY = Path.of(System.getProperty("user.home"), ".cobalt", "proto");
 
     /**
-     * The default libmdbx geometry upper bound in bytes.
+     * The default map-size hint in bytes.
      *
      * @implNote
-     * This implementation uses 8 GiB as the maximum size the env file may grow to. It is a virtual
-     * reservation, not a preallocation: libmdbx grows the file on demand in fixed steps and shrinks
-     * it when free space accumulates, so the on-disk size tracks the data rather than this cap.
+     * This 8 GiB value is the legacy libmdbx geometry upper bound. The MVStore backend grows its file
+     * on demand and ignores it; it is retained only so the {@code mapSize}-bearing factory and
+     * {@code open} signatures stay source-compatible.
      */
     private static final long DEFAULT_MAP_SIZE = 8L * 1024 * 1024 * 1024;
 
@@ -76,7 +76,7 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
     private final Path directory;
 
     /**
-     * The initial LMDB map size in bytes used for newly opened envs.
+     * The map-size hint in bytes, validated positive but ignored by the MVStore backend.
      */
     private final long mapSize;
 
@@ -104,18 +104,18 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
     }
 
     /**
-     * Constructs a factory using the given root directory and initial LMDB map size.
+     * Constructs a factory using the given root directory and map-size hint.
      *
      * @apiNote
      * Used by {@link LinkedWhatsAppStoreFactory#persistent(Path, long)}.
      *
      * @implNote
-     * This implementation rejects non-positive {@code mapSize} eagerly so the failure surfaces at
-     * factory construction time rather than later inside the LMDB binding.
+     * This implementation rejects a non-positive {@code mapSize} eagerly so the failure surfaces at
+     * factory construction time, even though the MVStore backend itself ignores the value.
      *
      * @param directory the root directory under which per-session folders are created; must not
      *                  be {@code null}
-     * @param mapSize   the initial LMDB map size in bytes; must be positive
+     * @param mapSize   the legacy map-size hint in bytes, ignored by the MVStore backend; must be positive
      * @throws IllegalArgumentException if {@code mapSize <= 0}
      * @throws NullPointerException     if {@code directory} is {@code null}
      */
@@ -175,7 +175,7 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
 
     /**
      * Loads the session identified by {@code sessionId} for the given client type, opens its
-     * LMDB env, attaches it to the deserialised store, and runs the orphan-recovery pass.
+     * MVStore, attaches it to the deserialised store, and runs the orphan-recovery pass.
      *
      * @apiNote
      * Internal helper for the three public {@code load} overloads.
@@ -205,7 +205,7 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
      * {@code messageStore} but has no corresponding entry in the deserialised snapshot.
      *
      * @apiNote
-     * Bridges the post-commit window where an LMDB write succeeded but the next metadata save
+     * Bridges the post-commit window where an MVStore write succeeded but the next metadata save
      * never happened (for example, the process was killed between the two).
      *
      * @implNote
@@ -215,7 +215,7 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
      * stubs so the inserted entries receive the same attachment handling as fresh ones.
      *
      * @param store        the freshly attached store
-     * @param messageStore the just-opened LMDB facade
+     * @param messageStore the just-opened MVStore facade
      */
     private static void recoverOrphans(PersistentStore store, PersistentMessageStore messageStore) {
         var chatStore = store.chatStore();
@@ -236,7 +236,7 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
      *
      * @implNote
      * This implementation generates a random UUID when {@code uuid} is {@code null}, opens a
-     * fresh LMDB env, and returns an otherwise empty store with the platform-appropriate device
+     * fresh MVStore, and returns an otherwise empty store with the platform-appropriate device
      * descriptor.
      */
     @Override
@@ -258,7 +258,7 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
                 new ProtobufLinkedWebSessionStoreBuilder().build(),
                 new ProtobufLinkedWhatsAppWamStoreBuilder().build(),
                 new PersistentLinkedWhatsAppChatStoreBuilder().build());
-        attachFreshLmdb(store, clientType, sessionId);
+        attachFreshMessageStore(store, clientType, sessionId);
         return store;
     }
 
@@ -288,7 +288,7 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
                 new ProtobufLinkedWebSessionStoreBuilder().build(),
                 new ProtobufLinkedWhatsAppWamStoreBuilder().build(),
                 new PersistentLinkedWhatsAppChatStoreBuilder().build());
-        attachFreshLmdb(store, clientType, sessionId);
+        attachFreshMessageStore(store, clientType, sessionId);
         return store;
     }
 
@@ -328,12 +328,12 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
                 new ProtobufLinkedWebSessionStoreBuilder().build(),
                 new ProtobufLinkedWhatsAppWamStoreBuilder().build(),
                 new PersistentLinkedWhatsAppChatStoreBuilder().build());
-        attachFreshLmdb(store, clientType, sessionId);
+        attachFreshMessageStore(store, clientType, sessionId);
         return store;
     }
 
     /**
-     * Opens a fresh LMDB env for {@code sessionId}, wires it into {@code store}, and records the
+     * Opens a fresh MVStore for {@code sessionId}, wires it into {@code store}, and records the
      * session as the most recently opened one.
      *
      * @apiNote
@@ -342,16 +342,16 @@ public final class PersistentLinkedWhatsAppStoreFactory implements LinkedWhatsAp
      *
      * @implNote
      * This implementation writes the
-     * {@link #writeLatestSession(LinkedWhatsAppClientType, String) latest-session pointer} once the env is
-     * open so a subsequent {@link #loadLatest(LinkedWhatsAppClientType)} resumes the session just created
-     * without scanning the home directory.
+     * {@link #writeLatestSession(LinkedWhatsAppClientType, String) latest-session pointer} once the
+     * message store is open so a subsequent {@link #loadLatest(LinkedWhatsAppClientType)} resumes the
+     * session just created without scanning the home directory.
      *
      * @param store      the freshly built store
      * @param clientType the client type
      * @param sessionId  the session UUID string or phone-number string
-     * @throws IOException if the env directory cannot be created or the pointer cannot be written
+     * @throws IOException if the session directory cannot be created or the pointer cannot be written
      */
-    private void attachFreshLmdb(PersistentStore store, LinkedWhatsAppClientType clientType, String sessionId) throws IOException {
+    private void attachFreshMessageStore(PersistentStore store, LinkedWhatsAppClientType clientType, String sessionId) throws IOException {
         var envPath = PersistentStore.messagesEnvPath(clientType, directory, sessionId);
         store.attachMessageStore(PersistentMessageStore.open(envPath, mapSize));
         writeLatestSession(clientType, sessionId);

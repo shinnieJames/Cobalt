@@ -13,13 +13,13 @@ import com.github.auties00.cobalt.wam.type.PlatformType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebInlineVideoPlaybackClosedWamEvent")
 @WamEvent(id = 2032)
 public interface InlineVideoPlaybackClosedEvent extends WamEventSpec {
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt chatSize();
+    OptionalLong chatSize();
 
     @WamProperty(index = 7, type = WamType.TIMER)
     Optional<Instant> inlineVideoCancelBeforePlayStateT();
@@ -28,7 +28,7 @@ public interface InlineVideoPlaybackClosedEvent extends WamEventSpec {
     Optional<Boolean> inlineVideoComplete();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt inlineVideoCompletionRate();
+    OptionalLong inlineVideoCompletionRate();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<InlineVideoCtaClick> inlineVideoCtaClick();

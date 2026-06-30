@@ -10,12 +10,11 @@ import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.util.SchedulerUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -114,7 +113,7 @@ public final class LiveInactiveGroupLidMigrationService implements InactiveGroup
      * <p>The reference is held so {@link #reset()} can cancel a pending retry
      * when the client disconnects.
      */
-    private volatile CompletableFuture<Void> scheduledTask;
+    private volatile ScheduledTask scheduledTask;
 
     /**
      * Constructs a new service bound to the given client and AB-props service.
@@ -140,7 +139,7 @@ public final class LiveInactiveGroupLidMigrationService implements InactiveGroup
             return;
         }
 
-        scheduledTask = SchedulerUtils.scheduleDelayed(INITIAL_DELAY, this::run);
+        scheduledTask = ScheduledTask.scheduleDelayed(INITIAL_DELAY, this::run);
     }
 
     /**
@@ -150,7 +149,7 @@ public final class LiveInactiveGroupLidMigrationService implements InactiveGroup
     public void reset() {
         var task = scheduledTask;
         if (task != null) {
-            task.cancel(true);
+            task.cancel();
             scheduledTask = null;
         }
     }
@@ -244,7 +243,7 @@ public final class LiveInactiveGroupLidMigrationService implements InactiveGroup
                 LOGGER.log(System.Logger.Level.INFO,
                         "[lid-inactive-group-migration] {0} PN groups left, retry later",
                         remaining.size());
-                scheduledTask = SchedulerUtils.scheduleDelayed(RETRY_DELAY, this::run);
+                scheduledTask = ScheduledTask.scheduleDelayed(RETRY_DELAY, this::run);
             }
         } catch (Exception e) {
             LOGGER.log(System.Logger.Level.WARNING,

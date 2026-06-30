@@ -146,7 +146,7 @@ public abstract class ProtobufWhatsAppStore implements LinkedWhatsAppStore {
         this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore cannot be null");
         this.directory = directory;
         this.webSessionStore = Objects.requireNonNullElseGet(webSessionStore, () -> new ProtobufLinkedWebSessionStore(null, null));
-        this.wamStore = Objects.requireNonNullElseGet(wamStore, () -> new ProtobufLinkedWhatsAppWamStore(null));
+        this.wamStore = Objects.requireNonNullElseGet(wamStore, () -> new ProtobufLinkedWhatsAppWamStore(null, null, null, null, null, null));
         this.businessStore = new ProtobufLinkedWhatsAppBusinessStore();
         this.connectionStore = new ProtobufLinkedWhatsAppConnectionStore();
         this.signalStore.bindAccount(accountStore);

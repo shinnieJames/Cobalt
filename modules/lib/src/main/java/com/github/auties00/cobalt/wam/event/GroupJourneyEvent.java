@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import com.github.auties00.cobalt.wam.type.UserRoleType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupJourneyWamEvent")
 @WamEvent(id = 4512)
@@ -25,7 +25,7 @@ public interface GroupJourneyEvent extends WamEventSpec {
     Optional<String> appSessionId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt groupSize();
+    OptionalLong groupSize();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<SurfaceType> surface();

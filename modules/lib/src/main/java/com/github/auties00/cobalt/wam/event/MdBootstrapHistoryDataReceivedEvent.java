@@ -10,19 +10,19 @@ import com.github.auties00.cobalt.wam.type.MdBootstrapHistoryPayloadType;
 import com.github.auties00.cobalt.wam.type.MdBootstrapPayloadType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdBootstrapHistoryDataReceivedWamEvent")
 @WamEvent(id = 2998)
 public interface MdBootstrapHistoryDataReceivedEvent extends WamEventSpec {
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt historySyncChunkOrder();
+    OptionalLong historySyncChunkOrder();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> historySyncRetryRequestId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt historySyncStageProgress();
+    OptionalLong historySyncStageProgress();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<MdBootstrapHistoryPayloadType> mdBootstrapHistoryPayloadType();
@@ -37,5 +37,5 @@ public interface MdBootstrapHistoryDataReceivedEvent extends WamEventSpec {
     Optional<String> mdSyncFailureReason();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt mdTimestamp();
+    OptionalLong mdTimestamp();
 }

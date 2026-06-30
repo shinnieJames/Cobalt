@@ -23,5 +23,6 @@ public enum PrekeysFetchContext {
     @WamEnumConstant(13) USER_INTENT_STATUS_PREFETCH,
     @WamEnumConstant(14) SEND_SENDERKEY,
     @WamEnumConstant(15) AEA_SEND_TIME_RECONCILATION,
-    @WamEnumConstant(16) AEA_CONSUMER_BACKFILL
+    @WamEnumConstant(16) AEA_CONSUMER_BACKFILL,
+    @WamEnumConstant(17) AEA_GOSSIP_MISMATCH
 }

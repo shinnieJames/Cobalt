@@ -68,7 +68,7 @@ public record WamPropertyElement(
                 return typeArgs.getFirst();
             }
         }
-        // OptionalInt / OptionalDouble have no type args — return the type itself.
+        // OptionalLong / OptionalDouble have no type args — return the type itself.
         // The wamType (INTEGER/FLOAT) already tells us the underlying Java type.
         return returnType;
     }

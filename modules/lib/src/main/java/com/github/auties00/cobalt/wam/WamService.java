@@ -699,8 +699,8 @@ public abstract class WamService {
      * {@code initialDelaySeconds} have elapsed and then every
      * {@code periodSeconds} thereafter until
      * {@link #cancelAllScheduled()} is called.
-     * {@link LiveWamService} uses a virtual-thread-backed
-     * {@link ScheduledExecutorService}; tests
+     * {@link LiveWamService} backs each tick with a virtual-thread
+     * {@link com.github.auties00.cobalt.util.ScheduledTask}; tests
      * record the schedule and drive ticks deterministically.
      *
      * @param task                the task to invoke on every tick

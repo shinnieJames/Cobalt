@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.KicEntryPointType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebDisappearingMessageKeepInChatWamEvent")
 @WamEvent(id = 3482)
@@ -21,7 +21,7 @@ public interface DisappearingMessageKeepInChatEvent extends WamEventSpec {
     Optional<Boolean> canEditDmSettings();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt chatEphemeralityDuration();
+    OptionalLong chatEphemeralityDuration();
 
     @WamProperty(index = 2, type = WamType.BOOLEAN)
     Optional<Boolean> isAGroup();
@@ -30,10 +30,10 @@ public interface DisappearingMessageKeepInChatEvent extends WamEventSpec {
     Optional<Boolean> isAdmin();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt keptCount();
+    OptionalLong keptCount();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt keptDelta();
+    OptionalLong keptDelta();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<KicActionNameType> kicActionName();
@@ -51,13 +51,13 @@ public interface DisappearingMessageKeepInChatEvent extends WamEventSpec {
     Optional<Boolean> messageExpiredOnUnkeep();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt messageExpiryTimer();
+    OptionalLong messageExpiryTimer();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt messagesInFolder();
+    OptionalLong messagesInFolder();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt messagesSelected();
+    OptionalLong messagesSelected();
 
     @WamProperty(index = 13, type = WamType.STRING)
     Optional<String> threadId();

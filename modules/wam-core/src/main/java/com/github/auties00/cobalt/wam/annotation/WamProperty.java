@@ -12,7 +12,7 @@ import java.lang.annotation.Target;
  * {@link WamEvent}-annotated interface that maps to one TLV-encoded field
  * in the WAM binary protocol.
  *
- * <p>Each annotated method must return an {@code Optional}, {@code OptionalInt},
+ * <p>Each annotated method must return an {@code Optional}, {@code OptionalLong},
  * or {@code OptionalDouble} wrapping the property value. The annotation
  * processor generates an implementation that stores raw nullable values
  * internally and wraps them at call time. Only non-{@code null} values are

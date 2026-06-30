@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MdBootstrapPayloadType;
 import com.github.auties00.cobalt.wam.type.MdBootstrapStepResult;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdBootstrapHistoryDataDownloadedWamEvent")
 @WamEvent(id = 2296)
@@ -21,46 +21,46 @@ public interface MdBootstrapHistoryDataDownloadedEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 17, type = WamType.ENUM)
     Optional<ApplicationState> applicationState();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt historySyncChunkOrder();
+    OptionalLong historySyncChunkOrder();
 
     @WamProperty(index = 20, type = WamType.STRING)
     Optional<String> historySyncRetryRequestId();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt historySyncStageProgress();
+    OptionalLong historySyncStageProgress();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt mdBootstrapChatsCount();
+    OptionalLong mdBootstrapChatsCount();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<MdBootstrapHistoryPayloadType> mdBootstrapHistoryPayloadType();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt mdBootstrapMessagesCount();
+    OptionalLong mdBootstrapMessagesCount();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt mdBootstrapPayloadSize();
+    OptionalLong mdBootstrapPayloadSize();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt mdBootstrapPayloadThumbnailsSize();
+    OptionalLong mdBootstrapPayloadThumbnailsSize();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<MdBootstrapPayloadType> mdBootstrapPayloadType();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt mdBootstrapStepDuration();
+    OptionalLong mdBootstrapStepDuration();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<MdBootstrapStepResult> mdBootstrapStepResult();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt mdHsOldestMessageTimestamp();
+    OptionalLong mdHsOldestMessageTimestamp();
 
     @WamProperty(index = 12, type = WamType.STRING)
     Optional<String> mdRegAttemptId();
@@ -69,14 +69,14 @@ public interface MdBootstrapHistoryDataDownloadedEvent extends WamEventSpec {
     Optional<String> mdSessionId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt mdStorageQuotaBytes();
+    OptionalLong mdStorageQuotaBytes();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt mdStorageQuotaUsedBytes();
+    OptionalLong mdStorageQuotaUsedBytes();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> mdSyncFailureReason();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt mdTimestamp();
+    OptionalLong mdTimestamp();
 }

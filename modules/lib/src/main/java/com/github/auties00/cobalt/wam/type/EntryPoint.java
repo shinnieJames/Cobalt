@@ -97,5 +97,6 @@ public enum EntryPoint {
     @WamEnumConstant(87) BB_SUGGESTED_AUDIENCE_YOUR_CONTACTS,
     @WamEnumConstant(88) BB_SUGGESTED_AUDIENCE_LIST,
     @WamEnumConstant(89) BB_SHARE_MODAL,
-    @WamEnumConstant(90) BB_FORWARD_MODAL
+    @WamEnumConstant(90) BB_FORWARD_MODAL,
+    @WamEnumConstant(91) ATTACHMENT_TRAY
 }

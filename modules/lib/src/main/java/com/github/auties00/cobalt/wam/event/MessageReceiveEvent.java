@@ -31,13 +31,13 @@ import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMessageReceiveWamEvent")
 @WamEvent(id = 450, releaseWeight = 5)
 public interface MessageReceiveEvent extends WamEventSpec {
     @WamProperty(index = 61, type = WamType.INTEGER)
-    OptionalInt afterReadDuration();
+    OptionalLong afterReadDuration();
 
     @WamProperty(index = 28, type = WamType.ENUM)
     Optional<AgentEngagementEnumType> agentEngagementType();
@@ -46,7 +46,7 @@ public interface MessageReceiveEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 37, type = WamType.ENUM)
     Optional<BotType> botType();
@@ -55,7 +55,7 @@ public interface MessageReceiveEvent extends WamEventSpec {
     Optional<ChatOriginsType> chatOrigins();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt deviceCount();
+    OptionalLong deviceCount();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<SizeBucket> deviceSizeBucket();
@@ -73,7 +73,7 @@ public interface MessageReceiveEvent extends WamEventSpec {
     Optional<EncryptionTypeCode> encryptionType();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt ephemeralityDuration();
+    OptionalLong ephemeralityDuration();
 
     @WamProperty(index = 26, type = WamType.ENUM)
     Optional<EphemeralityInitiatorType> ephemeralityInitiator();
@@ -148,22 +148,25 @@ public interface MessageReceiveEvent extends WamEventSpec {
     Optional<Boolean> mutedGroupMessage();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt numOfWebUrlsInTextMessage();
+    OptionalLong numOfWebUrlsInTextMessage();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt offlineCount();
+    OptionalLong offlineCount();
+
+    @WamProperty(index = 65, type = WamType.BOOLEAN)
+    Optional<Boolean> oppositeHasUsername();
 
     @WamProperty(index = 40, type = WamType.ENUM)
     Optional<OppositeVisibleIdentificationType> oppositeVisibleIdentification();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt paddingBytesSize();
+    OptionalLong paddingBytesSize();
 
     @WamProperty(index = 42, type = WamType.ENUM)
     Optional<PairedMediaType> pairedMediaType();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt participantCount();
+    OptionalLong participantCount();
 
     @WamProperty(index = 53, type = WamType.ENUM)
     Optional<PrivateAiFeatureName> privateAiFeatureName();
@@ -178,22 +181,22 @@ public interface MessageReceiveEvent extends WamEventSpec {
     Optional<String> receivedContactMetadataTypes();
 
     @WamProperty(index = 50, type = WamType.INTEGER)
-    OptionalInt receivedPhoneNumberContactSize();
+    OptionalLong receivedPhoneNumberContactSize();
 
     @WamProperty(index = 51, type = WamType.INTEGER)
-    OptionalInt receivedPhoneNumberWithUsernameContactSize();
+    OptionalLong receivedPhoneNumberWithUsernameContactSize();
 
     @WamProperty(index = 52, type = WamType.INTEGER)
-    OptionalInt receivedUsernameContactSize();
+    OptionalLong receivedUsernameContactSize();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt receiverDefaultDisappearingDuration();
+    OptionalLong receiverDefaultDisappearingDuration();
 
     @WamProperty(index = 20, type = WamType.ENUM)
     Optional<RevokeType> revokeType();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt senderDefaultDisappearingDuration();
+    OptionalLong senderDefaultDisappearingDuration();
 
     @WamProperty(index = 64, type = WamType.ENUM)
     Optional<PlatformType> senderPlatform();
@@ -205,7 +208,7 @@ public interface MessageReceiveEvent extends WamEventSpec {
     Optional<SessionScopeType> sessionScope();
 
     @WamProperty(index = 48, type = WamType.INTEGER)
-    OptionalInt stanzaProcessCount();
+    OptionalLong stanzaProcessCount();
 
     @WamProperty(index = 29, type = WamType.BOOLEAN)
     Optional<Boolean> stickerIsAi();
@@ -220,7 +223,7 @@ public interface MessageReceiveEvent extends WamEventSpec {
     Optional<StickerMakerSourceType> stickerMakerSourceType();
 
     @WamProperty(index = 56, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 21, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

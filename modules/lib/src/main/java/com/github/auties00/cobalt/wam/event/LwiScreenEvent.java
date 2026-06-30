@@ -28,7 +28,7 @@ import com.github.auties00.cobalt.wam.type.SmbiAdCreationAccessTokenSource;
 import com.github.auties00.cobalt.wam.type.ValidationStatus;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLwiScreenWamEvent")
 @WamEvent(id = 2772)
@@ -46,7 +46,7 @@ public interface LwiScreenEvent extends WamEventSpec {
     Optional<LwiAdsContentType> adsContentSelected();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt alertCount();
+    OptionalLong alertCount();
 
     @WamProperty(index = 45, type = WamType.ENUM)
     Optional<AudienceType> audienceType();
@@ -70,7 +70,7 @@ public interface LwiScreenEvent extends WamEventSpec {
     Optional<DefaultAudienceLocationType> defaultAudienceLocationType();
 
     @WamProperty(index = 39, type = WamType.INTEGER)
-    OptionalInt itemCount();
+    OptionalLong itemCount();
 
     @WamProperty(index = 46, type = WamType.STRING)
     Optional<String> lwiAdCampaignId();
@@ -85,7 +85,7 @@ public interface LwiScreenEvent extends WamEventSpec {
     Optional<LwiAlertReason> lwiAlertReason();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt lwiBudgetInLocal();
+    OptionalLong lwiBudgetInLocal();
 
     @WamProperty(index = 54, type = WamType.STRING)
     Optional<String> lwiBudgetOptionsInLocal();
@@ -100,19 +100,19 @@ public interface LwiScreenEvent extends WamEventSpec {
     Optional<String> lwiCurrency();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt lwiDefaultBudgetInLocal();
+    OptionalLong lwiDefaultBudgetInLocal();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt lwiDefaultDurationInDays();
+    OptionalLong lwiDefaultDurationInDays();
 
     @WamProperty(index = 19, type = WamType.ENUM)
     Optional<LwiDefaultTargetingSpec> lwiDefaultTargetingSpec();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt lwiDurationInDays();
+    OptionalLong lwiDurationInDays();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt lwiEventSequenceNumber();
+    OptionalLong lwiEventSequenceNumber();
 
     @WamProperty(index = 30, type = WamType.STRING)
     Optional<String> lwiExtras();
@@ -130,10 +130,10 @@ public interface LwiScreenEvent extends WamEventSpec {
     Optional<String> lwiLocationTypesSetOnAudienceSelection();
 
     @WamProperty(index = 52, type = WamType.INTEGER)
-    OptionalInt lwiMaxDurationInDays();
+    OptionalLong lwiMaxDurationInDays();
 
     @WamProperty(index = 53, type = WamType.INTEGER)
-    OptionalInt lwiMinDurationInDays();
+    OptionalLong lwiMinDurationInDays();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<LwiScreenAction> lwiScreenAction();
@@ -145,7 +145,7 @@ public interface LwiScreenEvent extends WamEventSpec {
     Optional<String> lwiTargetingSpec();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt lwiTotalCtwaAds();
+    OptionalLong lwiTotalCtwaAds();
 
     @WamProperty(index = 28, type = WamType.BOOLEAN)
     Optional<Boolean> lwiViewerHasEditPermission();
@@ -175,7 +175,7 @@ public interface LwiScreenEvent extends WamEventSpec {
     Optional<SmbiAdCreationAccessTokenSource> smbiAdCreationAccessTokenSource();
 
     @WamProperty(index = 50, type = WamType.INTEGER)
-    OptionalInt totalMediaCount();
+    OptionalLong totalMediaCount();
 
     @WamProperty(index = 31, type = WamType.BOOLEAN)
     Optional<Boolean> usedSavedAudience();

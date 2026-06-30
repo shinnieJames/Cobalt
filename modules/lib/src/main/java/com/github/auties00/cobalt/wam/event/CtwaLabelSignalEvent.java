@@ -11,16 +11,16 @@ import com.github.auties00.cobalt.wam.type.CtwaLabelType;
 import com.github.auties00.cobalt.wam.type.CustomerAdsSharingSettingEnabled;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCtwaLabelSignalWamEvent")
 @WamEvent(id = 4662)
 public interface CtwaLabelSignalEvent extends WamEventSpec {
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt ctwaConversationDepth();
+    OptionalLong ctwaConversationDepth();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt ctwaLabelSignalVersion();
+    OptionalLong ctwaLabelSignalVersion();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<CtwaLabelTarget> ctwaLabelTarget();

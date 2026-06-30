@@ -535,8 +535,8 @@ class Calls2TransportWireAdversarialTest {
         // when the combined cobalt-native library or libsrtp is not present on the build host.
         private LiveHbhSrtpRelay[] openRelays() {
             try {
-                var a = new LiveHbhSrtpRelay(master.clone(), srtcpMaster.clone(), srtcpMaster.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
-                var b = new LiveHbhSrtpRelay(master.clone(), srtcpMaster.clone(), srtcpMaster.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
+                var a = new LiveHbhSrtpRelay(master.clone(), srtcpMaster.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
+                var b = new LiveHbhSrtpRelay(master.clone(), srtcpMaster.clone(), SrtpCryptoSuite.AES_CM_128_HMAC_SHA1_80);
                 return new LiveHbhSrtpRelay[]{a, b};
             } catch (Throwable t) {
                 Assumptions.abort("native libsrtp unavailable on this host: " + t);

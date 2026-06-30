@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMediaPickerWamEvent")
 @WamEvent(id = 1038)
@@ -24,19 +24,19 @@ public interface MediaPickerEvent extends WamEventSpec {
     Optional<Boolean> audienceSelectorUpdated();
 
     @WamProperty(index = 51, type = WamType.INTEGER)
-    OptionalInt autoScaleCount();
+    OptionalLong autoScaleCount();
 
     @WamProperty(index = 37, type = WamType.STRING)
     Optional<String> captionPositions();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt chatRecipients();
+    OptionalLong chatRecipients();
 
     @WamProperty(index = 38, type = WamType.BOOLEAN)
     Optional<Boolean> hasCollectionCaption();
 
     @WamProperty(index = 34, type = WamType.INTEGER)
-    OptionalInt hdToggleChange();
+    OptionalLong hdToggleChange();
 
     @WamProperty(index = 35, type = WamType.BOOLEAN)
     Optional<Boolean> hdToggleEligible();
@@ -57,49 +57,49 @@ public interface MediaPickerEvent extends WamEventSpec {
     Optional<Boolean> isViewOnce();
 
     @WamProperty(index = 39, type = WamType.INTEGER)
-    OptionalInt itemCaptionCount();
+    OptionalLong itemCaptionCount();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt mediaPickerArBackground();
+    OptionalLong mediaPickerArBackground();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt mediaPickerArFilter();
+    OptionalLong mediaPickerArFilter();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt mediaPickerArFunEffect();
+    OptionalLong mediaPickerArFunEffect();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt mediaPickerAvatarStickers();
+    OptionalLong mediaPickerAvatarStickers();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt mediaPickerChanged();
+    OptionalLong mediaPickerChanged();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt mediaPickerCroppedRotated();
+    OptionalLong mediaPickerCroppedRotated();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt mediaPickerDeleted();
+    OptionalLong mediaPickerDeleted();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt mediaPickerDrawing();
+    OptionalLong mediaPickerDrawing();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt mediaPickerFilter();
+    OptionalLong mediaPickerFilter();
 
     @WamProperty(index = 26, type = WamType.BOOLEAN)
     Optional<Boolean> mediaPickerHasLocationSticker();
 
     @WamProperty(index = 47, type = WamType.INTEGER)
-    OptionalInt mediaPickerIgluLowlight();
+    OptionalLong mediaPickerIgluLowlight();
 
     @WamProperty(index = 48, type = WamType.INTEGER)
-    OptionalInt mediaPickerIgluTouchup();
+    OptionalLong mediaPickerIgluTouchup();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt mediaPickerLikeDoc();
+    OptionalLong mediaPickerLikeDoc();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt mediaPickerNotLikeDoc();
+    OptionalLong mediaPickerNotLikeDoc();
 
     @WamProperty(index = 14, type = WamType.ENUM)
     Optional<MediaPickerOriginType> mediaPickerOrigin();
@@ -111,43 +111,43 @@ public interface MediaPickerEvent extends WamEventSpec {
     Optional<String> mediaPickerPosition();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt mediaPickerSent();
+    OptionalLong mediaPickerSent();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt mediaPickerSentUnchanged();
+    OptionalLong mediaPickerSentUnchanged();
 
     @WamProperty(index = 29, type = WamType.STRING)
     Optional<String> mediaPickerSessionId();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt mediaPickerStickers();
+    OptionalLong mediaPickerStickers();
 
     @WamProperty(index = 15, type = WamType.TIMER)
     Optional<Instant> mediaPickerT();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt mediaPickerText();
+    OptionalLong mediaPickerText();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<MediaType> mediaType();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt motionPhotoImpressionCount();
+    OptionalLong motionPhotoImpressionCount();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt motionPhotoSentCount();
+    OptionalLong motionPhotoSentCount();
 
     @WamProperty(index = 45, type = WamType.INTEGER)
-    OptionalInt numberOfArPostCapture();
+    OptionalLong numberOfArPostCapture();
 
     @WamProperty(index = 46, type = WamType.INTEGER)
-    OptionalInt numberOfArPreCapture();
+    OptionalLong numberOfArPreCapture();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt numberOfIgluPostCapture();
+    OptionalLong numberOfIgluPostCapture();
 
     @WamProperty(index = 50, type = WamType.INTEGER)
-    OptionalInt numberOfIgluPreCapture();
+    OptionalLong numberOfIgluPreCapture();
 
     @WamProperty(index = 23, type = WamType.TIMER)
     Optional<Instant> photoGalleryDurationT();
@@ -156,13 +156,13 @@ public interface MediaPickerEvent extends WamEventSpec {
     Optional<MediaQuality> photoQualitySetting();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt pickerSessionId();
+    OptionalLong pickerSessionId();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt statusRecipients();
+    OptionalLong statusRecipients();
 
     @WamProperty(index = 52, type = WamType.INTEGER)
-    OptionalInt transformCount();
+    OptionalLong transformCount();
 
     @WamProperty(index = 28, type = WamType.ENUM)
     Optional<MediaQuality> videoQualitySetting();

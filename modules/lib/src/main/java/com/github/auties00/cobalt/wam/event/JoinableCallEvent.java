@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.LobbyExitType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebJoinableCallWamEvent")
 @WamEvent(id = 2572)
@@ -90,6 +90,9 @@ public interface JoinableCallEvent extends WamEventSpec {
     @WamProperty(index = 40, type = WamType.BOOLEAN)
     Optional<Boolean> isScheduledCall();
 
+    @WamProperty(index = 56, type = WamType.BOOLEAN)
+    Optional<Boolean> isTransferRejoin();
+
     @WamProperty(index = 47, type = WamType.BOOLEAN)
     Optional<Boolean> isUpgradedGroupCallBeforeConnected();
 
@@ -124,10 +127,10 @@ public interface JoinableCallEvent extends WamEventSpec {
     Optional<LobbyExitType> lobbyExit();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt lobbyExitNackCode();
+    OptionalLong lobbyExitNackCode();
 
     @WamProperty(index = 49, type = WamType.INTEGER)
-    OptionalInt lobbyOpenDurationMs();
+    OptionalLong lobbyOpenDurationMs();
 
     @WamProperty(index = 18, type = WamType.BOOLEAN)
     Optional<Boolean> lobbyQueryWhileConnected();
@@ -142,19 +145,19 @@ public interface JoinableCallEvent extends WamEventSpec {
     Optional<Instant> nseOfflineQueueMs();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt numConnectedPeers();
+    OptionalLong numConnectedPeers();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt numInvitedParticipants();
+    OptionalLong numInvitedParticipants();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt numOutgoingRingingPeers();
+    OptionalLong numOutgoingRingingPeers();
 
     @WamProperty(index = 35, type = WamType.TIMER)
     Optional<Instant> queryAckLatencyMs();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt randomScheduledId();
+    OptionalLong randomScheduledId();
 
     @WamProperty(index = 29, type = WamType.BOOLEAN)
     Optional<Boolean> receivedByNse();
@@ -163,7 +166,7 @@ public interface JoinableCallEvent extends WamEventSpec {
     Optional<Boolean> rejoinMissingDbMapping();
 
     @WamProperty(index = 53, type = WamType.INTEGER)
-    OptionalInt timeInWaitingRoomMs();
+    OptionalLong timeInWaitingRoomMs();
 
     @WamProperty(index = 36, type = WamType.TIMER)
     Optional<Instant> timeSinceAcceptMs();

@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.CertVerificationResultType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCertificateValidationEventWamEvent")
 @WamEvent(id = 7120)
 public interface CertificateValidationEventEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt certChainLength();
+    OptionalLong certChainLength();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<CertVerificationResultType> certVerificationResult();
@@ -28,7 +28,10 @@ public interface CertificateValidationEventEvent extends WamEventSpec {
     Optional<String> leafCertId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt leafCertTtlDays();
+    OptionalLong leafCertTtlDays();
+
+    @WamProperty(index = 8, type = WamType.STRING)
+    Optional<String> rawErrorCode();
 
     @WamProperty(index = 6, type = WamType.STRING)
     Optional<String> signatureVersion();

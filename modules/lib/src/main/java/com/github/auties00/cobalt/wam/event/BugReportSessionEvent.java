@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.BugReportEntryPointName;
 import com.github.auties00.cobalt.wam.type.BugReportFlowAction;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebBugReportSessionWamEvent")
 @WamEvent(id = 3850)
@@ -22,22 +22,22 @@ public interface BugReportSessionEvent extends WamEventSpec {
     Optional<BugReportFlowAction> bugReportFlowAction();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt bugReportImageCount();
+    OptionalLong bugReportImageCount();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt bugReportMediaCount();
+    OptionalLong bugReportMediaCount();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt bugReportNumberOfChars();
+    OptionalLong bugReportNumberOfChars();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt bugReportNumberOfWords();
+    OptionalLong bugReportNumberOfWords();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> bugReportTaskId();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt bugReportVideoCount();
+    OptionalLong bugReportVideoCount();
 
     @WamProperty(index = 14, type = WamType.STRING)
     Optional<String> bugReportingEndpoint();

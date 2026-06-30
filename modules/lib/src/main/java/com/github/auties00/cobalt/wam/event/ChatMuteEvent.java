@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.WaOfficialAccountName;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChatMuteWamEvent")
 @WamEvent(id = 2280)
@@ -35,7 +35,7 @@ public interface ChatMuteEvent extends WamEventSpec {
     Optional<MuteEntryPoint> muteEntryPoint();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt muteGroupSize();
+    OptionalLong muteGroupSize();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<WaOfficialAccountName> waOfficialAccountName();

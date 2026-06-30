@@ -85,38 +85,6 @@ import java.util.function.Function;
  */
 public final class Calls2EngineAssembler {
     /**
-     * The default capture geometry width, in pixels, the engine's video and screen-share capture sources
-     * are opened at when the application supplied no video source of its own.
-     *
-     * <p>Standard-definition 640x480 matches the {@link VideoOutput#fromCamera()} and
-     * {@link VideoOutput#fromScreen()} defaults and the media plane's default outbound video geometry, so a
-     * driver-manager-sourced capture and an application-sourced capture size the encoder identically.
-     */
-    private static final int DEFAULT_CAPTURE_WIDTH = 640;
-
-    /**
-     * The default capture geometry height, in pixels, the engine's video and screen-share capture sources
-     * are opened at when the application supplied no video source of its own.
-     */
-    private static final int DEFAULT_CAPTURE_HEIGHT = 480;
-
-    /**
-     * The default capture frame rate, in frames per second, the engine's video and screen-share capture
-     * sources are opened at when the application supplied no video source of its own.
-     */
-    private static final int DEFAULT_CAPTURE_FPS = 30;
-
-    /**
-     * The default target encoder bitrate, in bits per second, advertised by a driver-manager-sourced
-     * capture source.
-     *
-     * <p>Only the geometry of a driver-manager capture source sizes the encoder; the advertised bitrate is
-     * a positive placeholder the rate controller adapts, so this carries the {@link VideoOutput} default of
-     * one megabit per second rather than a negotiated value.
-     */
-    private static final int DEFAULT_CAPTURE_BITRATE_BPS = 1_000_000;
-
-    /**
      * Hidden constructor; this assembler exposes only its static factory.
      */
     private Calls2EngineAssembler() {
@@ -143,12 +111,8 @@ public final class Calls2EngineAssembler {
                 new LiveAudioCaptureDriver(),
                 new LiveAudioCaptureDriver(),
                 new LiveAudioPlaybackDriver(),
-                deviceId -> VideoOutput.fromCamera(
-                        DEFAULT_CAPTURE_WIDTH, DEFAULT_CAPTURE_HEIGHT, DEFAULT_CAPTURE_FPS,
-                        DEFAULT_CAPTURE_BITRATE_BPS),
-                surfaceId -> VideoOutput.fromScreen(
-                        DEFAULT_CAPTURE_WIDTH, DEFAULT_CAPTURE_HEIGHT, DEFAULT_CAPTURE_FPS,
-                        DEFAULT_CAPTURE_BITRATE_BPS));
+                deviceId -> VideoOutput.fromCamera(),
+                surfaceId -> VideoOutput.fromScreen());
     }
 
     /**

@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.TargetComponent;
 import com.github.auties00.cobalt.wam.type.WaAdAccountEligibility;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCtwaAdCreationAndManagementJourneyWamEvent")
 @WamEvent(id = 6562)
@@ -42,7 +42,7 @@ public interface CtwaAdCreationAndManagementJourneyEvent extends WamEventSpec {
     Optional<LwiSurface> lwiSurface();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt seqId();
+    OptionalLong seqId();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<TargetComponent> targetComponent();

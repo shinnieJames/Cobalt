@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.WebcChatCreateCreationMethod;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcChatCreateWamEvent")
 @WamEvent(id = 6132)
@@ -18,5 +18,5 @@ public interface WebcChatCreateEvent extends WamEventSpec {
     Optional<WebcChatCreateCreationMethod> creationMethod();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt noCreated();
+    OptionalLong noCreated();
 }

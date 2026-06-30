@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.WebcRmrReasonCode;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcMediaRmrWamEvent")
 @WamEvent(id = 1906)
@@ -24,13 +24,13 @@ public interface WebcMediaRmrEvent extends WamEventSpec {
     Optional<String> webcBrowserNetworkType();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt webcBrowserStorageQuotaBytes();
+    OptionalLong webcBrowserStorageQuotaBytes();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt webcBrowserStorageQuotaUsedBytes();
+    OptionalLong webcBrowserStorageQuotaUsedBytes();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt webcChatPosition();
+    OptionalLong webcChatPosition();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<WebcChatType> webcChatType();
@@ -42,10 +42,10 @@ public interface WebcMediaRmrEvent extends WamEventSpec {
     Optional<Instant> webcMediaRmrT();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt webcMediaSize();
+    OptionalLong webcMediaSize();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt webcMessageIndex();
+    OptionalLong webcMessageIndex();
 
     @WamProperty(index = 5, type = WamType.TIMER)
     Optional<Instant> webcMessageT();
@@ -54,5 +54,5 @@ public interface WebcMediaRmrEvent extends WamEventSpec {
     Optional<WebcRmrReasonCode> webcRmrReason();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt webcRmrStatusCode();
+    OptionalLong webcRmrStatusCode();
 }

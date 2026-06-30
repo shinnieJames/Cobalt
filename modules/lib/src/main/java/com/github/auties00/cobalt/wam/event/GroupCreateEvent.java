@@ -9,13 +9,13 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.GroupCreateEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupCreateWamEvent")
 @WamEvent(id = 594)
 public interface GroupCreateEvent extends WamEventSpec {
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt ephemeralityDuration();
+    OptionalLong ephemeralityDuration();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<GroupCreateEntryPoint> groupCreateEntryPoint();

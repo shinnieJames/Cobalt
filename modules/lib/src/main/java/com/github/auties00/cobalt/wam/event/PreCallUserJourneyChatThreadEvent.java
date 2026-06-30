@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.PreCallActionType;
 import com.github.auties00.cobalt.wam.type.SubSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPreCallUserJourneyChatThreadWamEvent")
 @WamEvent(id = 5634)
@@ -23,13 +23,16 @@ public interface PreCallUserJourneyChatThreadEvent extends WamEventSpec {
     Optional<String> callRandomId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt callSize();
+    OptionalLong callSize();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<CallSizeType> callSizeType();
 
+    @WamProperty(index = 14, type = WamType.STRING)
+    Optional<String> genaiBots();
+
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt groupSize();
+    OptionalLong groupSize();
 
     @WamProperty(index = 11, type = WamType.BOOLEAN)
     Optional<Boolean> isCommunityGroup();
@@ -47,7 +50,7 @@ public interface PreCallUserJourneyChatThreadEvent extends WamEventSpec {
     Optional<String> surfaceSessionId();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 6, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

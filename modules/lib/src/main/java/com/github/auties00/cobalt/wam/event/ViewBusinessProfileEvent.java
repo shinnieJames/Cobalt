@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.ViewBusinessProfileAction;
 import com.github.auties00.cobalt.wam.type.WebsiteSourceType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebViewBusinessProfileWamEvent")
 @WamEvent(id = 1522)
@@ -46,7 +46,7 @@ public interface ViewBusinessProfileEvent extends WamEventSpec {
     Optional<ProfileEntryPoint> profileEntryPoint();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt scrollDepth();
+    OptionalLong scrollDepth();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<ViewBusinessProfileAction> viewBusinessProfileAction();

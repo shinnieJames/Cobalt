@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.DisclosureSuppressionReason;
 import com.github.auties00.cobalt.wam.type.DisclosureSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMmDisclosureStateEventWamEvent")
 @WamEvent(id = 6552, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -23,7 +23,7 @@ public interface MmDisclosureStateEventEvent extends WamEventSpec {
     Optional<String> businessLidOrJid();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt deltaTimeReceived();
+    OptionalLong deltaTimeReceived();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<DisclosureEventType> disclosureEventType();
@@ -53,7 +53,7 @@ public interface MmDisclosureStateEventEvent extends WamEventSpec {
     Optional<Boolean> isUserDisclosed();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt mmDisclosureFlags();
+    OptionalLong mmDisclosureFlags();
 
     @WamProperty(index = 9, type = WamType.BOOLEAN)
     Optional<Boolean> mmHasDisclosedUrl();

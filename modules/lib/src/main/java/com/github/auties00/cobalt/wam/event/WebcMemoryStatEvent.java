@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.WebcScenarioType;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcMemoryStatWamEvent")
 @WamEvent(id = 1188, releaseWeight = 10)
@@ -20,49 +20,49 @@ public interface WebcMemoryStatEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt chatCollectionSize();
+    OptionalLong chatCollectionSize();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt chatDbSize();
+    OptionalLong chatDbSize();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt contactCollectionSize();
+    OptionalLong contactCollectionSize();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt contactDbSize();
+    OptionalLong contactDbSize();
 
     @WamProperty(index = 13, type = WamType.BOOLEAN)
     Optional<Boolean> isForeground();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt jsHeapSizeLimit();
+    OptionalLong jsHeapSizeLimit();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt messageCollectionSize();
+    OptionalLong messageCollectionSize();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt messageDbSize();
+    OptionalLong messageDbSize();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt peakUsedJsHeapSize();
+    OptionalLong peakUsedJsHeapSize();
 
     @WamProperty(index = 15, type = WamType.ENUM)
     Optional<WebcScenarioType> scenario();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt totalJsHeapSize();
+    OptionalLong totalJsHeapSize();
 
     @WamProperty(index = 6, type = WamType.FLOAT)
     OptionalDouble uptime();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt usedJsHeapSize();
+    OptionalLong usedJsHeapSize();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt usedJsHeapSizeDelta();
+    OptionalLong usedJsHeapSizeDelta();
 
     @WamProperty(index = 23, type = WamType.ENUM)
     Optional<WebcRuntimeEnvCode> webcRuntimeEnv();

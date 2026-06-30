@@ -28,13 +28,12 @@ import com.github.auties00.cobalt.wam.event.Lid11MigrationLifecycleEventBuilder;
 import com.github.auties00.cobalt.wam.type.MigrationStageEnum;
 import com.github.auties00.cobalt.wam.type.StageFailureReasonEnum;
 
-import com.github.auties00.cobalt.util.SchedulerUtils;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -268,7 +267,7 @@ public final class LiveLidMigrationService implements LidMigrationService {
      * {@link #processProtocolMessage(LIDMigrationMappingSyncPayload)} or by
      * {@link #reset()}. It is {@code null} when no timeout is currently armed.
      */
-    private volatile CompletableFuture<Void> mappingTimeoutFuture;
+    private volatile ScheduledTask mappingTimeoutFuture;
 
     /**
      * Constructs a new service bound to the given client, AB props service, and
@@ -455,7 +454,7 @@ public final class LiveLidMigrationService implements LidMigrationService {
                 return;
             }
 
-            mappingTimeoutFuture = SchedulerUtils.scheduleDelayed(
+            mappingTimeoutFuture = ScheduledTask.scheduleDelayed(
                     Duration.ofSeconds(timeoutSeconds),
                     () -> {
                         if (state.get() == LidMigrationState.WAITING_MAPPINGS) {
@@ -549,7 +548,7 @@ public final class LiveLidMigrationService implements LidMigrationService {
         try {
             var timeout = mappingTimeoutFuture;
             if (timeout != null) {
-                timeout.cancel(false);
+                timeout.cancel();
                 mappingTimeoutFuture = null;
             }
 
@@ -1696,7 +1695,7 @@ public final class LiveLidMigrationService implements LidMigrationService {
     public void reset() {
         var timeout = mappingTimeoutFuture;
         if (timeout != null) {
-            timeout.cancel(false);
+            timeout.cancel();
             mappingTimeoutFuture = null;
         }
 

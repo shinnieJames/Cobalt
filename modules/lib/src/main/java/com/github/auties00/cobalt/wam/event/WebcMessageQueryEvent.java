@@ -12,40 +12,40 @@ import com.github.auties00.cobalt.wam.type.WebcQueryTriggerType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcMessageQueryWamEvent")
 @WamEvent(id = 1876, releaseWeight = 5)
 public interface WebcMessageQueryEvent extends WamEventSpec {
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt webcAudioMessageCount();
+    OptionalLong webcAudioMessageCount();
 
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> webcBrowserNetworkType();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt webcBrowserStorageQuotaBytes();
+    OptionalLong webcBrowserStorageQuotaBytes();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt webcBrowserStorageQuotaUsedBytes();
+    OptionalLong webcBrowserStorageQuotaUsedBytes();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt webcChatPosition();
+    OptionalLong webcChatPosition();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<WebcChatType> webcChatType();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt webcDocumentMessageCount();
+    OptionalLong webcDocumentMessageCount();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt webcEarliestMessageIndex();
+    OptionalLong webcEarliestMessageIndex();
 
     @WamProperty(index = 12, type = WamType.TIMER)
     Optional<Instant> webcEarliestMessageT();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt webcMessageCount();
+    OptionalLong webcMessageCount();
 
     @WamProperty(index = 19, type = WamType.ENUM)
     Optional<WebcQueryTriggerType> webcMessageQueryTrigger();
@@ -54,26 +54,26 @@ public interface WebcMessageQueryEvent extends WamEventSpec {
     Optional<WebcMessageQueryDirection> webcMessageQueryType();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt webcOtherMessageCount();
+    OptionalLong webcOtherMessageCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt webcPhotoMessageCount();
+    OptionalLong webcPhotoMessageCount();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt webcPttMessageCount();
+    OptionalLong webcPttMessageCount();
 
     @WamProperty(index = 9, type = WamType.TIMER)
     Optional<Instant> webcQueryT();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt webcResponseBytes();
+    OptionalLong webcResponseBytes();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt webcStickerMessageCount();
+    OptionalLong webcStickerMessageCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt webcTextMessageCount();
+    OptionalLong webcTextMessageCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt webcVideoMessageCount();
+    OptionalLong webcVideoMessageCount();
 }

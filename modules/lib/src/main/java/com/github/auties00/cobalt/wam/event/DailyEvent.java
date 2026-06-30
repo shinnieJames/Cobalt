@@ -17,12 +17,13 @@ import com.github.auties00.cobalt.wam.type.MediaAutoDownloadQuality;
 import com.github.auties00.cobalt.wam.type.MediaQuality;
 import com.github.auties00.cobalt.wam.type.MetaAiModelTierType;
 import com.github.auties00.cobalt.wam.type.NotificationSettingType;
+import com.github.auties00.cobalt.wam.type.PeripheralDisplayConnectivityType;
 import com.github.auties00.cobalt.wam.type.PrivacySettingsContactsBuckets;
 import com.github.auties00.cobalt.wam.type.PrivacySettingsValueType;
 import com.github.auties00.cobalt.wam.type.UsernameState;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebDailyWamEvent")
 @WamEvent(id = 1158)
@@ -31,13 +32,13 @@ public interface DailyEvent extends WamEventSpec {
     Optional<Boolean> accessibilityVoiceover();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt addressbookSize();
+    OptionalLong addressbookSize();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt addressbookWhatsappSize();
+    OptionalLong addressbookWhatsappSize();
 
     @WamProperty(index = 223, type = WamType.INTEGER)
-    OptionalInt aiMemorySavedCnt();
+    OptionalLong aiMemorySavedCnt();
 
     @WamProperty(index = 210, type = WamType.BOOLEAN)
     Optional<Boolean> aiWidgetInstalled();
@@ -52,10 +53,10 @@ public interface DailyEvent extends WamEventSpec {
     Optional<String> appCodeHash();
 
     @WamProperty(index = 212, type = WamType.INTEGER)
-    OptionalInt appLastOpenTimestamp();
+    OptionalLong appLastOpenTimestamp();
 
     @WamProperty(index = 121, type = WamType.INTEGER)
-    OptionalInt appStandbyBucket();
+    OptionalLong appStandbyBucket();
 
     @WamProperty(index = 90, type = WamType.BOOLEAN)
     Optional<Boolean> autoDlAudioCellular();
@@ -100,70 +101,70 @@ public interface DailyEvent extends WamEventSpec {
     Optional<BackupNetworkSetting> backupNetworkSetting();
 
     @WamProperty(index = 138, type = WamType.INTEGER)
-    OptionalInt backupRestoreEncryptionVersion();
+    OptionalLong backupRestoreEncryptionVersion();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<BackupSchedule> backupSchedule();
 
     @WamProperty(index = 241, type = WamType.INTEGER)
-    OptionalInt canonicalEntLastValidationTsMs();
+    OptionalLong canonicalEntLastValidationTsMs();
 
     @WamProperty(index = 186, type = WamType.INTEGER)
-    OptionalInt channelsMediaFolderSize();
+    OptionalLong channelsMediaFolderSize();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt chatDatabaseSize();
+    OptionalLong chatDatabaseSize();
 
     @WamProperty(index = 168, type = WamType.INTEGER)
-    OptionalInt chatLockFolderCount();
+    OptionalLong chatLockFolderCount();
 
     @WamProperty(index = 200, type = WamType.INTEGER)
-    OptionalInt contactsCreatedOnWhatsappSize();
+    OptionalLong contactsCreatedOnWhatsappSize();
 
     @WamProperty(index = 201, type = WamType.ENUM)
     Optional<ContactsPermissionAuthorizationStatusType> contactsPermissionAuthorizationStatus();
 
     @WamProperty(index = 238, type = WamType.INTEGER)
-    OptionalInt contactsRequiringSyncBeforeDisplaySize();
+    OptionalLong contactsRequiringSyncBeforeDisplaySize();
 
     @WamProperty(index = 216, type = WamType.INTEGER)
-    OptionalInt count1on1Threads();
+    OptionalLong count1on1Threads();
 
     @WamProperty(index = 181, type = WamType.INTEGER)
-    OptionalInt countEphemeralThreads();
+    OptionalLong countEphemeralThreads();
 
     @WamProperty(index = 182, type = WamType.INTEGER)
-    OptionalInt countEphemeralThreadsEnabledByMe();
+    OptionalLong countEphemeralThreadsEnabledByMe();
 
     @WamProperty(index = 217, type = WamType.INTEGER)
-    OptionalInt countGroupThreads();
+    OptionalLong countGroupThreads();
 
     @WamProperty(index = 218, type = WamType.INTEGER)
-    OptionalInt countLimitSharing1on1Threads();
+    OptionalLong countLimitSharing1on1Threads();
 
     @WamProperty(index = 219, type = WamType.INTEGER)
-    OptionalInt countLimitSharingGroupThreads();
+    OptionalLong countLimitSharingGroupThreads();
 
     @WamProperty(index = 247, type = WamType.INTEGER)
-    OptionalInt dailyPasskeyCount();
+    OptionalLong dailyPasskeyCount();
 
     @WamProperty(index = 206, type = WamType.INTEGER)
-    OptionalInt dbAddressbookTableSize();
+    OptionalLong dbAddressbookTableSize();
 
     @WamProperty(index = 248, type = WamType.INTEGER)
-    OptionalInt defaultAfterReadDuration();
+    OptionalLong defaultAfterReadDuration();
 
     @WamProperty(index = 249, type = WamType.BOOLEAN)
     Optional<Boolean> defaultAfterReadEnabled();
 
     @WamProperty(index = 140, type = WamType.INTEGER)
-    OptionalInt defaultDisappearingDuration();
+    OptionalLong defaultDisappearingDuration();
 
     @WamProperty(index = 214, type = WamType.INTEGER)
-    OptionalInt defenseMode();
+    OptionalLong defenseMode();
 
     @WamProperty(index = 228, type = WamType.INTEGER)
-    OptionalInt deprecatedContactsSize();
+    OptionalLong deprecatedContactsSize();
 
     @WamProperty(index = 153, type = WamType.STRING)
     Optional<String> deviceLanguage();
@@ -175,16 +176,16 @@ public interface DailyEvent extends WamEventSpec {
     Optional<Boolean> entSecurityNotificationsEnabled();
 
     @WamProperty(index = 166, type = WamType.INTEGER)
-    OptionalInt experimentTmoPreloadGroupDaily();
+    OptionalLong experimentTmoPreloadGroupDaily();
 
     @WamProperty(index = 113, type = WamType.INTEGER)
-    OptionalInt favoritedAnimatedStickerCount();
+    OptionalLong favoritedAnimatedStickerCount();
 
     @WamProperty(index = 112, type = WamType.INTEGER)
-    OptionalInt favoritedFirstPartyStickerCount();
+    OptionalLong favoritedFirstPartyStickerCount();
 
     @WamProperty(index = 111, type = WamType.INTEGER)
-    OptionalInt favoritedTotalStickerCount();
+    OptionalLong favoritedTotalStickerCount();
 
     @WamProperty(index = 164, type = WamType.ENUM)
     Optional<GalleryPermissionState> galleryPermission();
@@ -205,19 +206,19 @@ public interface DailyEvent extends WamEventSpec {
     Optional<Boolean> hasUsernamePin();
 
     @WamProperty(index = 190, type = WamType.INTEGER)
-    OptionalInt inNetworkContactsSize();
+    OptionalLong inNetworkContactsSize();
 
     @WamProperty(index = 116, type = WamType.INTEGER)
-    OptionalInt installedAnimatedStickerPackCount();
+    OptionalLong installedAnimatedStickerPackCount();
 
     @WamProperty(index = 137, type = WamType.INTEGER)
-    OptionalInt installedAnimatedThirdPartyStickerPackCount();
+    OptionalLong installedAnimatedThirdPartyStickerPackCount();
 
     @WamProperty(index = 115, type = WamType.INTEGER)
-    OptionalInt installedFirstPartyStickerPackCount();
+    OptionalLong installedFirstPartyStickerPackCount();
 
     @WamProperty(index = 114, type = WamType.INTEGER)
-    OptionalInt installedTotalStickerPackCount();
+    OptionalLong installedTotalStickerPackCount();
 
     @WamProperty(index = 234, type = WamType.BOOLEAN)
     Optional<Boolean> isCanonicalEntPresent();
@@ -241,10 +242,16 @@ public interface DailyEvent extends WamEventSpec {
     Optional<String> languageCode();
 
     @WamProperty(index = 63, type = WamType.INTEGER)
-    OptionalInt lastBackupTimestamp();
+    OptionalLong lastBackupTimestamp();
 
     @WamProperty(index = 185, type = WamType.INTEGER)
-    OptionalInt lastCloudBackupSize();
+    OptionalLong lastCloudBackupSize();
+
+    @WamProperty(index = 253, type = WamType.INTEGER)
+    OptionalLong lidToPnMappingCount();
+
+    @WamProperty(index = 254, type = WamType.INTEGER)
+    OptionalLong lidToUsernameMappingCount();
 
     @WamProperty(index = 6, type = WamType.STRING)
     Optional<String> locationCode();
@@ -253,25 +260,25 @@ public interface DailyEvent extends WamEventSpec {
     Optional<Boolean> lockFolderHidden();
 
     @WamProperty(index = 160, type = WamType.INTEGER)
-    OptionalInt lowestAppStandbyBucket();
+    OptionalLong lowestAppStandbyBucket();
 
     @WamProperty(index = 124, type = WamType.INTEGER)
-    OptionalInt mdPairTime();
+    OptionalLong mdPairTime();
 
     @WamProperty(index = 244, type = WamType.ENUM)
     Optional<MediaAutoDownloadQuality> mediaAutoDownloadQualitySetting();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt mediaFolderFileCount();
+    OptionalLong mediaFolderFileCount();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt mediaFolderSize();
+    OptionalLong mediaFolderSize();
 
     @WamProperty(index = 188, type = WamType.ENUM)
     Optional<MediaQuality> mediaQualitySetting();
 
     @WamProperty(index = 239, type = WamType.INTEGER)
-    OptionalInt mediaSizeCacheAgeSeconds();
+    OptionalLong mediaSizeCacheAgeSeconds();
 
     @WamProperty(index = 198, type = WamType.ENUM)
     Optional<MetaAiModelTierType> metaAiModelActual();
@@ -298,19 +305,19 @@ public interface DailyEvent extends WamEventSpec {
     Optional<String> networkOperatorName();
 
     @WamProperty(index = 163, type = WamType.INTEGER)
-    OptionalInt numAccounts();
+    OptionalLong numAccounts();
 
     @WamProperty(index = 178, type = WamType.INTEGER)
-    OptionalInt numContactsWithTextstatus24h();
+    OptionalLong numContactsWithTextstatus24h();
 
     @WamProperty(index = 179, type = WamType.INTEGER)
-    OptionalInt numContactsWithTextstatusEmoji24h();
+    OptionalLong numContactsWithTextstatusEmoji24h();
 
     @WamProperty(index = 180, type = WamType.INTEGER)
-    OptionalInt numContactsWithTextstatusText24h();
+    OptionalLong numContactsWithTextstatusText24h();
 
     @WamProperty(index = 250, type = WamType.INTEGER)
-    OptionalInt numberOfSim();
+    OptionalLong numberOfSim();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> osBuildNumber();
@@ -319,7 +326,7 @@ public interface DailyEvent extends WamEventSpec {
     Optional<NotificationSettingType> osNotificationSetting();
 
     @WamProperty(index = 191, type = WamType.INTEGER)
-    OptionalInt outOfNetworkContactsSize();
+    OptionalLong outOfNetworkContactsSize();
 
     @WamProperty(index = 102, type = WamType.STRING)
     Optional<String> packageName();
@@ -333,32 +340,35 @@ public interface DailyEvent extends WamEventSpec {
     @WamProperty(index = 209, type = WamType.STRING)
     Optional<String> peripheralConnected();
 
+    @WamProperty(index = 255, type = WamType.ENUM)
+    Optional<PeripheralDisplayConnectivityType> peripheralDisplayConnectivityType();
+
     @WamProperty(index = 229, type = WamType.STRING)
     Optional<String> peripheralLinkedProductLine();
 
     @WamProperty(index = 57, type = WamType.INTEGER)
-    OptionalInt permissionAccessCoarseLocation();
+    OptionalLong permissionAccessCoarseLocation();
 
     @WamProperty(index = 58, type = WamType.INTEGER)
-    OptionalInt permissionAccessFineLocation();
+    OptionalLong permissionAccessFineLocation();
 
     @WamProperty(index = 56, type = WamType.INTEGER)
-    OptionalInt permissionCamera();
+    OptionalLong permissionCamera();
 
     @WamProperty(index = 104, type = WamType.BOOLEAN)
     Optional<Boolean> permissionContacts();
 
     @WamProperty(index = 53, type = WamType.INTEGER)
-    OptionalInt permissionReadExternalStorage();
+    OptionalLong permissionReadExternalStorage();
 
     @WamProperty(index = 55, type = WamType.INTEGER)
-    OptionalInt permissionRecordAudio();
+    OptionalLong permissionRecordAudio();
 
     @WamProperty(index = 156, type = WamType.INTEGER)
-    OptionalInt phoneCores();
+    OptionalLong phoneCores();
 
     @WamProperty(index = 251, type = WamType.INTEGER)
-    OptionalInt phoneNumberHintAvailableCount();
+    OptionalLong phoneNumberHintAvailableCount();
 
     @WamProperty(index = 162, type = WamType.STRING)
     Optional<String> phoneyid();
@@ -412,7 +422,7 @@ public interface DailyEvent extends WamEventSpec {
     Optional<PrivacySettingsContactsBuckets> privacySettingsStatusShareNum();
 
     @WamProperty(index = 211, type = WamType.INTEGER)
-    OptionalInt profileLinksCount();
+    OptionalLong profileLinksCount();
 
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> receiptsEnabled();
@@ -424,22 +434,28 @@ public interface DailyEvent extends WamEventSpec {
     Optional<Boolean> showMetaAiButtonSetting();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt simMcc();
+    OptionalLong simMcc();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt simMnc();
+    OptionalLong simMnc();
 
     @WamProperty(index = 243, type = WamType.INTEGER)
-    OptionalInt simPhoneNumberMatched();
+    OptionalLong simPhoneNumberMatched();
+
+    @WamProperty(index = 256, type = WamType.INTEGER)
+    OptionalLong stickersFolderFileCount();
+
+    @WamProperty(index = 257, type = WamType.INTEGER)
+    OptionalLong stickersFolderSize();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt storageAvailSize();
+    OptionalLong storageAvailSize();
 
     @WamProperty(index = 136, type = WamType.INTEGER)
-    OptionalInt storageAvailSizeWithCache();
+    OptionalLong storageAvailSizeWithCache();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt storageTotalSize();
+    OptionalLong storageTotalSize();
 
     @WamProperty(index = 169, type = WamType.STRING)
     Optional<String> supportedDecoders();
@@ -448,53 +464,53 @@ public interface DailyEvent extends WamEventSpec {
     Optional<String> supportedEncoders();
 
     @WamProperty(index = 192, type = WamType.INTEGER)
-    OptionalInt syncedInNetworkContactsSize();
+    OptionalLong syncedInNetworkContactsSize();
 
     @WamProperty(index = 193, type = WamType.INTEGER)
-    OptionalInt totalCountInNetworkUniquePhoneNumber();
+    OptionalLong totalCountInNetworkUniquePhoneNumber();
 
     @WamProperty(index = 194, type = WamType.INTEGER)
-    OptionalInt totalCountSyncedInNetworkUniquePhoneNumber();
+    OptionalLong totalCountSyncedInNetworkUniquePhoneNumber();
 
     @WamProperty(index = 232, type = WamType.INTEGER)
-    OptionalInt totalMissedCalls();
+    OptionalLong totalMissedCalls();
 
     @WamProperty(index = 233, type = WamType.INTEGER)
-    OptionalInt totalUnreadMessages();
+    OptionalLong totalUnreadMessages();
 
     @WamProperty(index = 240, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 215, type = WamType.INTEGER)
-    OptionalInt trafficAnonymization();
+    OptionalLong trafficAnonymization();
 
     @WamProperty(index = 236, type = WamType.INTEGER)
-    OptionalInt uniquePhoneNumberContactsSizeWithUsername();
+    OptionalLong uniquePhoneNumberContactsSizeWithUsername();
 
     @WamProperty(index = 213, type = WamType.INTEGER)
-    OptionalInt unreadBadgeFrequency();
+    OptionalLong unreadBadgeFrequency();
 
     @WamProperty(index = 245, type = WamType.INTEGER)
-    OptionalInt unverifiedProfileLinksCount();
+    OptionalLong unverifiedProfileLinksCount();
 
     @WamProperty(index = 237, type = WamType.INTEGER)
-    OptionalInt usernameOnlyContactsSize();
+    OptionalLong usernameOnlyContactsSize();
 
     @WamProperty(index = 242, type = WamType.ENUM)
     Optional<UsernameState> usernameState();
 
     @WamProperty(index = 246, type = WamType.INTEGER)
-    OptionalInt verifiedProfileLinksCount();
+    OptionalLong verifiedProfileLinksCount();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt videoFolderFileCount();
+    OptionalLong videoFolderFileCount();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt videoFolderSize();
+    OptionalLong videoFolderSize();
 
     @WamProperty(index = 207, type = WamType.INTEGER)
-    OptionalInt webcContactsTableSize();
+    OptionalLong webcContactsTableSize();
 
     @WamProperty(index = 208, type = WamType.INTEGER)
-    OptionalInt webcFilteredContactsSize();
+    OptionalLong webcFilteredContactsSize();
 }

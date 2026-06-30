@@ -10,9 +10,9 @@ import java.util.Set;
  * cadence from the round's {@link MlBweSignals}, returning {@link MlBweOutputs} the sender estimator folds
  * into its congestion, loss, and high-definition-targeting decisions. The default engine,
  * {@link NoopMlBweEngine}, loads nothing and always returns {@link MlBweOutputs#DISABLED}, so the pure
- * delay-based and sender-side path runs standalone. {@link LiveMlBweEngine} is the native-backed
- * implementation that runs the recovered congestion model through the {@link ExecuTorch} shim when a model
- * is provisioned; the recovered design is in re/calls2-spec/ML-BWE-RE.md.
+ * delay-based and sender-side path runs standalone. {@link LiveMlBweEngine} is the recovered implementation
+ * that would run the congestion model through its native backend; with that ExecuTorch backend removed it is
+ * inert and its native operations throw. The recovered design is in re/calls2-spec/ML-BWE-RE.md.
  *
  * <p>Implementations are not required to be thread-safe; the call session drives one engine from the
  * single transport thread.

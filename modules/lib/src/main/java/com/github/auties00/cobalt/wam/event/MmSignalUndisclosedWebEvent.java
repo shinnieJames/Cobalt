@@ -10,16 +10,16 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.MmSignalType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMmSignalUndisclosedWebWamEvent")
 @WamEvent(id = 7862, channel = WamChannel.PRIVATE, privateStatsId = 0)
 public interface MmSignalUndisclosedWebEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt mmCarouselCardIndex();
+    OptionalLong mmCarouselCardIndex();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt mmCtaButtonIndex();
+    OptionalLong mmCtaButtonIndex();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> mmSignalData();

@@ -26,7 +26,7 @@ import static java.util.Objects.requireNonNullElseGet;
 
 /**
  * The {@link ProtobufLinkedWhatsAppChatStore} variant that persists chat and newsletter metadata to {@code store.proto}
- * and offloads every message body to an embedded {@link PersistentMessageStore LMDB} env.
+ * and offloads every message body to an embedded {@link PersistentMessageStore MVStore}.
  *
  * <p>Chat and newsletter entries carry metadata only (jid, name, unread counters, ephemeral
  * settings); message bodies live in {@link PersistentMessageStore}, wired in by
@@ -54,7 +54,7 @@ public final class PersistentLinkedWhatsAppChatStore extends ProtobufLinkedWhats
     final ConcurrentHashMap<Jid, PersistentNewsletter> newsletters;
 
     /**
-     * The LMDB facade backing every message-bearing accessor; wired by
+     * The MVStore facade backing every message-bearing accessor; wired by
      * {@link #attachMessageStore(PersistentMessageStore)}, not persisted.
      */
     private volatile PersistentMessageStore messageStore;
@@ -79,9 +79,9 @@ public final class PersistentLinkedWhatsAppChatStore extends ProtobufLinkedWhats
     }
 
     /**
-     * Wires the LMDB facade into this store and into every existing chat and newsletter entry.
+     * Wires the MVStore facade into this store and into every existing chat and newsletter entry.
      *
-     * @param messageStore the freshly opened LMDB facade
+     * @param messageStore the freshly opened MVStore facade
      */
     void attachMessageStore(PersistentMessageStore messageStore) {
         this.messageStore = messageStore;
@@ -94,7 +94,7 @@ public final class PersistentLinkedWhatsAppChatStore extends ProtobufLinkedWhats
     }
 
     /**
-     * Returns the LMDB facade owned by this store.
+     * Returns the MVStore facade owned by this store.
      *
      * @return the message store, or {@code null} if not yet attached
      */

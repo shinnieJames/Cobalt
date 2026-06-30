@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.SmbDataSharingConsentSettingEntryPoint;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSmbDataSharingConsentSettingWamEvent")
 @WamEvent(id = 3974)
@@ -21,5 +21,5 @@ public interface SmbDataSharingConsentSettingEvent extends WamEventSpec {
     Optional<Boolean> smbDataSharingConsentSettingType();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt smbDataSharingConsentSettingVersion();
+    OptionalLong smbDataSharingConsentSettingVersion();
 }

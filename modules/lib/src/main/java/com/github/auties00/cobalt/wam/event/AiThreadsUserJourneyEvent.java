@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.MetaAiActionEntryPoint;
 import com.github.auties00.cobalt.wam.type.ThreadActionTypes;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebAiThreadsUserJourneyWamEvent")
 @WamEvent(id = 7224)
@@ -28,7 +28,7 @@ public interface AiThreadsUserJourneyEvent extends WamEventSpec {
     Optional<String> conversationThreadId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt eventTsMs();
+    OptionalLong eventTsMs();
 
     @WamProperty(index = 10, type = WamType.BOOLEAN)
     Optional<Boolean> isCanonicalThread();

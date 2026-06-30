@@ -17,7 +17,7 @@ import com.github.auties00.cobalt.wam.type.TextModalityType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebImagineActionsWamEvent")
 @WamEvent(id = 5620)
@@ -56,13 +56,13 @@ public interface ImagineActionsEvent extends WamEventSpec {
     Optional<Boolean> isSent();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt maxIndex();
+    OptionalLong maxIndex();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> metaAiConversationThreadId();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt selectedImageIndex();
+    OptionalLong selectedImageIndex();
 
     @WamProperty(index = 17, type = WamType.ENUM)
     Optional<TextModalityType> textModality();

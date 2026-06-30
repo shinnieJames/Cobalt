@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.BusinessInteractionInternalEntryPoint
 import com.github.auties00.cobalt.wam.type.BusinessInteractionTargetScreenType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebBusinessInteractionWamEvent")
 @WamEvent(id = 3450, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -38,5 +38,5 @@ public interface BusinessInteractionEvent extends WamEventSpec {
     Optional<BusinessInteractionInternalEntryPoint> internalEntryPoint();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt sequenceNumber();
+    OptionalLong sequenceNumber();
 }

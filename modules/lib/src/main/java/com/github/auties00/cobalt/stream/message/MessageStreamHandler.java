@@ -23,6 +23,15 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.message.receipt.MessageReceiptHandler;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanzaParser;
+import com.github.auties00.cobalt.model.business.BusinessHostStorageType;
+import com.github.auties00.cobalt.model.contact.Contact;
+import com.github.auties00.cobalt.model.props.ABProp;
+import com.github.auties00.cobalt.model.tos.TosNotice;
+import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.tos.TosService;
+import com.github.auties00.cobalt.wam.event.GatedMessageReceivedEventBuilder;
+import com.github.auties00.cobalt.wam.type.ChatGatedReason;
+import com.github.auties00.cobalt.quarantine.QuarantineService;
 import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
 import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.migration.LidMigrationService;
@@ -37,7 +46,9 @@ import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.*;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestResponseMessage;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestType;
+import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
 import com.github.auties00.cobalt.model.message.text.CommentMessage;
+import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.payment.OrphanPaymentNotificationBuilder;
 import com.github.auties00.cobalt.model.payment.PaymentInfo;
@@ -58,6 +69,8 @@ import com.github.auties00.cobalt.wam.event.NonMessagePeerDataOperationResponseE
 import com.github.auties00.cobalt.wam.event.OfflineCountTooHighEventBuilder;
 import com.github.auties00.cobalt.wam.event.StructuredMessageReceiveEventBuilder;
 import com.github.auties00.cobalt.wam.event.UnknownStanzaEventBuilder;
+import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingActivity;
+import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingMessages;
 import com.github.auties00.cobalt.wam.type.BizPlatform;
 import com.github.auties00.cobalt.wam.type.StructuredMessageClass;
 import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
@@ -234,6 +247,24 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
     private final AckSender ackSender;
 
     /**
+     * Resolves the AB-prop feature flags and the branded-number exemption list
+     * consulted by the inbound-message country and Terms-of-Service gating
+     * checks.
+     */
+    private final ABPropsService abPropsService;
+
+    /**
+     * Reads Terms-of-Service acceptance state for the inbound-message
+     * Terms-of-Service gating check.
+     */
+    private final TosService tosService;
+
+    /**
+     * Classifies inbound messages against the Defense Mode quarantine policy.
+     */
+    private final QuarantineService quarantineService;
+
+    /**
      * Constructs a handler bound to the given collaborators.
      *
      * <p>Invoked by the socket-stream wiring at client construction; user
@@ -267,6 +298,12 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * @param mediaConnectionService  the {@link MediaConnectionService} threaded
      *                                into the history-sync media download
      *                                pipeline
+     * @param abPropsService          the {@link ABPropsService} consulted for the
+     *                                gating feature flags and branded-number list
+     * @param tosService              the {@link TosService} consulted for the
+     *                                Terms-of-Service acceptance gating check
+     * @param quarantineService       the {@link QuarantineService} consulted for the
+     *                                inbound-message Defense Mode quarantine check
      */
     public MessageStreamHandler(
             LinkedWhatsAppClient whatsapp,
@@ -276,7 +313,10 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
             LidMigrationService lidMigrationService,
             WamService wamService,
             AckSender ackSender,
-            MediaConnectionService mediaConnectionService
+            MediaConnectionService mediaConnectionService,
+            ABPropsService abPropsService,
+            TosService tosService,
+            QuarantineService quarantineService
     ) {
         this.whatsapp = whatsapp;
         this.messageService = Objects.requireNonNull(messageService, "messageService cannot be null");
@@ -288,6 +328,127 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
         Objects.requireNonNull(mediaConnectionService, "mediaConnectionService cannot be null");
         this.webHistorySyncService = new LiveWebHistorySyncService(whatsapp, lidMigrationService, wamService, mediaConnectionService);
         this.ackSender = Objects.requireNonNull(ackSender, "ackSender cannot be null");
+        this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
+        this.tosService = Objects.requireNonNull(tosService, "tosService cannot be null");
+        this.quarantineService = Objects.requireNonNull(quarantineService, "quarantineService cannot be null");
+    }
+
+    /**
+     * Applies the privacy-mode update carried on a received message and records a
+     * {@code GatedMessageReceived} metric when the message lands in a gated chat.
+     *
+     * <p>The chat contact's {@linkplain Contact#privacyModeHostStorage() privacy-mode
+     * host storage} is refreshed from the message {@code <biz>} envelope (the newer
+     * {@code privacy_mode_ts} wins); then, for a message that was not sent by the
+     * local user, the country and Terms-of-Service gating checks run and the
+     * matching {@link ChatGatedReason} is committed. A message whose chat has no
+     * known contact (for example a group or newsletter) is never gated.
+     *
+     * @param info   the parsed inbound chat message
+     * @param stanza the inbound message stanza carrying the {@code <biz>} envelope
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogReceivedMessages", exports = "logReceivedMessagesInWAM", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitGatedMessageReceivedIfApplicable(ChatMessageInfo info, MessageReceiveStanza stanza) {
+        var contact = whatsapp.store().contactStore().findContactByJid(stanza.chatJid()).orElse(null);
+        if (contact == null) {
+            return;
+        }
+        stanza.bizInfo().ifPresent(biz -> {
+            var hostStorage = biz.hostStorage().orElse(null);
+            var timestamp = biz.privacyModeTs().orElse(null);
+            if (hostStorage != null && timestamp != null) {
+                BusinessHostStorageType.ofIndex(hostStorage)
+                        .ifPresent(type -> contact.setPrivacyMode(type, Instant.ofEpochSecond(timestamp)));
+            }
+        });
+        if (info.key().fromMe()) {
+            return;
+        }
+        gatedReason(contact).ifPresent(reason -> wamService.commit(new GatedMessageReceivedEventBuilder()
+                .chatGatedReason(reason)
+                .build()));
+    }
+
+    /**
+     * Returns the reason the chat with the given contact is gated for an inbound
+     * message, with country gating taking precedence over Terms-of-Service gating.
+     *
+     * @param contact the chat contact
+     * @return the {@link ChatGatedReason}, or empty when the chat is not gated
+     */
+    private Optional<ChatGatedReason> gatedReason(Contact contact) {
+        if (shouldBlockByCountry(contact)) {
+            return Optional.of(ChatGatedReason.COUNTRY);
+        }
+        if (shouldBlockByTos(contact)) {
+            return Optional.of(ChatGatedReason.TOS3);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Returns whether the chat with the given contact is gated because the
+     * recipient's region is not yet cleared for cross-Meta interoperable
+     * messaging.
+     *
+     * @param contact the chat contact
+     * @return {@code true} when country gating applies, {@code false} otherwise
+     */
+    @WhatsAppWebExport(moduleName = "WAWebTosCountryGating", exports = "shouldBlockByCountry", adaptation = WhatsAppAdaptation.DIRECT)
+    private boolean shouldBlockByCountry(Contact contact) {
+        return abPropsService.getBool(ABProp.COUNTRY_CLIENT_GATING_ENABLED)
+                && contact.hostedOnFacebook()
+                && !isFbBrandedNumber(contact.jid());
+    }
+
+    /**
+     * Returns whether the chat with the given contact is gated because the local
+     * user has not accepted the interoperability Terms-of-Service notice.
+     *
+     * @implNote
+     * This implementation also gates on
+     * {@link ABProp#TOS_CLIENT_STATE_FETCH_ENABLED} as the proxy for WA Web's
+     * {@code TosManager.getState(TOS_3) === "NOT_ACCEPTED"}: Cobalt persists only
+     * acknowledged notices, so a notice counts as not accepted exactly when
+     * fetching is enabled (which drives the login-time pull) yet the notice is
+     * absent from the acknowledged set; without the fetch flag the state is
+     * unknown and never gates, matching WA Web.
+     *
+     * @param contact the chat contact
+     * @return {@code true} when Terms-of-Service gating applies, {@code false}
+     *         otherwise
+     */
+    @WhatsAppWebExport(moduleName = "WAWebTosGating", exports = "shouldBlockByTos", adaptation = WhatsAppAdaptation.ADAPTED)
+    private boolean shouldBlockByTos(Contact contact) {
+        return abPropsService.getBool(ABProp.TOS_3_CLIENT_GATING_ENABLED)
+                && abPropsService.getBool(ABProp.TOS_CLIENT_STATE_FETCH_ENABLED)
+                && !tosService.isAcknowledged(TosNotice.TOS_3)
+                && contact.hostedOnFacebook()
+                && !isFbBrandedNumber(contact.jid());
+    }
+
+    /**
+     * Returns whether the given JID's user part is a Facebook-branded system
+     * message number, which is exempt from both gating checks.
+     *
+     * @param jid the chat contact JID
+     * @return {@code true} when the number is on the
+     *         {@link ABProp#SYSTEM_MSG_NUMBERS_FB_BRANDED} list, {@code false}
+     *         otherwise
+     */
+    @WhatsAppWebExport(moduleName = "WAWebABPropsInternalNumber", exports = "getFbBrandedNumber", adaptation = WhatsAppAdaptation.DIRECT)
+    private boolean isFbBrandedNumber(Jid jid) {
+        var raw = abPropsService.getString(ABProp.SYSTEM_MSG_NUMBERS_FB_BRANDED);
+        if (raw == null || raw.isEmpty()) {
+            return false;
+        }
+        var user = jid.user();
+        for (var number : raw.split(",")) {
+            if (number.equals(user)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -366,15 +527,20 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
         try {
             var info = messageService.process(node);
             if (info != null) {
+                var quarantined = info instanceof ChatMessageInfo quarantineCandidate
+                        && quarantineService.quarantine(quarantineCandidate);
                 storeIncomingMessage(info);
                 if (info instanceof ChatMessageInfo chatInfo) {
                     handleProtocolMessage(chatInfo);
                     emitMessageReceiveForChatMessage(chatInfo, stanza);
+                    emitGatedMessageReceivedIfApplicable(chatInfo, stanza);
                     emitStructuredMessageReceiveIfApplicable(stanza);
                 }
                 resolveOrphanPayment(info);
-                var quoted = whatsapp.store().chatStore().findQuotedMessage(info);
-                notifyMessageReceived(info, quoted);
+                if (!quarantined) {
+                    var quoted = whatsapp.store().chatStore().findQuotedMessage(info);
+                    notifyMessageReceived(info, quoted);
+                }
             }
 
             if (info == null) {
@@ -1000,7 +1166,11 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      *
      * <p>Runs once per decrypted message in an incoming batch and carries the
      * typing, content, addressing, ephemerality, and timing metadata the
-     * server uses to debug delivery and adoption regressions.
+     * server uses to debug delivery and adoption regressions. After committing
+     * the event it reports the receive to the ctlv2 thread-logging aggregator
+     * through {@link LinkedWhatsAppClient#recordThreadActivity(com.github.auties00.cobalt.model.jid.JidProvider, ThreadLoggingActivity)}
+     * as a {@link ThreadLoggingActivity.MessageReceived}; protocol and system
+     * messages are skipped.
      *
      * @implNote
      * This implementation populates the subset of properties Cobalt can
@@ -1113,6 +1283,15 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
                 .ifPresent(builder::serverAddressingMode);
 
         wamService.commit(builder.build());
+
+        var receivedContent = info.message().content();
+        if (!(receivedContent instanceof ProtocolMessage)) {
+            var reaction = receivedContent instanceof ReactionMessage || receivedContent instanceof EncReactionMessage;
+            var forwarded = contextInfo != null && contextInfo.forwardingScore().orElse(0) > 1;
+            var commerce = ThreadLoggingMessages.isCommerceMessage(info.message());
+            whatsapp.recordThreadActivity(stanza.chatJid(), new ThreadLoggingActivity.MessageReceived(
+                    isViewOnceMessage(info.message()), forwarded, reaction, commerce));
+        }
     }
 
     /**

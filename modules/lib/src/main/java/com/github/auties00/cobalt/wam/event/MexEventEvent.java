@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMexEventWamEvent")
 @WamEvent(id = 3782)
@@ -24,26 +24,26 @@ public interface MexEventEvent extends WamEventSpec {
     Optional<Instant> mexEventDurationT();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt mexEventEndTime();
+    OptionalLong mexEventEndTime();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt mexEventEnvelopeResponseStatus();
+    OptionalLong mexEventEnvelopeResponseStatus();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> mexEventOperation();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt mexEventPayloadResponseStatus();
+    OptionalLong mexEventPayloadResponseStatus();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt mexEventRequestSize();
+    OptionalLong mexEventRequestSize();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt mexEventResponseSize();
+    OptionalLong mexEventResponseSize();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt mexEventRetries();
+    OptionalLong mexEventRetries();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt mexEventStartTime();
+    OptionalLong mexEventStartTime();
 }

@@ -4,8 +4,7 @@ import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacyMode;
 import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.action.SyncActionState;
 import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
@@ -31,8 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Verifies {@link StatusPrivacyHandler}: applying an incoming status-privacy
- * mutation and asserting the persisted {@link PrivacySettingType#STATUS}
- * entry, across the per-mode dispatch and the user-JID filter applied to
+ * mutation and asserting the persisted status-privacy setting,
+ * across the per-mode dispatch and the user-JID filter applied to
  * the allow/deny lists. Allow/deny-list tests pass a peer-A, peer-B, and
  * group JID so they can observe the group JID being dropped by the
  * user-only filter.
@@ -97,29 +96,29 @@ class StatusPrivacyHandlerTest {
     @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
-        @DisplayName("CONTACTS mode persists a STATUS entry with CONTACTS value and empty excluded list")
+        @DisplayName("CONTACTS mode persists a status-privacy setting with CONTACTS mode and empty jids")
         void contactsMode() {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var result = new StatusPrivacyHandler().applyMutation(client,
                     statusMutation(StatusPrivacyAction.StatusDistributionMode.CONTACTS, List.of(), SyncdOperation.SET, ts));
             assertEquals(SyncActionState.SUCCESS, result.actionState());
-            var entry = client.store().settingsStore().findPrivacySetting(PrivacySettingType.STATUS).orElseThrow();
-            assertEquals(PrivacySettingValue.CONTACTS, entry.value());
-            assertTrue(entry.excluded().isEmpty());
+            var setting = client.store().settingsStore().statusPrivacy().orElseThrow();
+            assertEquals(StatusPrivacyMode.CONTACTS, setting.mode().orElseThrow());
+            assertTrue(setting.jids().isEmpty());
         }
 
         @Test
-        @DisplayName("ALLOW_LIST mode filters userJids and persists CONTACTS_ONLY with the filtered list")
+        @DisplayName("ALLOW_LIST mode filters userJids and persists WHITELIST with the filtered list")
         void allowListMode() {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var result = new StatusPrivacyHandler().applyMutation(client,
                     statusMutation(StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST,
                             List.of(PEER_A, GROUP, PEER_B), SyncdOperation.SET, ts));
             assertEquals(SyncActionState.SUCCESS, result.actionState());
-            var entry = client.store().settingsStore().findPrivacySetting(PrivacySettingType.STATUS).orElseThrow();
-            assertEquals(PrivacySettingValue.CONTACTS_ONLY, entry.value());
+            var setting = client.store().settingsStore().statusPrivacy().orElseThrow();
+            assertEquals(StatusPrivacyMode.WHITELIST, setting.mode().orElseThrow());
             // Group JID is filtered out by isUser() predicate; only PEER_A and PEER_B survive
-            assertEquals(List.of(PEER_A, PEER_B), entry.excluded(),
+            assertEquals(List.of(PEER_A, PEER_B), setting.jids(),
                     "WAWebWid.isUser drops non-user-server JIDs from the allow list");
         }
 
@@ -131,9 +130,9 @@ class StatusPrivacyHandlerTest {
                     statusMutation(StatusPrivacyAction.StatusDistributionMode.DENY_LIST,
                             List.of(PEER_A, PEER_B), SyncdOperation.SET, ts));
             assertEquals(SyncActionState.SUCCESS, result.actionState());
-            var entry = client.store().settingsStore().findPrivacySetting(PrivacySettingType.STATUS).orElseThrow();
-            assertEquals(PrivacySettingValue.CONTACTS_EXCEPT, entry.value());
-            assertEquals(List.of(PEER_A, PEER_B), entry.excluded());
+            var setting = client.store().settingsStore().statusPrivacy().orElseThrow();
+            assertEquals(StatusPrivacyMode.CONTACTS_EXCEPT, setting.mode().orElseThrow());
+            assertEquals(List.of(PEER_A, PEER_B), setting.jids());
         }
 
         @Test
@@ -144,7 +143,7 @@ class StatusPrivacyHandlerTest {
                     statusMutation(StatusPrivacyAction.StatusDistributionMode.CLOSE_FRIENDS, List.of(), SyncdOperation.SET, ts));
             assertEquals(SyncActionState.SUCCESS, result.actionState(),
                     "WA Web's switch breaks out of the CLOSE_FRIENDS branch without writing any IDB entry");
-            assertTrue(client.store().settingsStore().findPrivacySetting(PrivacySettingType.STATUS).isEmpty());
+            assertTrue(client.store().settingsStore().statusPrivacy().isEmpty());
         }
 
         @Test
@@ -154,7 +153,7 @@ class StatusPrivacyHandlerTest {
             var result = new StatusPrivacyHandler().applyMutation(client,
                     statusMutation(StatusPrivacyAction.StatusDistributionMode.CUSTOM_LIST, List.of(), SyncdOperation.SET, ts));
             assertEquals(SyncActionState.SUCCESS, result.actionState());
-            assertTrue(client.store().settingsStore().findPrivacySetting(PrivacySettingType.STATUS).isEmpty());
+            assertTrue(client.store().settingsStore().statusPrivacy().isEmpty());
         }
     }
 

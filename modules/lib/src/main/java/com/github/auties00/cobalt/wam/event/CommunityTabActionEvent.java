@@ -7,23 +7,23 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCommunityTabActionWamEvent")
 @WamEvent(id = 3496)
 public interface CommunityTabActionEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt communityNoActionTabViews();
+    OptionalLong communityNoActionTabViews();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt communityTabGroupNavigations();
+    OptionalLong communityTabGroupNavigations();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt communityTabToHomeViews();
+    OptionalLong communityTabToHomeViews();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt communityTabViews();
+    OptionalLong communityTabViews();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt communityTabViewsViaContextMenu();
+    OptionalLong communityTabViewsViaContextMenu();
 }

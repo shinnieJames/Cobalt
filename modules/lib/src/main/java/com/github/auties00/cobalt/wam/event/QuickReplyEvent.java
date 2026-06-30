@@ -14,19 +14,19 @@ import com.github.auties00.cobalt.wam.type.QuickReplyTranscodeResult;
 import com.github.auties00.cobalt.wam.type.QuickReplyType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebQuickReplyWamEvent")
 @WamEvent(id = 1468)
 public interface QuickReplyEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt attachmentGifCount();
+    OptionalLong attachmentGifCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt attachmentImageCount();
+    OptionalLong attachmentImageCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt attachmentVideoCount();
+    OptionalLong attachmentVideoCount();
 
     @WamProperty(index = 10, type = WamType.BOOLEAN)
     Optional<Boolean> isSmartDefault();
@@ -41,19 +41,19 @@ public interface QuickReplyEvent extends WamEventSpec {
     Optional<String> listIds();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt messageDepth();
+    OptionalLong messageDepth();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<QuickReplyAction> quickReplyAction();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt quickReplyCount();
+    OptionalLong quickReplyCount();
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<QuickReplyEntryPoint> quickReplyEntryPoint();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt quickReplyKeywordCount();
+    OptionalLong quickReplyKeywordCount();
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> quickReplyKeywordMatched();

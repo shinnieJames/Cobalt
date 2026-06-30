@@ -115,9 +115,7 @@ public final class ControlEventBridge implements CallEventSink {
                     new CallEvent.MuteChanged(callId, e.requester(), true, true);
             case MuteRequestFailed ignored ->
                     new CallEvent.Generic(CallEventType.MUTE_REQUEST_FAILED, callId);
-            case VideoStateChanged e ->
-                    new CallEvent.VideoStateChanged(callId, e.self() ? null : e.participant(),
-                            e.state() == VideoStreamState.ENABLED);
+            case VideoStateChanged e -> videoEvent(callId, e);
             case PeerVideoPermissionChanged e ->
                     new CallEvent.PeerVideoPermissionChanged(callId, e.participant(), e.allowed());
             case ScreenShareEvent e ->
@@ -150,6 +148,30 @@ public final class ControlEventBridge implements CallEventSink {
                     new CallEvent.Generic(CallEventType.PLAY_CALL_TONE, callId);
         };
         bus.emit(translated);
+    }
+
+    /**
+     * Maps an inbound video-state change onto the host event family it belongs to.
+     *
+     * <p>A peer's {@link VideoStreamState#UPGRADE_REQUEST} or {@link VideoStreamState#UPGRADE_REQUEST_V2}
+     * is the request leg of a mid-call audio-to-video upgrade and becomes a
+     * {@link CallEvent.VideoUpgradeRequest}, the distinct host notification the application answers with
+     * an accept or reject. Every other state (the camera on/off lifecycle, and the upgrade
+     * accept/reject/cancel responses) becomes a {@link CallEvent.VideoStateChanged} reporting whether the
+     * camera is on, with a self-originated change carrying no peer attribution.
+     *
+     * @param callId the call identifier to stamp onto the event
+     * @param event  the inbound video-state change
+     * @return the typed video-upgrade-request event for an inbound upgrade request, otherwise the
+     *         video-state-changed event
+     */
+    private CallEvent videoEvent(String callId, VideoStateChanged event) {
+        if (!event.self() && (event.state() == VideoStreamState.UPGRADE_REQUEST
+                || event.state() == VideoStreamState.UPGRADE_REQUEST_V2)) {
+            return new CallEvent.VideoUpgradeRequest(callId, event.participant());
+        }
+        return new CallEvent.VideoStateChanged(callId, event.self() ? null : event.participant(),
+                event.state() == VideoStreamState.ENABLED);
     }
 
     /**

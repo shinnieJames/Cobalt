@@ -15,40 +15,40 @@ import com.github.auties00.cobalt.wam.type.ThreadCreationTime;
 import com.github.auties00.cobalt.wam.type.ThumbnailType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebQbmMessageReadWamEvent")
 @WamEvent(id = 3792)
 public interface QbmMessageReadEvent extends WamEventSpec {
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt apiDailyThreadCount7d();
+    OptionalLong apiDailyThreadCount7d();
 
     @WamProperty(index = 19, type = WamType.INTEGER)
-    OptionalInt apiMessageCount1d();
+    OptionalLong apiMessageCount1d();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt apiMessageCount7d();
+    OptionalLong apiMessageCount7d();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt apiTotalMessageCount();
+    OptionalLong apiTotalMessageCount();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt apiTotalNewThreadCount();
+    OptionalLong apiTotalNewThreadCount();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt apiUniqueThreadCount1d();
+    OptionalLong apiUniqueThreadCount1d();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt apiUniqueThreadCount7d();
+    OptionalLong apiUniqueThreadCount7d();
 
     @WamProperty(index = 34, type = WamType.STRING)
     Optional<String> bizTrustTier();
 
     @WamProperty(index = 51, type = WamType.INTEGER)
-    OptionalInt bodyUrlCountInt();
+    OptionalLong bodyUrlCountInt();
 
     @WamProperty(index = 52, type = WamType.INTEGER)
-    OptionalInt bodyUrlUniqueCountInt();
+    OptionalLong bodyUrlUniqueCountInt();
 
     @WamProperty(index = 44, type = WamType.STRING)
     Optional<String> buttonValueJsonArray();
@@ -57,22 +57,22 @@ public interface QbmMessageReadEvent extends WamEventSpec {
     Optional<ChatsFolderType> chatsFolderType();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt companionDevices();
+    OptionalLong companionDevices();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<ContactType> contactType();
 
     @WamProperty(index = 53, type = WamType.INTEGER)
-    OptionalInt ctaUrlUniqueCountInt();
+    OptionalLong ctaUrlUniqueCountInt();
 
     @WamProperty(index = 40, type = WamType.STRING)
     Optional<String> decisionId();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt deltaTime();
+    OptionalLong deltaTime();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt deltaTimeReceived();
+    OptionalLong deltaTimeReceived();
 
     @WamProperty(index = 39, type = WamType.STRING)
     Optional<String> entSourceSubplatform();
@@ -144,25 +144,25 @@ public interface QbmMessageReadEvent extends WamEventSpec {
     Optional<ReadSource> readSource();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt smbDailyThreadCount7d();
+    OptionalLong smbDailyThreadCount7d();
 
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt smbMessageCount1d();
+    OptionalLong smbMessageCount1d();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt smbMessageCount7d();
+    OptionalLong smbMessageCount7d();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt smbTotalMessageCount();
+    OptionalLong smbTotalMessageCount();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
-    OptionalInt smbTotalNewThreadCount();
+    OptionalLong smbTotalNewThreadCount();
 
     @WamProperty(index = 30, type = WamType.INTEGER)
-    OptionalInt smbUniqueThreadCount1d();
+    OptionalLong smbUniqueThreadCount1d();
 
     @WamProperty(index = 31, type = WamType.INTEGER)
-    OptionalInt smbUniqueThreadCount7d();
+    OptionalLong smbUniqueThreadCount7d();
 
     @WamProperty(index = 46, type = WamType.STRING)
     Optional<String> submessageFieldJsonArray();
@@ -171,7 +171,7 @@ public interface QbmMessageReadEvent extends WamEventSpec {
     Optional<ThreadCreationTime> threadCreationTime();
 
     @WamProperty(index = 33, type = WamType.INTEGER)
-    OptionalInt threadDwellTime();
+    OptionalLong threadDwellTime();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> threadIdHmac();
@@ -183,5 +183,5 @@ public interface QbmMessageReadEvent extends WamEventSpec {
     Optional<ThumbnailType> thumbnailType();
 
     @WamProperty(index = 54, type = WamType.INTEGER)
-    OptionalInt urlUniqueCountInt();
+    OptionalLong urlUniqueCountInt();
 }

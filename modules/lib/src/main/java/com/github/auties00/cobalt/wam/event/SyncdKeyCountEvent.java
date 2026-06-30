@@ -7,23 +7,23 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSyncdKeyCountWamEvent")
 @WamEvent(id = 3978)
 public interface SyncdKeyCountEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt keysUsedInSnapshotCount();
+    OptionalLong keysUsedInSnapshotCount();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt p80MuationsPerKey();
+    OptionalLong p80MuationsPerKey();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt p95MuationsPerKey();
+    OptionalLong p95MuationsPerKey();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt syncdSessionLengthDays();
+    OptionalLong syncdSessionLengthDays();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt totalKeyCount();
+    OptionalLong totalKeyCount();
 }

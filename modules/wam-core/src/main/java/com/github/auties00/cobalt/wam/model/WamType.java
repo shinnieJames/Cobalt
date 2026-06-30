@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
  * The mapping from {@code WamType} to Java type is:
  *
  * <ul>
- * <li>{@link #INTEGER} corresponds to {@code Integer} (variable-width
+ * <li>{@link #INTEGER} corresponds to {@code Long} (variable-width
  *     signed integer encoding: tag-only for 0 and 1, otherwise int8,
  *     int16, int32, or int64)
  * <li>{@link #BOOLEAN} corresponds to {@code Boolean} (encoded as the
@@ -41,7 +41,7 @@ public enum WamType {
      * with no payload. Other values use the minimum number of bytes needed:
      * int8, int16, int32, or int64.
      *
-     * <p>Java return type: {@code OptionalInt}.
+     * <p>Java return type: {@code OptionalLong}.
      */
     INTEGER,
 

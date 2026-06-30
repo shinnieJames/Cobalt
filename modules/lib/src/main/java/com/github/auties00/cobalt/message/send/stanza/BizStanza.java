@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.message.send.stanza;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.business.BusinessHostStorageType;
 import com.github.auties00.cobalt.model.business.BusinessVerifiedName;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
@@ -83,7 +84,7 @@ public final class BizStanza {
                 .orElse(null);
         if (verifiedName != null && verifiedName.hasPrivacyMode()) {
             var hostStorage = verifiedName.hostStorage()
-                    .map(BusinessVerifiedName.HostStorageType::index)
+                    .map(BusinessHostStorageType::index)
                     .orElse(null);
             var actualActors = verifiedName.actualActors()
                     .map(BusinessVerifiedName.ActualActorsType::index)

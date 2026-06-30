@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.DeepLinkOpenFrom;
 import com.github.auties00.cobalt.wam.type.EntryPointConversationInitiated;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebBizCatalogViewWamEvent")
 @WamEvent(id = 3006, channel = WamChannel.PRIVATE, privateStatsId = 0)
@@ -86,10 +86,10 @@ public interface BizCatalogViewEvent extends WamEventSpec {
     Optional<String> productIndex();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt quantity();
+    OptionalLong quantity();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt sequenceNumber();
+    OptionalLong sequenceNumber();
 
     @WamProperty(index = 24, type = WamType.STRING)
     Optional<String> variantTypes();

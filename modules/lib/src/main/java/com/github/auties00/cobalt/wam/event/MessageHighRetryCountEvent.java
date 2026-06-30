@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMessageHighRetryCountWamEvent")
 @WamEvent(id = 3132, betaWeight = 20, releaseWeight = 20)
@@ -48,7 +48,7 @@ public interface MessageHighRetryCountEvent extends WamEventSpec {
     Optional<MessageType> messageType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt retryCount();
+    OptionalLong retryCount();
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<SessionScopeType> sessionScope();

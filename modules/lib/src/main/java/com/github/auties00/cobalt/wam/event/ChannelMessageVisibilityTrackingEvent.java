@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChannelUserType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebChannelMessageVisibilityTrackingWamEvent")
 @WamEvent(id = 5998)
@@ -23,6 +23,9 @@ public interface ChannelMessageVisibilityTrackingEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.BOOLEAN)
     Optional<Boolean> containsMusic();
 
+    @WamProperty(index = 12, type = WamType.BOOLEAN)
+    Optional<Boolean> isOriginalAuthor();
+
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> isStarredPost();
 
@@ -33,7 +36,7 @@ public interface ChannelMessageVisibilityTrackingEvent extends WamEventSpec {
     Optional<String> postId();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 6, type = WamType.STRING)
     Optional<String> unifiedSessionId();

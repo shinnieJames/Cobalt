@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.PinInChatInteractionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPinInChatInteractionWamEvent")
 @WamEvent(id = 4436)
@@ -21,7 +21,7 @@ public interface PinInChatInteractionEvent extends WamEventSpec {
     Optional<GroupRoleType> groupRole();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt groupSize();
+    OptionalLong groupSize();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<GroupTypeClient> groupTypeClient();
@@ -36,11 +36,11 @@ public interface PinInChatInteractionEvent extends WamEventSpec {
     Optional<MediaType> mediaType();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt pinCount();
+    OptionalLong pinCount();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<PinInChatInteractionType> pinInChatInteractionType();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt pinIndex();
+    OptionalLong pinIndex();
 }

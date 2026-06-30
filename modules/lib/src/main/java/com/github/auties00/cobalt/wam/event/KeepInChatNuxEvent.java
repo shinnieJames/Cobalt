@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.KicNuxActionNameType;
 import com.github.auties00.cobalt.wam.type.TriggerType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebKeepInChatNuxWamEvent")
 @WamEvent(id = 3486)
 public interface KeepInChatNuxEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt chatEphemeralityDuration();
+    OptionalLong chatEphemeralityDuration();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<KicNuxActionNameType> kicNuxActionName();

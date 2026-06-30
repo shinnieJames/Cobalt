@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.Set;
-import java.util.concurrent.ScheduledExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
@@ -27,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
  * {@code startPeriodicReRequestJob}, {@code scheduleAllDevicesRespondedCheck}) without
  * depending on a real timer fire.
  *
- * <p>The wait-for-key timeout is set to 30 days so the {@link ScheduledExecutorService}
- * timers cannot fire during a test and pollute assertions; {@link #tearDown()} always calls
- * {@link MissingSyncKeyTimeoutScheduler#shutdown()} so the executor thread does not leak.
+ * <p>The wait-for-key timeout is set to 30 days so the scheduled timers cannot fire during a
+ * test and pollute assertions; {@link #tearDown()} always calls
+ * {@link MissingSyncKeyTimeoutScheduler#shutdown()} so the timer threads do not leak.
  */
 @DisplayName("MissingSyncKeyTimeoutScheduler")
 class MissingSyncKeyTimeoutSchedulerTest {
@@ -162,7 +161,7 @@ class MissingSyncKeyTimeoutSchedulerTest {
     }
 
     @Nested
-    @DisplayName("shutdown - releases executor and is idempotent")
+    @DisplayName("shutdown - cancels timers and is idempotent")
     class Shutdown {
         @Test
         @DisplayName("shutdown does not throw")

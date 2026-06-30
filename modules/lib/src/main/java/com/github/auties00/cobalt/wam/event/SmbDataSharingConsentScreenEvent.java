@@ -10,19 +10,19 @@ import com.github.auties00.cobalt.wam.type.SmbDataSharingConsentScreenEntryPoint
 import com.github.auties00.cobalt.wam.type.SmbDataSharingConsentScreenType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSmbDataSharingConsentScreenWamEvent")
 @WamEvent(id = 3972)
 public interface SmbDataSharingConsentScreenEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt elapsedTimeMs();
+    OptionalLong elapsedTimeMs();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt previousImpressionCount();
+    OptionalLong previousImpressionCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt previousOptOutImpressionCount();
+    OptionalLong previousOptOutImpressionCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<SmbDataSharingConsentScreenEntryPoint> smbDataSharingConsentScreenEntryPoint();
@@ -31,5 +31,5 @@ public interface SmbDataSharingConsentScreenEvent extends WamEventSpec {
     Optional<SmbDataSharingConsentScreenType> smbDataSharingConsentScreenType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt smbDataSharingConsentScreenVersion();
+    OptionalLong smbDataSharingConsentScreenVersion();
 }

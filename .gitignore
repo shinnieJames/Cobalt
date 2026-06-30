@@ -36,3 +36,6 @@ re/
 
 # Validation run data (incremental-mode anchor, reports, captures)
 validation/
+
+# Logs
+*.log

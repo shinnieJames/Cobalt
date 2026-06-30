@@ -124,7 +124,7 @@ class Calls2PublicCallApiTest {
             var harness = new Harness();
             var audioOut = AudioOutput.silence();
             var audioIn = AudioInput.buffered();
-            VideoOutput videoOut = BufferedVideoOutput.buffered(); // capture source
+            VideoOutput videoOut = BufferedVideoOutput.buffered(640, 480); // capture source
             VideoInput videoIn = BufferedVideoInput.buffered();     // playback sink
 
             var call = harness.service.placeGroupCall(Set.of(PEER), GROUP, audioOut, audioIn, videoOut, videoIn);

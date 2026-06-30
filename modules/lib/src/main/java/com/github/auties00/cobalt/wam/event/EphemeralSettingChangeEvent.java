@@ -11,16 +11,16 @@ import com.github.auties00.cobalt.wam.type.PreciseSizeBucket;
 import com.github.auties00.cobalt.wam.type.PreviousEphemeralityType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebEphemeralSettingChangeWamEvent")
 @WamEvent(id = 2370)
 public interface EphemeralSettingChangeEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt afterReadDuration();
+    OptionalLong afterReadDuration();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt chatEphemeralityDuration();
+    OptionalLong chatEphemeralityDuration();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<EphemeralSettingEntryPointType> ephemeralSettingEntryPoint();
@@ -29,7 +29,7 @@ public interface EphemeralSettingChangeEvent extends WamEventSpec {
     Optional<PreciseSizeBucket> ephemeralSettingGroupSize();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt errorCode();
+    OptionalLong errorCode();
 
     @WamProperty(index = 10, type = WamType.BOOLEAN)
     Optional<Boolean> isAfterRead();
@@ -38,7 +38,7 @@ public interface EphemeralSettingChangeEvent extends WamEventSpec {
     Optional<Boolean> isSuccess();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt previousEphemeralityDuration();
+    OptionalLong previousEphemeralityDuration();
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<PreviousEphemeralityType> previousEphemeralityType();

@@ -26,5 +26,6 @@ public enum DownloadOriginType {
     @WamEnumConstant(16) WAMO_STATUS,
     @WamEnumConstant(17) WAMO_BIZ_PROFILE,
     @WamEnumConstant(18) WAMO_PREFERENCES,
-    @WamEnumConstant(19) RICH_ORDER_STATUS
+    @WamEnumConstant(19) RICH_ORDER_STATUS,
+    @WamEnumConstant(20) WA_BACKUP
 }

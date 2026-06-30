@@ -14,6 +14,7 @@ import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppWamStore;
 import com.github.auties00.cobalt.util.BufferedProtobufInputStream;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -22,6 +23,7 @@ import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.media.StickerMetadata;
+import com.github.auties00.cobalt.model.message.system.history.HistorySyncMessageAccessStatus;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
 import com.github.auties00.cobalt.model.preference.StickerBuilder;
@@ -160,6 +162,33 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
     }
 
     /**
+     * Applies a {@link HistorySyncType#MESSAGE_ACCESS_STATUS} notification by recording whether the
+     * primary has granted this device complete on-demand access to the message history.
+     *
+     * <p>This sync type carries no downloadable chunk, so {@link #processSync} dispatches to it before
+     * any download or metric step runs. The grant is the wire form of the primary's per-device "all chat history"
+     * versus "limited" setting and bounds how far back the companion may pull history on demand; it
+     * is only meaningful for desktop companions, so the notification is ignored on any other platform.
+     *
+     * @implNote This implementation generalises WhatsApp Web's {@code isWindows} gate to every desktop
+     * platform Cobalt impersonates, since Cobalt supports both the Windows and macOS desktop clients.
+     *
+     * @param notification the access-status notification to apply
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandleHistorySyncMessageAccessStatusChange",
+            exports = "handleHistorySyncMessageAccessStatusChange", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void applyMessageAccessStatus(HistorySyncNotification notification) {
+        var store = whatsapp.store();
+        if (!store.accountStore().device().platform().isDesktop()) {
+            return;
+        }
+        var granted = notification.messageAccessStatus()
+                .map(HistorySyncMessageAccessStatus::completeAccessGranted)
+                .orElse(false);
+        store.syncStore().setCompleteHistoryAccessGranted(granted);
+    }
+
+    /**
      * Runs the full download-decrypt-decode-fanout pipeline for one
      * notification on the current (virtual) thread.
      *
@@ -178,6 +207,10 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      * @param notification the non-{@code null} notification to process
      */
     private void processSync(HistorySyncNotification notification) {
+        if (notification.syncType().orElse(null) == HistorySyncType.MESSAGE_ACCESS_STATUS) {
+            applyMessageAccessStatus(notification);
+            return;
+        }
         var applyStartTs = System.currentTimeMillis();
         var inlinePayload = notification.initialHistBootstrapInlinePayload().orElse(null);
         var sentViaMms = inlinePayload == null || inlinePayload.length == 0;
@@ -750,7 +783,7 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      *
      * @implNote This implementation routes through the lightweight
      * {@link HistorySync#ofLight(ProtobufInputStream)} variant when the caller
-     * configured a zero web-history policy, which trims the wire-decoded
+     * configured the discard history mode, which trims the wire-decoded
      * payload to the fields Cobalt actually projects into the listener API;
      * the full decoder
      * ({@link HistorySync#ofFull(ProtobufInputStream)}) is used otherwise.
@@ -762,8 +795,7 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private HistorySync decodeHistorySync(InputStream stream) {
         var protoStream = new BufferedProtobufInputStream(stream);
-        var historyPolicy = whatsapp.store().syncStore().webHistoryPolicy();
-        if(historyPolicy.isPresent() && historyPolicy.get().isZero()) {
+        if (whatsapp.store().syncStore().isHistoryDiscarded()) {
             return HistorySync.ofLight(protoStream);
         } else {
             return HistorySync.ofFull(protoStream);
@@ -814,14 +846,12 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      * Past participants are forwarded only as a listener event because
      * Cobalt's store has no past-participants collection. The
      * {@code threadIdUserSecret} and {@code threadDsTimeframeOffset}
-     * fields are intentionally not consumed: WA Web feeds them through
-     * {@code WAWebHistorySyncNotificationUtils.handleChatThreadLoggingMetadata}
-     * into {@code WAWebChatThreadLogging.metadataStore} (the HMAC seed
-     * and disappearing-mode window offset for Meta's internal
-     * Chat-Thread-Logging analytics pipeline), and Cobalt has no
-     * equivalent of that pipeline (the same Falco-style telemetry
-     * surface elided from the error model and from the broader
-     * receive-path code).
+     * fields are projected into
+     * {@link LinkedWhatsAppWamStore#setChatThreadLoggingSecret(byte[])}
+     * and {@link LinkedWhatsAppWamStore#setChatThreadLoggingOffset(Integer)}
+     * to feed the ctlv2 thread-logging uploader (the HMAC seed and
+     * disappearing-mode window offset for the {@code ThreadInteractionData}
+     * WAM events).
      * The {@code globalSettings} sub-message is decoded for protobuf
      * parity but deliberately not projected onto the store, because
      * WA Web does not read it from the history-sync chunk either: the
@@ -903,6 +933,12 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
 
         historySync.shareableChatLinkKey()
                 .ifPresent(store.accountStore()::setShareableChatLinkKey);
+
+        historySync.chatThreadLoggingSecret()
+                .ifPresent(store.wamStore()::setChatThreadLoggingSecret);
+
+        historySync.chatThreadLoggingDisappearingOffset()
+                .ifPresent(offset -> store.wamStore().setChatThreadLoggingOffset(offset));
 
         for (var pastParticipants : historySync.pastParticipants()) {
             var groupJid = pastParticipants.groupJid().orElse(null);

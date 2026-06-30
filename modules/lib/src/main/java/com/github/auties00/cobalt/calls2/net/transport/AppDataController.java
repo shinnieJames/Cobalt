@@ -9,16 +9,13 @@ import com.github.auties00.cobalt.model.call.datachannel.PeerFeedback;
 import com.github.auties00.cobalt.model.call.datachannel.ReactionInfo;
 import com.github.auties00.cobalt.model.call.datachannel.ReactionInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -31,10 +28,10 @@ import java.util.function.Consumer;
  * <p>Reactions are unreliable, transient UI events shipped over the {@link AppDataChannel}. The
  * controller keeps a single outbound reaction live for a short window so it can be retransmitted against
  * packet loss, then clears it; it tracks one inbound reaction per participant and expires each after its
- * lifetime so a displayed overlay is taken down. The three housekeeping actions run on a virtual-thread
- * scheduler as the {@link AppDataTimerType} timers: a one-shot clear of the outbound reaction, a
- * self-rearming sweep of aged inbound reactions, and an optional periodic retransmission of the live
- * outbound reaction.
+ * lifetime so a displayed overlay is taken down. The three housekeeping actions run as the
+ * {@link AppDataTimerType} timers, each on its own virtual-thread {@link ScheduledTask}: a one-shot clear
+ * of the outbound reaction, a periodic sweep of aged inbound reactions, and an optional periodic
+ * retransmission of the live outbound reaction.
  *
  * <p>The controller is also the inbound demultiplexer. A received {@link AppDataPayloads} batch is split
  * into its messages: each reaction updates the per-participant record and notifies the reaction
@@ -44,8 +41,8 @@ import java.util.function.Consumer;
  * which selects the SCTP DataChannel or the relay RTP stream.
  *
  * <p>Mutations of the reaction state are guarded by a single lock so a timer callback and an inbound or
- * outbound reaction never race; the scheduler runs each timer on its own virtual thread. The controller
- * is closed with {@link #close()}, which cancels every timer and shuts the scheduler down.
+ * outbound reaction never race; each timer runs on its own virtual thread. The controller is closed with
+ * {@link #close()}, which cancels every timer.
  *
  * <p>The inbound observers may be supplied at construction (the fully wired constructor) or left as no-ops
  * and attached afterwards through {@link #attachReactionObserver(ReactionObserver)} and its siblings (the
@@ -64,8 +61,8 @@ import java.util.function.Consumer;
  * outbound reaction state at {@code controller+0x108}; {@code rx_reaction_clear} sweeps the participant
  * collection, clears each reaction older than a threshold, optionally notifies the app, and re-arms
  * itself with interval {@code DAT_22f5c}. The native pjlib pool/mutex/timer machinery is replaced by JDK
- * objects per the threading design: a {@link ScheduledExecutorService} over virtual threads for the
- * timers and a {@link ReentrantLock} for the reaction-state mutex, rather than reimplemented. The
+ * objects per the threading design: a virtual-thread {@link ScheduledTask} per timer and a
+ * {@link ReentrantLock} for the reaction-state mutex, rather than reimplemented. The
  * concrete native controller implements only the reaction tx/rx path; rekey, subscription, and feedback
  * app-data are demultiplexed here to their handlers because they share the AppData stream that this
  * controller owns.
@@ -145,14 +142,6 @@ public final class AppDataController implements AutoCloseable {
     private final AppDataChannel channel;
 
     /**
-     * Scheduler running the three reaction timers, one task per virtual thread.
-     *
-     * <p>A single-threaded virtual-thread scheduler suffices because the timers are infrequent and their
-     * callbacks take the reaction lock; it replaces the native call timer heap for this controller.
-     */
-    private final ScheduledExecutorService scheduler;
-
-    /**
      * Guards every mutation of the outbound and inbound reaction state.
      *
      * <p>Held briefly by a send, an inbound reaction, and each timer callback so they never observe a
@@ -230,18 +219,18 @@ public final class AppDataController implements AutoCloseable {
      * <p>Cancelled and rescheduled each time a new outbound reaction is sent so the clear fires a full
      * lifetime after the latest reaction.
      */
-    private ScheduledFuture<?> txClearTimer;
+    private ScheduledTask txClearTimer;
 
     /**
      * Handle to the self-rearming rx-reaction-clear sweep, or {@code null} once the controller is closed.
      */
-    private ScheduledFuture<?> rxSweepTimer;
+    private ScheduledTask rxSweepTimer;
 
     /**
      * Handle to the periodic reaction-retransmission timer, or {@code null} when retransmission is
      * disabled.
      */
-    private ScheduledFuture<?> retransmissionTimer;
+    private ScheduledTask retransmissionTimer;
 
     /**
      * Monotonically increasing transaction id stamped into successive outbound reactions.
@@ -261,9 +250,9 @@ public final class AppDataController implements AutoCloseable {
     /**
      * Constructs an app-data controller bound to the given channel and inbound handlers.
      *
-     * <p>Starts the self-rearming inbound-reaction sweep immediately and, when retransmission is enabled,
+     * <p>Starts the periodic inbound-reaction sweep immediately and, when retransmission is enabled,
      * the periodic retransmission timer; the outbound-reaction clear timer is armed only once a reaction
-     * is sent. The controller owns its scheduler and shuts it down on {@link #close()}.
+     * is sent. The controller owns its timers and cancels them on {@link #close()}.
      *
      * @param channel               the app-data transport seam to send through; never {@code null}
      * @param reactionObserver      the observer for inbound reaction arrival and expiry; never
@@ -287,7 +276,6 @@ public final class AppDataController implements AutoCloseable {
         this.rekeyHandler = Objects.requireNonNull(rekeyHandler, "rekeyHandler cannot be null");
         this.feedbackHandler = Objects.requireNonNull(feedbackHandler, "feedbackHandler cannot be null");
         this.retransmissionEnabled = retransmissionEnabled;
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("calls2-appdata-timers", 0).factory());
         startRecurringTimers();
     }
 
@@ -543,10 +531,10 @@ public final class AppDataController implements AutoCloseable {
     }
 
     /**
-     * Cancels every timer and shuts the scheduler down.
+     * Cancels every timer.
      *
-     * <p>Marks the controller closed so a late send or callback is a no-op, cancels the three timers, and
-     * shuts the virtual-thread scheduler down without waiting; idempotent.
+     * <p>Marks the controller closed so a late send or callback is a no-op and cancels the three timers;
+     * idempotent.
      */
     @Override
     public void close() {
@@ -565,7 +553,6 @@ public final class AppDataController implements AutoCloseable {
         } finally {
             reactionLock.unlock();
         }
-        scheduler.shutdownNow();
     }
 
     /**
@@ -575,17 +562,9 @@ public final class AppDataController implements AutoCloseable {
      * periodic retransmission timer; the one-shot outbound clear is armed lazily on the first reaction.
      */
     private void startRecurringTimers() {
-        rxSweepTimer = scheduler.scheduleWithFixedDelay(
-                this::rxReactionClear,
-                DEFAULT_RX_REACTION_SWEEP.toMillis(),
-                DEFAULT_RX_REACTION_SWEEP.toMillis(),
-                TimeUnit.MILLISECONDS);
+        rxSweepTimer = ScheduledTask.schedule(DEFAULT_RX_REACTION_SWEEP, this::rxReactionClear);
         if (retransmissionEnabled) {
-            retransmissionTimer = scheduler.scheduleWithFixedDelay(
-                    this::reactionRetransmission,
-                    DEFAULT_RETRANSMISSION_INTERVAL.toMillis(),
-                    DEFAULT_RETRANSMISSION_INTERVAL.toMillis(),
-                    TimeUnit.MILLISECONDS);
+            retransmissionTimer = ScheduledTask.schedule(DEFAULT_RETRANSMISSION_INTERVAL, this::reactionRetransmission);
         }
     }
 
@@ -600,10 +579,7 @@ public final class AppDataController implements AutoCloseable {
             return;
         }
         cancel(txClearTimer);
-        txClearTimer = scheduler.schedule(
-                this::txReactionClear,
-                DEFAULT_TX_REACTION_LIFETIME.toMillis(),
-                TimeUnit.MILLISECONDS);
+        txClearTimer = ScheduledTask.scheduleDelayed(DEFAULT_TX_REACTION_LIFETIME, this::txReactionClear);
     }
 
     /**
@@ -702,14 +678,14 @@ public final class AppDataController implements AutoCloseable {
     /**
      * Cancels a scheduled timer if it is armed.
      *
-     * <p>A {@code null} handle is ignored; the cancellation does not interrupt a callback already
-     * running.
+     * <p>A {@code null} handle is ignored; cancelling wakes a pending timer so it never fires and
+     * interrupts one whose callback is already running.
      *
      * @param timer the timer handle to cancel, or {@code null}
      */
-    private static void cancel(ScheduledFuture<?> timer) {
+    private static void cancel(ScheduledTask timer) {
         if (timer != null) {
-            timer.cancel(false);
+            timer.cancel();
         }
     }
 

@@ -13,5 +13,6 @@ public enum ActionThreadTypeType {
     @WamEnumConstant(3) MESSAGE_YOURSELF,
     @WamEnumConstant(4) META_AI,
     @WamEnumConstant(5) TO_CHARACTER,
-    @WamEnumConstant(6) TO_UGC
+    @WamEnumConstant(6) TO_UGC,
+    @WamEnumConstant(7) AR_SURFACE
 }

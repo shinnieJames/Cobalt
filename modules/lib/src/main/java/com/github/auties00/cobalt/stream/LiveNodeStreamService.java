@@ -22,6 +22,8 @@ import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.tos.TosService;
+import com.github.auties00.cobalt.quarantine.QuarantineService;
 import com.github.auties00.cobalt.stream.control.ErrorStreamHandler;
 import com.github.auties00.cobalt.stream.control.FailureStreamHandler;
 import com.github.auties00.cobalt.stream.control.InfoBulletinStreamHandler;
@@ -168,8 +170,15 @@ public final class LiveNodeStreamService implements NodeStreamService {
      *                                         supplying the media-endpoint
      *                                         connection consumed by the
      *                                         message and success handlers
+     * @param tosService                       the {@link TosService} consulted
+     *                                         by the message handler's gating
+     *                                         checks and refreshed at success
+     *                                         bootstrap
+     * @param quarantineService                the {@link QuarantineService} consulted
+     *                                         by the message handler's Defense Mode
+     *                                         quarantine check
      */
-    public LiveNodeStreamService(LinkedWhatsAppClient whatsapp, Calls2Service calls2Service, LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService, AckSender ackSender, MediaConnectionService mediaConnectionService) {
+    public LiveNodeStreamService(LinkedWhatsAppClient whatsapp, Calls2Service calls2Service, LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService, AckSender ackSender, MediaConnectionService mediaConnectionService, TosService tosService, QuarantineService quarantineService) {
         var offlineNotificationsReporter = new OfflineNotificationsReporter(whatsapp, wamService);
         var callSignalingRouter = new CallSignalingRouter();
         var callMessageBuffer = new CallMessageBuffer();
@@ -183,12 +192,15 @@ public final class LiveNodeStreamService implements NodeStreamService {
                 lidMigrationService,
                 wamService,
                 ackSender,
-                mediaConnectionService
+                mediaConnectionService,
+                abPropsService,
+                tosService,
+                quarantineService
         ));
         addHandler(result, "receipt", new ReceiptStreamHandler(whatsapp, messageService, wamService, ackSender));
         addHandler(result, "presence", new PresenceStreamHandler(whatsapp));
         addHandler(result, "chatstate", new ChatStateStreamHandler(whatsapp));
-        addHandler(result, "call", new Calls2CallReceiver(whatsapp, ackSender, callSignalingRouter, callMessageBuffer, calls2Service::callExists, (message, from) -> routeInboundCall(calls2Service, message, from)));
+        addHandler(result, "call", new Calls2CallReceiver(whatsapp, ackSender, callSignalingRouter, callMessageBuffer, calls2Service::callExists, (message, from) -> routeInboundCall(calls2Service, message, from), calls2Service::handleOfferNotice));
         addHandler(result, "terminate", new Calls2TerminateReceiver((terminate, from) -> calls2Service.handleInboundTerminate(terminate, from != null ? from : terminate.callCreator())));
         addHandler(result, "ack", new Calls2CallAckReceiver(calls2Service));
         addHandler(result, "notification", new NotificationStreamHandler(
@@ -210,7 +222,8 @@ public final class LiveNodeStreamService implements NodeStreamService {
                 inactiveGroupLidMigrationService,
                 wamService,
                 webAppStateService,
-                mediaConnectionService
+                mediaConnectionService,
+                tosService
         ));
         addHandler(result, "failure", new FailureStreamHandler(whatsapp));
         addHandler(result, "stream:error", new StreamErrorStreamHandler(whatsapp));

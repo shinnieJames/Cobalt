@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebTsNavigationWamEvent")
 @WamEvent(id = 4334)
@@ -24,7 +24,7 @@ public interface TsNavigationEvent extends WamEventSpec {
     Optional<String> aiSessionId();
 
     @WamProperty(index = 38, type = WamType.INTEGER)
-    OptionalInt canonicalEntLastValidationTsMs();
+    OptionalLong canonicalEntLastValidationTsMs();
 
     @WamProperty(index = 19, type = WamType.STRING)
     Optional<String> cid();
@@ -39,7 +39,7 @@ public interface TsNavigationEvent extends WamEventSpec {
     Optional<String> entryPointConversionSource();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt groupSize();
+    OptionalLong groupSize();
 
     @WamProperty(index = 36, type = WamType.BOOLEAN)
     Optional<Boolean> isCanonicalEntPresent();
@@ -72,25 +72,25 @@ public interface TsNavigationEvent extends WamEventSpec {
     Optional<TsSurface> navigationSource();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt networkIsWifiCanonicalOpNumber();
+    OptionalLong networkIsWifiCanonicalOpNumber();
 
     @WamProperty(index = 41, type = WamType.INTEGER)
-    OptionalInt networkIsWifiOpNumber();
+    OptionalLong networkIsWifiOpNumber();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt networkRadioTypeCanonicalOpNumber();
+    OptionalLong networkRadioTypeCanonicalOpNumber();
 
     @WamProperty(index = 40, type = WamType.ENUM)
     Optional<RadioType> networkRadioTypeEventLevel();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
-    OptionalInt networkRadioTypeOpNumber();
+    OptionalLong networkRadioTypeOpNumber();
 
     @WamProperty(index = 31, type = WamType.ENUM)
     Optional<ReferrerAction> referrerAction();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt relativeTimestampMs();
+    OptionalLong relativeTimestampMs();
 
     @WamProperty(index = 20, type = WamType.STRING)
     Optional<String> smbCatalogBusinessVertical();
@@ -105,13 +105,13 @@ public interface TsNavigationEvent extends WamEventSpec {
     Optional<ThreadType> threadType();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt tsSessionId();
+    OptionalLong tsSessionId();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt tsTimestampMs();
+    OptionalLong tsTimestampMs();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

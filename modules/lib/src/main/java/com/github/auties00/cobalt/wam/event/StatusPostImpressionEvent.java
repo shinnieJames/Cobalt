@@ -22,13 +22,13 @@ import com.github.auties00.cobalt.wam.type.UrlStatusType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStatusPostImpressionWamEvent")
 @WamEvent(id = 6364)
 public interface StatusPostImpressionEvent extends WamEventSpec {
     @WamProperty(index = 46, type = WamType.INTEGER)
-    OptionalInt channelStatusId();
+    OptionalLong channelStatusId();
 
     @WamProperty(index = 47, type = WamType.ENUM)
     Optional<ChannelUserType> channelUserType();
@@ -88,7 +88,7 @@ public interface StatusPostImpressionEvent extends WamEventSpec {
     Optional<PairedMediaType> pairedMediaType();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
-    OptionalInt pogViewSequenceIndex();
+    OptionalLong pogViewSequenceIndex();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> psaCampaignId();
@@ -130,10 +130,10 @@ public interface StatusPostImpressionEvent extends WamEventSpec {
     Optional<MediaType> statusMediaType();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt statusPogIndex();
+    OptionalLong statusPogIndex();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt statusPostIndex();
+    OptionalLong statusPostIndex();
 
     @WamProperty(index = 17, type = WamType.TIMER)
     Optional<Instant> statusPostPlaybackDuration();
@@ -157,20 +157,20 @@ public interface StatusPostImpressionEvent extends WamEventSpec {
     Optional<Instant> statusViewTime();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt statusViewerSessionId();
+    OptionalLong statusViewerSessionId();
 
     @WamProperty(index = 52, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 21, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt updatesTabSessionId();
+    OptionalLong updatesTabSessionId();
 
     @WamProperty(index = 23, type = WamType.ENUM)
     Optional<UrlStatusType> urlStatusType();
 
     @WamProperty(index = 32, type = WamType.INTEGER)
-    OptionalInt viewSequenceIndex();
+    OptionalLong viewSequenceIndex();
 }

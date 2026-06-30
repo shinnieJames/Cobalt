@@ -11,13 +11,13 @@ import com.github.auties00.cobalt.wam.type.CommunityCreationCurrentScreenType;
 import com.github.auties00.cobalt.wam.type.CommunityCreationEntrypointType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCommunityCreationWamEvent")
 @WamEvent(id = 3492)
 public interface CommunityCreationEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt communityCreationActionCount();
+    OptionalLong communityCreationActionCount();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<CommunityCreationActionTakenType> communityCreationActionTaken();

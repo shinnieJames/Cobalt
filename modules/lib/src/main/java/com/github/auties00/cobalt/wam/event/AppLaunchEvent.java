@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.AppLaunchType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebAppLaunchWamEvent")
 @WamEvent(id = 1094)
@@ -20,7 +20,7 @@ public interface AppLaunchEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 2, type = WamType.TIMER)
     Optional<Instant> appLaunchCpuT();
@@ -47,7 +47,7 @@ public interface AppLaunchEvent extends WamEventSpec {
     Optional<Instant> dbBgThreadWritesDurationT();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt dbMainThreadCount();
+    OptionalLong dbMainThreadCount();
 
     @WamProperty(index = 19, type = WamType.TIMER)
     Optional<Instant> dbMainThreadReadsDurationT();
@@ -56,10 +56,10 @@ public interface AppLaunchEvent extends WamEventSpec {
     Optional<Instant> dbMainThreadWritesDurationT();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt dbReadsCount();
+    OptionalLong dbReadsCount();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt dbWritesCount();
+    OptionalLong dbWritesCount();
 
     @WamProperty(index = 12, type = WamType.BOOLEAN)
     Optional<Boolean> lowPowerModeEnabled();
@@ -68,8 +68,8 @@ public interface AppLaunchEvent extends WamEventSpec {
     Optional<String> peripheralConnected();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt processIdentifier();
+    OptionalLong processIdentifier();
 
     @WamProperty(index = 24, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 }

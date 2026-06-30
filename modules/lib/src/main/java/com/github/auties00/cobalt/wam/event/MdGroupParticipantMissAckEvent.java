@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.ClientGroupSizeBucket;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdGroupParticipantMissAckWamEvent")
 @WamEvent(id = 4146)
@@ -25,10 +25,10 @@ public interface MdGroupParticipantMissAckEvent extends WamEventSpec {
     Optional<Boolean> messageIsRevoke();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt participantAddCount();
+    OptionalLong participantAddCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt participantRemoveCount();
+    OptionalLong participantRemoveCount();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

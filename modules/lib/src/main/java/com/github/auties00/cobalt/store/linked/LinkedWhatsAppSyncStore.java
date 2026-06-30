@@ -1,6 +1,5 @@
 package com.github.auties00.cobalt.store.linked;
 
-import com.github.auties00.cobalt.client.linked.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
@@ -15,6 +14,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.SequencedCollection;
 
@@ -44,19 +44,140 @@ import java.util.SequencedCollection;
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public interface LinkedWhatsAppSyncStore {
     /**
-     * Returns the history-sync policy governing how much prior chat history the server may push.
+     * Returns whether the companion advertises a full history sync to the primary during pairing.
      *
-     * @return the history policy, or empty if not set
+     * @return {@code true} if a full sync is requested
      */
-    Optional<WhatsAppWebClientHistory> webHistoryPolicy();
+    boolean isFullHistorySyncRequired();
 
     /**
-     * Sets the history-sync policy.
+     * Sets whether the companion advertises a full history sync.
      *
-     * @param webHistoryPolicy the policy, or {@code null} to clear
+     * @param fullSyncRequired whether to request a full sync
      * @return this store instance for method chaining
      */
-    LinkedWhatsAppSyncStore setWebHistoryPolicy(WhatsAppWebClientHistory webHistoryPolicy);
+    LinkedWhatsAppSyncStore setFullHistorySyncRequired(boolean fullSyncRequired);
+
+    /**
+     * Returns whether the decoded history payload is trimmed on receipt to the data Cobalt needs.
+     *
+     * @return {@code true} if the decoded payload is trimmed
+     */
+    boolean isHistoryDiscarded();
+
+    /**
+     * Sets whether the decoded history payload is trimmed on receipt.
+     *
+     * @param discarded whether to trim the decoded payload
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setHistoryDiscarded(boolean discarded);
+
+    /**
+     * Returns whether the newsletter list is bootstrapped after login. Defaults to {@code true}.
+     *
+     * @return {@code true} if newsletters are bootstrapped
+     */
+    boolean hasHistoryNewsletters();
+
+    /**
+     * Sets whether the newsletter list is bootstrapped after login.
+     *
+     * @param newsletters whether to bootstrap newsletters
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setHistoryNewsletters(boolean newsletters);
+
+    /**
+     * Returns the advertised full-sync day window.
+     *
+     * @return the day window, or empty to let the primary choose
+     */
+    OptionalInt historyFullSyncDays();
+
+    /**
+     * Sets the advertised full-sync day window.
+     *
+     * @param days the day window, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setHistoryFullSyncDays(Integer days);
+
+    /**
+     * Returns the advertised storage budget in megabytes.
+     *
+     * @return the storage quota in megabytes, or empty to compute it from available storage
+     */
+    OptionalInt historyStorageQuotaMb();
+
+    /**
+     * Sets the advertised storage budget in megabytes.
+     *
+     * @param storageQuotaMb the storage quota in megabytes, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setHistoryStorageQuotaMb(Integer storageQuotaMb);
+
+    /**
+     * Returns the advertised recent-sync day window.
+     *
+     * @return the recent-sync day window, or empty for the server default
+     */
+    OptionalInt historyRecentSyncDays();
+
+    /**
+     * Sets the advertised recent-sync day window.
+     *
+     * @param days the recent-sync day window, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setHistoryRecentSyncDays(Integer days);
+
+    /**
+     * Returns the advertised thumbnail-sync day window.
+     *
+     * @return the thumbnail-sync day window, or empty for the server default
+     */
+    OptionalInt historyThumbnailSyncDays();
+
+    /**
+     * Sets the advertised thumbnail-sync day window.
+     *
+     * @param days the thumbnail-sync day window, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setHistoryThumbnailSyncDays(Integer days);
+
+    /**
+     * Returns the advertised maximum number of messages per chat in the initial sync.
+     *
+     * @return the per-chat message cap, or empty for the server default
+     */
+    OptionalInt historyMaxMessagesPerChat();
+
+    /**
+     * Sets the advertised maximum number of messages per chat in the initial sync.
+     *
+     * @param count the per-chat message cap, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setHistoryMaxMessagesPerChat(Integer count);
+
+    /**
+     * Returns whether the primary device has granted this companion complete on-demand access to the
+     * message history (the desktop "all chat history" setting).
+     *
+     * @return {@code true} if complete history access was granted
+     */
+    boolean isCompleteHistoryAccessGranted();
+
+    /**
+     * Sets whether the primary device has granted complete on-demand access to the message history.
+     *
+     * @param granted whether complete history access was granted
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSyncStore setCompleteHistoryAccessGranted(boolean granted);
 
     /**
      * Returns whether app-state patch MACs are verified during sync.

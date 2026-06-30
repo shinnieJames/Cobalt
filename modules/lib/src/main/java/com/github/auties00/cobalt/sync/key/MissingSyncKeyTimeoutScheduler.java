@@ -9,14 +9,11 @@ import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncdCoordinator;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Schedules the wall-clock-driven follow-ups that bound how long the client waits for missing
@@ -35,11 +32,11 @@ import java.util.concurrent.TimeUnit;
  * arms no timer until {@link #scheduleTimeoutCheck()} or {@link #startPeriodicReRequestJob()}
  * is called.
  *
- * @implNote This implementation runs every task on a single-threaded
- * {@link ScheduledExecutorService} with daemon threads so the executor neither serialises with
- * the syncd virtual-thread pipeline nor holds the JVM alive on shutdown. The wait-for-key
- * timeout and the all-devices-responded grace check are arming-and-cancelling
- * {@link ScheduledFuture}s rather than persistent timers.
+ * @implNote This implementation runs each task as an independent virtual-thread
+ * {@link ScheduledTask} rather than sharing a {@link java.util.concurrent.ScheduledExecutorService},
+ * so no task serialises with the syncd virtual-thread pipeline and no daemon thread is held across
+ * shutdown. The wait-for-key timeout and the all-devices-responded grace check are arming-and-cancelling
+ * one-shot handles rather than persistent timers.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
 @WhatsAppWebModule(moduleName = "WAWebSyncdRequestAllSyncdMissingKeysJob")
@@ -90,33 +87,36 @@ public final class MissingSyncKeyTimeoutScheduler {
     private final SyncdCoordinator coordinator;
 
     /**
-     * Holds the single-threaded executor that owns every timer in this class.
-     *
-     * @implNote This implementation uses a daemon-thread factory so a lingering wait-for-key
-     * timer does not keep the JVM alive on shutdown.
-     */
-    private final ScheduledExecutorService scheduler;
-
-    /**
      * Holds the currently armed wait-for-key timeout, or {@code null} when none is armed.
      *
      * @implNote This implementation declares the field {@code volatile} so a concurrent
      * {@link #cancel()} or {@link #scheduleTimeoutCheck()} observes the latest write without
-     * holding the {@link #scheduler} monitor across the schedule boundary.
+     * holding a monitor across the schedule boundary.
      */
-    private volatile ScheduledFuture<?> scheduledCheck;
+    private volatile ScheduledTask scheduledCheck;
 
     /**
      * Holds the currently armed five-second grace-period timer, independent of
      * {@link #scheduledCheck}.
      */
-    private volatile ScheduledFuture<?> allDevicesCheck;
+    private volatile ScheduledTask allDevicesCheck;
 
     /**
      * Holds the handle of the periodic six-hour re-broadcast job, or {@code null} until
      * {@link #startPeriodicReRequestJob()} is called.
      */
-    private volatile ScheduledFuture<?> reRequestJob;
+    private volatile ScheduledTask reRequestJob;
+
+    /**
+     * Whether {@link #shutdown()} has been called; guarded by this instance's monitor so the arming
+     * methods refuse to schedule new work after teardown.
+     *
+     * @implNote This implementation replaces the rejection a shut-down
+     * {@link java.util.concurrent.ScheduledExecutorService} used to raise on a post-teardown
+     * submission, since each timer now owns an independent virtual thread with no shared executor to
+     * reject against.
+     */
+    private boolean shutdown;
 
     /**
      * Constructs a new scheduler bound to the supplied dependencies.
@@ -136,11 +136,6 @@ public final class MissingSyncKeyTimeoutScheduler {
         this.abPropsService = abPropsService;
         this.requestService = requestService;
         this.coordinator = coordinator;
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            var thread = new Thread(r, "MissingSyncKeyTimeoutScheduler");
-            thread.setDaemon(true);
-            return thread;
-        });
     }
 
     /**
@@ -155,12 +150,15 @@ public final class MissingSyncKeyTimeoutScheduler {
      * whenever a key is added, and again from inside the periodic re-request job.
      *
      * @implNote This implementation clamps a negative remaining duration to zero so the
-     * deferred check fires on the next scheduler tick rather than being rejected by
-     * {@link ScheduledExecutorService#schedule(Runnable, long, TimeUnit)}.
+     * deferred check fires as soon as its worker thread is scheduled rather than being armed with a
+     * negative delay.
      */
     public synchronized void scheduleTimeoutCheck() {
-        if (scheduledCheck != null && !scheduledCheck.isDone()) {
-            scheduledCheck.cancel(false);
+        if (shutdown) {
+            return;
+        }
+        if (scheduledCheck != null) {
+            scheduledCheck.cancel();
         }
 
         var timeout = getTimeout();
@@ -179,10 +177,9 @@ public final class MissingSyncKeyTimeoutScheduler {
             return;
         }
 
-        var delayMs = delay.get().toMillis();
-        LOGGER.log(System.Logger.Level.DEBUG, "Scheduling missing sync key timeout check in {0}ms", delayMs);
+        LOGGER.log(System.Logger.Level.DEBUG, "Scheduling missing sync key timeout check in {0}ms", delay.get().toMillis());
 
-        scheduledCheck = scheduler.schedule(this::checkForExpiredKeys, delayMs, TimeUnit.MILLISECONDS);
+        scheduledCheck = ScheduledTask.scheduleDelayed(delay.get(), this::checkForExpiredKeys);
     }
 
     /**
@@ -305,11 +302,11 @@ public final class MissingSyncKeyTimeoutScheduler {
      * collects every tracked missing key id and, when at least one exists, re-broadcasts the
      * request through {@link MissingSyncKeyRequestService#reRequestMissingKeys(java.util.Collection)}.
      *
-     * @implNote This implementation runs the re-broadcast on a freshly spawned virtual thread
-     * so the periodic timer does not block on the peer-message fan-out, then defers a
-     * 20-second reschedule of the wait-for-key timeout to mirror the WA Web re-request task's
-     * sequel. Cobalt enforces the single-registration guard explicitly because it has no
-     * equivalent of the WA Web task registry.
+     * @implNote This implementation runs the re-broadcast directly on the job's own virtual thread
+     * (its fixed-delay recurrence already isolates the peer-message fan-out from the other timers,
+     * each of which owns a separate thread), then defers a 20-second reschedule of the wait-for-key
+     * timeout to mirror the WA Web re-request task's sequel. Cobalt enforces the single-registration
+     * guard explicitly because it has no equivalent of the WA Web task registry.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdRequestAllSyncdMissingKeysJob",
             exports = "requestAllSyncdMissingKeysJob",
@@ -318,11 +315,11 @@ public final class MissingSyncKeyTimeoutScheduler {
             exports = "requestAllMissingKeys",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public synchronized void startPeriodicReRequestJob() {
-        if (reRequestJob != null && !reRequestJob.isDone()) {
+        if (shutdown || (reRequestJob != null && !reRequestJob.isCancelled())) {
             return;
         }
 
-        reRequestJob = scheduler.scheduleAtFixedRate(() -> {
+        reRequestJob = ScheduledTask.schedule(Duration.ofHours(RE_REQUEST_INTERVAL_HOURS), () -> {
             var missingKeys = store.syncStore().missingSyncKeys();
             var keyIds = missingKeys.stream()
                     .map(MissingDeviceSyncKey::keyId)
@@ -332,11 +329,9 @@ public final class MissingSyncKeyTimeoutScheduler {
             if (keyIds.isEmpty()) {
                 return;
             }
-            Thread.startVirtualThread(() -> {
-                requestService.reRequestMissingKeys(keyIds);
-                scheduler.schedule(this::scheduleTimeoutCheck, 20, TimeUnit.SECONDS);
-            });
-        }, RE_REQUEST_INTERVAL_HOURS, RE_REQUEST_INTERVAL_HOURS, TimeUnit.HOURS);
+            requestService.reRequestMissingKeys(keyIds);
+            ScheduledTask.scheduleDelayed(Duration.ofSeconds(20), this::scheduleTimeoutCheck);
+        });
     }
 
     /**
@@ -349,12 +344,15 @@ public final class MissingSyncKeyTimeoutScheduler {
      * responses do not stack independent timers.
      */
     public synchronized void scheduleAllDevicesRespondedCheck() {
-        if (allDevicesCheck != null && !allDevicesCheck.isDone()) {
-            allDevicesCheck.cancel(false);
+        if (shutdown) {
+            return;
+        }
+        if (allDevicesCheck != null) {
+            allDevicesCheck.cancel();
         }
 
         LOGGER.log(System.Logger.Level.DEBUG, "Scheduling 5-second grace period before missing key fatal");
-        allDevicesCheck = scheduler.schedule(this::checkForAllDevicesRespondedWithoutKey, 5, TimeUnit.SECONDS);
+        allDevicesCheck = ScheduledTask.scheduleDelayed(Duration.ofSeconds(5), this::checkForAllDevicesRespondedWithoutKey);
     }
 
     /**
@@ -364,28 +362,29 @@ public final class MissingSyncKeyTimeoutScheduler {
      * {@link #scheduleTimeoutCheck()}.
      */
     public synchronized void cancel() {
-        if (scheduledCheck != null && !scheduledCheck.isDone()) {
-            scheduledCheck.cancel(false);
+        if (scheduledCheck != null) {
+            scheduledCheck.cancel();
         }
     }
 
     /**
-     * Cancels every armed timer and shuts down the underlying executor.
+     * Cancels every armed timer and refuses any further scheduling.
      *
      * <p>Called by {@link com.github.auties00.cobalt.sync.WebAppStateService} on disconnect.
-     * After this method returns no further {@link #scheduleTimeoutCheck()},
-     * {@link #scheduleAllDevicesRespondedCheck()}, or {@link #startPeriodicReRequestJob()} call
-     * should be issued; the executor rejects further submissions with a
-     * {@link java.util.concurrent.RejectedExecutionException}.
+     * After this method returns every {@link #scheduleTimeoutCheck()},
+     * {@link #scheduleAllDevicesRespondedCheck()}, and {@link #startPeriodicReRequestJob()} call is a
+     * no-op, so a re-request job tick that fires concurrently cannot re-arm a timer past teardown.
      */
-    public void shutdown() {
-        cancel();
-        if (allDevicesCheck != null && !allDevicesCheck.isDone()) {
-            allDevicesCheck.cancel(false);
+    public synchronized void shutdown() {
+        shutdown = true;
+        if (scheduledCheck != null) {
+            scheduledCheck.cancel();
         }
-        if (reRequestJob != null && !reRequestJob.isDone()) {
-            reRequestJob.cancel(false);
+        if (allDevicesCheck != null) {
+            allDevicesCheck.cancel();
         }
-        scheduler.shutdown();
+        if (reRequestJob != null) {
+            reRequestJob.cancel();
+        }
     }
 }

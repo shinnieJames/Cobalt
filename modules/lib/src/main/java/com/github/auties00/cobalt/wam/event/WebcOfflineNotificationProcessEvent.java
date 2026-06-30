@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.OfflineProcessRunReasons;
 import com.github.auties00.cobalt.wam.type.OfflineProcessStages;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcOfflineNotificationProcessWamEvent")
 @WamEvent(id = 4222)
@@ -19,22 +19,22 @@ public interface WebcOfflineNotificationProcessEvent extends WamEventSpec {
     Optional<OfflineProcessStages> currentOfflineProcessStage();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt offlineProcessDecryptErrorCount();
+    OptionalLong offlineProcessDecryptErrorCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt offlineProcessMailboxAge();
+    OptionalLong offlineProcessMailboxAge();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt offlineProcessMessageCount();
+    OptionalLong offlineProcessMessageCount();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt offlineProcessNotificationCount();
+    OptionalLong offlineProcessNotificationCount();
 
     @WamProperty(index = 9, type = WamType.STRING)
     Optional<String> offlineProcessSessionId();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt offlineProcessStageTimestampMs();
+    OptionalLong offlineProcessStageTimestampMs();
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<OfflineProcessRunReasons> runReason();

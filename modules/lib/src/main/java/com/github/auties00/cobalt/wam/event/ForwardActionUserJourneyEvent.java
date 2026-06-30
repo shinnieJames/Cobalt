@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import com.github.auties00.cobalt.wam.type.UserJourneyChatType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebForwardActionUserJourneyWamEvent")
 @WamEvent(id = 6506)
@@ -46,7 +46,7 @@ public interface ForwardActionUserJourneyEvent extends WamEventSpec {
     Optional<UserJourneyChatType> userJourneyChatType();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

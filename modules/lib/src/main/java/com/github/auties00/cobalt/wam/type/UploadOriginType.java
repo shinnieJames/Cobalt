@@ -20,5 +20,6 @@ public enum UploadOriginType {
     @WamEnumConstant(10) CHANNEL,
     @WamEnumConstant(11) BROADCAST,
     @WamEnumConstant(12) MULTI_CHAT,
-    @WamEnumConstant(13) INTEROP
+    @WamEnumConstant(13) INTEROP,
+    @WamEnumConstant(14) WA_BACKUP
 }

@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.model.device.DeviceProps;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandConfig;
 import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandRequestMetadata;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
 import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
@@ -326,16 +327,25 @@ public final class PeerDataOperationRequestMessage implements Message {
         @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
         DeviceProps.HistorySyncConfig historySyncConfig;
 
+        /**
+         * The on-demand window configuration, selecting the requested history
+         * slice by an absolute start timestamp or a relative duration in days.
+         */
+        @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
+        FullHistorySyncOnDemandConfig fullHistorySyncOnDemandConfig;
+
 
         /**
          * Constructs a new full on-demand history sync request.
          *
-         * @param requestMetadata    the correlating request metadata
-         * @param historySyncConfig  the user's history-sync policy
+         * @param requestMetadata               the correlating request metadata
+         * @param historySyncConfig             the user's history-sync policy
+         * @param fullHistorySyncOnDemandConfig the on-demand window configuration
          */
-        FullHistorySyncOnDemandRequest(FullHistorySyncOnDemandRequestMetadata requestMetadata, DeviceProps.HistorySyncConfig historySyncConfig) {
+        FullHistorySyncOnDemandRequest(FullHistorySyncOnDemandRequestMetadata requestMetadata, DeviceProps.HistorySyncConfig historySyncConfig, FullHistorySyncOnDemandConfig fullHistorySyncOnDemandConfig) {
             this.requestMetadata = requestMetadata;
             this.historySyncConfig = historySyncConfig;
+            this.fullHistorySyncOnDemandConfig = fullHistorySyncOnDemandConfig;
         }
 
         /**
@@ -359,6 +369,16 @@ public final class PeerDataOperationRequestMessage implements Message {
         }
 
         /**
+         * Returns the on-demand window configuration.
+         *
+         * @return an {@link Optional} containing the window configuration, or
+         *         {@link Optional#empty()} if it was not provided
+         */
+        public Optional<FullHistorySyncOnDemandConfig> fullHistorySyncOnDemandConfig() {
+            return Optional.ofNullable(fullHistorySyncOnDemandConfig);
+        }
+
+        /**
          * Sets the correlating request metadata.
          *
          * @param requestMetadata the new metadata, may be {@code null}
@@ -374,6 +394,16 @@ public final class PeerDataOperationRequestMessage implements Message {
          */
         public void setHistorySyncConfig(DeviceProps.HistorySyncConfig historySyncConfig) {
             this.historySyncConfig = historySyncConfig;
+    }
+
+        /**
+         * Sets the on-demand window configuration.
+         *
+         * @param fullHistorySyncOnDemandConfig the new window configuration, may
+         *                                      be {@code null}
+         */
+        public void setFullHistorySyncOnDemandConfig(FullHistorySyncOnDemandConfig fullHistorySyncOnDemandConfig) {
+            this.fullHistorySyncOnDemandConfig = fullHistorySyncOnDemandConfig;
     }
     }
 

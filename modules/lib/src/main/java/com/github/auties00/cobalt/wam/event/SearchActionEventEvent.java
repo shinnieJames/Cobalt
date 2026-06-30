@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.SearchActionEntryPointType;
 import com.github.auties00.cobalt.wam.type.SearchActionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSearchActionEventWamEvent")
 @WamEvent(id = 5308)
 public interface SearchActionEventEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt bizSearchCount();
+    OptionalLong bizSearchCount();
 
     @WamProperty(index = 11, type = WamType.BOOLEAN)
     Optional<Boolean> resultPageShown();
@@ -28,23 +28,23 @@ public interface SearchActionEventEvent extends WamEventSpec {
     Optional<SearchActionEntryPointType> searchActionEntryPoint();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt searchAiSuggestionCount();
+    OptionalLong searchAiSuggestionCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt searchChatsCount();
+    OptionalLong searchChatsCount();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt searchContactsCount();
+    OptionalLong searchContactsCount();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt searchFilterCount();
+    OptionalLong searchFilterCount();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt searchGroupsCount();
+    OptionalLong searchGroupsCount();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt searchMessagesCount();
+    OptionalLong searchMessagesCount();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt selectedItemRank();
+    OptionalLong selectedItemRank();
 }

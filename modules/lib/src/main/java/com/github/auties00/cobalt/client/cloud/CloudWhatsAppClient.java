@@ -492,7 +492,7 @@ public sealed interface CloudWhatsAppClient extends WhatsAppClient<CloudWhatsApp
      * @throws IllegalStateException if no WhatsApp Business Account id is configured
      * @see #queryMessageTemplateById(String)
      */
-    Optional<CloudMessageTemplate> queryMessageTemplate(String name);
+    Optional<CloudMessageTemplate> queryMessageTemplateByName(String name);
 
     /**
      * Queries a single message template by its server-assigned id.
@@ -506,7 +506,7 @@ public sealed interface CloudWhatsAppClient extends WhatsAppClient<CloudWhatsApp
      * @throws NullPointerException if {@code templateId} is {@code null}
      * @throws CloudAuthException if the access token is missing or rejected
      * @throws CloudApiException if the Graph request fails
-     * @see #queryMessageTemplate(String)
+     * @see #queryMessageTemplateByName(String)
      */
     Optional<CloudMessageTemplate> queryMessageTemplateById(String templateId);
 

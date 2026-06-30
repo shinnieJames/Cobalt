@@ -70,6 +70,9 @@ module com.github.auties00.cobalt {
     // Message store
     requires com.github.auties00.collections;
 
+    // Persistent message store (embedded H2 MVStore)
+    requires com.h2database.mvstore;
+
     // PDF rendering (document thumbnails in the upload transcoder)
     requires org.apache.pdfbox;
 
@@ -94,6 +97,10 @@ module com.github.auties00.cobalt {
     exports com.github.auties00.cobalt.client;
     exports com.github.auties00.cobalt.client.linked;
     exports com.github.auties00.cobalt.client.cloud;
+    exports com.github.auties00.cobalt.export;
+
+    // Emoji
+    exports com.github.auties00.cobalt.emoji;
 
     // Listeners
     exports com.github.auties00.cobalt.listener;

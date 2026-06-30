@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.PsUploadReason;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPsBufferUploadWamEvent")
 @WamEvent(id = 2244, releaseWeight = 100)
@@ -31,10 +31,10 @@ public interface PsBufferUploadEvent extends WamEventSpec {
     Optional<Boolean> isUserSampled();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt psBufferSequenceNumber();
+    OptionalLong psBufferSequenceNumber();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt psBufferUploadHttpResponseCode();
+    OptionalLong psBufferUploadHttpResponseCode();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<PsBufferUploadResult> psBufferUploadResult();
@@ -43,7 +43,7 @@ public interface PsBufferUploadEvent extends WamEventSpec {
     Optional<Instant> psBufferUploadT();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt psDitheredT();
+    OptionalLong psDitheredT();
 
     @WamProperty(index = 10, type = WamType.BOOLEAN)
     Optional<Boolean> psForceUpload();

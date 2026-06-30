@@ -2,18 +2,16 @@ package com.github.auties00.cobalt.wam;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.util.ScheduledTask;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Provides the production {@link WamService} bound to the system UTC clock and
- * to a virtual-thread {@link ScheduledExecutorService} for the periodic
+ * to virtual-thread {@link ScheduledTask} recurrences for the periodic
  * serialize and flush ticks.
  *
  * <p>This is the WAM service every embedder wires into the client; it is
@@ -24,28 +22,20 @@ import java.util.concurrent.TimeUnit;
  * {@link #cancelAllScheduled()} to drive ticks deterministically.
  *
  * @implNote
- * This implementation backs scheduling with a single-thread
- * {@link Executors#newSingleThreadScheduledExecutor} carried on virtual
- * threads, matching the single-flush threading model documented on
- * {@link WamService}; cancellation drops all outstanding futures but does not
- * shut the executor down so a later
- * {@link #scheduleRecurring(Runnable, long, long)} call can reuse it without
- * re-allocating.
+ * This implementation backs each recurring tick with one
+ * {@link ScheduledTask#schedule(Duration, Duration, Runnable)} handle running on
+ * its own virtual thread with fixed-delay semantics, matching the single-flush
+ * threading model documented on {@link WamService}; cancellation cancels every
+ * outstanding handle and clears the tracking list so a later
+ * {@link #scheduleRecurring(Runnable, long, long)} call starts fresh.
  */
 public final class LiveWamService extends WamService {
     /**
-     * Holds the backing executor for
-     * {@link #scheduleRecurring(Runnable, long, long)}; created lazily on the
-     * first call and reused across {@link #cancelAllScheduled()} cycles.
-     */
-    private ScheduledExecutorService executor;
-
-    /**
-     * Holds the futures returned by
+     * Holds the handles returned by
      * {@link #scheduleRecurring(Runnable, long, long)}, tracked so
      * {@link #cancelAllScheduled()} can cancel them all in one pass.
      */
-    private final List<ScheduledFuture<?>> futures;
+    private final List<ScheduledTask> futures;
 
     /**
      * Constructs a production WAM service bound to the given client and
@@ -99,35 +89,30 @@ public final class LiveWamService extends WamService {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation lazily allocates a single-thread executor carried on
-     * a virtual thread the first time it is called, then arms
-     * {@link ScheduledExecutorService#scheduleWithFixedDelay} so each tick
-     * starts {@code periodSeconds} after the previous tick completes (not after
-     * it began), keeping ticks from piling up if a flush stalls.
+     * This implementation schedules the tick through
+     * {@link ScheduledTask#schedule(Duration, Duration, Runnable)} with
+     * fixed-delay semantics, so each tick starts {@code periodSeconds} after the
+     * previous tick completes (not after it began), keeping ticks from piling up
+     * if a flush stalls.
      */
     @Override
     protected void scheduleRecurring(Runnable task, long initialDelaySeconds, long periodSeconds) {
-        if (executor == null) {
-            executor = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
-        }
-        var future = executor.scheduleWithFixedDelay(task, initialDelaySeconds, periodSeconds, TimeUnit.SECONDS);
-        futures.add(future);
+        var handle = ScheduledTask.schedule(Duration.ofSeconds(initialDelaySeconds), Duration.ofSeconds(periodSeconds), task);
+        futures.add(handle);
     }
 
     /**
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation cancels each tracked future non-interruptibly (with
-     * {@code mayInterruptIfRunning} {@code false}) so an in-flight flush tick is
-     * allowed to finish; the executor itself is left running so a later
-     * re-initialize sequence can reuse it without paying the thread-factory cost
-     * again.
+     * This implementation cancels each tracked handle, which wakes a pending
+     * tick so it never fires and interrupts one already running, then clears the
+     * list so a later re-initialize sequence schedules fresh handles.
      */
     @Override
     protected void cancelAllScheduled() {
-        for (var future : futures) {
-            future.cancel(false);
+        for (var handle : futures) {
+            handle.cancel();
         }
         futures.clear();
     }

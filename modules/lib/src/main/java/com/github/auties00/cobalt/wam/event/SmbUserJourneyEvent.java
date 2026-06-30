@@ -14,7 +14,7 @@ import com.github.auties00.cobalt.wam.type.SmbUserActionTypeEnum;
 import com.github.auties00.cobalt.wam.type.SurfaceType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebSmbUserJourneyWamEvent")
 @WamEvent(id = 5462)
@@ -50,10 +50,10 @@ public interface SmbUserJourneyEvent extends WamEventSpec {
     Optional<SurfaceType> prevSurface();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt recipientSize();
+    OptionalLong recipientSize();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt seqId();
+    OptionalLong seqId();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<SmbFeatureNameEnum> smbFeatureName();

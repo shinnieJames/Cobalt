@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.PollActionType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPollsActionsWamEvent")
 @WamEvent(id = 3676)
@@ -36,13 +36,13 @@ public interface PollsActionsEvent extends WamEventSpec {
     Optional<PollActionType> pollAction();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt pollCreationDs();
+    OptionalLong pollCreationDs();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt pollDurationMs();
+    OptionalLong pollDurationMs();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt pollOptionsCount();
+    OptionalLong pollOptionsCount();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

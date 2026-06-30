@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.model.preference.OnboardingHintState;
 import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.AccountDisappearingMode;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
+import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
 import com.github.auties00.cobalt.model.setting.AppTheme;
@@ -56,10 +56,15 @@ import static java.util.Objects.requireNonNullElseGet;
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsAppSettingsStore {
     /**
-     * The current value of every privacy setting, keyed by setting type.
+     * The value of every configured privacy setting.
+     *
+     * <p>Each {@link PrivacySettingValue} is self-describing (it carries its
+     * {@link PrivacySettingType} and refinement list), so the settings are stored as a flat
+     * list rather than a type-keyed map; at most one value per setting is retained by
+     * {@link #addPrivacySetting(PrivacySettingValue)}.
      */
-    @ProtobufProperty(index = 1, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
-    private final ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettingsMap;
+    @ProtobufProperty(index = 1, type = ProtobufType.STRING)
+    private final List<PrivacySettingValue> privacySettingsValues;
 
     /**
      * Whether archived chats auto-unarchive on new messages.
@@ -319,7 +324,7 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
     /**
      * The acknowledged Terms-of-Service notice ids; not persisted.
      */
-    private Set<String> tosNotices;
+    private Set<String> acknowledgedTosNotices;
 
     /**
      * The marketing opt-out list hashes keyed by category; not persisted.
@@ -384,7 +389,7 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
     /**
      * Constructs a settings sub-store, defaulting the ephemeral timer and the sticker/label/quick-reply maps.
      *
-     * @param privacySettingsMap               the privacy-setting map, never {@code null}
+     * @param privacySettingsValues            the privacy-setting values, never {@code null}
      * @param unarchiveChats                   the auto-unarchive flag
      * @param twentyFourHourFormat             the 24-hour-format flag
      * @param newChatsEphemeralTimer           the default ephemeral timer, or {@code null} for OFF
@@ -426,8 +431,8 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
      * @param statusNotificationToneId         the status tone id, or {@code null}
      * @param playSoundForCallNotification     the call-sound preference, or {@code null}
      */
-    ProtobufLinkedWhatsAppSettingsStore(ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettingsMap, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickersMap, ConcurrentMap<String, Sticker> favouriteStickersMap, ConcurrentMap<String, QuickReply> quickRepliesMap, ConcurrentMap<String, Label> labelsMap, boolean disableLinkPreviews, boolean relayAllCalls, ChatLockSettings chatLockSettings, Boolean startAtLogin, Boolean minimizeToTray, Boolean replaceTextWithEmoji, SettingsSyncAction.DisplayMode bannerNotificationDisplayMode, SettingsSyncAction.DisplayMode unreadCounterBadgeDisplayMode, Boolean messagesNotificationEnabled, Boolean callsNotificationEnabled, Boolean reactionsNotificationEnabled, Boolean statusReactionsNotificationEnabled, Boolean textPreviewForNotificationEnabled, Integer defaultNotificationToneId, Integer groupDefaultNotificationToneId, AppTheme appTheme, Integer wallpaperId, Boolean doodleWallpaperEnabled, Integer fontSize, Boolean photosAutodownloadEnabled, Boolean audiosAutodownloadEnabled, Boolean videosAutodownloadEnabled, Boolean documentsAutodownloadEnabled, Integer notificationToneId, SettingsSyncAction.MediaQualitySetting mediaUploadQuality, Boolean spellCheckEnabled, Boolean enterToSendEnabled, Boolean groupMessageNotificationEnabled, Boolean groupReactionsNotificationEnabled, Boolean statusNotificationEnabled, Integer statusNotificationToneId, Boolean playSoundForCallNotification) {
-        this.privacySettingsMap = Objects.requireNonNull(privacySettingsMap, "privacySettingsMap cannot be null");
+    ProtobufLinkedWhatsAppSettingsStore(List<PrivacySettingValue> privacySettingsValues, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickersMap, ConcurrentMap<String, Sticker> favouriteStickersMap, ConcurrentMap<String, QuickReply> quickRepliesMap, ConcurrentMap<String, Label> labelsMap, boolean disableLinkPreviews, boolean relayAllCalls, ChatLockSettings chatLockSettings, Boolean startAtLogin, Boolean minimizeToTray, Boolean replaceTextWithEmoji, SettingsSyncAction.DisplayMode bannerNotificationDisplayMode, SettingsSyncAction.DisplayMode unreadCounterBadgeDisplayMode, Boolean messagesNotificationEnabled, Boolean callsNotificationEnabled, Boolean reactionsNotificationEnabled, Boolean statusReactionsNotificationEnabled, Boolean textPreviewForNotificationEnabled, Integer defaultNotificationToneId, Integer groupDefaultNotificationToneId, AppTheme appTheme, Integer wallpaperId, Boolean doodleWallpaperEnabled, Integer fontSize, Boolean photosAutodownloadEnabled, Boolean audiosAutodownloadEnabled, Boolean videosAutodownloadEnabled, Boolean documentsAutodownloadEnabled, Integer notificationToneId, SettingsSyncAction.MediaQualitySetting mediaUploadQuality, Boolean spellCheckEnabled, Boolean enterToSendEnabled, Boolean groupMessageNotificationEnabled, Boolean groupReactionsNotificationEnabled, Boolean statusNotificationEnabled, Integer statusNotificationToneId, Boolean playSoundForCallNotification) {
+        this.privacySettingsValues = new CopyOnWriteArrayList<>(privacySettingsValues == null ? List.of() : privacySettingsValues);
         this.unarchiveChats = unarchiveChats;
         this.twentyFourHourFormat = twentyFourHourFormat;
         this.newChatsEphemeralTimer = requireNonNullElse(newChatsEphemeralTimer, ChatEphemeralTimer.OFF);
@@ -469,7 +474,7 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
         this.statusNotificationToneId = statusNotificationToneId;
         this.playSoundForCallNotification = playSoundForCallNotification;
         this.recentEmojiWeights = new CopyOnWriteArrayList<>();
-        this.tosNotices = ConcurrentHashMap.newKeySet();
+        this.acknowledgedTosNotices = ConcurrentHashMap.newKeySet();
         this.optOutListHashes = new ConcurrentHashMap<>();
         this.optOutListEntries = new ConcurrentHashMap<>();
         this.contactBlacklistHashes = new ConcurrentHashMap<>();
@@ -478,12 +483,12 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
     }
 
     /**
-     * Returns the live privacy-setting map backing this store.
+     * Returns the live privacy-setting list backing this store.
      *
-     * @return the live privacy-setting map
+     * @return the live privacy-setting list
      */
-    ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettingsMap() {
-        return privacySettingsMap;
+    List<PrivacySettingValue> privacySettingsValues() {
+        return privacySettingsValues;
     }
 
     /**
@@ -523,21 +528,29 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
     }
 
     @Override
-    public Collection<PrivacySettingEntry> privacySettings() {
-        return List.copyOf(privacySettingsMap.values());
+    public Collection<PrivacySettingValue> privacySettings() {
+        return List.copyOf(privacySettingsValues);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <V extends PrivacySettingValue> Optional<V> findPrivacySetting(PrivacySettingType<V> type) {
+        if (type == null) {
+            return Optional.empty();
+        }
+        for (var value : privacySettingsValues) {
+            if (value.type().equals(type)) {
+                return Optional.of((V) value);
+            }
+        }
+        return Optional.empty();
     }
 
     @Override
-    public Optional<PrivacySettingEntry> findPrivacySetting(PrivacySettingType type) {
-        return type == null
-                ? Optional.empty()
-                : Optional.ofNullable(privacySettingsMap.get(type));
-    }
-
-    @Override
-    public void addPrivacySetting(PrivacySettingEntry entry) {
-        Objects.requireNonNull(entry, "entry cannot be null");
-        privacySettingsMap.put(entry.type(), entry);
+    public synchronized void addPrivacySetting(PrivacySettingValue value) {
+        Objects.requireNonNull(value, "value cannot be null");
+        privacySettingsValues.removeIf(existing -> existing.type().equals(value.type()));
+        privacySettingsValues.add(value);
     }
 
     @Override
@@ -755,15 +768,15 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
     }
 
     @Override
-    public Set<String> tosNotices() {
-        return Set.copyOf(tosNotices);
+    public Set<String> acknowledgedTosNotices() {
+        return Set.copyOf(acknowledgedTosNotices);
     }
 
     @Override
-    public LinkedWhatsAppSettingsStore setTosNotices(Set<String> noticeIds) {
-        this.tosNotices = noticeIds == null ? ConcurrentHashMap.newKeySet() : ConcurrentHashMap.newKeySet(noticeIds.size());
+    public LinkedWhatsAppSettingsStore setAcknowledgedTosNotices(Set<String> noticeIds) {
+        this.acknowledgedTosNotices = noticeIds == null ? ConcurrentHashMap.newKeySet() : ConcurrentHashMap.newKeySet(noticeIds.size());
         if (noticeIds != null) {
-            this.tosNotices.addAll(noticeIds);
+            this.acknowledgedTosNotices.addAll(noticeIds);
         }
         return this;
     }
@@ -1259,7 +1272,7 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
                && showSecurityNotifications == that.showSecurityNotifications
                && disableLinkPreviews == that.disableLinkPreviews
                && relayAllCalls == that.relayAllCalls
-               && Objects.equals(privacySettingsMap, that.privacySettingsMap)
+               && Objects.equals(privacySettingsValues, that.privacySettingsValues)
                && newChatsEphemeralTimer == that.newChatsEphemeralTimer
                && Objects.equals(recentStickersMap, that.recentStickersMap)
                && Objects.equals(favouriteStickersMap, that.favouriteStickersMap)
@@ -1298,7 +1311,7 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
                && Objects.equals(statusPrivacy, that.statusPrivacy)
                && Objects.equals(disappearingMode, that.disappearingMode)
                && Objects.equals(recentEmojiWeights, that.recentEmojiWeights)
-               && Objects.equals(tosNotices, that.tosNotices)
+               && Objects.equals(acknowledgedTosNotices, that.acknowledgedTosNotices)
                && Objects.equals(optOutListHashes, that.optOutListHashes)
                && Objects.equals(optOutListEntries, that.optOutListEntries)
                && Objects.equals(contactBlacklistHashes, that.contactBlacklistHashes)
@@ -1315,7 +1328,7 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
 
     @Override
     public int hashCode() {
-        return Objects.hash(privacySettingsMap, unarchiveChats, twentyFourHourFormat, newChatsEphemeralTimer,
+        return Objects.hash(privacySettingsValues, unarchiveChats, twentyFourHourFormat, newChatsEphemeralTimer,
                 showSecurityNotifications, recentStickersMap, favouriteStickersMap, quickRepliesMap, labelsMap,
                 disableLinkPreviews, relayAllCalls, chatLockSettings, startAtLogin, minimizeToTray, replaceTextWithEmoji,
                 bannerNotificationDisplayMode, unreadCounterBadgeDisplayMode, messagesNotificationEnabled,
@@ -1325,7 +1338,7 @@ public final class ProtobufLinkedWhatsAppSettingsStore implements LinkedWhatsApp
                 videosAutodownloadEnabled, documentsAutodownloadEnabled, notificationToneId, mediaUploadQuality,
                 spellCheckEnabled, enterToSendEnabled, groupMessageNotificationEnabled, groupReactionsNotificationEnabled,
                 statusNotificationEnabled, statusNotificationToneId, playSoundForCallNotification, statusPrivacy,
-                disappearingMode, recentEmojiWeights, tosNotices, optOutListHashes, optOutListEntries,
+                disappearingMode, recentEmojiWeights, acknowledgedTosNotices, optOutListHashes, optOutListEntries,
                 contactBlacklistHashes, contactBlacklistEntries, onboardingHintStates,
                 newsletterSubscriptionUserIdentifier, newsletterSavedInterests,
                 statusPostOptInNotificationPreferencesEnabled, channelsPersonalisedRecommendationOptOut,

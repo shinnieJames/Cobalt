@@ -15,19 +15,19 @@ import com.github.auties00.cobalt.wam.type.OtpEventType;
 import com.github.auties00.cobalt.wam.type.OtpProductType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebOtpRetrieverWamEvent")
 @WamEvent(id = 3468, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface OtpRetrieverEvent extends WamEventSpec {
     @WamProperty(index = 26, type = WamType.INTEGER)
-    OptionalInt businessLid();
+    OptionalLong businessLid();
 
     @WamProperty(index = 28, type = WamType.STRING)
     Optional<String> businessLidOrJid();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt businessPhoneNumber();
+    OptionalLong businessPhoneNumber();
 
     @WamProperty(index = 19, type = WamType.STRING)
     Optional<String> chatId();
@@ -51,7 +51,7 @@ public interface OtpRetrieverEvent extends WamEventSpec {
     Optional<Boolean> isNotificationEnabled();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt messageReceivedElapsedTimeSeconds();
+    OptionalLong messageReceivedElapsedTimeSeconds();
 
     @WamProperty(index = 20, type = WamType.STRING)
     Optional<String> otpCorrelationId();
@@ -66,7 +66,7 @@ public interface OtpRetrieverEvent extends WamEventSpec {
     Optional<String> otpFailureReason();
 
     @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt otpHandshakeElapsedTimeMs();
+    OptionalLong otpHandshakeElapsedTimeMs();
 
     @WamProperty(index = 23, type = WamType.STRING)
     Optional<String> otpHandshakeId();
@@ -102,5 +102,5 @@ public interface OtpRetrieverEvent extends WamEventSpec {
     Optional<String> thirdPartyPackageSignatureHash();
 
     @WamProperty(index = 25, type = WamType.INTEGER)
-    OptionalInt waDeviceId();
+    OptionalLong waDeviceId();
 }

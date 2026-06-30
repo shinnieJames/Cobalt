@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.wam.type.UserJourneyChatType;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPttMessageUserJourneyWamEvent")
 @WamEvent(id = 5402)
@@ -58,7 +58,7 @@ public interface PttMessageUserJourneyEvent extends WamEventSpec {
     Optional<UserJourneyChatType> userJourneyChatType();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt userJourneyEventMs();
+    OptionalLong userJourneyEventMs();
 
     @WamProperty(index = 6, type = WamType.STRING)
     Optional<String> userJourneyFunnelId();

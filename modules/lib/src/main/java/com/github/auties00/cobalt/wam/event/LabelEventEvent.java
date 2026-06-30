@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.SmbListFeatureNameType;
 import com.github.auties00.cobalt.wam.type.SmbListSurfaceType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLabelEventWamEvent")
 @WamEvent(id = 1422)
@@ -31,10 +31,10 @@ public interface LabelEventEvent extends WamEventSpec {
     Optional<String> extraAttributes();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt itemsLabeledCount();
+    OptionalLong itemsLabeledCount();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt labelCount();
+    OptionalLong labelCount();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<LabelOperations> labelOperation();
@@ -49,10 +49,10 @@ public interface LabelEventEvent extends WamEventSpec {
     Optional<LastMessageDirection> lastMessageDirection();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt messageDepth();
+    OptionalLong messageDepth();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt predefinedLabelNumber();
+    OptionalLong predefinedLabelNumber();
 
     @WamProperty(index = 19, type = WamType.ENUM)
     Optional<SmbListFeatureNameType> smbListFeatureName();

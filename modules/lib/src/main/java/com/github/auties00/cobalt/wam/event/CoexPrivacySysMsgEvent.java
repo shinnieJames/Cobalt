@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.wam.type.CoexSysMsgInsertionChannel;
 import com.github.auties00.cobalt.wam.type.CoexSysMsgStateTransitionAttempt;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCoexPrivacySysMsgWamEvent")
 @WamEvent(id = 5204, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
@@ -27,7 +27,7 @@ public interface CoexPrivacySysMsgEvent extends WamEventSpec {
     Optional<CoexSysMsgInsertionChannel> coexSysMsgInsertionChannel();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt coexSysMsgInsertionErrorCode();
+    OptionalLong coexSysMsgInsertionErrorCode();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> coexSysMsgInsertionErrorMsg();
@@ -39,7 +39,7 @@ public interface CoexPrivacySysMsgEvent extends WamEventSpec {
     Optional<Boolean> coexSysMsgIsSelf();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt coexSysMsgMultiDeviceId();
+    OptionalLong coexSysMsgMultiDeviceId();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<CoexSysMsgStateTransitionAttempt> coexSysMsgStateTransitionAttempt();

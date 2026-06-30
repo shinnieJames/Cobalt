@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.NoticeType;
 import com.github.auties00.cobalt.wam.type.UserNoticeErrorEventType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebUserNoticeErrorWamEvent")
 @WamEvent(id = 2474)
@@ -19,11 +19,11 @@ public interface UserNoticeErrorEvent extends WamEventSpec {
     Optional<NoticeType> noticeType();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt userNoticeContentVersion();
+    OptionalLong userNoticeContentVersion();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<UserNoticeErrorEventType> userNoticeErrorEvent();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt userNoticeId();
+    OptionalLong userNoticeId();
 }

@@ -138,9 +138,15 @@ public final class SenderSubscriptionExt {
     public static final class SSrcsToPidAssignments {
         /**
          * The ordered SSRCs used by the sender.
+         *
+         * <p>Held as {@code long} values in the canonical unsigned range {@code 0..0xFFFFFFFF} and
+         * wire-encoded as packed {@code UINT64} varints so a high-bit-set SSRC encodes as a five-byte
+         * unsigned varint rather than the ten-byte sign-extended form a {@code UINT32}-backed
+         * {@code Integer} would produce, the same rationale {@link StreamSubscriptions.Entry#ssrc()}
+         * documents for its single-SSRC field.
          */
-        @ProtobufProperty(index = 1, type = ProtobufType.UINT32, packed = true)
-        final List<Integer> ssrcs;
+        @ProtobufProperty(index = 1, type = ProtobufType.UINT64, packed = true)
+        final List<Long> ssrcs;
 
         /**
          * The PID and SVC layer for each SSRC, in matching order.
@@ -151,20 +157,20 @@ public final class SenderSubscriptionExt {
         /**
          * Constructs a new {@code SSrcsToPidAssignments}.
          *
-         * @param ssrcs the SSRC list
+         * @param ssrcs the SSRC list, each in the unsigned {@code 0..0xFFFFFFFF} range
          * @param pids  the PID-layer list
          */
-        SSrcsToPidAssignments(List<Integer> ssrcs, List<PidTemporalLayer> pids) {
+        SSrcsToPidAssignments(List<Long> ssrcs, List<PidTemporalLayer> pids) {
             this.ssrcs = ssrcs;
             this.pids = pids;
         }
 
         /**
-         * Returns the ordered SSRCs.
+         * Returns the ordered SSRCs, each in the unsigned {@code 0..0xFFFFFFFF} range.
          *
          * @return an unmodifiable list, never {@code null}
          */
-        public List<Integer> ssrcs() {
+        public List<Long> ssrcs() {
             return ssrcs == null ? List.of() : Collections.unmodifiableList(ssrcs);
         }
 

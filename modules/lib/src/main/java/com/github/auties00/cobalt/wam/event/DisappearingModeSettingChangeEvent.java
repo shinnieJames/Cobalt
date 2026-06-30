@@ -10,19 +10,19 @@ import com.github.auties00.cobalt.wam.type.DisappearingModeEntryPointType;
 import com.github.auties00.cobalt.wam.type.PreviousEphemeralityType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebDisappearingModeSettingChangeWamEvent")
 @WamEvent(id = 3056)
 public interface DisappearingModeSettingChangeEvent extends WamEventSpec {
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt afterReadDuration();
+    OptionalLong afterReadDuration();
 
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<DisappearingModeEntryPointType> disappearingModeEntryPoint();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt errorCode();
+    OptionalLong errorCode();
 
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> isAfterRead();
@@ -31,13 +31,13 @@ public interface DisappearingModeSettingChangeEvent extends WamEventSpec {
     Optional<Boolean> isSuccess();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt lastToggleTimestamp();
+    OptionalLong lastToggleTimestamp();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt newEphemeralityDuration();
+    OptionalLong newEphemeralityDuration();
 
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt previousEphemeralityDuration();
+    OptionalLong previousEphemeralityDuration();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<PreviousEphemeralityType> previousEphemeralityType();

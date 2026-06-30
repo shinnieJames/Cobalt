@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.EsrFailureReasonType;
 import com.github.auties00.cobalt.wam.type.EsrSendResultType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebEphemeralSyncResponseSendWamEvent")
 @WamEvent(id = 4778)
@@ -22,13 +22,13 @@ public interface EphemeralSyncResponseSendEvent extends WamEventSpec {
     Optional<DisappearingChatInitiatorType> clientDisappearingModeInitiator();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt clientEphemeralityDuration();
+    OptionalLong clientEphemeralityDuration();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<EphemeralityInitiatorType> clientEphemeralityInitiator();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt clientEphemeralitySettingTimestamp();
+    OptionalLong clientEphemeralitySettingTimestamp();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<EphemeralityTriggerActionType> clientEphemeralityTriggerAction();
@@ -37,13 +37,13 @@ public interface EphemeralSyncResponseSendEvent extends WamEventSpec {
     Optional<DisappearingChatInitiatorType> esrDisappearingModeInitiator();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt esrEphemeralityDuration();
+    OptionalLong esrEphemeralityDuration();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<EphemeralityInitiatorType> esrEphemeralityInitiator();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt esrEphemeralitySettingTimestamp();
+    OptionalLong esrEphemeralitySettingTimestamp();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<EphemeralityTriggerActionType> esrEphemeralityTriggerAction();
@@ -52,7 +52,7 @@ public interface EphemeralSyncResponseSendEvent extends WamEventSpec {
     Optional<EsrFailureReasonType> esrFailureReason();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt esrSendAttempt();
+    OptionalLong esrSendAttempt();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<EsrSendResultType> esrSendResult();
@@ -64,13 +64,13 @@ public interface EphemeralSyncResponseSendEvent extends WamEventSpec {
     Optional<DisappearingChatInitiatorType> messageDisappearingModeInitiator();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt messageEphemeralityDuration();
+    OptionalLong messageEphemeralityDuration();
 
     @WamProperty(index = 17, type = WamType.ENUM)
     Optional<EphemeralityInitiatorType> messageEphemeralityInitiator();
 
     @WamProperty(index = 18, type = WamType.INTEGER)
-    OptionalInt messageEphemeralitySettingTimestamp();
+    OptionalLong messageEphemeralitySettingTimestamp();
 
     @WamProperty(index = 19, type = WamType.ENUM)
     Optional<EphemeralityTriggerActionType> messageEphemeralityTriggerAction();

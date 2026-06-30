@@ -2,6 +2,8 @@ package com.github.auties00.cobalt.calls2.net.transport;
 
 import com.github.auties00.cobalt.calls2.platform.VoipCryptoNative;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptions;
+import com.github.auties00.cobalt.model.call.datachannel.SenderSubscriptionsSpec;
 import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptors;
 import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptorsSpec;
 import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptions;
@@ -381,6 +383,89 @@ public final class SubscriptionEnvelope {
         var attributes = new ArrayList<StunMessage.Attribute>(3);
         attributes.add(relayTokenAttribute(relayToken));
         attributes.add(streamDescriptorsAttribute(descriptors));
+        attributes.add(xorMappedAddressAttribute(reflexiveAddress, transactionId));
+        return assembleEnvelope(relayKey, attributes, transactionId);
+    }
+
+    /**
+     * Encodes the cleartext value of the {@link StunAttributeType#WA_SENDER_SUBSCRIPTIONS} attribute from this
+     * client's sender subscriptions.
+     *
+     * <p>The value is the {@link SenderSubscriptions} protobuf serialized through {@link SenderSubscriptionsSpec},
+     * unpadded. This is the {@code 0x4025} form of the subscription attribute: a list of SSRC-to-PID assignment
+     * sources declaring this client's own send streams (the two simulcast video streams, the audio stream, and
+     * the app-data stream), each binding the streams' SSRCs to the relay-assigned self participant id and the SVC
+     * temporal layer, that the relay reads to map this client's forwarded media back to its sender and layer.
+     *
+     * @param senderSubscriptions this client's own send-stream SSRC-to-PID assignments; never {@code null}
+     * @return the serialized sender-subscription protobuf bytes
+     * @throws NullPointerException if {@code senderSubscriptions} is {@code null}
+     */
+    public static byte[] senderSubscriptionsAttributeValue(SenderSubscriptions senderSubscriptions) {
+        Objects.requireNonNull(senderSubscriptions, "senderSubscriptions cannot be null");
+        return SenderSubscriptionsSpec.encode(senderSubscriptions);
+    }
+
+    /**
+     * Frames the {@link StunAttributeType#WA_SENDER_SUBSCRIPTIONS} attribute from this client's sender
+     * subscriptions.
+     *
+     * <p>Pairs the {@code 0x4025} attribute type with the
+     * {@linkplain #senderSubscriptionsAttributeValue(SenderSubscriptions) cleartext sender-subscription value} so
+     * a STUN message writer can append it as a type-length-value entry. It is the subscription attribute of the
+     * {@code 0x0003} envelope {@link #subscriptionEnvelope(byte[], byte[], SenderSubscriptions, InetSocketAddress,
+     * byte[]) assembles}.
+     *
+     * @param senderSubscriptions this client's own send-stream SSRC-to-PID assignments; never {@code null}
+     * @return the framed {@link StunMessage.Attribute} carrying the sender-subscription protobuf
+     * @throws NullPointerException if {@code senderSubscriptions} is {@code null}
+     */
+    public static StunMessage.Attribute senderSubscriptionsAttribute(SenderSubscriptions senderSubscriptions) {
+        return new StunMessage.Attribute(
+                StunAttributeType.WA_SENDER_SUBSCRIPTIONS, senderSubscriptionsAttributeValue(senderSubscriptions));
+    }
+
+    /**
+     * Assembles a complete {@code 0x0003} subscription envelope carrying the leading {@code 0x4000} RELAY-TOKEN
+     * attribute and this client's sender subscriptions as the {@code 0x4025} attribute, message-integrity-protected
+     * with the relay {@code <key>}.
+     *
+     * <p>The emitted message is {@code type 0x0003 + magic + txid + RELAY_TOKEN(0x4000) +
+     * WA_SENDER_SUBSCRIPTIONS(0x4025) + WA_XOR_MAPPED_ADDRESS(0x0016) + MESSAGE_INTEGRITY(0x0008)}, the
+     * sender-subscription form of the four-attribute envelope: it is identical to the
+     * {@link #subscriptionEnvelope(byte[], byte[], StreamDescriptors, InetSocketAddress, byte[]) descriptor form}
+     * except the subscription attribute is the {@code 0x4025} {@link SenderSubscriptions} (SSRC-to-PID
+     * assignments) in place of the {@code 0x4024} attribute, matching the byte-verified caller capture. The relay
+     * authenticates the envelope by binding the credential the leading {@code 0x4000} relay {@code <token>}
+     * references, then verifying the trailing {@code 0x0008} HMAC-SHA1 keyed by the relay {@code <key>} used
+     * verbatim.
+     *
+     * @param relayKey            the relay {@code <key>} keying the {@code 0x0008} HMAC-SHA1, used verbatim
+     * @param relayToken          the relay {@code <token>} bytes carried as the leading {@code 0x4000}
+     *                            RELAY-TOKEN attribute; never {@code null}
+     * @param senderSubscriptions this client's own send-stream SSRC-to-PID assignments carried as {@code 0x4025};
+     *                            never {@code null}
+     * @param reflexiveAddress    the relay reflexive transport address carried as {@code 0x0016}; never
+     *                            {@code null}
+     * @param transactionId       the {@value StunMessage#TRANSACTION_ID_LENGTH}-byte envelope transaction id
+     * @return the encoded, message-integrity-protected {@code 0x0003} envelope bytes
+     * @throws NullPointerException        if any argument is {@code null}
+     * @throws IllegalArgumentException    if {@code transactionId} is not the required length
+     * @throws WhatsAppCallException.Srtp  if the platform cannot compute the HMAC-SHA1 message integrity
+     */
+    public static byte[] subscriptionEnvelope(byte[] relayKey,
+                                              byte[] relayToken,
+                                              SenderSubscriptions senderSubscriptions,
+                                              InetSocketAddress reflexiveAddress,
+                                              byte[] transactionId) {
+        Objects.requireNonNull(relayKey, "relayKey cannot be null");
+        Objects.requireNonNull(relayToken, "relayToken cannot be null");
+        Objects.requireNonNull(senderSubscriptions, "senderSubscriptions cannot be null");
+        Objects.requireNonNull(reflexiveAddress, "reflexiveAddress cannot be null");
+        Objects.requireNonNull(transactionId, "transactionId cannot be null");
+        var attributes = new ArrayList<StunMessage.Attribute>(3);
+        attributes.add(relayTokenAttribute(relayToken));
+        attributes.add(senderSubscriptionsAttribute(senderSubscriptions));
         attributes.add(xorMappedAddressAttribute(reflexiveAddress, transactionId));
         return assembleEnvelope(relayKey, attributes, transactionId);
     }

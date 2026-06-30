@@ -14,5 +14,6 @@ public enum WpbujBenefitType {
     @WamEnumConstant(4) PINNED_CHATS,
     @WamEnumConstant(5) STICKERS,
     @WamEnumConstant(6) LISTS,
-    @WamEnumConstant(7) NOT_APPLICABLE
+    @WamEnumConstant(7) NOT_APPLICABLE,
+    @WamEnumConstant(8) CLOUD_STORAGE
 }

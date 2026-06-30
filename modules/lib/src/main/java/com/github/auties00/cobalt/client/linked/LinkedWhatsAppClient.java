@@ -48,6 +48,9 @@ import com.github.auties00.cobalt.model.business.linking.BusinessLinkedAdAccount
 import com.github.auties00.cobalt.model.business.marketing.*;
 import com.github.auties00.cobalt.model.business.order.BusinessOrder;
 import com.github.auties00.cobalt.model.business.order.BusinessOrderItem;
+import com.github.auties00.cobalt.model.business.order.OrderLifecycleStatus;
+import com.github.auties00.cobalt.model.business.order.OrderPaymentStatus;
+import com.github.auties00.cobalt.model.chat.ChatExportOptions;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerification;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerificationResult;
 import com.github.auties00.cobalt.model.business.profile.*;
@@ -113,8 +116,10 @@ import com.github.auties00.cobalt.stanza.usync.UsyncResult;
 import com.github.auties00.cobalt.store.linked.*;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.util.BusinessLabelConstants;
+import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingActivity;
 
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -2232,6 +2237,112 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void sendPeerMessage(JidProvider chatJid, ChatMessageInfo response);
 
     /**
+     * Records one thread-interaction activity against the ctlv2 thread-logging aggregator for the
+     * given thread.
+     *
+     * @apiNote
+     * This is the internal entry point that receive-path and call-end producer hooks outside the
+     * client package (the inbound message stream handler and the calls service) use to report
+     * activity the client cannot observe directly. The aggregator buckets it per thread per day and
+     * uploads it once daily as the {@code ThreadInteractionData} WAM events; application code never
+     * calls it directly.
+     *
+     * @param chat     the thread the activity occurred in; never {@code null}
+     * @param activity the activity to record; never {@code null}
+     * @throws NullPointerException if any argument is {@code null}
+     */
+    void recordThreadActivity(JidProvider chat, ThreadLoggingActivity activity);
+
+    /**
+     * Asks the primary device to resend a specific message that this companion holds only as an
+     * undecryptable placeholder.
+     *
+     * <p>Issues a placeholder-resend peer data operation request for the message identified by
+     * {@code key}. The primary looks up the plaintext and delivers it back through the on-demand
+     * history pipeline, where it surfaces to the registered history-sync listeners. This is the only
+     * way to recover an individual message by key in a regular chat; whole messages are not otherwise
+     * addressable on the server.
+     *
+     * @apiNote
+     * Use this for messages received as placeholder stubs, for example after a missed retry.
+     * Newsletter messages are not delivered through this mechanism; query them with
+     * {@link #queryNewsletterMessages(JidProvider, int)} instead.
+     *
+     * @param key the key of the message to resend; never {@code null}
+     * @throws NullPointerException            if {@code key} is {@code null}
+     * @throws WhatsAppSessionException.Closed if the socket is closed
+     * @see #queryChatMessages(JidProvider, int)
+     */
+    void queryChatMessage(MessageKey key);
+
+    /**
+     * Asks the primary device to deliver a slice of older messages for a regular chat, ending at the
+     * oldest message this companion currently holds.
+     *
+     * <p>Issues an on-demand history sync request for up to {@code count} messages older than the
+     * chat's oldest locally stored message. The delivered messages arrive asynchronously through the
+     * registered history-sync listeners. Newsletters use a different mechanism and are rejected.
+     *
+     * @apiNote
+     * This is the scroll-back primitive: call it repeatedly to page further into a chat's history.
+     * The number actually delivered may be smaller than {@code count} and is bounded by the user's
+     * per-device history setting on their phone. For a newsletter use
+     * {@link #queryNewsletterMessages(JidProvider, int)} instead.
+     *
+     * @param chat  the regular chat to page; never {@code null}
+     * @param count the maximum number of older messages to request; must be positive
+     * @throws NullPointerException            if {@code chat} is {@code null}
+     * @throws IllegalArgumentException        if {@code count} is not positive, or {@code chat} is a newsletter
+     * @throws WhatsAppSessionException.Closed if the socket is closed
+     * @see #queryChatMessages(JidProvider, MessageKey, int)
+     */
+    void queryChatMessages(JidProvider chat, int count);
+
+    /**
+     * Asks the primary device to deliver a slice of older messages for a regular chat, ending at a
+     * specific message.
+     *
+     * <p>Behaves like {@link #queryChatMessages(JidProvider, int)} but uses {@code before} as the
+     * boundary instead of the oldest locally stored message, requesting up to {@code count} messages
+     * older than it. When this companion holds {@code before}, its timestamp is included so the
+     * primary can resolve the boundary precisely.
+     *
+     * @apiNote
+     * Use this to page from an arbitrary anchor rather than from the oldest message held.
+     *
+     * @param chat   the regular chat to page; never {@code null}
+     * @param before the message to page back from; never {@code null}
+     * @param count  the maximum number of older messages to request; must be positive
+     * @throws NullPointerException            if {@code chat} or {@code before} is {@code null}
+     * @throws IllegalArgumentException        if {@code count} is not positive, or {@code chat} is a newsletter
+     * @throws WhatsAppSessionException.Closed if the socket is closed
+     * @see #queryChatMessages(JidProvider, int)
+     */
+    void queryChatMessages(JidProvider chat, MessageKey before, int count);
+
+    /**
+     * Asks the primary device to deliver the account's full message history over the given window.
+     *
+     * <p>Issues a full on-demand history sync request covering the last {@code days} days across all
+     * chats. The history is replayed asynchronously through the registered history-sync listeners. The
+     * request is only issued when the primary has granted this device complete history access; that
+     * grant is delivered to desktop companions when the user selects "All chat history" for the device
+     * on their phone.
+     *
+     * @apiNote
+     * This is a heavyweight, account-wide pull. It consults the complete-access grant and fails fast
+     * when the grant is absent rather than issuing a request the primary would refuse. WhatsApp Web
+     * itself only requests up to one year; larger windows are honoured at the primary's discretion.
+     *
+     * @param days the length of the requested window in days; must be positive
+     * @throws IllegalArgumentException        if {@code days} is not positive
+     * @throws IllegalStateException           if the primary has not granted complete history access
+     * @throws WhatsAppSessionException.Closed if the socket is closed
+     * @see #queryChatMessages(JidProvider, int)
+     */
+    void queryFullChatsHistory(int days);
+
+    /**
      * Resolves a batch of phone-number JIDs to whether each one corresponds to a registered WhatsApp account.
      *
      * @apiNote
@@ -3062,6 +3173,18 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     boolean checkUsernameAvailability(String candidate);
 
     /**
+     * Removes the authenticated user's username, clearing it on the relay and locally.
+     *
+     * <p>Dispatches the set-username mutation with an empty input, which the relay interprets as a
+     * deletion. On success the stored username, registration state, and recovery-PIN flag are cleared.
+     *
+     * @apiNote There is no separate recovery-PIN removal; clearing the username clears its recovery PIN.
+     * @return {@code true} if the relay confirmed the removal, {@code false} otherwise
+     * @throws WhatsAppSessionException.Closed if the socket is no longer open
+     */
+    boolean removeUsername();
+
+    /**
      * Publishes or clears the authenticated user's ephemeral text status.
      *
      * @apiNote
@@ -3870,6 +3993,41 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void deleteStatus(String statusId);
 
     /**
+     * Reshares an existing status or chat message as the user's own status.
+     *
+     * @apiNote
+     * Mirrors the status-reshare composer flow: the source message's text or media is re-posted as a
+     * fresh status carrying a {@link com.github.auties00.cobalt.model.message.status.StatusAttribution.Type#RESHARE}
+     * attribution crediting the original. Text is copied directly; image and video media are
+     * re-downloaded and re-uploaded so the reshared status owns independent media. Resharing a
+     * newsletter status adds a channel-reshare attribution identifying the originating channel and
+     * its server message id.
+     *
+     * @param sourceKey the key of the message to reshare
+     * @return the posted status message
+     * @throws NullPointerException     if {@code sourceKey} is {@code null}
+     * @throws IllegalArgumentException if the source message is absent or its type cannot be reshared
+     *                                  as a status
+     * @throws IllegalStateException    if the client is not logged in
+     */
+    ChatMessageInfo reshareStatus(MessageKey sourceKey);
+
+    /**
+     * Eagerly establishes the Signal sessions for a chat's devices ahead of the first send.
+     *
+     * @apiNote
+     * Mirrors WhatsApp's chat-open session warm-up: resolves the chat's device fan-out and fetches
+     * pre-key bundles for any device that does not yet have a session, so the first message to the
+     * chat encrypts without a server round-trip. Best-effort: a device whose pre-keys cannot be
+     * fetched is skipped. Commits one {@code PrekeysDepletion} metric (with the
+     * {@code USER_INTENT_PREFETCH} fetch reason) per depleted one-time pre-key.
+     *
+     * @param chat the chat whose sessions to pre-establish
+     * @throws NullPointerException if {@code chat} is {@code null}
+     */
+    void eagerlyEstablishSession(JidProvider chat);
+
+    /**
      * Emits a {@code read} receipt for a viewed status update.
      *
      * @apiNote
@@ -3907,8 +4065,8 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Drives the "Status privacy" panel write: applies the new
      * distribution mode server-side and the local
-     * {@link PrivacySettingType#STATUS} entry in the store is updated
-     * eagerly.
+     * {@link LinkedWhatsAppSettingsStore#statusPrivacy() status-privacy setting} in the store is
+     * updated eagerly.
      *
      * @param mode the new distribution mode
      * @param jids the JID list applied by
@@ -4681,66 +4839,61 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *         never {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no longer open
      */
-    Map<PrivacySettingType, PrivacySettingValue> refreshPrivacySettings();
+    Map<PrivacySettingType<?>, PrivacySettingValue> refreshPrivacySettings();
 
     /**
-     * Changes a single privacy setting on the local account without
-     * touching the per-contact allow or block list.
+     * Changes a single privacy setting on the local account.
      *
      * @apiNote
-     * Drives the per-category dropdowns on the Settings privacy
-     * panel for values that do not need a roster (e.g.
-     * {@link PrivacySettingValue#EVERYONE},
-     * {@link PrivacySettingValue#CONTACTS},
-     * {@link PrivacySettingValue#NOBODY}). Use the three-argument
-     * overload for {@link PrivacySettingValue#CONTACTS_EXCEPT} or
-     * {@link PrivacySettingValue#CONTACTS_ONLY}, which require the
-     * paired list of contacts.
+     * Drives the per-category selectors on the Settings privacy panel. The supplied
+     * {@link PrivacySettingValue} fully describes the change: it names its
+     * {@linkplain PrivacySettingValue#type() setting}, carries its audience token, and, for a
+     * contacts-except value, carries the inline blocklist through
+     * {@link PrivacySettingValue#excluded()}; constructing the value is the only way to pair a
+     * setting with an audience it accepts. Observers registered via
+     * {@link #addPrivacySettingChangedListener(LinkedPrivacySettingChangedListener)} see the new
+     * state after the server acknowledges the change without another round trip.
      *
-     * @param type  the setting to change; never {@code null}
-     * @param value the new audience; must be accepted by
-     *              {@link PrivacySettingType#isSupported(PrivacySettingValue)}
-     * @throws NullPointerException     if {@code type} or {@code value}
-     *                                  is {@code null}
-     * @throws IllegalArgumentException if the value is not supported by
-     *                                  the given type
+     * @param value the new privacy value; never {@code null}
+     * @throws NullPointerException            if {@code value} is {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is no longer open
      */
-    void editPrivacySetting(PrivacySettingType type, PrivacySettingValue value);
+    void editPrivacySetting(PrivacySettingValue value);
 
     /**
-     * Changes a single privacy setting on the local account, pairing the
-     * new audience with an allow or block list of contacts when the
-     * selected {@link PrivacySettingValue} requires one.
+     * Restores a message previously withheld by Defense Mode, re-delivering it to the registered
+     * listeners.
      *
      * @apiNote
-     * Drives the per-category dropdowns on the Settings privacy
-     * panel for the value variants that refine their audience with an
-     * explicit roster:
-     * {@link PrivacySettingValue#CONTACTS_EXCEPT} (block these
-     * contacts) and {@link PrivacySettingValue#CONTACTS_ONLY} (allow
-     * only these contacts). Observers registered via
-     * {@link #addPrivacySettingChangedListener(LinkedPrivacySettingChangedListener)}
-     * see the new state after the server acknowledges the change
-     * without another round trip.
+     * Defense Mode withholds unsolicited messages from senders that are not in the user's address
+     * book while the feature is enabled; a withheld message is stored but kept out of the
+     * {@code onNewMessage} listeners until restored, either individually through this method or in
+     * bulk when Defense Mode is turned off. The message is identified by its {@link MessageKey};
+     * restoring a message that does not exist or was not quarantined is a no-op.
      *
-     * @param type               the setting to change; never {@code null}
-     * @param value              the new audience; must be accepted by
-     *                           {@link PrivacySettingType#isSupported(PrivacySettingValue)}
-     * @param excludedOrIncluded the per-contact allowlist
-     *                           ({@link PrivacySettingValue#CONTACTS_ONLY})
-     *                           or blocklist
-     *                           ({@link PrivacySettingValue#CONTACTS_EXCEPT});
-     *                           may be {@code null} or empty when the
-     *                           value does not refine its audience with
-     *                           a list
-     * @throws NullPointerException     if {@code type} or {@code value}
-     *                                  is {@code null}
-     * @throws IllegalArgumentException if the value is not supported by
-     *                                  the given type
-     * @throws WhatsAppSessionException.Closed if the socket is no longer open
+     * @param key the key of the quarantined message to restore; never {@code null}
+     * @return {@code true} when a quarantined message was restored, {@code false} otherwise
+     * @throws NullPointerException if {@code key} is {@code null}
      */
-    void editPrivacySetting(PrivacySettingType type, PrivacySettingValue value, Collection<? extends JidProvider> excludedOrIncluded);
+    boolean restoreQuarantinedMessage(MessageKey key);
+
+    /**
+     * Exports a chat's message history to a WhatsApp-format ZIP archive.
+     *
+     * @apiNote
+     * Produces a ZIP containing {@code chat.txt} (a plain-text transcript) and {@code chat.md} (a
+     * markdown transcript), plus a {@code media/} folder when {@link ChatExportOptions#includeMedia()}
+     * is set. Messages are filtered (protocol, reaction, poll-update, keep-in-chat and pin stubs,
+     * view-once and ephemeral messages are excluded) and ordered oldest-first. Commits a
+     * {@code ChatExport} metric describing the outcome.
+     *
+     * @param chat    the chat to export
+     * @param options the export options
+     * @param output  the stream that receives the produced ZIP archive
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if the chat is not present in the store
+     */
+    void exportChat(JidProvider chat, ChatExportOptions options, OutputStream output);
 
     /**
      * Enables sending and receiving "read" receipts (blue double-ticks).
@@ -4752,7 +4905,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * account sees read receipts from them. Use this convenience when
      * the UI surfaces a simple on/off toggle rather than the broader
      * audience picker driven by
-     * {@link #editPrivacySetting(PrivacySettingType, PrivacySettingValue)}.
+     * {@link #editPrivacySetting(PrivacySettingValue)}.
      *
      * @throws WhatsAppSessionException.Closed if the socket is no longer
      *                                         open
@@ -4770,7 +4923,7 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * also stops seeing read receipts from them. Use this convenience
      * when the UI surfaces a simple on/off toggle rather than the
      * broader audience picker driven by
-     * {@link #editPrivacySetting(PrivacySettingType, PrivacySettingValue)}.
+     * {@link #editPrivacySetting(PrivacySettingValue)}.
      *
      * @throws WhatsAppSessionException.Closed if the socket is no longer
      *                                         open
@@ -4814,9 +4967,9 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @apiNote
      * Privacy disallowed lists are the per-category exclusion rosters
      * backing the {@link PrivacySettingType#LAST_SEEN},
-     * {@link PrivacySettingType#PROFILE_PIC},
-     * {@link PrivacySettingType#STATUS} and
-     * {@link PrivacySettingType#ADD_ME_TO_GROUPS} audience selectors.
+     * {@link PrivacySettingType#PROFILE_PICTURE},
+     * {@link PrivacySettingType#ABOUT} and
+     * {@link PrivacySettingType#GROUP_ADD} audience selectors.
      * Each category maintains its own sliding digest ({@code dhash}) so
      * reconciliation can hit a server-side fast path when the local
      * cache is up to date. Applications typically call this on first
@@ -5945,6 +6098,22 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws WhatsAppSessionException.Closed if the socket is closed
      */
     void editBusinessPrivacySetting(BusinessDataSharingConsent dataSharingConsent);
+
+    /**
+     * Fetches the global Small-Business CTWA data-sharing setting from the relay and stores it.
+     *
+     * @apiNote
+     * This is the account-wide switch consulted by the CTWA conversion-signal pipeline before it
+     * emits; it is distinct from {@link #refreshBusinessPrivacySetting()}, which surfaces the same
+     * underlying consent as the privacy-settings toggle position.
+     *
+     * @return the resolved {@link CtwaDataSharingSetting}; {@link CtwaDataSharingSetting#NOT_SET}
+     *         when the relay reply did not parse
+     * @throws WhatsAppServerRuntimeException  if the relay rejected the request with a documented
+     *                                         client/server error
+     * @throws WhatsAppSessionException.Closed if the socket is closed
+     */
+    CtwaDataSharingSetting refreshBusinessDataSharingSetting();
 
     /**
      * Records a per-contact message-feedback preference.
@@ -8653,6 +8822,8 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
 
     LinkedWhatsAppClient addPrivacySettingChangedListener(LinkedPrivacySettingChangedListener listener);
 
+    LinkedWhatsAppClient addMessageQuarantinedListener(LinkedMessageQuarantinedListener listener);
+
     LinkedWhatsAppClient addWebHistorySyncProgressListener(LinkedWebHistorySyncProgressListener listener);
 
     LinkedWhatsAppClient addProfilePictureChangedListener(LinkedProfilePictureChangedListener listener);
@@ -10000,6 +10171,44 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      * @throws WhatsAppServerRuntimeException if the transport fails or the seller reports an error
      */
     Optional<BusinessOrder> createBusinessOrder(JidProvider seller, List<BusinessOrderItem> products, String directConnectionEncryptedInfo);
+
+    /**
+     * Sends an order-status update to a customer as the merchant.
+     *
+     * @apiNote
+     * Posts an order-status native-flow message carrying the order's items, totals, new lifecycle
+     * status and payment status. The lifecycle status and payment status are independent fields; pass
+     * {@link OrderPaymentStatus#fromLifecycle(OrderLifecycleStatus)} for the conventional default.
+     * Commits the {@code SEND_ORDER_STATUS} order-management metric.
+     *
+     * @param chat          the customer chat
+     * @param order         the order being updated, whose reference id, items and totals are serialized
+     * @param status        the new order lifecycle status
+     * @param paymentStatus the order payment status
+     * @return the key of the sent message
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if the order carries no reference id
+     */
+    MessageKey updateOrderStatus(JidProvider chat, BusinessOrder order, OrderLifecycleStatus status, OrderPaymentStatus paymentStatus);
+
+    /**
+     * Sends an order payment-status update (for example, marking an order paid or unpaid) to a
+     * customer as the merchant.
+     *
+     * @apiNote
+     * Posts a payment-status native-flow message carrying the order's items, totals, lifecycle status
+     * and payment status. Commits the {@code SEND_MARK_AS_PAID} metric when the payment status is
+     * {@link OrderPaymentStatus#CAPTURED}, otherwise {@code SEND_MARK_AS_UNPAID}.
+     *
+     * @param chat          the customer chat
+     * @param order         the order being updated, whose reference id, items and totals are serialized
+     * @param status        the order lifecycle status
+     * @param paymentStatus the new payment status
+     * @return the key of the sent message
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if the order carries no reference id
+     */
+    MessageKey updateOrderPaymentStatus(JidProvider chat, BusinessOrder order, OrderLifecycleStatus status, OrderPaymentStatus paymentStatus);
 
     /**
      * Resolves a WhatsApp Business short-link slug to the account that owns it.

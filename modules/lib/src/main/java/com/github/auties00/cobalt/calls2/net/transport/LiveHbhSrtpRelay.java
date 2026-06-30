@@ -43,15 +43,16 @@ import java.util.Objects;
  *           unprotect paths of {@code transport/wa_hbh_srtp_relay.cc}: the context keyed by
  *           {@code derive_hbh_srtp_key} (fn4808) with the suite from {@code fill_hbh_srtp_crypto}
  *           (fn4809). {@code create_srtp_context_for_hbh_srtp} keys RTP media from the {@code 'hbh srtp'}
- *           ({@link CallE2eKeyDerivation.HopByHopGroup#MEDIA}) group and keys RTCP control directionally:
- *           outbound (client to relay) RTCP from the {@code 'uplink hbh srtcp'}
- *           ({@link CallE2eKeyDerivation.HopByHopGroup#UPLINK_SRTCP}) group and inbound (relay to client)
- *           RTCP from the {@code 'downlink hbh srtcp'}
- *           ({@link CallE2eKeyDerivation.HopByHopGroup#DOWNLINK_SRTCP}) group. A live 1:1 relay call
- *           reported a libsrtp authentication failure (status 7) unprotecting inbound RTCP under the
- *           non-directional {@code 'hbh srtcp'} ({@link CallE2eKeyDerivation.HopByHopGroup#SRTCP}, KDF
- *           index pair {@code (4, 5)}) master, so the relay's directional RTCP masters key the two
- *           directions per-direction instead. The host libsrtp split (one outbound and one inbound
+ *           ({@link CallE2eKeyDerivation.HopByHopGroup#MEDIA}) group and keys RTCP control, in both
+ *           directions, from the non-directional {@code 'hbh srtcp'}
+ *           ({@link CallE2eKeyDerivation.HopByHopGroup#SRTCP}, KDF index pair {@code (4, 5)}) master: the
+ *           relay-leg setup (fn11466) builds both the outbound and the inbound RTCP policy from that one
+ *           SRTCP master, and the {@code is_hbh_srtp} branch of {@code create_srtp_context_for_hbh_srtp}
+ *           (fn4811) derives only the {@code (4, 5)} master and keys both its transmit and receive
+ *           policies from it. The directional {@code 'uplink hbh srtcp'} and {@code 'downlink hbh srtcp'}
+ *           groups (KDF {@code (6, 7)} and {@code (8, 9)}) belong to the SFU-forwarding role
+ *           ({@code is_hbh_srtp == 0}), a different transport role than this 1:1 relay leg, so they do not
+ *           key these contexts. The host libsrtp split (one outbound and one inbound
  *           session over wildcard SSRCs per master) matches libsrtp's
  *           {@code ssrc_any_outbound}/{@code ssrc_any_inbound} usage; in the WhatsApp
  *           Web build the equivalent SRTP transform is a browser WebRTC native callback, and Cobalt
@@ -110,13 +111,13 @@ public final class LiveHbhSrtpRelay implements HbhSrtpRelay {
 
     /**
      * Holds the outbound libsrtp session pointer that encrypts RTCP control packets toward the relay,
-     * keyed from the {@link CallE2eKeyDerivation.HopByHopGroup#UPLINK_SRTCP} master.
+     * keyed from the {@link CallE2eKeyDerivation.HopByHopGroup#SRTCP} master.
      */
     private final MemorySegment outboundRtcpSession;
 
     /**
      * Holds the inbound libsrtp session pointer that decrypts RTCP control packets from the relay,
-     * keyed from the {@link CallE2eKeyDerivation.HopByHopGroup#DOWNLINK_SRTCP} master.
+     * keyed from the {@link CallE2eKeyDerivation.HopByHopGroup#SRTCP} master.
      */
     private final MemorySegment inboundRtcpSession;
 
@@ -151,15 +152,14 @@ public final class LiveHbhSrtpRelay implements HbhSrtpRelay {
      * crypto suite.
      *
      * <p>This is the convenience entry point for relay election: it derives the non-directional
-     * hop-by-hop media SRTP master and the two directional hop-by-hop SRTCP masters from the relay
+     * hop-by-hop media SRTP master and the non-directional hop-by-hop SRTCP master from the relay
      * {@code <hbh_key>} through
      * {@link CallE2eKeyDerivation#deriveHbhSrtpMaster(byte[], CallE2eKeyDerivation.HopByHopGroup)} and
      * then builds the libsrtp contexts. The {@code <hbh_key>} is the 30-byte value the relay block
      * carried, base64-decoded by the signaling layer, shared identically across every participant of a
      * group call. The relay keys RTP media from the {@link CallE2eKeyDerivation.HopByHopGroup#MEDIA}
-     * group, outbound RTCP from the {@link CallE2eKeyDerivation.HopByHopGroup#UPLINK_SRTCP} group, and
-     * inbound RTCP from the {@link CallE2eKeyDerivation.HopByHopGroup#DOWNLINK_SRTCP} group, so all three
-     * masters are derived here and the flows keyed independently.
+     * group and both RTCP directions from the {@link CallE2eKeyDerivation.HopByHopGroup#SRTCP} group, so
+     * the two masters are derived here and the media and control flows keyed independently.
      *
      * @param hopByHopKey the {@value CallE2eKeyDerivation#HBH_KEY_LENGTH}-byte decoded relay
      *                    {@code <hbh_key>}
@@ -172,56 +172,44 @@ public final class LiveHbhSrtpRelay implements HbhSrtpRelay {
      */
     public static LiveHbhSrtpRelay fromHopByHopKey(byte[] hopByHopKey, SrtpCryptoSuite suite) {
         var mediaMaster = CallE2eKeyDerivation.deriveHbhSrtpMaster(hopByHopKey, CallE2eKeyDerivation.HopByHopGroup.MEDIA);
-        var uplinkSrtcpMaster = CallE2eKeyDerivation.deriveHbhSrtpMaster(hopByHopKey, CallE2eKeyDerivation.HopByHopGroup.UPLINK_SRTCP);
-        var downlinkSrtcpMaster = CallE2eKeyDerivation.deriveHbhSrtpMaster(hopByHopKey, CallE2eKeyDerivation.HopByHopGroup.DOWNLINK_SRTCP);
-        return new LiveHbhSrtpRelay(mediaMaster, uplinkSrtcpMaster, downlinkSrtcpMaster, suite);
+        var srtcpMaster = CallE2eKeyDerivation.deriveHbhSrtpMaster(hopByHopKey, CallE2eKeyDerivation.HopByHopGroup.SRTCP);
+        return new LiveHbhSrtpRelay(mediaMaster, srtcpMaster, suite);
     }
 
     /**
-     * Creates a hop-by-hop relay context from the derived hop-by-hop media and directional SRTCP SRTP
-     * masters and a crypto suite.
+     * Creates a hop-by-hop relay context from the derived hop-by-hop media and SRTCP SRTP masters and a
+     * crypto suite.
      *
      * <p>Each master is split into its 16-byte key and 14-byte salt and copied into its own foreign key
      * buffer. Four libsrtp sessions are created: an outbound and an inbound session over
-     * {@code mediaMaster} for RTP media, an outbound RTCP session over {@code uplinkSrtcpMaster} for
-     * control toward the relay, and an inbound RTCP session over {@code downlinkSrtcpMaster} for control
-     * from the relay. RTP and RTCP are keyed from different masters because the relay keys the two flows
-     * from different {@code wa_sfu_kdf} groups, and the two RTCP directions are keyed from the relay's
-     * directional uplink and downlink SRTCP groups, so neither flow can share a session.
+     * {@code mediaMaster} for RTP media, and an outbound and an inbound RTCP session both over
+     * {@code srtcpMaster} for control toward and from the relay. RTP and RTCP are keyed from different
+     * masters because the relay keys the two flows from different {@code wa_sfu_kdf} groups, so media
+     * cannot share a session with control; the two RTCP directions share the one non-directional SRTCP
+     * master but stay separate sessions for their inbound and outbound SSRC-wildcard roles.
      *
-     * @param mediaMaster         the {@value SrtpCryptoSuite#SUITE_MASTER_LENGTH}-byte hop-by-hop media
-     *                            SRTP master keying RTP, from
-     *                            {@link CallE2eKeyDerivation.HopByHopGroup#MEDIA}
-     * @param uplinkSrtcpMaster   the {@value SrtpCryptoSuite#SUITE_MASTER_LENGTH}-byte SRTCP master keying
-     *                            outbound (client to relay) RTCP, from
-     *                            {@link CallE2eKeyDerivation.HopByHopGroup#UPLINK_SRTCP}
-     * @param downlinkSrtcpMaster the {@value SrtpCryptoSuite#SUITE_MASTER_LENGTH}-byte SRTCP master keying
-     *                            inbound (relay to client) RTCP, from
-     *                            {@link CallE2eKeyDerivation.HopByHopGroup#DOWNLINK_SRTCP}
-     * @param suite               the SRTP crypto suite to apply, from {@code fill_hbh_srtp_crypto}
-     * @throws NullPointerException       if {@code mediaMaster}, {@code uplinkSrtcpMaster},
-     *                                    {@code downlinkSrtcpMaster} or {@code suite} is {@code null}
+     * @param mediaMaster the {@value SrtpCryptoSuite#SUITE_MASTER_LENGTH}-byte hop-by-hop media SRTP
+     *                    master keying RTP, from {@link CallE2eKeyDerivation.HopByHopGroup#MEDIA}
+     * @param srtcpMaster the {@value SrtpCryptoSuite#SUITE_MASTER_LENGTH}-byte SRTCP master keying both
+     *                    RTCP directions, from {@link CallE2eKeyDerivation.HopByHopGroup#SRTCP}
+     * @param suite       the SRTP crypto suite to apply, from {@code fill_hbh_srtp_crypto}
+     * @throws NullPointerException       if {@code mediaMaster}, {@code srtcpMaster} or {@code suite} is
+     *                                    {@code null}
      * @throws IllegalArgumentException   if any master is not exactly
      *                                    {@value SrtpCryptoSuite#SUITE_MASTER_LENGTH} bytes long
      * @throws WhatsAppCallException.Srtp if libsrtp cannot create any session
      */
-    public LiveHbhSrtpRelay(byte[] mediaMaster, byte[] uplinkSrtcpMaster, byte[] downlinkSrtcpMaster,
-                            SrtpCryptoSuite suite) {
+    public LiveHbhSrtpRelay(byte[] mediaMaster, byte[] srtcpMaster, SrtpCryptoSuite suite) {
         Objects.requireNonNull(mediaMaster, "mediaMaster cannot be null");
-        Objects.requireNonNull(uplinkSrtcpMaster, "uplinkSrtcpMaster cannot be null");
-        Objects.requireNonNull(downlinkSrtcpMaster, "downlinkSrtcpMaster cannot be null");
+        Objects.requireNonNull(srtcpMaster, "srtcpMaster cannot be null");
         this.suite = Objects.requireNonNull(suite, "suite cannot be null");
         if (mediaMaster.length != SrtpCryptoSuite.SUITE_MASTER_LENGTH) {
             throw new IllegalArgumentException(
                     "mediaMaster must be " + SrtpCryptoSuite.SUITE_MASTER_LENGTH + " bytes, got " + mediaMaster.length);
         }
-        if (uplinkSrtcpMaster.length != SrtpCryptoSuite.SUITE_MASTER_LENGTH) {
+        if (srtcpMaster.length != SrtpCryptoSuite.SUITE_MASTER_LENGTH) {
             throw new IllegalArgumentException(
-                    "uplinkSrtcpMaster must be " + SrtpCryptoSuite.SUITE_MASTER_LENGTH + " bytes, got " + uplinkSrtcpMaster.length);
-        }
-        if (downlinkSrtcpMaster.length != SrtpCryptoSuite.SUITE_MASTER_LENGTH) {
-            throw new IllegalArgumentException(
-                    "downlinkSrtcpMaster must be " + SrtpCryptoSuite.SUITE_MASTER_LENGTH + " bytes, got " + downlinkSrtcpMaster.length);
+                    "srtcpMaster must be " + SrtpCryptoSuite.SUITE_MASTER_LENGTH + " bytes, got " + srtcpMaster.length);
         }
         ensureInitialized();
         this.rtcpFeedbackSubscriptions = new RtcpRxSubscriptionTable();
@@ -233,17 +221,15 @@ public final class LiveHbhSrtpRelay implements HbhSrtpRelay {
         try {
             var mediaKeyBuffer = arena.allocate(SrtpCryptoSuite.SUITE_MASTER_LENGTH);
             MemorySegment.copy(mediaMaster, 0, mediaKeyBuffer, ValueLayout.JAVA_BYTE, 0, SrtpCryptoSuite.SUITE_MASTER_LENGTH);
-            var uplinkSrtcpKeyBuffer = arena.allocate(SrtpCryptoSuite.SUITE_MASTER_LENGTH);
-            MemorySegment.copy(uplinkSrtcpMaster, 0, uplinkSrtcpKeyBuffer, ValueLayout.JAVA_BYTE, 0, SrtpCryptoSuite.SUITE_MASTER_LENGTH);
-            var downlinkSrtcpKeyBuffer = arena.allocate(SrtpCryptoSuite.SUITE_MASTER_LENGTH);
-            MemorySegment.copy(downlinkSrtcpMaster, 0, downlinkSrtcpKeyBuffer, ValueLayout.JAVA_BYTE, 0, SrtpCryptoSuite.SUITE_MASTER_LENGTH);
+            var srtcpKeyBuffer = arena.allocate(SrtpCryptoSuite.SUITE_MASTER_LENGTH);
+            MemorySegment.copy(srtcpMaster, 0, srtcpKeyBuffer, ValueLayout.JAVA_BYTE, 0, SrtpCryptoSuite.SUITE_MASTER_LENGTH);
             outbound = createSession(mediaKeyBuffer, CobaltSrtp.COBALT_SRTP_DIR_OUTBOUND());
             this.outboundSession = outbound;
             inbound = createSession(mediaKeyBuffer, CobaltSrtp.COBALT_SRTP_DIR_INBOUND());
             this.inboundSession = inbound;
-            outboundRtcp = createSession(uplinkSrtcpKeyBuffer, CobaltSrtp.COBALT_SRTP_DIR_OUTBOUND());
+            outboundRtcp = createSession(srtcpKeyBuffer, CobaltSrtp.COBALT_SRTP_DIR_OUTBOUND());
             this.outboundRtcpSession = outboundRtcp;
-            this.inboundRtcpSession = createSession(downlinkSrtcpKeyBuffer, CobaltSrtp.COBALT_SRTP_DIR_INBOUND());
+            this.inboundRtcpSession = createSession(srtcpKeyBuffer, CobaltSrtp.COBALT_SRTP_DIR_INBOUND());
             this.scratch = arena.allocate(MAX_PACKET_LENGTH + CobaltSrtp.COBALT_SRTP_MAX_TRAILER_LEN());
             this.lengthCell = arena.allocate(ValueLayout.JAVA_INT);
         } catch (RuntimeException e) {

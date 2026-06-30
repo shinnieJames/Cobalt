@@ -16,7 +16,7 @@ import com.github.auties00.cobalt.wam.type.PttTriggerType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPttPlaybackWamEvent")
 @WamEvent(id = 2044)
@@ -28,7 +28,7 @@ public interface PttPlaybackEvent extends WamEventSpec {
     Optional<Instant> pttAudioRouteBluetoothTime();
 
     @WamProperty(index = 20, type = WamType.INTEGER)
-    OptionalInt pttAudioRouteChangeCount();
+    OptionalLong pttAudioRouteChangeCount();
 
     @WamProperty(index = 24, type = WamType.TIMER)
     Optional<Instant> pttAudioRouteEarpieceTime();
@@ -52,13 +52,13 @@ public interface PttPlaybackEvent extends WamEventSpec {
     Optional<Boolean> pttMainThreadBlock();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt pttMiniPlayerClick();
+    OptionalLong pttMiniPlayerClick();
 
     @WamProperty(index = 16, type = WamType.BOOLEAN)
     Optional<Boolean> pttMiniPlayerClose();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt pttMiniPlayerPauseCnt();
+    OptionalLong pttMiniPlayerPauseCnt();
 
     @WamProperty(index = 1, type = WamType.TIMER)
     Optional<Instant> pttPlayRequestT();
@@ -73,7 +73,7 @@ public interface PttPlaybackEvent extends WamEventSpec {
     Optional<PttPlaybackSpeedType> pttPlaybackSpeed();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt pttPlaybackSpeedCnt();
+    OptionalLong pttPlaybackSpeedCnt();
 
     @WamProperty(index = 18, type = WamType.BOOLEAN)
     Optional<Boolean> pttPlayedOutOfChat();
@@ -91,7 +91,7 @@ public interface PttPlaybackEvent extends WamEventSpec {
     Optional<Instant> pttPlayerPlayT();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt pttSeekCnt();
+    OptionalLong pttSeekCnt();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<PttTriggerType> pttTrigger();
@@ -100,5 +100,5 @@ public interface PttPlaybackEvent extends WamEventSpec {
     Optional<PttStreamType> pttType();
 
     @WamProperty(index = 27, type = WamType.INTEGER)
-    OptionalInt pttVolumeUpAfterMaxCount();
+    OptionalLong pttVolumeUpAfterMaxCount();
 }

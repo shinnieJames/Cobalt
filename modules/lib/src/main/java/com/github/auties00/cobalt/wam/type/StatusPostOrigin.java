@@ -64,5 +64,6 @@ public enum StatusPostOrigin {
     @WamEnumConstant(54) CLOSE_SHARING_MIMICRY,
     @WamEnumConstant(55) CHANNEL_STATUS_VIEWER_TOP_BAR,
     @WamEnumConstant(56) MEDIA_BROWSER_STATUS_MENU,
-    @WamEnumConstant(57) ARCHIVE_STATUS_VIEWER
+    @WamEnumConstant(57) ARCHIVE_STATUS_VIEWER,
+    @WamEnumConstant(58) ME_TAB
 }

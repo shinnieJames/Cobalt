@@ -44,5 +44,6 @@ public enum StatusRowSection {
     @WamEnumConstant(36) CHANNEL_INFO_SCREEN,
     @WamEnumConstant(37) CHANNEL_THREAD_SCREEN,
     @WamEnumConstant(38) ARCHIVE_STATUS_VIEWER,
-    @WamEnumConstant(39) ARCHIVE_STORAGE
+    @WamEnumConstant(39) ARCHIVE_STORAGE,
+    @WamEnumConstant(40) ME_TAB
 }

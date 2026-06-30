@@ -12,16 +12,16 @@ import com.github.auties00.cobalt.wam.type.StatusTypeMedia;
 import com.github.auties00.cobalt.wam.type.WebFlowType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebLwiEntryTapWamEvent")
 @WamEvent(id = 2770)
 public interface LwiEntryTapEvent extends WamEventSpec {
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt activeItemsCount();
+    OptionalLong activeItemsCount();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt archivedItemsCount();
+    OptionalLong archivedItemsCount();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> businessToolsSessionId();
@@ -30,7 +30,7 @@ public interface LwiEntryTapEvent extends WamEventSpec {
     Optional<String> catalogSessionId();
 
     @WamProperty(index = 11, type = WamType.INTEGER)
-    OptionalInt itemsCount();
+    OptionalLong itemsCount();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<LwiEntryPoint> lwiEntryPoint();
@@ -54,7 +54,7 @@ public interface LwiEntryTapEvent extends WamEventSpec {
     Optional<String> statusId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt statusSessionId();
+    OptionalLong statusSessionId();
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<StatusTypeMedia> statusTypeMedia();

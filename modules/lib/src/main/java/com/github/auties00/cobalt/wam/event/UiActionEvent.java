@@ -15,7 +15,7 @@ import com.github.auties00.cobalt.wam.type.UiActionType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebUiActionWamEvent")
 @WamEvent(id = 472, betaWeight = 100, releaseWeight = 5000)
@@ -27,7 +27,7 @@ public interface UiActionEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 22, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 26, type = WamType.STRING)
     Optional<String> appSessionId();
@@ -42,7 +42,7 @@ public interface UiActionEvent extends WamEventSpec {
     Optional<Instant> dbBgThreadWritesDurationT();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt dbMainThreadCount();
+    OptionalLong dbMainThreadCount();
 
     @WamProperty(index = 19, type = WamType.TIMER)
     Optional<Instant> dbMainThreadReadsDurationT();
@@ -51,13 +51,13 @@ public interface UiActionEvent extends WamEventSpec {
     Optional<Instant> dbMainThreadWritesDurationT();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt dbReadsCount();
+    OptionalLong dbReadsCount();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt dbWritesCount();
+    OptionalLong dbWritesCount();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt deviceCount();
+    OptionalLong deviceCount();
 
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> isLid();
@@ -69,7 +69,7 @@ public interface UiActionEvent extends WamEventSpec {
     Optional<AddressingMode> localAddressingMode();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt participantCount();
+    OptionalLong participantCount();
 
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> peripheralConnected();
@@ -78,7 +78,7 @@ public interface UiActionEvent extends WamEventSpec {
     Optional<SizeBucket> sizeBucket();
 
     @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
+    OptionalLong traceIdInt();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<UiActionChatType> uiActionChatType();

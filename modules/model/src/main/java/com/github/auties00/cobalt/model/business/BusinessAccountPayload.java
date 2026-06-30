@@ -153,7 +153,7 @@ public final class BusinessAccountPayload {
          * Meta-hosted Cloud API deployments.
          */
         @ProtobufProperty(index = 4, type = ProtobufType.ENUM)
-        HostStorageType hostStorage;
+        BusinessIdentityHostStorageType hostStorage;
 
         /**
          * Tier of the WhatsApp Business product this account belongs to,
@@ -174,7 +174,7 @@ public final class BusinessAccountPayload {
          * @param hostStorage        the hosting infrastructure type, or {@code null}
          * @param accountType        the business account tier, or {@code null}
          */
-        AccountLinkInfo(Long facebookBusinessId, String phoneNumber, Instant issueTime, HostStorageType hostStorage, AccountType accountType) {
+        AccountLinkInfo(Long facebookBusinessId, String phoneNumber, Instant issueTime, BusinessIdentityHostStorageType hostStorage, AccountType accountType) {
             this.facebookBusinessId = facebookBusinessId;
             this.phoneNumber = phoneNumber;
             this.issueTime = issueTime;
@@ -220,10 +220,10 @@ public final class BusinessAccountPayload {
          * Returns the type of infrastructure that hosts the business's data
          * and processes its messages.
          *
-         * @return an {@code Optional} containing the {@link HostStorageType},
+         * @return an {@code Optional} containing the {@link BusinessIdentityHostStorageType},
          *         or empty when the wire omitted the field
          */
-        public Optional<HostStorageType> hostStorage() {
+        public Optional<BusinessIdentityHostStorageType> hostStorage() {
             return Optional.ofNullable(hostStorage);
         }
 
@@ -268,9 +268,9 @@ public final class BusinessAccountPayload {
         /**
          * Sets the hosting infrastructure type for this account link.
          *
-         * @param hostStorage the {@link HostStorageType} to set, or {@code null} to clear
+         * @param hostStorage the {@link BusinessIdentityHostStorageType} to set, or {@code null} to clear
          */
-        public void setHostStorage(HostStorageType hostStorage) {
+        public void setHostStorage(BusinessIdentityHostStorageType hostStorage) {
             this.hostStorage = hostStorage;
         }
 
@@ -324,50 +324,5 @@ public final class BusinessAccountPayload {
             }
         }
 
-        /**
-         * Enumerates the kinds of infrastructure that can host a WhatsApp
-         * Business account's data and message-processing pipeline. The
-         * choice of host directly affects the messaging privacy guarantees
-         * the business can advertise to its customers.
-         */
-        @ProtobufEnum(name = "BizAccountLinkInfo.HostStorageType")
-        public enum HostStorageType {
-            /**
-             * Data is hosted and processed on the business's own
-             * infrastructure (on-premises deployment of the WhatsApp Business
-             * API).
-             */
-            ON_PREMISE(0),
-
-            /**
-             * Data is hosted and processed on Meta-managed infrastructure
-             * (Cloud API deployment).
-             */
-            FACEBOOK(1);
-
-            /**
-             * Protobuf wire index for this enum constant.
-             */
-            final int index;
-
-            /**
-             * Constructs a {@code HostStorageType} enum constant bound to
-             * the given protobuf wire index.
-             *
-             * @param index the protobuf wire index
-             */
-            HostStorageType(@ProtobufEnumIndex int index) {
-                this.index = index;
-            }
-
-            /**
-             * Returns the protobuf wire index of this enum constant.
-             *
-             * @return the protobuf index
-             */
-            public int index() {
-                return this.index;
-            }
-        }
     }
 }

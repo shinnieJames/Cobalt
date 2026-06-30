@@ -18,7 +18,7 @@ import com.github.auties00.cobalt.wam.type.PromptTriggerPoint;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebBotJourneyWamEvent")
 @WamEvent(id = 4630)
@@ -81,7 +81,7 @@ public interface BotJourneyEvent extends WamEventSpec {
     Optional<String> conversationStarterCategory();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
-    OptionalInt conversationStarterIndex();
+    OptionalLong conversationStarterIndex();
 
     @WamProperty(index = 46, type = WamType.STRING)
     Optional<String> conversationStarterLabel();
@@ -99,7 +99,7 @@ public interface BotJourneyEvent extends WamEventSpec {
     Optional<DiscoveryOriginType> discoveryOrigin();
 
     @WamProperty(index = 47, type = WamType.INTEGER)
-    OptionalInt eventTsMs();
+    OptionalLong eventTsMs();
 
     @WamProperty(index = 41, type = WamType.BOOLEAN)
     Optional<Boolean> hasContinueChatting();
@@ -114,7 +114,7 @@ public interface BotJourneyEvent extends WamEventSpec {
     Optional<InlineTosStatus> inlineTosStatus();
 
     @WamProperty(index = 39, type = WamType.INTEGER)
-    OptionalInt interestCategoriesSelected();
+    OptionalLong interestCategoriesSelected();
 
     @WamProperty(index = 45, type = WamType.BOOLEAN)
     Optional<Boolean> isCache();
@@ -129,7 +129,7 @@ public interface BotJourneyEvent extends WamEventSpec {
     Optional<Boolean> isUserCreatedAgent();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt metricCount();
+    OptionalLong metricCount();
 
     @WamProperty(index = 50, type = WamType.ENUM)
     Optional<PromptTriggerPoint> promptTriggerPoint();
@@ -138,17 +138,17 @@ public interface BotJourneyEvent extends WamEventSpec {
     Optional<String> rawBotEntryPoint();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
-    OptionalInt scrollDepth();
+    OptionalLong scrollDepth();
 
     @WamProperty(index = 43, type = WamType.INTEGER)
-    OptionalInt scrollFetchLatency();
+    OptionalLong scrollFetchLatency();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<TsSurface> uiSurface();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt xmaReelIndex();
+    OptionalLong xmaReelIndex();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt xmaReelMaxIndex();
+    OptionalLong xmaReelMaxIndex();
 }

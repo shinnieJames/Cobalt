@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.wam.type.PlaybackStateType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMediaStreamPlaybackWamEvent")
 @WamEvent(id = 1584)
@@ -28,7 +28,7 @@ public interface MediaStreamPlaybackEvent extends WamEventSpec {
     Optional<Boolean> didPlay();
 
     @WamProperty(index = 12, type = WamType.INTEGER)
-    OptionalInt forcedPlayCount();
+    OptionalLong forcedPlayCount();
 
     @WamProperty(index = 7, type = WamType.TIMER)
     Optional<Instant> initialBufferingT();
@@ -46,10 +46,10 @@ public interface MediaStreamPlaybackEvent extends WamEventSpec {
     Optional<Instant> overallT();
 
     @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt playbackCount();
+    OptionalLong playbackCount();
 
     @WamProperty(index = 17, type = WamType.INTEGER)
-    OptionalInt playbackError();
+    OptionalLong playbackError();
 
     @WamProperty(index = 16, type = WamType.ENUM)
     Optional<PlaybackOriginType> playbackOrigin();
@@ -58,17 +58,17 @@ public interface MediaStreamPlaybackEvent extends WamEventSpec {
     Optional<PlaybackStateType> playbackState();
 
     @WamProperty(index = 13, type = WamType.INTEGER)
-    OptionalInt seekCount();
+    OptionalLong seekCount();
 
     @WamProperty(index = 18, type = WamType.STRING)
     Optional<String> statusId();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt totalRebufferingCount();
+    OptionalLong totalRebufferingCount();
 
     @WamProperty(index = 8, type = WamType.TIMER)
     Optional<Instant> totalRebufferingT();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt videoDuration();
+    OptionalLong videoDuration();
 }

@@ -1,165 +1,174 @@
 package com.github.auties00.cobalt.model.privacy;
 
+import com.github.auties00.cobalt.model.jid.Jid;
 
-import it.auties.protobuf.annotation.ProtobufEnum;
-import it.auties.protobuf.annotation.ProtobufEnumIndex;
-
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.SequencedCollection;
+import java.util.stream.Collectors;
 
 /**
- * Enumerates the privacy settings that a WhatsApp user can configure on their account.
+ * Identifies a privacy setting that a WhatsApp user can configure on their account.
  *
- * <p>Each constant identifies a distinct piece of information or behaviour that can be
- * restricted on a per-audience basis. Not every setting supports every possible audience:
- * {@link #supportedValues()} returns the set of {@link PrivacySettingValue} constants that
- * are accepted by the server for a given setting, and {@link #isSupported(PrivacySettingValue)}
- * can be used to validate a value before sending it.
+ * <p>Each constant is parameterized over the {@link PrivacySettingValue} sub-interface that
+ * enumerates the values the setting accepts, so the type system pairs a setting with its
+ * legal audiences: {@link #LAST_SEEN} is a {@code PrivacySettingType<LastSeenPrivacyValue>}
+ * and can therefore only ever be paired with a {@link LastSeenPrivacyValue}. The nine
+ * constants are exactly the categories the relay's {@code <iq xmlns="privacy">} surface
+ * recognises.
  *
- * <p>The textual identifier returned by {@link #data()} matches the wire format used by the
- * WhatsApp servers and can be looked up with {@link #of(String)}.
+ * <p>The {@link #wire()} token matches the server's {@code <category name=...>} attribute
+ * and round-trips through {@link #of(String)}; {@link #parse(String, List)} resolves a
+ * server value token (and its refinement list) into the concrete {@link PrivacySettingValue}
+ * for this setting.
+ *
+ * @param <V>  the {@link PrivacySettingValue} sub-interface accepted by this setting
+ * @param wire the server-side token used in the {@code <category name=...>} attribute
  */
-@ProtobufEnum
-public enum PrivacySettingType {
+public record PrivacySettingType<V extends PrivacySettingValue>(String wire) {
     /**
      * Controls who can see the timestamp of the last time the user was online.
-     *
-     * <p>Supports the {@link PrivacySettingValue#EVERYONE}, {@link PrivacySettingValue#CONTACTS},
-     * {@link PrivacySettingValue#CONTACTS_EXCEPT} and {@link PrivacySettingValue#NOBODY}
-     * audiences.
      */
-    LAST_SEEN(0, "last", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.NOBODY)),
+    public static final PrivacySettingType<LastSeenPrivacyValue> LAST_SEEN =
+            new PrivacySettingType<>("last");
+
     /**
      * Controls who can see whether the user is currently online.
-     *
-     * <p>Supports only {@link PrivacySettingValue#EVERYONE} and
-     * {@link PrivacySettingValue#MATCH_LAST_SEEN}. The latter keeps the online indicator
-     * consistent with the {@link #LAST_SEEN} setting.
      */
-    ONLINE(1, "online", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.MATCH_LAST_SEEN)),
+    public static final PrivacySettingType<OnlinePrivacyValue> ONLINE =
+            new PrivacySettingType<>("online");
+
     /**
      * Controls who can see the user's profile picture.
-     *
-     * <p>Supports the {@link PrivacySettingValue#EVERYONE}, {@link PrivacySettingValue#CONTACTS},
-     * {@link PrivacySettingValue#CONTACTS_EXCEPT} and {@link PrivacySettingValue#NOBODY}
-     * audiences.
      */
-    PROFILE_PIC(2, "profile", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.NOBODY)),
+    public static final PrivacySettingType<ProfilePicturePrivacyValue> PROFILE_PICTURE =
+            new PrivacySettingType<>("profile");
+
     /**
-     * Controls who can see the user's status updates.
+     * Controls who can see the user's about text.
      *
-     * <p>Supports {@link PrivacySettingValue#CONTACTS}, {@link PrivacySettingValue#CONTACTS_EXCEPT},
-     * {@link PrivacySettingValue#CONTACTS_ONLY} and {@link PrivacySettingValue#NOBODY}. Unlike
-     * other settings, status updates can be restricted to an explicit allowlist of contacts
-     * rather than only a blocklist.
+     * <p>This is the about-text visibility, not the Status story feed audience, which is a
+     * separate setting carried by {@link StatusPrivacySetting}.
      */
-    STATUS(3, "status", Set.of(PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.CONTACTS_ONLY, PrivacySettingValue.NOBODY)),
-    /**
-     * Controls who can add the user to new group chats without an explicit invitation.
-     *
-     * <p>Supports {@link PrivacySettingValue#EVERYONE}, {@link PrivacySettingValue#CONTACTS}
-     * and {@link PrivacySettingValue#CONTACTS_EXCEPT}. Users who are not in the allowed
-     * audience must send an invitation link instead of adding the user directly.
-     */
-    ADD_ME_TO_GROUPS(4, "groupadd", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT)),
+    public static final PrivacySettingType<AboutPrivacyValue> ABOUT =
+            new PrivacySettingType<>("status");
+
     /**
      * Controls whether read receipts are exchanged for one-to-one chats.
-     *
-     * <p>Supports only {@link PrivacySettingValue#EVERYONE} and
-     * {@link PrivacySettingValue#NOBODY}. When disabled the user neither sends nor receives
-     * read receipts in private conversations, while read receipts in group chats are always
-     * exchanged regardless of this setting.
      */
-    READ_RECEIPTS(5, "readreceipts", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.NOBODY)),
+    public static final PrivacySettingType<ReadReceiptsPrivacyValue> READ_RECEIPTS =
+            new PrivacySettingType<>("readreceipts");
+
+    /**
+     * Controls who can add the user to new group chats without an invitation.
+     */
+    public static final PrivacySettingType<GroupAddPrivacyValue> GROUP_ADD =
+            new PrivacySettingType<>("groupadd");
+
     /**
      * Controls who can add the user to ongoing voice or video calls.
-     *
-     * <p>Only {@link PrivacySettingValue#EVERYONE} is currently accepted for this setting.
      */
-    CALL_ADD(6, "calladd", Set.of(PrivacySettingValue.EVERYONE));
+    public static final PrivacySettingType<CallAddPrivacyValue> CALL_ADD =
+            new PrivacySettingType<>("calladd");
 
     /**
-     * The numeric identifier used for protobuf serialization.
-     *
-     * <p>Matches the index declared on the wire format of privacy related messages.
+     * Controls who can message the user without a prior conversation.
      */
-    final int index;
+    public static final PrivacySettingType<MessagesPrivacyValue> MESSAGES =
+            new PrivacySettingType<>("messages");
 
     /**
-     * The textual identifier used by the WhatsApp servers to refer to this setting.
-     *
-     * <p>Examples include {@code "last"} for {@link #LAST_SEEN} and {@code "groupadd"} for
-     * {@link #ADD_ME_TO_GROUPS}. This value is returned by {@link #data()} and accepted by
-     * {@link #of(String)}.
+     * Controls WhatsApp's Defense Mode, which quarantines unsolicited messages from senders
+     * that are not in the user's address book.
      */
-    private final String data;
+    public static final PrivacySettingType<DefenseModePrivacyValue> DEFENSE_MODE =
+            new PrivacySettingType<>("defense");
 
     /**
-     * The set of audiences that are accepted by the server for this setting.
-     *
-     * <p>Returned as an unmodifiable view by {@link #supportedValues()}.
+     * The immutable registry of every known setting, used by {@link #of(String)} and
+     * {@link #values()}.
      */
-    private final Set<PrivacySettingValue> values;
+    private static final List<PrivacySettingType<?>> VALUES = List.of(
+            LAST_SEEN, ONLINE, PROFILE_PICTURE, ABOUT, READ_RECEIPTS, GROUP_ADD, CALL_ADD, MESSAGES, DEFENSE_MODE);
 
     /**
-     * Creates a new privacy setting type constant.
-     *
-     * @param index  the protobuf index assigned to the constant
-     * @param data   the textual identifier used by the server
-     * @param values the set of audiences accepted for the constant
+     * The {@link #VALUES} registry indexed by {@link #wire()} token for constant-time
+     * {@link #of(String)} resolution.
      */
-    PrivacySettingType(@ProtobufEnumIndex int index, String data, Set<PrivacySettingValue> values) {
-        this.index = index;
-        this.data = data;
-        this.values = values;
+    private static final Map<String, PrivacySettingType<?>> BY_WIRE = VALUES.stream()
+            .collect(Collectors.toUnmodifiableMap(PrivacySettingType::wire, value -> value));
+
+    /**
+     * Returns the immutable list of every known privacy setting.
+     *
+     * @return the registry of settings, never {@code null}
+     */
+    public static SequencedCollection<PrivacySettingType<?>> values() {
+        return VALUES;
     }
 
     /**
-     * Resolves a privacy setting type from the textual identifier used by the server.
+     * Resolves a setting from the wire token used in a {@code <category name=...>} attribute.
      *
-     * <p>The identifier is compared case-sensitively against the value returned by
-     * {@link #data()} for each constant.
-     *
-     * @param id the identifier to resolve, for example {@code "last"} or {@code "groupadd"}
-     * @return an {@link Optional} containing the matching constant, or empty if no constant
-     *         has the given identifier
+     * @param wire the wire token to resolve, for example {@code "last"} or {@code "defense"}
+     * @return the matching setting, or empty if no setting uses the given token
      */
-    public static Optional<PrivacySettingType> of(String id) {
-        return Arrays.stream(values())
-                .filter(entry -> Objects.equals(entry.data(), id))
-                .findFirst();
+    public static Optional<PrivacySettingType<?>> of(String wire) {
+        return Optional.ofNullable(BY_WIRE.get(wire));
     }
 
     /**
-     * Returns the set of audiences that can be configured for this setting.
+     * Resolves a value token (and its refinement list) into the concrete value for this
+     * setting.
      *
-     * <p>The returned set is unmodifiable and can be used to populate a UI or to validate a
-     * user selection before calling a setter on the WhatsApp API.
-     *
-     * @return the unmodifiable set of supported {@link PrivacySettingValue} constants
+     * @param token    the server value token, for example {@code "all"} or {@code "contact_blacklist"}
+     * @param excluded the refinement list for the contacts-except value, otherwise ignored
+     * @return the resolved value, or empty if the token is not accepted by this setting
      */
-    public Set<PrivacySettingValue> supportedValues() {
-        return Collections.unmodifiableSet(values);
+    public Optional<? extends PrivacySettingValue> parse(String token, List<Jid> excluded) {
+        return switch (wire) {
+            case "last" -> LastSeenPrivacyValue.of(token, excluded);
+            case "online" -> OnlinePrivacyValue.of(token, excluded);
+            case "profile" -> ProfilePicturePrivacyValue.of(token, excluded);
+            case "status" -> AboutPrivacyValue.of(token, excluded);
+            case "readreceipts" -> ReadReceiptsPrivacyValue.of(token, excluded);
+            case "groupadd" -> GroupAddPrivacyValue.of(token, excluded);
+            case "calladd" -> CallAddPrivacyValue.of(token, excluded);
+            case "messages" -> MessagesPrivacyValue.of(token, excluded);
+            case "defense" -> DefenseModePrivacyValue.of(token, excluded);
+            default -> Optional.empty();
+        };
     }
 
     /**
-     * Returns whether the given audience can be configured for this setting.
+     * Compares this setting to another for equality by {@link #wire()} token.
      *
-     * @param value the audience to test
-     * @return {@code true} if the server accepts {@code value} for this setting,
-     *         {@code false} otherwise
+     * @param o the object to compare against
+     * @return {@code true} if the given object is a setting with the same wire token
      */
-    public boolean isSupported(PrivacySettingValue value) {
-        return values.contains(value);
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof PrivacySettingType<?>(var thatWire) && wire.equals(thatWire);
     }
 
     /**
-     * Returns the textual identifier used by the WhatsApp servers to refer to this setting.
+     * Returns a hash code consistent with {@link #equals(Object)}, derived from the wire token.
      *
-     * <p>This is the inverse of {@link #of(String)}.
-     *
-     * @return the server side identifier, never {@code null}
+     * @return the wire token hash code
      */
-    public String data() {
-        return this.data;
+    @Override
+    public int hashCode() {
+        return wire.hashCode();
+    }
+
+    /**
+     * Returns a concise representation naming the wire token.
+     *
+     * @return a string representation of this setting
+     */
+    @Override
+    public String toString() {
+        return "PrivacySettingType[" + wire + "]";
     }
 }

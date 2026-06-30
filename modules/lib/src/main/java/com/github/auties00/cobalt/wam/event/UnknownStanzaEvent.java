@@ -8,13 +8,13 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebUnknownStanzaWamEvent")
 @WamEvent(id = 3448)
 public interface UnknownStanzaEvent extends WamEventSpec {
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt unknownStanzaDropReason();
+    OptionalLong unknownStanzaDropReason();
 
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> unknownStanzaTag();

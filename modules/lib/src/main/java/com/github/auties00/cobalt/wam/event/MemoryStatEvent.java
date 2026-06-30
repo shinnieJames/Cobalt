@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMemoryStatWamEvent")
 @WamEvent(id = 1336)
@@ -18,7 +18,7 @@ public interface MemoryStatEvent extends WamEventSpec {
     Optional<String> appContext();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt appContextBitfield();
+    OptionalLong appContextBitfield();
 
     @WamProperty(index = 7, type = WamType.BOOLEAN)
     Optional<Boolean> hasVerifiedNumber();

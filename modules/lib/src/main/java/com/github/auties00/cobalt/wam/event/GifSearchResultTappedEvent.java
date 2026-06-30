@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.GifSearchProvider;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGifSearchResultTappedWamEvent")
 @WamEvent(id = 1122)
@@ -18,5 +18,5 @@ public interface GifSearchResultTappedEvent extends WamEventSpec {
     Optional<GifSearchProvider> gifSearchProvider();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt rank();
+    OptionalLong rank();
 }

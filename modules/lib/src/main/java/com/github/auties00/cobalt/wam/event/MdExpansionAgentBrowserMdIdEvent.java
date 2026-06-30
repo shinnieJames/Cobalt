@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.MultideviceActionType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMdExpansionAgentBrowserMdIdWamEvent")
 @WamEvent(id = 3390)
@@ -21,7 +21,7 @@ public interface MdExpansionAgentBrowserMdIdEvent extends WamEventSpec {
     Optional<String> browserId();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt companionMdId();
+    OptionalLong companionMdId();
 
     @WamProperty(index = 6, type = WamType.BOOLEAN)
     Optional<Boolean> isCustomAgentName();
@@ -30,13 +30,13 @@ public interface MdExpansionAgentBrowserMdIdEvent extends WamEventSpec {
     Optional<Boolean> isNewAgent();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt loginTimestamp();
+    OptionalLong loginTimestamp();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt logoutTimestamp();
+    OptionalLong logoutTimestamp();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt mdLinkedCount();
+    OptionalLong mdLinkedCount();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<MultideviceActionType> multideviceAction();

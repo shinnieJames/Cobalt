@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.wam.type.DeepLinkType;
 import com.github.auties00.cobalt.wam.type.OwnerType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebDeepLinkOpenWamEvent")
 @WamEvent(id = 2136)
@@ -35,5 +35,5 @@ public interface DeepLinkOpenEvent extends WamEventSpec {
     Optional<OwnerType> linkOwnerType();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt sourceSurface();
+    OptionalLong sourceSurface();
 }

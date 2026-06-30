@@ -9,13 +9,13 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.WebcMediaOperationCode;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebWebcMediaErrorUnknownDetailsWamEvent")
 @WamEvent(id = 2352)
 public interface WebcMediaErrorUnknownDetailsEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt mediaId();
+    OptionalLong mediaId();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> webcMediaErrorMessage();

@@ -81,7 +81,7 @@ public final class BusinessIdentityInfo {
      * determines the messaging-privacy level advertised to chat peers.
      */
     @ProtobufProperty(index = 5, type = ProtobufType.ENUM)
-    HostStorageType hostStorage;
+    BusinessIdentityHostStorageType hostStorage;
 
     /**
      * Entity that actually reads and writes messages on behalf of the
@@ -125,7 +125,7 @@ public final class BusinessIdentityInfo {
      * @param privacyModeTimestamp    the privacy-mode change timestamp, or {@code null}
      * @param featureControls         the feature-controls bitmask, or {@code null}
      */
-    BusinessIdentityInfo(VerificationLevel verificationLevel, BusinessVerifiedNameCertificate verifiedNameCertificate, Boolean signed, Boolean revoked, HostStorageType hostStorage, ActualActorsType actualActors, Instant privacyModeTimestamp, Long featureControls) {
+    BusinessIdentityInfo(VerificationLevel verificationLevel, BusinessVerifiedNameCertificate verifiedNameCertificate, Boolean signed, Boolean revoked, BusinessIdentityHostStorageType hostStorage, ActualActorsType actualActors, Instant privacyModeTimestamp, Long featureControls) {
         this.verificationLevel = verificationLevel;
         this.verifiedNameCertificate = verifiedNameCertificate;
         this.signed = signed;
@@ -181,10 +181,10 @@ public final class BusinessIdentityInfo {
      * Returns the type of infrastructure that hosts the business's data
      * and message processing.
      *
-     * @return an {@code Optional} containing the {@link HostStorageType},
+     * @return an {@code Optional} containing the {@link BusinessIdentityHostStorageType},
      *         or empty when the field is absent
      */
-    public Optional<HostStorageType> hostStorage() {
+    public Optional<BusinessIdentityHostStorageType> hostStorage() {
         return Optional.ofNullable(hostStorage);
     }
 
@@ -260,9 +260,9 @@ public final class BusinessIdentityInfo {
     /**
      * Sets the hosting infrastructure type for this identity.
      *
-     * @param hostStorage the {@link HostStorageType} to set, or {@code null} to clear
+     * @param hostStorage the {@link BusinessIdentityHostStorageType} to set, or {@code null} to clear
      */
-    public void setHostStorage(HostStorageType hostStorage) {
+    public void setHostStorage(BusinessIdentityHostStorageType hostStorage) {
         this.hostStorage = hostStorage;
     }
 
@@ -326,51 +326,6 @@ public final class BusinessIdentityInfo {
          * @param index the protobuf wire index
          */
         ActualActorsType(@ProtobufEnumIndex int index) {
-            this.index = index;
-        }
-
-        /**
-         * Returns the protobuf wire index of this enum constant.
-         *
-         * @return the protobuf index
-         */
-        public int index() {
-            return this.index;
-        }
-    }
-
-    /**
-     * Identifies where a business's data is hosted and processed within a
-     * {@link BusinessIdentityInfo} privacy-mode triplet, distinguishing
-     * on-premises deployments from Meta-managed Cloud API deployments.
-     */
-    @ProtobufEnum(name = "BizIdentityInfo.HostStorageType")
-    public enum HostStorageType {
-        /**
-         * Data is hosted and processed on the business's own
-         * infrastructure (on-premises deployment of the WhatsApp Business
-         * API).
-         */
-        ON_PREMISE(0),
-
-        /**
-         * Data is hosted and processed on Meta-managed infrastructure
-         * (Cloud API deployment).
-         */
-        FACEBOOK(1);
-
-        /**
-         * Protobuf wire index for this enum constant.
-         */
-        final int index;
-
-        /**
-         * Constructs a {@code HostStorageType} enum constant bound to the
-         * given protobuf wire index.
-         *
-         * @param index the protobuf wire index
-         */
-        HostStorageType(@ProtobufEnumIndex int index) {
             this.index = index;
         }
 

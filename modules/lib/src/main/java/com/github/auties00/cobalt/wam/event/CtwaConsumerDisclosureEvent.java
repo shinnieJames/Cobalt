@@ -13,13 +13,13 @@ import com.github.auties00.cobalt.wam.type.DisclosureEntryPointType;
 import com.github.auties00.cobalt.wam.type.DisclosureType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebCtwaConsumerDisclosureWamEvent")
 @WamEvent(id = 4406, channel = WamChannel.PRIVATE, privateStatsId = 0)
 public interface CtwaConsumerDisclosureEvent extends WamEventSpec {
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt ctwaConsumerDisclosureVersion();
+    OptionalLong ctwaConsumerDisclosureVersion();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<DisclosureAction> disclosureAction();

@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.DeleteActionType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMessageDeleteActionsWamEvent")
 @WamEvent(id = 3626)
@@ -25,7 +25,7 @@ public interface MessageDeleteActionsEvent extends WamEventSpec {
     Optional<MediaType> mediaType();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt messagesDeleted();
+    OptionalLong messagesDeleted();
 
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> threadId();

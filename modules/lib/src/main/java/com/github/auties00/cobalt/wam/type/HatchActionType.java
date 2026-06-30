@@ -9,5 +9,9 @@ import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 @WamEnum
 public enum HatchActionType {
     @WamEnumConstant(1) REQUEST_WELCOME_MSG_SENT,
-    @WamEnumConstant(2) TAP_UNLINK_BUTTON
+    @WamEnumConstant(2) TAP_UNLINK_BUTTON,
+    @WamEnumConstant(3) UNLINK_SUCCESS,
+    @WamEnumConstant(4) WA_READ_WRITE_ACCESS_IMPRESSION,
+    @WamEnumConstant(5) TAP_WA_READ_WRITE_ACCESS,
+    @WamEnumConstant(6) WA_READ_WRITE_ACCESS_LINK_SUCCESS
 }

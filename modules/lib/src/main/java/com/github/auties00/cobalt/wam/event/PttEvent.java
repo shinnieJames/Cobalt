@@ -8,11 +8,12 @@ import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.PttResultType;
 import com.github.auties00.cobalt.wam.type.PttSourceType;
+import com.github.auties00.cobalt.wam.type.PttWaveformResult;
 
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebPttWamEvent")
 @WamEvent(id = 458)
@@ -33,7 +34,7 @@ public interface PttEvent extends WamEventSpec {
     Optional<Instant> pttAuddevRecorderStopT();
 
     @WamProperty(index = 16, type = WamType.INTEGER)
-    OptionalInt pttAudioEngine();
+    OptionalLong pttAudioEngine();
 
     @WamProperty(index = 11, type = WamType.FLOAT)
     OptionalDouble pttAvgNoiseLoudness();
@@ -48,13 +49,16 @@ public interface PttEvent extends WamEventSpec {
     OptionalDouble pttAvgSpeechLoudnessReduction();
 
     @WamProperty(index = 7, type = WamType.INTEGER)
-    OptionalInt pttDraftPlayCnt();
+    OptionalLong pttDraftPlayCnt();
 
     @WamProperty(index = 8, type = WamType.INTEGER)
-    OptionalInt pttDraftSeekCnt();
+    OptionalLong pttDraftSeekCnt();
 
     @WamProperty(index = 5, type = WamType.TIMER)
     Optional<Instant> pttDuration();
+
+    @WamProperty(index = 50, type = WamType.FLOAT)
+    OptionalDouble pttIntensityAggregateValue();
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> pttLock();
@@ -96,7 +100,7 @@ public interface PttEvent extends WamEventSpec {
     OptionalDouble pttOpusEncodeBucketLt8msPct();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt pttPauseCnt();
+    OptionalLong pttPauseCnt();
 
     @WamProperty(index = 21, type = WamType.FLOAT)
     OptionalDouble pttRecorderCbBucketGte20msPct();
@@ -132,5 +136,8 @@ public interface PttEvent extends WamEventSpec {
     Optional<Boolean> pttStop();
 
     @WamProperty(index = 10, type = WamType.INTEGER)
-    OptionalInt pttStopTapCnt();
+    OptionalLong pttStopTapCnt();
+
+    @WamProperty(index = 51, type = WamType.ENUM)
+    Optional<PttWaveformResult> pttWaveformResult();
 }

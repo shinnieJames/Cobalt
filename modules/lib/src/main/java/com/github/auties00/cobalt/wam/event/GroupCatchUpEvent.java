@@ -7,11 +7,11 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebGroupCatchUpWamEvent")
 @WamEvent(id = 3058)
 public interface GroupCatchUpEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt mentionsCountPendingPercentage();
+    OptionalLong mentionsCountPendingPercentage();
 }

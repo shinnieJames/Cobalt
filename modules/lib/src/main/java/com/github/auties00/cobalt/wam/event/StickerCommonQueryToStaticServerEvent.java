@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.wam.type.QueryType;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStickerCommonQueryToStaticServerWamEvent")
 @WamEvent(id = 2740)
 public interface StickerCommonQueryToStaticServerEvent extends WamEventSpec {
     @WamProperty(index = 2, type = WamType.INTEGER)
-    OptionalInt httpResponseCode();
+    OptionalLong httpResponseCode();
 
     @WamProperty(index = 3, type = WamType.STRING)
     Optional<String> params();

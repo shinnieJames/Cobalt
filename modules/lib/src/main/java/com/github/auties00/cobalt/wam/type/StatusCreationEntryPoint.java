@@ -64,5 +64,6 @@ public enum StatusCreationEntryPoint {
     @WamEnumConstant(55) CLOSE_SHARING_MIMICRY,
     @WamEnumConstant(56) CHANNEL_THREAD_SCREEN,
     @WamEnumConstant(57) MEDIA_BROWSER_STATUS_MENU,
-    @WamEnumConstant(58) ARCHIVE_STATUS_VIEWER
+    @WamEnumConstant(58) ARCHIVE_STATUS_VIEWER,
+    @WamEnumConstant(59) ME_TAB
 }

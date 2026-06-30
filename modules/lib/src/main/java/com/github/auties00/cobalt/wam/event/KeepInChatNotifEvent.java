@@ -7,20 +7,20 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebKeepInChatNotifWamEvent")
 @WamEvent(id = 3484)
 public interface KeepInChatNotifEvent extends WamEventSpec {
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt kicGroupNotificationTaps();
+    OptionalLong kicGroupNotificationTaps();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
-    OptionalInt kicGroupNotifications();
+    OptionalLong kicGroupNotifications();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt kicNotificationTaps();
+    OptionalLong kicNotificationTaps();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt kicNotifications();
+    OptionalLong kicNotifications();
 }

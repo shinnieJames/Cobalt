@@ -12,13 +12,13 @@ import com.github.auties00.cobalt.wam.type.MmUserControlsEntryPoint;
 
 import java.time.Instant;
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebMarketingMessageUserControlsJourneyWamEvent")
 @WamEvent(id = 6070, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface MarketingMessageUserControlsJourneyEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.INTEGER)
-    OptionalInt businessPhoneNumber();
+    OptionalLong businessPhoneNumber();
 
     @WamProperty(index = 1, type = WamType.BOOLEAN)
     Optional<Boolean> isSuccess();
@@ -33,10 +33,10 @@ public interface MarketingMessageUserControlsJourneyEvent extends WamEventSpec {
     Optional<String> mmUserControlsErrorType();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
-    OptionalInt mmUserControlsRolloutVariant();
+    OptionalLong mmUserControlsRolloutVariant();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
-    OptionalInt sequenceNumber();
+    OptionalLong sequenceNumber();
 
     @WamProperty(index = 10, type = WamType.TIMER)
     Optional<Instant> stopDuration();

@@ -9,17 +9,17 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.StickerLatencyAction;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebStickerLatencyWamEvent")
 @WamEvent(id = 5026)
 public interface StickerLatencyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt size();
+    OptionalLong size();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<StickerLatencyAction> stickerLatencyAction();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
-    OptionalInt stickerLatencyTtAction();
+    OptionalLong stickerLatencyTtAction();
 }

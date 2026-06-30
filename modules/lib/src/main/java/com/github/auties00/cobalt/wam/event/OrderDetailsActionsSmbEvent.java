@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.wam.type.LastMessageDirection;
 import com.github.auties00.cobalt.wam.type.OrderDetailsCreationAction;
 
 import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 @WhatsAppWebModule(moduleName = "WAWebOrderDetailsActionsSmbWamEvent")
 @WamEvent(id = 3456)
@@ -40,7 +40,7 @@ public interface OrderDetailsActionsSmbEvent extends WamEventSpec {
     Optional<LastMessageDirection> lastMessageDirection();
 
     @WamProperty(index = 15, type = WamType.INTEGER)
-    OptionalInt messageDepth();
+    OptionalLong messageDepth();
 
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> orderDetailEntryPoint();
