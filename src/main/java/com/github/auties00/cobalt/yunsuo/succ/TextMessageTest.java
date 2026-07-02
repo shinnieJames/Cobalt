@@ -16,6 +16,11 @@ public class TextMessageTest {
         System.out.println("Enter the six parts segment: ");
         var scanner = new Scanner(System.in);
         var sixParts = scanner.nextLine().trim();
+        System.out.println("Enter proxy in the format Region|Host|Port|Username|Password|ExpireTime: ");
+        var proxyInfo = scanner.nextLine().trim().split("\\|");
+        if (proxyInfo.length != 6) {
+            throw new IllegalStateException("Unexpected proxy format: " + proxyInfo.length);
+        }
         System.out.println("Select if the account is business or personal:\n(1) Business (2) Personal");
         var business = switch (scanner.nextInt()) {
             case 1 -> true;
@@ -23,8 +28,7 @@ public class TextMessageTest {
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
 
-        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@92.113.231.117:7202");
-//        var proxyUri = URI.create("socks5://3221:3221@s10.sgp6.dns.2jj.net:50488");
+        var proxyUri = URI.create("socks5://%s:%s@%s:%s".formatted(proxyInfo[3], proxyInfo[4], proxyInfo[1], proxyInfo[2]));
         var targetPhone = 60102619686L;
 
         WhatsAppClient whatsapp = WhatsAppClient.builder()
@@ -43,9 +47,9 @@ public class TextMessageTest {
                     System.out.println("Logged in");
                     try {
                         var info = api.sendMessage(Jid.of(targetPhone), "hi");
-                        System.out.println("Image-text card sent successfully: " + info.id());
+                        System.out.println("Text message sent successfully: " + info.id());
                     } catch (Throwable error) {
-                        System.err.println("Failed to send image-text card: " + error.getMessage());
+                        System.err.println("Failed to send Text message: " + error.getMessage());
                         error.printStackTrace();
                     }
                 })
