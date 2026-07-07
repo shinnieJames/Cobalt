@@ -49,6 +49,43 @@ public sealed interface AudioDecoder extends AutoCloseable
     short[] decode(byte[] payload, int frameSamples, boolean fec);
 
     /**
+     * Pairs one decoded frame with its receive-side voice-activity verdict.
+     *
+     * @param pcm         the decoded interleaved PCM, {@code frameSamples * channels} signed 16-bit samples
+     * @param voiceActive whether the decoded packet carried active speech
+     */
+    record DecodedFrame(short[] pcm, boolean voiceActive) {
+    }
+
+    /**
+     * Decodes one codec packet and reports its voice-activity verdict in a single call.
+     *
+     * <p>Pairs the {@link #decode(byte[], int, boolean)} output with the packet's own voice-activity
+     * verdict: a normal decode reads {@link #packetHasVoiceActivity(byte[])}, while a
+     * forward-error-correction reconstruction ({@code fec == true}) carries no packet of its own and reports
+     * inactive. The result is a fresh immutable {@link DecodedFrame}, so the fused call adds no shared
+     * decoder state and keeps the single-writer contract of {@link #decode(byte[], int, boolean)}.
+     *
+     * @implSpec The default implementation invokes {@link #decode(byte[], int, boolean)} then, when
+     * {@code fec} is {@code false}, {@link #packetHasVoiceActivity(byte[])}; an implementation may override to
+     * fuse the two into one native round-trip provided the returned PCM and verdict remain identical to the
+     * two separate calls.
+     *
+     * @param payload      the codec packet bytes; never {@code null}
+     * @param frameSamples the per-channel sample count to produce
+     * @param fec          whether to reconstruct the previous frame from this packet's in-band FEC
+     * @return the decoded PCM paired with its voice-activity verdict
+     * @throws NullPointerException  if {@code payload} is {@code null}
+     * @throws IllegalStateException if the decoder is closed
+     * @throws WhatsAppCallException  if decoding fails
+     */
+    default DecodedFrame decodeWithVoiceActivity(byte[] payload, int frameSamples, boolean fec) {
+        var pcm = decode(payload, frameSamples, fec);
+        var voiceActive = !fec && packetHasVoiceActivity(payload);
+        return new DecodedFrame(pcm, voiceActive);
+    }
+
+    /**
      * Synthesizes one concealment frame with no input packet, the codec's packet-loss concealment.
      *
      * @implSpec Implementations must return exactly {@code frameSamples} times {@link #channels()} samples,

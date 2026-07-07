@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
@@ -350,7 +351,7 @@ class ArchiveChatHandlerTest {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var range = rangeWithLast(1_699_999_900L);
 
-            var pending = new ArchiveChatMutationFactory(new PinChatMutationFactory()).getArchiveChatMutation(ts, true, PEER, range);
+            var pending = new ArchiveChatMutationFactory(new PinChatMutationFactory(TestWamService.create(client))).getArchiveChatMutation(ts, true, PEER, range);
 
             var trusted = pending.mutation();
             assertEquals(SyncdOperation.SET, trusted.operation());
@@ -368,7 +369,7 @@ class ArchiveChatHandlerTest {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var range = rangeWithLast(1_699_999_900L);
 
-            var mutations = new ArchiveChatMutationFactory(new PinChatMutationFactory()).getMutationsForArchive(ts, true, PEER, range);
+            var mutations = new ArchiveChatMutationFactory(new PinChatMutationFactory(TestWamService.create(client))).getMutationsForArchive(ts, true, PEER, range);
 
             assertEquals(2, mutations.size(), "archiving must also queue an unpin mutation");
             var first = mutations.get(0).mutation().value().flatMap(sav -> sav.action()).filter(a -> a instanceof ArchiveChatAction).map(a -> (ArchiveChatAction) a).orElseThrow();
@@ -384,7 +385,7 @@ class ArchiveChatHandlerTest {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var range = rangeWithLast(1_699_999_900L);
 
-            var mutations = new ArchiveChatMutationFactory(new PinChatMutationFactory()).getMutationsForArchive(ts, false, PEER, range);
+            var mutations = new ArchiveChatMutationFactory(new PinChatMutationFactory(TestWamService.create(client))).getMutationsForArchive(ts, false, PEER, range);
             assertEquals(1, mutations.size(), "unarchive only emits the archive mutation");
             var only = mutations.get(0).mutation().value().flatMap(sav -> sav.action()).filter(a -> a instanceof ArchiveChatAction).map(a -> (ArchiveChatAction) a).orElseThrow();
             assertFalse(only.archived());

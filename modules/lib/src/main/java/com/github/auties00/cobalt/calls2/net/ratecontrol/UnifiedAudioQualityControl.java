@@ -322,8 +322,9 @@ public final class UnifiedAudioQualityControl {
         plrEma = plrEma == 0.0 ? plr : (1.0 - config.plrEmaAlpha()) * plrEma + config.plrEmaAlpha() * plr;
         rttEstimator.update(rttMs, config.rttEmaAlpha());
         rttEstimator.updateMin(rttMs, config.rttEmaAlpha());
-        updateRembTrend(rembBps, nowMs);
-        var rttSlope = updateRttSlope(nowMs);
+        var elapsedS = lastUpdateMs >= 0 && nowMs > lastUpdateMs ? (nowMs - lastUpdateMs) / 1000.0 : 0.0;
+        updateRembTrend(rembBps, elapsedS);
+        var rttSlope = updateRttSlope(elapsedS);
         lastUpdateMs = nowMs;
 
         var thresholds = thresholdsFor(state);
@@ -404,18 +405,17 @@ public final class UnifiedAudioQualityControl {
     /**
      * Folds a receiver-estimate sample into its smoothed value and trend slope.
      *
-     * @param rembBps the receiver-estimated-maximum bitrate sample, in bits per second
-     * @param nowMs   the current time in milliseconds
+     * @param rembBps  the receiver-estimated-maximum bitrate sample, in bits per second
+     * @param elapsedS the seconds since the previous update, or {@code 0} when none is available
      */
-    private void updateRembTrend(long rembBps, long nowMs) {
+    private void updateRembTrend(long rembBps, double elapsedS) {
         if (rembEma == 0.0) {
             rembEma = rembBps;
             return;
         }
         var prev = rembEma;
         rembEma = (1.0 - config.rembEmaAlpha()) * rembEma + config.rembEmaAlpha() * rembBps;
-        if (lastUpdateMs >= 0 && nowMs > lastUpdateMs) {
-            var elapsedS = (nowMs - lastUpdateMs) / 1000.0;
+        if (elapsedS > 0.0) {
             var rawSlope = (rembEma - prev) / elapsedS;
             rembSlopeBpsPerS = (1.0 - config.rembEmaAlpha()) * rembSlopeBpsPerS + config.rembEmaAlpha() * rawSlope;
         }
@@ -424,14 +424,13 @@ public final class UnifiedAudioQualityControl {
     /**
      * Computes the round-trip trend slope against the previous smoothed estimate, in ms per second.
      *
-     * @param nowMs the current time in milliseconds
+     * @param elapsedS the seconds since the previous update, or {@code 0} when none is available
      * @return the round-trip slope, or {@code 0} when no elapsed time is available
      */
-    private double updateRttSlope(long nowMs) {
+    private double updateRttSlope(double elapsedS) {
         var currentRtt = (double) rttEstimator.estimate();
         double slope = 0.0;
-        if (lastUpdateMs >= 0 && nowMs > lastUpdateMs) {
-            var elapsedS = (nowMs - lastUpdateMs) / 1000.0;
+        if (elapsedS > 0.0) {
             slope = (currentRtt - lastRttMs) / elapsedS;
         }
         lastRttMs = currentRtt;

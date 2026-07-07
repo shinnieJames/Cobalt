@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
+import com.github.auties00.cobalt.calls2.core.control.PrivacyToken;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
@@ -87,7 +88,7 @@ import java.util.OptionalLong;
  * @param encOptions      the encryption options, or {@code null} when absent
  * @param groupInfo       the raw {@code <group_info>} roster subtree, or {@code null} when absent
  * @param deviceIdentity  the ADV device-identity bytes, or {@code null} when absent
- * @param privacyToken    the one-to-one trusted-contact token bytes, or {@code null} when absent
+ * @param privacyToken    the one-to-one trusted-contact {@link PrivacyToken}, or {@code null} when absent
  * @param relay           the raw {@code <relay>} transport subtree, or {@code null} when absent
  * @param bot             the raw {@code <bot>} descriptor subtree, or {@code null} when absent
  * @param voipSettings    the raw {@code <voip_settings>} parameter-bundle subtrees; never
@@ -102,7 +103,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
                           List<CallCapability> capabilities, List<CallCodecDescriptor> audioCodecs,
                           List<CallCodecDescriptor> videoCodecs, List<CallKeyDistribution> keyDistribution,
                           CallMediaDescriptor media, CallEncOptions encOptions, Stanza groupInfo, byte[] deviceIdentity,
-                          byte[] privacyToken, Stanza relay, Stanza bot, List<Stanza> voipSettings, Stanza callerMetadata)
+                          PrivacyToken privacyToken, Stanza relay, Stanza bot, List<Stanza> voipSettings, Stanza callerMetadata)
         implements CallMessage {
     /**
      * The wire element tag for an offer signal.
@@ -258,7 +259,6 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
         voipSettings = List.copyOf(voipSettings);
         lightweightKey = lightweightKey == null ? null : lightweightKey.clone();
         deviceIdentity = deviceIdentity == null ? null : deviceIdentity.clone();
-        privacyToken = privacyToken == null ? null : privacyToken.clone();
     }
 
     /**
@@ -397,13 +397,14 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
     /**
      * Returns the one-to-one trusted-contact token bytes, if present.
      *
-     * <p>The returned array, when present, is a defensive copy.
+     * <p>The returned array, when present, is a defensive copy extracted from the
+     * {@link PrivacyToken}.
      *
      * @return an {@link Optional} holding a copy of the privacy-token bytes, or empty when absent
      */
     public Optional<byte[]> privacyTokenBytes() {
         return Optional.ofNullable(privacyToken)
-                .map(byte[]::clone);
+                .map(PrivacyToken::value);
     }
 
     /**
@@ -458,18 +459,6 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
     }
 
     /**
-     * Returns the one-to-one trusted-contact token bytes backing this offer.
-     *
-     * <p>This accessor overrides the implicit record accessor to return a defensive copy.
-     *
-     * @return a copy of the privacy-token bytes, or {@code null} when absent
-     */
-    @Override
-    public byte[] privacyToken() {
-        return privacyToken == null ? null : privacyToken.clone();
-    }
-
-    /**
      * {@inheritDoc}
      *
      * @return {@link Calls2SignalingType#OFFER}
@@ -501,7 +490,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
         if (privacyToken != null) {
             children.add(new StanzaBuilder()
                     .description(PRIVACY_ELEMENT)
-                    .content(privacyToken)
+                    .content(privacyToken.value())
                     .build());
         }
         for (var codec : audioCodecs) {
@@ -623,6 +612,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
                 .orElse(null);
         var privacyToken = stanza.getChild(PRIVACY_ELEMENT)
                 .flatMap(Stanza::toContentBytes)
+                .map(PrivacyToken::new)
                 .orElse(null);
         var relay = stanza.getChild(RELAY_ELEMENT).orElse(null);
         var bot = stanza.getChild(BOT_ELEMENT).orElse(null);
@@ -707,7 +697,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
                 && Objects.equals(this.encOptions, that.encOptions)
                 && Objects.equals(this.groupInfo, that.groupInfo)
                 && Arrays.equals(this.deviceIdentity, that.deviceIdentity)
-                && Arrays.equals(this.privacyToken, that.privacyToken)
+                && Objects.equals(this.privacyToken, that.privacyToken)
                 && Objects.equals(this.relay, that.relay)
                 && Objects.equals(this.bot, that.bot)
                 && this.voipSettings.equals(that.voipSettings)
@@ -725,10 +715,9 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
     public int hashCode() {
         var result = Objects.hash(callId, callCreator, callerPn, userPn, username, groupJid, scheduledId, deviceClass,
                 joinable, lightweight, reringTimestamp, netMedium, capabilities, audioCodecs, videoCodecs,
-                keyDistribution, media, encOptions, groupInfo, relay, bot, voipSettings, callerMetadata);
+                keyDistribution, media, encOptions, groupInfo, privacyToken, relay, bot, voipSettings, callerMetadata);
         result = 31 * result + Arrays.hashCode(lightweightKey);
         result = 31 * result + Arrays.hashCode(deviceIdentity);
-        result = 31 * result + Arrays.hashCode(privacyToken);
         return result;
     }
 
@@ -749,7 +738,7 @@ public record OfferStanza(String callId, Jid callCreator, Jid callerPn, Jid user
                 + ", joinable=" + joinable
                 + ", deviceCount=" + keyDistribution.size()
                 + ", deviceIdentityLen=" + (deviceIdentity == null ? -1 : deviceIdentity.length)
-                + ", privacyTokenLen=" + (privacyToken == null ? -1 : privacyToken.length)
+                + ", privacyTokenLen=" + (privacyToken == null ? -1 : privacyToken.length())
                 + ']';
     }
 }

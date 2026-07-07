@@ -307,6 +307,7 @@ public final class LiveDesktopCaptureDriver implements DesktopCaptureDriver {
             this.lastWidth = -1;
             this.lastHeight = -1;
             toClose = source;
+            this.source = null;
         } finally {
             lock.unlock();
         }
@@ -315,12 +316,6 @@ public final class LiveDesktopCaptureDriver implements DesktopCaptureDriver {
         }
         if (toClose != null) {
             toClose.shutdown();
-        }
-        lock.lock();
-        try {
-            this.source = null;
-        } finally {
-            lock.unlock();
         }
     }
 

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.net;
 
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.vigil.ConnectivityMonitor;
 
 import java.io.IOException;
 import java.util.Objects;
@@ -15,7 +16,7 @@ import java.util.random.RandomGenerator;
  * the drop: the client hands off by calling {@link #requestReconnect()} from its
  * disconnect path and returns immediately, never holding its disconnect guard
  * across a multi-minute outage. A single long-lived supervisor thread waits for
- * a reconnect request, then loops {@link NetworkConnectivityMonitor#awaitOnline()
+ * a reconnect request, then loops {@link ConnectivityMonitor#awaitOnline()
  * await-online} plus one {@link ConnectAttempt} until {@code connected} reports
  * success, sleeping a {@link ReconnectBackoff jittered backoff} between failures.
  *
@@ -55,7 +56,7 @@ public final class ReconnectSupervisor {
      * Connectivity monitor that gates attempts while the host is offline and
      * accelerates them when the network returns.
      */
-    private final NetworkConnectivityMonitor monitor;
+    private final ConnectivityMonitor monitor;
 
     /**
      * Backoff schedule between failed attempts; touched only on the supervisor
@@ -104,7 +105,7 @@ public final class ReconnectSupervisor {
      * @param random     the jitter source for the backoff; must not be
      *                   {@code null}
      */
-    public ReconnectSupervisor(ConnectAttempt attempt, BooleanSupplier connected, BooleanSupplier terminated, NetworkConnectivityMonitor monitor, RandomGenerator random) {
+    public ReconnectSupervisor(ConnectAttempt attempt, BooleanSupplier connected, BooleanSupplier terminated, ConnectivityMonitor monitor, RandomGenerator random) {
         this.attempt = Objects.requireNonNull(attempt, "attempt cannot be null");
         this.connected = Objects.requireNonNull(connected, "connected cannot be null");
         this.terminated = Objects.requireNonNull(terminated, "terminated cannot be null");
@@ -144,8 +145,8 @@ public final class ReconnectSupervisor {
      * Signals that connectivity has returned, resetting the backoff and waking
      * the supervisor so the next attempt fires immediately.
      *
-     * <p>Registered as the {@link NetworkConnectivityMonitor}'s regained
-     * callback.
+     * <p>Registered with the {@link ConnectivityMonitor} as a listener that
+     * fires when connectivity returns.
      */
     public void onConnectivityRegained() {
         backoff.reset();

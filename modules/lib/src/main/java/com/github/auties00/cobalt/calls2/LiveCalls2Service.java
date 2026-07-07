@@ -26,6 +26,7 @@ import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.call.CallInteraction;
+import com.github.auties00.cobalt.model.call.CallLink;
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
 import com.github.auties00.cobalt.model.call.CallState;
 import com.github.auties00.cobalt.model.call.IncomingCall;
@@ -33,9 +34,16 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.CallEventBuilder;
 import com.github.auties00.cobalt.wam.event.JoinableCallEventBuilder;
+import com.github.auties00.cobalt.wam.event.PreCallUserJourneyChatThreadEventBuilder;
 import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingActivity;
+import com.github.auties00.cobalt.wam.type.CallFromUi;
+import com.github.auties00.cobalt.wam.type.CallNetworkMedium;
 import com.github.auties00.cobalt.wam.type.CallResultType;
 import com.github.auties00.cobalt.wam.type.CallSide;
+import com.github.auties00.cobalt.wam.type.CallSizeType;
+import com.github.auties00.cobalt.wam.type.CallTransportType;
+import com.github.auties00.cobalt.wam.type.PreCallActionType;
+import com.github.auties00.cobalt.wam.type.SubSurface;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +51,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Live implementation of {@link Calls2Service} that coordinates one client's call activity over the
@@ -61,8 +70,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Where the engine controller runs the call's signaling and media state machine, this service owns the
  * host-API translation around it: it builds the public {@link Call} view, registers the
  * {@link Calls2Runtime} that owns the application media streams and the telemetry accumulator before
- * delegating the engine work, drains a call's telemetry into a WAM Call event when it unregisters, and
- * fans the call-ended event out to listeners. A placed or accepted call sits in {@link CallState#RINGING}
+ * delegating the engine work, emits a pre-call user-journey funnel event as a call is placed, drains a
+ * call's telemetry into a WAM Call event when it unregisters, and fans the call-ended event out to
+ * listeners. A placed or accepted call sits in {@link CallState#RINGING}
  * or {@link CallState#CONNECTING} until the engine wires its media plane and is terminated by either a
  * local {@link #terminate(String, CallEndReason)} or a peer termination.
  *
@@ -141,6 +151,17 @@ public final class LiveCalls2Service implements Calls2Service {
     private final Calls2LifecycleController lifecycleController;
 
     /**
+     * Identifies the WAM app session this service runs under, stamped on every pre-call user-journey event.
+     *
+     * <p>WhatsApp tags each pre-call funnel beacon with the app session identifier of the launch it was
+     * emitted in so a whole journey correlates back to one session. This is a stable random identifier
+     * minted once per service instance, matching WhatsApp's per-app-launch session id: there is exactly one
+     * calls2 service per {@link LinkedWhatsAppClient} connection, so one identifier per instance is the
+     * connection's app session.
+     */
+    private final String appSessionId = randomSessionId();
+
+    /**
      * Constructs a service bound to the given client, WAM service, and {@link MessageService}, building a
      * fresh event bus.
      *
@@ -198,9 +219,11 @@ public final class LiveCalls2Service implements Calls2Service {
      * <p>When a controller is supplied, this constructor binds {@link #unregister(String)} onto the
      * controller's teardown sink ({@link Calls2LifecycleController#bindTeardownSink}), so the controller
      * drives the service-level teardown and end-of-call WAM drain once at the ENDED transition of every call,
-     * regardless of which side ended it. Binding from here, where the service and its controller are both in
-     * hand, keeps the service the owner of the call back into itself, mirroring how the engine assembler binds
-     * the result and call-log sinks; a controller-less service binds nothing.
+     * regardless of which side ended it, and binds {@link #markCallConnected(String)} onto the controller's
+     * connected sink ({@link Calls2LifecycleController#bindConnectedSink}), so the call's connected instant is
+     * stamped once its media plane goes active. Binding from here, where the service and its controller are
+     * both in hand, keeps the service the owner of the call back into itself, mirroring how the engine
+     * assembler binds the result and call-log sinks; a controller-less service binds nothing.
      *
      * @param whatsapp            the owning client
      * @param wamService          the WAM telemetry service, or {@code null} when telemetry is disabled
@@ -221,6 +244,7 @@ public final class LiveCalls2Service implements Calls2Service {
         this.lifecycleController = lifecycleController;
         if (lifecycleController != null) {
             lifecycleController.bindTeardownSink(this::unregister);
+            lifecycleController.bindConnectedSink(this::markCallConnected);
         }
     }
 
@@ -246,6 +270,9 @@ public final class LiveCalls2Service implements Calls2Service {
         var addressing = messageService.resolveCallPeerAddressing(peer);
         var streams = mediaStreams(audioOut, audioIn, videoOut, videoIn);
         var call = engine().startCall(self, addressing.peer(), addressing.peerDevices(), video, streams);
+        emitPreCallJourney(call.callId(), video ? PreCallActionType.CLICK_VIDEO_CALL
+                        : PreCallActionType.CLICK_AUDIO_CALL, CallSizeType.ONE_TO_ONE, video,
+                SubSurface.CHAT_HEADER, 2L, null, null);
         if (notifyIfEndedDuringPlacement(call, addressing.peer())) {
             return call;
         }
@@ -270,6 +297,9 @@ public final class LiveCalls2Service implements Calls2Service {
         var video = videoOut != null;
         var streams = mediaStreams(audioOut, audioIn, videoOut, videoIn);
         var call = engine().startGroupCall(self, peers, groupJid, video, streams);
+        var callSize = (long) (peers.size() + 1);
+        emitPreCallJourney(call.callId(), PreCallActionType.CLICK_START_CALL, CallSizeType.LGC, video,
+                SubSurface.CHAT_HEADER, callSize, callSize, false);
         if (notifyIfEndedDuringPlacement(call, groupJid)) {
             return call;
         }
@@ -297,6 +327,8 @@ public final class LiveCalls2Service implements Calls2Service {
         var video = videoOut != null;
         var streams = mediaStreams(audioOut, audioIn, videoOut, videoIn);
         var call = engine().joinCallLink(self, token, media, video, streams);
+        emitPreCallJourney(call.callId(), PreCallActionType.CLICK_CALL_LINK, CallSizeType.CALL_LINK, video,
+                null, null, null, null);
         registerRuntime(call, CallSide.CALLER, video, audioOut, audioIn, videoOut, videoIn);
         return call;
     }
@@ -334,13 +366,14 @@ public final class LiveCalls2Service implements Calls2Service {
      *
      * @implNote This implementation ends the call through the engine
      * ({@link Calls2LifecycleController#endCall(String, CallEndReason)}, which sends the terminate and runs
-     * the engine teardown), shuts the runtime's streams and media session through
-     * {@link Calls2Runtime#end(CallEndReason)}, and then fans the {@code onCallEnded} event out through
+     * the engine teardown) and then fans the {@code onCallEnded} event out through
      * {@link #notifyEnded(String, Jid, String)} with the call creator and wire reason. The host end event is
      * fired on the local hangup path here to match {@link #reject(IncomingCall, CallEndReason)} and the
      * inbound-terminate path, so the application observes the call ending regardless of who hung up. The
-     * engine teardown separately drives the registry removal and end-of-call WAM drain through the teardown
-     * sink, so this method only adds the host listener fan-out the slim engine event sink cannot carry.
+     * engine teardown drives the registry removal, the runtime stream and media-session shutdown through
+     * {@link Calls2Runtime#end(CallEndReason)}, and the end-of-call WAM drain through the teardown sink bound
+     * to {@link #unregister(String)}, so this method only adds the host listener fan-out the slim engine event
+     * sink cannot carry.
      */
     @Override
     public void terminate(String callId, CallEndReason reason) {
@@ -351,10 +384,9 @@ public final class LiveCalls2Service implements Calls2Service {
         }
         var creator = runtime.call().creator();
         engine().endCall(callId, reason);
-        runtime.end(reason);
         // Fan the local hangup out to the application's onCallEnded listeners, matching reject() and the
-        // inbound-terminate path; the engine teardown fires the registry/WAM teardown sink but not the host
-        // end event, so the local end path surfaces it here for symmetry with every peer-driven end.
+        // inbound-terminate path; the engine teardown fires the registry/WAM/runtime teardown sink but not the
+        // host end event, so the local end path surfaces it here for symmetry with every peer-driven end.
         notifyEnded(callId, creator, reason.wireValue());
     }
 
@@ -563,6 +595,74 @@ public final class LiveCalls2Service implements Calls2Service {
 
     /**
      * {@inheritDoc}
+     *
+     * @implNote This implementation delegates to
+     * {@link Calls2LifecycleController#createCallLink(CallLinkMedia, boolean)}, which runs the blocking
+     * {@code link_create} request-reply against the {@code call} service and applies the call-link feature
+     * gate; the minted {@link CallLink} is returned directly rather than surfaced as a listener event.
+     */
+    @Override
+    public CallLink createCallLink(CallLinkMedia media, boolean waitingRoomEnabled) {
+        Objects.requireNonNull(media, "media cannot be null");
+        return engine().createCallLink(media, waitingRoomEnabled);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote This implementation delegates to
+     * {@link Calls2LifecycleController#setWaitingRoomEnabled(String, boolean)}, which drives the call's
+     * waiting-room controller when the call is a tracked call-link call and is a no-op otherwise.
+     */
+    @Override
+    public void setWaitingRoomEnabled(String callId, boolean enabled) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        engine().setWaitingRoomEnabled(callId, enabled);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote This implementation delegates to
+     * {@link Calls2LifecycleController#admitWaitingRoomParticipant(String, Jid)}, which drives the call's
+     * waiting-room controller when the call is a tracked call-link call and is a no-op otherwise.
+     */
+    @Override
+    public void admitWaitingRoomParticipant(String callId, Jid userJid) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        Objects.requireNonNull(userJid, "userJid cannot be null");
+        engine().admitWaitingRoomParticipant(callId, userJid);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote This implementation delegates to
+     * {@link Calls2LifecycleController#admitAllWaitingRoomParticipants(String)}, which drives the call's
+     * waiting-room controller when the call is a tracked call-link call and is a no-op otherwise.
+     */
+    @Override
+    public void admitAllWaitingRoomParticipants(String callId) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        engine().admitAllWaitingRoomParticipants(callId);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote This implementation delegates to
+     * {@link Calls2LifecycleController#denyWaitingRoomParticipant(String, Jid)}, which drives the call's
+     * waiting-room controller when the call is a tracked call-link call and is a no-op otherwise.
+     */
+    @Override
+    public void denyWaitingRoomParticipant(String callId, Jid userJid) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        Objects.requireNonNull(userJid, "userJid cannot be null");
+        engine().denyWaitingRoomParticipant(callId, userJid);
+    }
+
+    /**
+     * {@inheritDoc}
      */
     @Override
     public Calls2Runtime find(String callId) {
@@ -644,6 +744,11 @@ public final class LiveCalls2Service implements Calls2Service {
      * @param call the offline-offer descriptor to deliver
      */
     private void notifyOfferNotice(IncomingCall call) {
+        // FIXME: this hand-rolls the per-listener virtual-thread fan-out that LiveCallEventBus.emit performs.
+        //  Routing through eventBus.emit would need a new CallEvent variant for the offline offer-notice
+        //  (LinkedCallOfferNoticeListener) plus a matching case in LiveCallEventBus.emit and a host-facing
+        //  entry in its gate; no such event exists, so a faithful reroute is not possible without adding one.
+        //  Left as a direct fan-out.
         for (var listener : whatsapp.store().listeners()) {
             if (listener instanceof LinkedCallOfferNoticeListener typed) {
                 Thread.startVirtualThread(() -> {
@@ -731,19 +836,50 @@ public final class LiveCalls2Service implements Calls2Service {
      * sink, which the service binds to this method through
      * {@link Calls2LifecycleController#bindTeardownSink(java.util.function.Consumer)} in its constructor. The
      * controller fires it from its single ENDED transition for every end path (local hangup, peer terminate,
-     * reject, timeout, offer NACK, or setup failure), so the registry removal and the end-of-call WAM Call
-     * and JoinableCall events fire exactly once for every ended call regardless of who ended it. An unknown
-     * {@code callId} removes nothing and emits nothing; a call with no telemetry accumulator (telemetry
-     * disabled, or a call that was never registered as a runtime) skips the WAM commit.
+     * reject, timeout, offer NACK, or setup failure), so the registry removal, the runtime stream and
+     * media-session shutdown through {@link Calls2Runtime#end(CallEndReason)}, and the end-of-call WAM Call
+     * and JoinableCall events fire exactly once for every ended call regardless of who ended it. The runtime
+     * teardown runs here as the sole owner of {@link Calls2Runtime#end(CallEndReason)}, using the terminal end
+     * reason the controller stamped on the call view before firing this sink; an unknown {@code callId}
+     * removes nothing and ends nothing, and a call with no telemetry accumulator (telemetry disabled) still
+     * has its runtime shut down but skips the WAM commit.
      */
     @Override
     public void unregister(String callId) {
         var runtime = activeCalls.remove(callId);
         whatsapp.store().chatStore().removeCall(callId);
-        if (wamService == null || runtime == null) {
+        if (runtime == null) {
+            return;
+        }
+        // Own the runtime teardown here: this sink is fired once at the ENDED transition for every end path
+        // (local hangup, peer terminate, reject, timeout, offer NACK, setup failure), so shutting the four
+        // streams and the media session from here unblocks the application's blocked reads and writes and
+        // reaches CallState#ENDED regardless of who ended the call. The controller has already stamped the
+        // terminal end reason on the shared call view before firing this sink.
+        runtime.end(runtime.call().endReason().orElse(CallEndReason.UNKNOWN));
+        if (wamService == null) {
             return;
         }
         emitFieldStatsEvent(runtime);
+    }
+
+    /**
+     * Stamps a tracked call's telemetry accumulator with its connected instant when its media plane first
+     * goes active.
+     *
+     * <p>Bound onto the engine lifecycle controller's connected sink through
+     * {@link Calls2LifecycleController#bindConnectedSink(java.util.function.Consumer)} in this service's
+     * constructor, this is driven once as a call first reaches {@link CallState#ACTIVE}, symmetric with the
+     * ended instant the runtime stamps at teardown, so the end-of-call WAM Call event reports a non-zero
+     * connected duration rather than zero. A signal for an untracked call stamps nothing.
+     *
+     * @param callId the identifier of the call whose media plane became active
+     */
+    private void markCallConnected(String callId) {
+        var runtime = activeCalls.get(callId);
+        if (runtime != null) {
+            runtime.stats().markConnected();
+        }
     }
 
     /**
@@ -755,6 +891,13 @@ public final class LiveCalls2Service implements Calls2Service {
         // Call signaling is LID-addressed on the wire; applications expect the peer's phone number, so
         // map the LID back to its PN through the learned mapping before fanning the event out.
         var from = toListenerJid(fromJid);
+        // FIXME: this hand-rolls the per-listener virtual-thread fan-out that LiveCallEventBus.emit already
+        //  performs for a CallEvent.Ended, duplicating its dispatch. The faithful route is
+        //  eventBus.emit(new CallEvent.Ended(callId, from, parsed)), but LiveCallEventBus gates every event
+        //  through shouldEmit(CallEventType) and this method is called from local hangup, reject,
+        //  placement-NACK, and inbound terminate; rerouting would subject those ends to the host-facing gate
+        //  the hand-rolled path deliberately bypasses, which could suppress an onCallEnded the application
+        //  currently always receives. Not verified WA-faithful, so left as a direct fan-out.
         for (var listener : whatsapp.store().listeners()) {
             if (listener instanceof LinkedCallEndedListener typed) {
                 Thread.startVirtualThread(() -> {
@@ -939,20 +1082,32 @@ public final class LiveCalls2Service implements Calls2Service {
                     .map(LiveCalls2Service::toResultType)
                     .orElseGet(() -> mapToResultType(endReason));
             var connectedDuration = stats.connectedDurationSeconds();
+            var group = runtime.call().isGroup();
             var builder = new CallEventBuilder()
                     .callRandomId(stats.callId())
                     .callSide(stats.side())
                     .callResult(resultType)
                     .videoEnabled(stats.videoEnabled())
                     .videoEnabledAtCallStart(stats.videoEnabled())
-                    .callOfferElapsedT(stats.startedAt());
+                    .callOfferElapsedT(stats.startedAt())
+                    .isLidCall(true)
+                    .callTransport(CallTransportType.UDP_RELAY)
+                    .callNetwork(CallNetworkMedium.WIFI)
+                    .isRejoin(false)
+                    .isCallFull(false);
             if (connectedDuration > 0) {
                 builder.durationTSs(Instant.ofEpochSecond(connectedDuration));
+                if (!group) {
+                    builder.numConnectedPeers(1);
+                }
+            }
+            if (stats.side() == CallSide.CALLER) {
+                builder.callFromUi(group ? CallFromUi.GROUP_CALL_INFO : CallFromUi.CONVERSATION);
             }
             wamService.commit(builder.build());
             whatsapp.recordThreadActivity(runtime.call().chatJid(), new ThreadLoggingActivity.Call(
                     stats.side() == CallSide.CALLER, connectedDuration));
-            if (runtime.call().isGroup()) {
+            if (group) {
                 emitJoinableCallEvent(runtime, resultType);
             }
         } catch (RuntimeException _) {
@@ -983,6 +1138,82 @@ public final class LiveCalls2Service implements Calls2Service {
                 .isOneOnOneCall(false)
                 .build();
         wamService.commit(event);
+    }
+
+    /**
+     * Builds and commits the WAM pre-call user-journey event for a call this client is placing.
+     *
+     * <p>WhatsApp records a pre-call funnel beacon at the moment the user initiates a call from a chat
+     * thread (tapping the audio or video call control, starting a group call, or joining a call link), well
+     * before the call connects, so the pre-call journey can be reconciled against the call that follows. This
+     * emits that beacon the instant the engine has minted the call identifier, keyed to it through
+     * {@link PreCallUserJourneyChatThreadEventBuilder#callRandomId(String)}, and stamps the initiating
+     * action, the call-size class, and the video flag drawn from the placement call, together with the
+     * service's {@link #appSessionId} and freshly minted per-call surface and funnel identifiers. The
+     * event fires only when {@link WamService telemetry} is enabled; a build or commit failure is swallowed
+     * so telemetry never breaks the call-placement path. The optional dimensions are set only when the
+     * caller supplies them, so an audio-only one-to-one placement carries no group size and a call-link join
+     * carries no sub-surface.
+     *
+     * @param callId           the identifier of the call being placed, correlating the funnel to the call
+     * @param action           the pre-call action that initiated the placement
+     * @param sizeType         the call-size class of the placement
+     * @param video            whether the call is being placed with video enabled
+     * @param subSurface       the UI sub-surface the placement originated from, or {@code null} when none
+     *                         applies
+     * @param callSize         the number of participants the call is placed to, or {@code null} when it is
+     *                         not known at placement
+     * @param groupSize        the size of the group the call is placed within, or {@code null} for a
+     *                         non-group placement
+     * @param isCommunityGroup whether the group is a community group, or {@code null} for a non-group
+     *                         placement
+     */
+    private void emitPreCallJourney(String callId, PreCallActionType action, CallSizeType sizeType,
+                                    boolean video, SubSurface subSurface, Long callSize, Long groupSize,
+                                    Boolean isCommunityGroup) {
+        if (wamService == null) {
+            return;
+        }
+        try {
+            var builder = new PreCallUserJourneyChatThreadEventBuilder()
+                    .appSessionId(appSessionId)
+                    .callRandomId(callId)
+                    .callSizeType(sizeType)
+                    .isVideoCall(video)
+                    .preCallActionType(action)
+                    .surfaceSessionId(randomSessionId())
+                    .userJourneyFunnelId(randomSessionId())
+                    .userJourneyEventMs(System.currentTimeMillis());
+            if (subSurface != null) {
+                builder.subSurface(subSurface);
+            }
+            if (callSize != null) {
+                builder.callSize(callSize);
+            }
+            if (groupSize != null) {
+                builder.groupSize(groupSize);
+            }
+            if (isCommunityGroup != null) {
+                builder.isCommunityGroup(isCommunityGroup);
+            }
+            wamService.commit(builder.build());
+        } catch (RuntimeException _) {
+            // Telemetry is best-effort and must never break the call-placement path; a build or commit
+            // failure is swallowed.
+        }
+    }
+
+    /**
+     * Mints a fresh random 16-hex-character identifier for a WAM session or funnel field.
+     *
+     * <p>WhatsApp identifies an app session and a pre-call funnel with opaque random strings the receiver
+     * only groups by, never parses; this produces one such identifier from the low 64 bits of a
+     * {@link ThreadLocalRandom} draw, zero-padded to 16 hexadecimal characters.
+     *
+     * @return a random 16-hex-character identifier
+     */
+    private static String randomSessionId() {
+        return String.format("%016x", ThreadLocalRandom.current().nextLong());
     }
 
     /**

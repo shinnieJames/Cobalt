@@ -17,8 +17,11 @@ import java.util.Objects;
  * <p>The {@code width} and {@code height} are carried per frame rather than fixed for the lifetime of
  * a call: a single call may switch resolution as the codec follows the peer's bandwidth adaptation,
  * and the keyframe header of each encoded picture authoritatively sets the picture size. The pixel
- * buffer is referenced as supplied and never copied, so a caller transfers ownership and must not
- * mutate the array after constructing the frame.
+ * buffer is referenced as supplied and never copied. A frame the call engine delivers to a consumer
+ * through {@link VideoInput#read()} borrows a pooled buffer owned by the producing input: the buffer is
+ * valid only until the consumer reads the next frame from that same input, at which point the producer
+ * may refill and re-offer it, so the consumer must neither retain a reference to it past that point nor
+ * mutate it.
  *
  * @apiNote The call API accepts only the planar 4:2:0 layouts named by {@link VideoPixelFormat}; a
  * source capturing in a packed or already-encoded format converts to {@link VideoPixelFormat#I420}
@@ -39,7 +42,9 @@ public record VideoFrame(byte[] pixels, VideoPixelFormat format, int width, int 
      * {@code width} or {@code height}, and a buffer whose length does not equal
      * {@code width*height + 2*(width/2)*(height/2)}. Because {@link VideoPixelFormat#I420} and
      * {@link VideoPixelFormat#NV12} share that byte count, the length check is independent of which of
-     * the two layouts is declared. The buffer reference is shared rather than copied.
+     * the two layouts is declared. The buffer reference is shared rather than copied; a frame the engine
+     * produces from its pooled render path borrows a buffer reused for a later frame, so a consumer must
+     * neither retain nor mutate it past the next {@link VideoInput#read()}.
      *
      * @throws NullPointerException     if {@code pixels} or {@code format} is {@code null}
      * @throws IllegalArgumentException if {@code width} or {@code height} is odd or less than

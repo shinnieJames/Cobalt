@@ -125,7 +125,7 @@ public final class SmaxNewsletterReportMessageEntry {
      *
      * @return the built stanza; never {@code null}
      */
-    public Stanza toNode() {
+    public Stanza toStanza() {
         if (raw != null) {
             return raw;
         }

@@ -4,11 +4,10 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Represents a {@code <peer_state>} in-call action: a report of a single peer's membership state.
@@ -122,9 +121,20 @@ public record PeerStateStanza(String callId, Jid callCreator, Jid peerJid, int s
      * <p>This is the inverse of {@link #STATE_NAMES}: the state string written into a {@code <user state>}
      * attribute resolves back to the numeric code the engine stores.
      */
-    private static final Map<String, Integer> CODE_BY_NAME = IntStream.range(0, STATE_NAMES.length)
-            .boxed()
-            .collect(Collectors.toUnmodifiableMap(code -> STATE_NAMES[code], code -> code));
+    private static final Map<String, Integer> CODE_BY_NAME = buildCodeByName();
+
+    /**
+     * Builds the inverse of {@link #STATE_NAMES}, mapping each wire string to its peer-state code.
+     *
+     * @return an unmodifiable map from state string to numeric code
+     */
+    private static Map<String, Integer> buildCodeByName() {
+        var codeByName = new HashMap<String, Integer>(STATE_NAMES.length * 2);
+        for (var code = 0; code < STATE_NAMES.length; code++) {
+            codeByName.put(STATE_NAMES[code], code);
+        }
+        return Map.copyOf(codeByName);
+    }
 
     /**
      * Validates the record components.

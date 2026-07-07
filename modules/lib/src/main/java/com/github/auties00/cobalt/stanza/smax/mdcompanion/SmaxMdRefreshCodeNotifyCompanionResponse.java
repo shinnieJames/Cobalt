@@ -27,7 +27,10 @@ import java.util.Optional;
  * {@code stage="refresh_code"}, the optional {@code force_manual_refresh} attribute is
  * constrained to {@code "true"} or {@code "false"}, and the new {@code <link_code_pairing_ref/>}
  * child resolves to non-empty bytes.
+ *
+ * @deprecated companion-pairing notify handled inline by {@code IqStreamHandler}.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInMdRefreshCodeNotifyCompanionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMdServerNotificationMixin")
 public final class SmaxMdRefreshCodeNotifyCompanionResponse implements SmaxStanza.Response {

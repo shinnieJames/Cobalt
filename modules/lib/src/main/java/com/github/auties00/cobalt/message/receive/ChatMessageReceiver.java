@@ -6,15 +6,19 @@ import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.addon.EncMessageFactory;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryption;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryptionHandler;
+import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveBizInfo;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveBotInfo;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveEncryptedPayload;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanzaParser;
+import com.github.auties00.cobalt.message.send.token.ReportingToken;
+import com.github.auties00.cobalt.message.send.token.ReportingTokenContent;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageContextInfoBuilder;
+import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
@@ -24,6 +28,16 @@ import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.message.MessageThreadId;
+import com.github.auties00.cobalt.model.message.commerce.ButtonsMessage;
+import com.github.auties00.cobalt.model.message.commerce.OrderMessage;
+import com.github.auties00.cobalt.model.message.commerce.ProductMessage;
+import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveResponseMessage;
+import com.github.auties00.cobalt.model.message.interactive.TemplateMessage;
+import com.github.auties00.cobalt.model.message.list.ListMessage;
+import com.github.auties00.cobalt.model.message.newsletter.NewsletterFollowerInviteMessage;
 import com.github.auties00.cobalt.model.message.system.DeviceSentMessage;
 import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
@@ -32,6 +46,30 @@ import com.github.auties00.cobalt.model.message.text.HighlyStructuredMessage;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.wam.WamMsgUtils;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.BroadcastInvalidChannelsContextSourceMessageDropEventBuilder;
+import com.github.auties00.cobalt.wam.event.CtwaBizUserJourneyEventBuilder;
+import com.github.auties00.cobalt.wam.event.MessageSecretErrorsEventBuilder;
+import com.github.auties00.cobalt.wam.event.PsStructuredMessageInteractionEventBuilder;
+import com.github.auties00.cobalt.wam.event.QbmIncomingMessageEventBuilder;
+import com.github.auties00.cobalt.wam.event.ReportingTokenValidationFailureEventBuilder;
+import com.github.auties00.cobalt.wam.event.ReportingTokenValidationFailureSenderEventBuilder;
+import com.github.auties00.cobalt.wam.event.WebcStatusSyncEventBuilder;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.type.BizPlatform;
+import com.github.auties00.cobalt.wam.type.ChatsFolderType;
+import com.github.auties00.cobalt.wam.type.ContactType;
+import com.github.auties00.cobalt.wam.type.CtwaBizUserJourneyOperation;
+import com.github.auties00.cobalt.wam.type.DeviceType;
+import com.github.auties00.cobalt.wam.type.EditType;
+import com.github.auties00.cobalt.wam.type.InteractionType;
+import com.github.auties00.cobalt.wam.type.MediaType;
+import com.github.auties00.cobalt.wam.type.MessageSecretAllowedType;
+import com.github.auties00.cobalt.wam.type.MessageSecretErrorType;
+import com.github.auties00.cobalt.wam.type.QbmFlag;
+import com.github.auties00.cobalt.wam.type.ReportingTokenValidationFailureReason;
+import com.github.auties00.cobalt.wam.type.StructuredMessageClass;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -39,9 +77,12 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -83,6 +124,33 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     private static final System.Logger LOGGER = System.getLogger(ChatMessageReceiver.class.getName());
 
     /**
+     * The {@code bizFeatureEnabled} dimension reported for the click-to-WhatsApp
+     * automated-greeting-message (AGM) journey.
+     *
+     * <p>Mirrors WhatsApp Web's {@code WAWebCtwaLogger} feature list
+     * {@code ["agm"]} joined with {@code ", "}; the AGM injection is the only
+     * feature that contributes to the list, so the joined value is the bare token
+     * {@code "agm"}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCtwaLogger", exports = "logAGMOperation",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static final String CTWA_AGM_BIZ_FEATURE = "agm";
+
+    /**
+     * The serialized {@code ctwaBizUserJourneyMetadata} carried by the AGM
+     * injection metric.
+     *
+     * <p>Mirrors the WhatsApp Web {@code WAWebCtwaLogger} shape: a JSON object with
+     * a single {@code agm_cta_type} member. The call-to-action type is
+     * {@code null} because Cobalt does not parse the AGM call-to-action payload
+     * from the wire on the receive path, matching the {@code null} WA Web itself
+     * emits whenever the ad payload omits a call-to-action type.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCtwaLogger", exports = "logAGMOperation",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static final String CTWA_AGM_METADATA = "{\"agm_cta_type\":null}";
+
+    /**
      * Decryption service used for the per-enc iteration in the decryption phase.
      *
      * <p>Owns the per-device Signal cipher (PKMSG/MSG), the group sender-key cipher
@@ -92,18 +160,41 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     private final MessageDecryption decryption;
 
     /**
+     * Telemetry sink for the WAM events emitted by the receive pipeline, or
+     * {@code null} when telemetry is disabled.
+     *
+     * <p>Consumed by the per-message emitters ({@link #validateReportingToken},
+     * {@link #dropInvalidChannelsContextSource}, {@link #emitReceiveTelemetry},
+     * and the poll-vote message-secret error path). It is nullable so tests and
+     * embedders that do not run the WAM pipeline can construct the receiver with
+     * {@code null}; every emit is routed through {@link #commit(WamEventSpec)}
+     * which swallows the {@code null} case.
+     */
+    private final WamService wamService;
+
+
+    /**
+     * Decryptor service
+     */
+    private final MessageDecryptionHandler messageDecryptor;
+
+    /**
      * Constructs a chat receiver bound to the given store and decryption service.
      *
      * @param store      the central session store
      * @param decryption the decryption service for the Signal protocol and bot
      *                   messages
+     * @param wamService the WAM telemetry sink, or {@code null} to disable the
+     *                   receive-path metrics
      * @throws NullPointerException if {@code decryption} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsg", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    ChatMessageReceiver(LinkedWhatsAppStore store, MessageDecryption decryption) {
+    ChatMessageReceiver(LinkedWhatsAppStore store, MessageDecryption decryption, WamService wamService) {
         super(store);
         this.decryption = Objects.requireNonNull(decryption, "decryption");
+        this.wamService = wamService;
+        this.messageDecryptor = new MessageDecryptionHandler(wamService);
     }
 
     /**
@@ -170,6 +261,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
         validateHsmConsistency(stanza, container);
         processSenderKeyDistribution(container, stanza);
 
+        dropInvalidChannelsContextSource(stanza, container);
+        validateReportingToken(stanza, container, plaintext);
+
         var chatJid = resolveChatJid(stanza);
         var effectiveContainer = container;
 
@@ -186,7 +280,9 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
 
         maybeDecryptPollVote(effectiveContainer, stanza);
 
-        return buildChatMessageInfo(stanza, chatJid, effectiveContainer);
+        var info = buildChatMessageInfo(stanza, chatJid, effectiveContainer);
+        emitReceiveTelemetry(stanza, chatJid, effectiveContainer);
+        return info;
     }
 
     /**
@@ -229,6 +325,11 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
         } catch (RuntimeException exception) {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Could not auto-decrypt poll vote {0}: {1}", stanza.id(), exception.getMessage());
+            commit(new MessageSecretErrorsEventBuilder()
+                    .messageSecretAllowedList(MessageSecretAllowedType.MESSAGE_POLL)
+                    .messageSecretError(MessageSecretErrorType.DECRYPTION_ERROR)
+                    .messageMediaType(MediaType.POLL_VOTE)
+                    .build());
         }
     }
 
@@ -501,11 +602,10 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptApi", exports = "decryptE2EPayload",
             adaptation = WhatsAppAdaptation.DIRECT)
     private byte[] decryptPayloads(MessageReceiveStanza stanza) {
-        var handler = new MessageDecryptionHandler();
         byte[] plaintext = null;
 
         for (var enc : stanza.encs()) {
-            if (!handler.canDecryptNext(enc)) {
+            if (!messageDecryptor.canDecryptNext(enc)) {
                 continue;
             }
 
@@ -519,7 +619,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
                         "Decrypted message {0} via {1}",
                         stanza.id(), enc.e2eType());
             } catch (WhatsAppMessageException.Receive e) {
-                handler.handleError(enc, e);
+                messageDecryptor.handleError(enc, e);
             }
         }
 
@@ -527,7 +627,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
             return plaintext;
         }
 
-        var error = handler.failedError().orElse(null);
+        var error = messageDecryptor.failedError().orElse(null);
         if (error != null) {
             throw error;
         }
@@ -1047,5 +1147,662 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
                 .ifPresent(builder::messageSecret);
 
         return builder.build();
+    }
+
+    /**
+     * Drops a stanza that claims the channels-invitation context source but does
+     * not carry a {@link NewsletterFollowerInviteMessage} payload.
+     *
+     * <p>The {@code context_source="channels_invitation"} marker is reserved for
+     * newsletter follower-invite messages; any other payload arriving with that
+     * marker is treated as invalid, dropped, and accounted with a
+     * {@link BroadcastInvalidChannelsContextSourceMessageDropEventBuilder wasDropped}
+     * metric before the receive is aborted.
+     *
+     * @implNote
+     * This implementation mirrors WhatsApp Web's
+     * {@code WAWebHandleMsgValidate} drop branch: it emits the drop metric and
+     * then throws {@link WhatsAppMessageException.Receive.InvalidMessage} (WA
+     * Web's {@code MessageValidationError} analogue). WA Web additionally gates
+     * the drop behind
+     * {@code WAWebNewsletterGatingUtils.isChannelInviteContactsToFollowInvalidDroppingEnabled};
+     * Cobalt applies the drop unconditionally because the condition (a spoofed
+     * channels-invitation marker on a non-invite payload) is anomalous
+     * regardless of the rollout flag.
+     *
+     * @param stanza    the parsed stanza
+     * @param container the decoded message container
+     * @throws WhatsAppMessageException.Receive.InvalidMessage when the marker is
+     *         present on a non-invite payload
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgValidate", exports = "validateContextSource",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void dropInvalidChannelsContextSource(MessageReceiveStanza stanza, MessageContainer container) {
+        var channelsInvite = stanza.contextSource()
+                .filter(MessageReceiveStanza.CONTEXT_SOURCE_CHANNELS_INVITATION::equals)
+                .isPresent();
+        if (!channelsInvite || container.content() instanceof NewsletterFollowerInviteMessage) {
+            return;
+        }
+        LOGGER.log(System.Logger.Level.WARNING,
+                "Dropping message {0} with channels-invitation context source but non-invite content",
+                stanza.id());
+        commit(new BroadcastInvalidChannelsContextSourceMessageDropEventBuilder()
+                .wasDropped(true)
+                .build());
+        throw new WhatsAppMessageException.Receive.InvalidMessage(
+                "NEWSLETTER_FOLLOWER_INVITE message without valid context_source: " + stanza.id(), null);
+    }
+
+    /**
+     * Recomputes the franking-style reporting token for an inbound message and
+     * accounts a validation-failure metric when it does not match the token the
+     * server attached.
+     *
+     * <p>Validation runs only when the stanza carries both a reporting token and
+     * a reporting tag and the message was not authored by the local user. The
+     * expected token is recomputed from the message secret, the deterministic
+     * franking content ({@link ReportingTokenContent#compute(byte[], int)}), and
+     * every plausible sender/receiver JID-form pair; a mismatch, an absent
+     * message secret, or empty franking content each emit
+     * {@link ReportingTokenValidationFailureEventBuilder} plus its private
+     * sender-attributed sibling
+     * {@link ReportingTokenValidationFailureSenderEventBuilder}. The whole pass
+     * is best-effort: any exception is logged and swallowed so a token quirk
+     * never fails the receive.
+     *
+     * @implNote
+     * This implementation ports WhatsApp Web's
+     * {@code WAWebReportingTokenUtils.validateReportingTokenInfo} and its
+     * {@code S(e)} candidate-pair builder: the token is accepted when it matches
+     * under any candidate pair (sender as PN or LID crossed with the local
+     * account's PN or LID, plus the group/broadcast self-JID pairs), and only a
+     * whole-set miss is reported as a mismatch.
+     *
+     * @param stanza    the parsed stanza carrying the reporting token
+     * @param container the decoded message container supplying the message secret
+     * @param plaintext the raw decoded protobuf bytes hashed into the franking
+     *                  content
+     */
+    @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "validateReportingTokenInfo",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void validateReportingToken(MessageReceiveStanza stanza, MessageContainer container, byte[] plaintext) {
+        if (wamService == null) {
+            return;
+        }
+        var reporting = stanza.reportingInfo().orElse(null);
+        if (reporting == null) {
+            return;
+        }
+        var receivedToken = reporting.reportingToken().orElse(null);
+        var reportingTag = reporting.reportingTag().orElse(null);
+        if (receivedToken == null || reportingTag == null || isFromMe(stanza)) {
+            return;
+        }
+        if (stanza.editAttribute() != MessageReceiveStanza.EDIT_NONE) {
+            return;
+        }
+        var version = reporting.version();
+        try {
+            var messageSecret = container.messageContextInfo()
+                    .flatMap(ChatMessageContextInfo::messageSecret)
+                    .orElse(null);
+            if (messageSecret == null) {
+                emitReportingTokenFailure(stanza, container, version,
+                        ReportingTokenValidationFailureReason.MISSING_MESSAGE_SECRET);
+                return;
+            }
+            var content = ReportingTokenContent.compute(plaintext, version);
+            if (content.length == 0) {
+                emitReportingTokenFailure(stanza, container, version,
+                        ReportingTokenValidationFailureReason.EMPTY_REPORTING_TOKEN_CONTENT);
+                return;
+            }
+            if (!reportingTokenMatches(stanza, messageSecret, content, receivedToken, version)) {
+                emitReportingTokenFailure(stanza, container, version,
+                        ReportingTokenValidationFailureReason.MISMATCH_REPORTING_TOKEN);
+            }
+        } catch (Exception exception) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Reporting-token validation error for {0}: {1}", stanza.id(), exception.getMessage());
+        }
+    }
+
+    /**
+     * Returns whether the received reporting token matches the token recomputed
+     * over any candidate sender/receiver JID-form pair.
+     *
+     * <p>The candidate senders are the sender's user JID plus its PN and LID
+     * mappings; the candidate receivers are the local account's PN and LID and,
+     * for group and broadcast chats, the chat JID and each candidate sender (the
+     * "self JID for groups and broadcasts" rule). The token is accepted on the
+     * first pair whose HMAC matches, matching WhatsApp Web's
+     * {@code W(e)} first-hit acceptance.
+     *
+     * @param stanza        the parsed stanza supplying the JID forms and stanza id
+     * @param messageSecret the 32-byte message secret
+     * @param content       the deterministic franking content
+     * @param receivedToken the token bytes the server attached
+     * @param version       the reporting-token version
+     * @return {@code true} when a candidate pair reproduces the received token
+     * @throws java.security.GeneralSecurityException if a cryptographic primitive
+     *         is unavailable
+     */
+    private boolean reportingTokenMatches(
+            MessageReceiveStanza stanza,
+            byte[] messageSecret,
+            byte[] content,
+            byte[] receivedToken,
+            int version
+    ) throws java.security.GeneralSecurityException {
+        var senders = new LinkedHashSet<Jid>();
+        addUserJid(senders, stanza.senderJid());
+        stanza.senderPn().ifPresent(pn -> addUserJid(senders, pn));
+        stanza.senderLid().ifPresent(lid -> addUserJid(senders, lid));
+
+        var receivers = new LinkedHashSet<Jid>();
+        store.accountStore().jid().ifPresent(pn -> addUserJid(receivers, pn));
+        store.accountStore().lid().ifPresent(lid -> addUserJid(receivers, lid));
+        var chatJid = stanza.chatJid();
+        if (chatJid.hasGroupOrCommunityServer() || chatJid.hasBroadcastServer()) {
+            receivers.add(chatJid);
+            receivers.addAll(senders);
+        }
+
+        for (var sender : senders) {
+            for (var receiver : receivers) {
+                var result = ReportingToken.generate(
+                        messageSecret, stanza.id(), sender, receiver, content, version);
+                if (result.isEmpty()) {
+                    continue;
+                }
+                var token = result.get().token();
+                if (Arrays.equals(token, Arrays.copyOf(receivedToken, token.length))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Adds the user-level form of a JID to a candidate set, skipping
+     * {@code null}.
+     *
+     * @param set the candidate set to grow
+     * @param jid the JID whose {@link Jid#toUserJid()} form is added, or
+     *            {@code null} to skip
+     */
+    private static void addUserJid(LinkedHashSet<Jid> set, Jid jid) {
+        if (jid != null) {
+            set.add(jid.toUserJid());
+        }
+    }
+
+    /**
+     * Commits the pair of reporting-token validation-failure events for a failed
+     * inbound message.
+     *
+     * <p>The regular-channel {@link ReportingTokenValidationFailureEventBuilder}
+     * carries the message-shape dimensions and the private-channel
+     * {@link ReportingTokenValidationFailureSenderEventBuilder} additionally
+     * carries the sender JID and the E2E sender classification, matching
+     * WhatsApp Web's {@code logReportingTokenValidationEvent} which commits both.
+     *
+     * @param stanza    the parsed stanza
+     * @param container the decoded message container
+     * @param version   the reporting-token version
+     * @param reason    the classified failure reason
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamReportingTokenMismatchReporter", exports = "logReportingTokenValidationEvent",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private void emitReportingTokenFailure(
+            MessageReceiveStanza stanza,
+            MessageContainer container,
+            int version,
+            ReportingTokenValidationFailureReason reason
+    ) {
+        var editType = mapEditType(stanza.editAttribute());
+        var mediaType = WamMsgUtils.getWamMediaType(container);
+        var messageType = WamMsgUtils.getWamMessageTypeFromStanzaType(stanza.messageType());
+        var lid = isLidAddressed(stanza);
+        var forwarded = isForwardedMessage(container);
+        var groupHistory = stanza.appdata().filter("group_history"::equals).isPresent();
+
+        commit(new ReportingTokenValidationFailureEventBuilder()
+                .editType(editType)
+                .messageMediaType(mediaType)
+                .messageType(messageType)
+                .reportingTokenValidationFailureReason(reason)
+                .isLid(lid)
+                .isMessageRetry(stanza.isRetry())
+                .offline(stanza.isOffline())
+                .reportingTokenVersion(version)
+                .messageIsForward(forwarded)
+                .isSecretEncryptedMsg(false)
+                .isPartOfGroupHistory(groupHistory)
+                .build());
+
+        var senderBuilder = new ReportingTokenValidationFailureSenderEventBuilder()
+                .clientMessageId(stanza.id())
+                .e2eReceiverType(DeviceType.COMPANION)
+                .editType(editType)
+                .messageMediaType(mediaType)
+                .messageType(messageType)
+                .reportingTokenValidationFailureReason(reason)
+                .isLid(lid)
+                .isMessageRetry(stanza.isRetry())
+                .offline(stanza.isOffline())
+                .reportingTokenVersion(version)
+                .messageIsForward(forwarded)
+                .isSecretEncryptedMsg(false)
+                .senderJid(stanza.senderJid().toString());
+        var e2eSenderType = WamMsgUtils.getWamE2eSenderType(
+                stanza.senderJid(), store.accountStore().jid().orElse(null));
+        if (e2eSenderType != null) {
+            senderBuilder.e2eSenderType(e2eSenderType);
+        }
+        commit(senderBuilder.build());
+    }
+
+    /**
+     * Dispatches the per-message receive telemetry emitted after a message has
+     * been successfully assembled.
+     *
+     * <p>Fans out to the status-sync, QuickBusinessMessaging incoming-message,
+     * and structured-message-interaction emitters, each of which self-gates on
+     * the payload and chat class.
+     *
+     * @param stanza    the parsed stanza
+     * @param chatJid   the effective chat JID
+     * @param container the decoded (and possibly DSM-unwrapped) container
+     */
+    private void emitReceiveTelemetry(MessageReceiveStanza stanza, Jid chatJid, MessageContainer container) {
+        if (wamService == null) {
+            return;
+        }
+        maybeEmitStatusSync(stanza);
+        maybeEmitQbmIncomingMessage(stanza, chatJid, container);
+        maybeEmitStructuredMessageInteraction(stanza, chatJid, container);
+        maybeEmitCtwaBizUserJourney(stanza);
+    }
+
+    /**
+     * Accounts a click-to-WhatsApp business user-journey metric when an inbound
+     * message carries CTWA ad-greeting attribution.
+     *
+     * <p>WhatsApp Web synthesises an automated greeting message (AGM) for the
+     * buyer whenever a business is reached through a click-to-WhatsApp ad and logs
+     * the {@link CtwaBizUserJourneyOperation#AGM_INJECTED injection} on the
+     * business half of the journey. Cobalt is headless and never injects a
+     * synthetic greeting row, but it observes the same trigger: an inbound
+     * (non-self) message whose {@link MessageReceiveBizInfo} carries the CTWA
+     * {@link MessageReceiveBizInfo#campaignId() campaign attribution}. The ad id
+     * is the real campaign attribution read from the biz info; the feature tag
+     * ({@link #CTWA_AGM_BIZ_FEATURE}), the {@code AGM_INJECTED} operation, and the
+     * {@link #CTWA_AGM_METADATA metadata} are the fixed dimensions WA Web reports
+     * for the injection.
+     *
+     * @implNote
+     * This implementation gates on the CTWA campaign attribution surfaced by the
+     * biz-info parser rather than WA Web's
+     * {@code ctwaContext.automatedGreetingMessageShown} flag and {@code sourceId},
+     * which live on the message's CTWA context and are not carried by
+     * {@link MessageReceiveBizInfo}; it emits only the {@code AGM_INJECTED}
+     * operation because the receive path cannot observe WA Web's duplicate,
+     * null-greeting, invalid-source-app, and bottom-sheet error branches. The
+     * {@code fromBusiness} guard that WA Web applies inside
+     * {@code WAWebCtwaLogger.logAGMOperation} (commit only when the message is not
+     * self-sent) is reproduced here as the {@link #isFromMe(MessageReceiveStanza)}
+     * short-circuit.
+     *
+     * @param stanza the parsed stanza
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCtwaLogger", exports = "logAGMOperation",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebMsgAGMProcessing", exports = "generateAutomatedGreetingMsgs",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeEmitCtwaBizUserJourney(MessageReceiveStanza stanza) {
+        if (isFromMe(stanza)) {
+            return;
+        }
+        var adId = stanza.bizInfo()
+                .flatMap(MessageReceiveBizInfo::campaignId)
+                .orElse(null);
+        if (adId == null) {
+            return;
+        }
+        commit(new CtwaBizUserJourneyEventBuilder()
+                .adId(adId)
+                .bizFeatureEnabled(CTWA_AGM_BIZ_FEATURE)
+                .ctwaBizUserJourneyOperation(CtwaBizUserJourneyOperation.AGM_INJECTED)
+                .ctwaBizUserJourneyMetadata(CTWA_AGM_METADATA)
+                .build());
+    }
+
+    /**
+     * Accounts a status-feed sync metric when the received message is a status
+     * broadcast.
+     *
+     * <p>The recent and viewed item and row counts are read from the live
+     * {@link LinkedWhatsAppChatStore#status() status feed}, aggregating distinct
+     * authors as the "row" dimension; the sync-duration timer is derived from the
+     * feed size because Cobalt receives status items one stanza at a time rather
+     * than in a single collection sync.
+     *
+     * @implNote
+     * This implementation emits per received status stanza, whereas WhatsApp
+     * Web's {@code WAWebStatusCollection.logMetrics} emits once per collection
+     * sync round; Cobalt has no batched status-collection sync boundary in the
+     * receive path, so the closest faithful trigger is the arrival of a status
+     * item. The counts are real store data; the {@code webcStatusSyncT} duration
+     * is host-derived rather than measured.
+     *
+     * @param stanza the parsed stanza
+     */
+    @WhatsAppWebExport(moduleName = "WAWebStatusCollection", exports = "logMetrics",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeEmitStatusSync(MessageReceiveStanza stanza) {
+        if (!stanza.chatJid().isStatusBroadcastAccount()) {
+            return;
+        }
+        var statuses = store.chatStore().status();
+        var itemCount = statuses.size();
+        var authors = new LinkedHashSet<Jid>();
+        var viewedAuthors = new LinkedHashSet<Jid>();
+        var viewedItems = 0L;
+        for (var status : statuses) {
+            var author = status.senderJid().map(Jid::toUserJid).orElse(null);
+            if (author != null) {
+                authors.add(author);
+            }
+            var viewed = status.status()
+                    .map(state -> state == MessageStatus.READ || state == MessageStatus.PLAYED)
+                    .orElse(false);
+            if (viewed) {
+                viewedItems++;
+                if (author != null) {
+                    viewedAuthors.add(author);
+                }
+            }
+        }
+        commit(new WebcStatusSyncEventBuilder()
+                .webcStatusSyncT(Instant.ofEpochMilli(35L + itemCount * 4L))
+                .webcStatusRecentItemCount(itemCount)
+                .webcStatusRecentRowCount(authors.size())
+                .webcStatusViewedItemCount(viewedItems)
+                .webcStatusViewedRowCount(viewedAuthors.size())
+                .build());
+    }
+
+    /**
+     * Accounts a QuickBusinessMessaging incoming-message metric for an inbound
+     * business message on a 1:1 chat.
+     *
+     * <p>Gated exactly as WhatsApp Web's {@code WAWebQbmIncomingMessageLogger}:
+     * the message is not self-authored, the chat is an individual user (not a
+     * group, status, or broadcast), and the sender is a business (the stanza
+     * carries business metadata or a highly-structured template). The obtainable
+     * dimensions (contact type, folder, mute, QBM flag, HSM tag, message type,
+     * subscribed-contact) are read from the store; the server-side analytics
+     * counters and in-app-signup fields WA Web populates from business-backend
+     * signals are omitted because Cobalt cannot obtain them client-side.
+     *
+     * @implNote
+     * This implementation derives the SMB-versus-enterprise contact type from
+     * the stanza's {@code verified_level} rather than a contact-database flag,
+     * and synthesises the message and thread id HMACs with a SHA-256 digest
+     * because Cobalt does not run WA Web's keyed thread-id HMAC service.
+     *
+     * @param stanza    the parsed stanza
+     * @param chatJid   the effective chat JID
+     * @param container the decoded container
+     */
+    @WhatsAppWebExport(moduleName = "WAWebQbmIncomingMessageLogger", exports = "logQbmIncomingMessages",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeEmitQbmIncomingMessage(MessageReceiveStanza stanza, Jid chatJid, MessageContainer container) {
+        if (isFromMe(stanza)) {
+            return;
+        }
+        if (!chatJid.hasUserServer() && !chatJid.hasLidServer()) {
+            return;
+        }
+        if (stanza.bizInfo().isEmpty() && !stanza.isHsm()) {
+            return;
+        }
+        var chat = store.chatStore().findChatByJid(chatJid).orElse(null);
+        var archived = chat != null && chat.archived();
+        var muted = chat != null && chat.mute().map(ChatMute::isMuted).orElse(false);
+        var enterprise = isEnterpriseSender(stanza);
+        var flag = qbmFlag(stanza);
+        var known = store.contactStore().findContactByJid(stanza.senderJid().toUserJid()).isPresent();
+
+        commit(new QbmIncomingMessageEventBuilder()
+                .contactType(enterprise ? ContactType.ENTERPRISE : ContactType.SMB)
+                .chatsFolderType(archived ? ChatsFolderType.ARCHIVED : ChatsFolderType.INBOX)
+                .isMuted(muted)
+                .qbmFlag(flag)
+                .qbmFlagStr(qbmFlagName(flag))
+                .hsmTagStr(stanza.hsmTag().orElse(""))
+                .messageTypeStr(stanza.stanzaType())
+                .notificationEnabled(true)
+                .isBizIntent(true)
+                .isInsubContact(known)
+                .messageIdHmac(pseudoHmac(stanza.id()))
+                .threadIdHmac(pseudoHmac(chatJid.toString()))
+                .build());
+    }
+
+    /**
+     * Accounts a structured-message interaction metric when an inbound message
+     * carries a structured business payload.
+     *
+     * <p>The message class is derived from the payload type; the interaction is
+     * reported as {@link InteractionType#USER_VIEW} because the receive path
+     * represents the buyer receiving and viewing the structured message rather
+     * than acting on one of its buttons.
+     *
+     * @implNote
+     * This implementation is the receive-time analogue of WhatsApp Web's
+     * per-button interaction loggers in {@code WAWebFrontendVcardUtils}, which
+     * fire from the buyer's UI (Pay Now, copy Pix code, and so on). Cobalt is
+     * headless, so it emits the view interaction at message receipt and cannot
+     * surface the button-specific interaction types.
+     *
+     * @param stanza    the parsed stanza
+     * @param chatJid   the effective chat JID
+     * @param container the decoded container
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPsStructuredMessageInteractionWamEvent", exports = "PsStructuredMessageInteractionWamEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeEmitStructuredMessageInteraction(MessageReceiveStanza stanza, Jid chatJid, MessageContainer container) {
+        if (isFromMe(stanza)) {
+            return;
+        }
+        var messageClass = structuredMessageClass(container);
+        if (messageClass == null) {
+            return;
+        }
+        var hasMedia = WamMsgUtils.getWamMediaType(container) != MediaType.NONE;
+        commit(new PsStructuredMessageInteractionEventBuilder()
+                .bizPlatform(isEnterpriseSender(stanza) ? BizPlatform.ENT : BizPlatform.SMB)
+                .businessOwnerJid(stanza.senderJid().toUserJid().toString())
+                .messageClass(messageClass)
+                .messageClassAttributes("{\"has_media\":" + hasMedia + "}")
+                .messageInteraction(InteractionType.USER_VIEW)
+                .messageMediaType(WamMsgUtils.getWamMediaType(container))
+                .templateId(stanza.hsmTag().orElse(""))
+                .threadIdHmac(pseudoHmac(chatJid.toString()))
+                .build());
+    }
+
+    /**
+     * Returns whether the sender is a verified enterprise business.
+     *
+     * <p>Reads the stanza's business {@code verified_level}: an enterprise sender
+     * carries a high verification level, everything else is treated as an SMB.
+     *
+     * @param stanza the parsed stanza
+     * @return {@code true} when the sender presents an enterprise verification
+     *         level
+     */
+    private static boolean isEnterpriseSender(MessageReceiveStanza stanza) {
+        return stanza.bizInfo()
+                .flatMap(biz -> biz.verifiedLevel())
+                .filter(level -> level.equalsIgnoreCase("high") || level.equalsIgnoreCase("enterprise"))
+                .isPresent();
+    }
+
+    /**
+     * Classifies a container's payload into the WAM structured-message class, or
+     * returns {@code null} when the payload is not a structured business message.
+     *
+     * @param container the decoded container
+     * @return the structured-message class, or {@code null} when the payload is
+     *         not structured
+     */
+    private static StructuredMessageClass structuredMessageClass(MessageContainer container) {
+        return switch (container.content()) {
+            case HighlyStructuredMessage ignored -> StructuredMessageClass.HSM;
+            case TemplateMessage ignored -> StructuredMessageClass.HSM;
+            case ButtonsMessage ignored -> StructuredMessageClass.BUTTON;
+            case InteractiveMessage ignored -> StructuredMessageClass.BUTTON_NFM;
+            case InteractiveResponseMessage ignored -> StructuredMessageClass.BUTTON_NFM;
+            case ListMessage ignored -> StructuredMessageClass.LIST;
+            case ProductMessage ignored -> StructuredMessageClass.PRODUCT_ITEM;
+            case OrderMessage ignored -> StructuredMessageClass.PRODUCT_LIST;
+            case null, default -> null;
+        };
+    }
+
+    /**
+     * Classifies a business message into its QuickBusinessMessaging flag.
+     *
+     * <p>Marketing-message business sources map to
+     * {@link QbmFlag#MARKETING_MESSAGE_SMB}; otherwise the highly-structured
+     * category drives the flag (utility to transactional, marketing to
+     * promotional, authentication to OTP), defaulting to {@link QbmFlag#OTHER}.
+     *
+     * @param stanza the parsed stanza
+     * @return the QuickBusinessMessaging flag
+     */
+    @WhatsAppWebExport(moduleName = "WAWebQbmIncomingMessageLogger", exports = "logQbmIncomingMessages",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static QbmFlag qbmFlag(MessageReceiveStanza stanza) {
+        var bizSource = stanza.bizSource().orElse(null);
+        if (bizSource != null && bizSource.toLowerCase(Locale.ROOT).contains("marketing")) {
+            return QbmFlag.MARKETING_MESSAGE_SMB;
+        }
+        var category = stanza.hsmCategory().orElse(null);
+        if (category == null) {
+            return QbmFlag.OTHER;
+        }
+        return switch (category.toUpperCase(Locale.ROOT)) {
+            case "UTILITY" -> QbmFlag.TRANSACTIONAL;
+            case "MARKETING" -> QbmFlag.PROMOTIONAL;
+            case "AUTHENTICATION" -> QbmFlag.OTP;
+            default -> QbmFlag.OTHER;
+        };
+    }
+
+    /**
+     * Returns the string label WhatsApp Web reports for a QuickBusinessMessaging
+     * flag.
+     *
+     * <p>Mirrors WA Web's flag-to-string table, in which
+     * {@link QbmFlag#PROMOTIONAL} is reported as {@code "NON_TRANSACTIONAL"}.
+     *
+     * @param flag the QuickBusinessMessaging flag
+     * @return the string label
+     */
+    private static String qbmFlagName(QbmFlag flag) {
+        return switch (flag) {
+            case TRANSACTIONAL -> "TRANSACTIONAL";
+            case PROMOTIONAL -> "NON_TRANSACTIONAL";
+            case OTP -> "OTP";
+            case MARKETING_MESSAGE_SMB -> "MARKETING_MESSAGE_SMB";
+            case OTHER -> "OTHER";
+        };
+    }
+
+    /**
+     * Maps the stanza {@code edit} attribute to the WAM {@link EditType}
+     * enumeration.
+     *
+     * @param editAttribute the raw {@code edit} attribute value
+     * @return the corresponding WAM edit type, defaulting to
+     *         {@link EditType#NOT_EDITED}
+     */
+    private static EditType mapEditType(int editAttribute) {
+        return switch (editAttribute) {
+            case MessageReceiveStanza.EDIT_MESSAGE -> EditType.EDITED;
+            case MessageReceiveStanza.EDIT_PIN -> EditType.PIN;
+            case MessageReceiveStanza.EDIT_SENDER_REVOKE -> EditType.SENDER_REVOKE;
+            case MessageReceiveStanza.EDIT_ADMIN_REVOKE -> EditType.ADMIN_REVOKE;
+            default -> EditType.NOT_EDITED;
+        };
+    }
+
+    /**
+     * Returns whether the stanza is LID-addressed.
+     *
+     * <p>True when the {@code addressing_mode} is {@code "lid"} or either the
+     * sender or chat JID lives on the LID server.
+     *
+     * @param stanza the parsed stanza
+     * @return {@code true} when the message is LID-addressed
+     */
+    private boolean isLidAddressed(MessageReceiveStanza stanza) {
+        return "lid".equals(stanza.addressingMode().orElse(null))
+                || stanza.senderJid().hasLidServer()
+                || stanza.chatJid().hasLidServer();
+    }
+
+    /**
+     * Returns whether the container's payload is a forwarded message.
+     *
+     * @param container the decoded container
+     * @return {@code true} when the payload carries a forwarded
+     *         {@link ContextInfo}
+     */
+    private static boolean isForwardedMessage(MessageContainer container) {
+        return container.content() instanceof ContextualMessage contextual
+                && contextual.contextInfo().map(ContextInfo::isForwarded).orElse(false);
+    }
+
+    /**
+     * Computes a stable, non-reversible identifier from an input string.
+     *
+     * <p>Used to fill the {@code messageIdHmac} and {@code threadIdHmac} WAM
+     * dimensions with real-looking hex digests. It hashes with SHA-256 rather
+     * than a keyed HMAC because Cobalt does not run WhatsApp Web's per-account
+     * thread-id HMAC key service.
+     *
+     * @param input the string to digest
+     * @return the lowercase hex SHA-256 digest
+     * @throws IllegalStateException if SHA-256 is unavailable
+     */
+    private static String pseudoHmac(String input) {
+        try {
+            var digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(input.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 not available", exception);
+        }
+    }
+
+    /**
+     * Commits a WAM event when the telemetry sink is present.
+     *
+     * <p>Central null-guard so every emitter can call
+     * {@link WamService#commit(WamEventSpec)} without repeating the disabled-sink
+     * check; a {@code null} {@link #wamService} silently drops the event.
+     *
+     * @param event the WAM event to commit
+     */
+    private void commit(WamEventSpec event) {
+        if (wamService != null) {
+            wamService.commit(event);
+        }
     }
 }

@@ -22,11 +22,16 @@ import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.E2eRetryRejectEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdRetryFromUnknownDeviceEventBuilder;
 import com.github.auties00.cobalt.wam.event.ReceiptStanzaReceiveEventBuilder;
 import com.github.auties00.cobalt.wam.type.DeviceType;
+import com.github.auties00.cobalt.wam.type.E2eDeviceType;
+import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.ReceiptStanzaStage;
+import com.github.auties00.cobalt.wam.type.RetryRejectReason;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
 import com.github.auties00.libsignal.state.SignalPreKeyBundleBuilder;
@@ -506,6 +511,17 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
      * driven by {@code WAWebVoipStackInterface.resendEncRekeyRetry} in
      * WA Web.
      *
+     * <p>Every branch that refuses the resend commits one
+     * {@link com.github.auties00.cobalt.wam.event.E2eRetryRejectEvent} through
+     * {@link #emitRetryReject(Jid, Jid, int, MessageInfo, RetryRejectReason)}:
+     * the retry-count ceiling maps to
+     * {@link RetryRejectReason#HIGH_RETRY_COUNT}, a missing original message to
+     * {@link RetryRejectReason#MESSAGE_NOT_EXIST} and a message that is not
+     * outbound to {@link RetryRejectReason#OTHER}. The unknown-device branch
+     * keeps its own {@link com.github.auties00.cobalt.wam.event.MdRetryFromUnknownDeviceEvent}
+     * emission and the self-broadcast suppression path stays silent because it
+     * is a duplicate-avoidance guard rather than a rejection.
+     *
      * @implNote
      * This implementation mirrors WA Web's
      * {@code WAWebHandleRetryRequest.handleRetryRequest} and its inner
@@ -547,6 +563,10 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Refusing retry attempt #{0}, exceeds max retry count {1}",
                     retryCount, MAX_RETRY);
+            var highRetryRequester = participant != null ? participant : from;
+            if (highRetryRequester != null) {
+                emitRetryReject(highRetryRequester, from, retryCount, null, RetryRejectReason.HIGH_RETRY_COUNT);
+            }
             return;
         }
 
@@ -573,7 +593,12 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
         }
 
         var message = findRetryMessage(from, participant, originalId);
-        if (message == null || !message.key().fromMe()) {
+        if (message == null) {
+            emitRetryReject(requester, from, retryCount, null, RetryRejectReason.MESSAGE_NOT_EXIST);
+            return;
+        }
+        if (!message.key().fromMe()) {
+            emitRetryReject(requester, from, retryCount, message, RetryRejectReason.OTHER);
             return;
         }
 
@@ -885,6 +910,127 @@ public final class MessageReceiptStreamHandler extends SocketStreamHandler.Concu
                 .offline(offline)
                 .senderType(senderType)
                 .build());
+    }
+
+    /**
+     * Commits one
+     * {@link com.github.auties00.cobalt.wam.event.E2eRetryRejectEvent} for a
+     * retry request the local client refuses to satisfy as the message
+     * sender.
+     *
+     * <p>The event is emitted from every reject branch of
+     * {@link #processRetryRequest(Stanza)}: the retry-count ceiling, a missing
+     * original message and a message that is not outbound. The
+     * {@code senderDeviceType} and {@code e2eSenderType} classify the
+     * requesting device against the local account; {@code sessionScope}
+     * distinguishes the status-broadcast encryption session from the default
+     * one; {@code encryptionType} is set to {@link EncryptionTypeCode#COEX}
+     * only when the requester lives on a hosted server; {@code messageType}
+     * buckets the conversation surface and {@code retryRevoke} flags a
+     * rejected revoke.
+     *
+     * @implNote
+     * This implementation mirrors the {@code E2eRetryRejectWamEvent}
+     * construction inside {@code WAWebProcessRetryKeyBundle.getMsgIfAuthorized},
+     * which commits the event with {@code senderDeviceType} derived from
+     * {@code l.isCompanion()}, {@code messageType} from
+     * {@code getWamMessageType}, {@code msgRetryCount} from the retry count,
+     * {@code retryRevoke} from the revoke flag, {@code retryRejectReason} from
+     * the {@code RetryEligibilityResult}, {@code sessionScope} from
+     * {@code sessionScopeToWamType}, the optional {@code e2eSenderType} from
+     * {@code getWamE2eSenderType} and the {@code encryptionType} COEX override
+     * for hosted requesters. WA Web classifies {@code messageType} from the
+     * stored message body; Cobalt derives the same surface bucket from the
+     * conversation JID through {@link #resolveMessageType(Jid)} because the
+     * rejected message is not always resolvable on the count-ceiling branch.
+     *
+     * @param requester  the device-level JID that issued the retry request
+     * @param chat       the conversation JID the retry targets, or
+     *                   {@code null}
+     * @param retryCount the retry attempt count read from the {@code <retry>}
+     *                   child
+     * @param message    the resolved original message, or {@code null} when
+     *                   it could not be located
+     * @param reason     the {@link RetryRejectReason} for this refusal
+     */
+    @WhatsAppWebExport(moduleName = "WAWebProcessRetryKeyBundle",
+            exports = "getMsgIfAuthorized",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitRetryReject(Jid requester, Jid chat, int retryCount, MessageInfo message, RetryRejectReason reason) {
+        var deviceId = Math.max(requester.device(), 0);
+        var builder = new E2eRetryRejectEventBuilder()
+                .senderDeviceType(deviceId == DeviceConstants.PRIMARY_DEVICE_ID ? DeviceType.PRIMARY : DeviceType.COMPANION)
+                .e2eSenderType(resolveE2eSenderType(requester, deviceId))
+                .msgRetryCount(retryCount)
+                .retryRevoke(isRevokeMessage(message))
+                .retryRejectReason(reason)
+                .messageType(resolveMessageType(chat))
+                .sessionScope(chat != null && chat.isStatusBroadcastAccount() ? SessionScopeType.STATUS : SessionScopeType.DEFAULT);
+        if (requester.hasHostedServer() || requester.hasHostedLidServer()) {
+            builder.encryptionType(EncryptionTypeCode.COEX);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Classifies the retry requester's device into the {@link E2eDeviceType}
+     * WAM enum value carried by
+     * {@link com.github.auties00.cobalt.wam.event.E2eRetryRejectEvent}.
+     *
+     * <p>The classification splits on whether the requesting device belongs to
+     * the local account and on whether it is a primary, companion or hosted
+     * device.
+     *
+     * @implNote
+     * This implementation reconstructs WA Web's
+     * {@code WAWebWamMsgUtils.getWamE2eSenderType}: hosted requesters resolve
+     * to the {@code HOSTED_COMPANION} pair, the primary device id
+     * ({@link DeviceConstants#PRIMARY_DEVICE_ID}) to the {@code PRIMARY} pair
+     * and any other device id to the {@code COMPANION} pair, with the
+     * {@code MY_}/{@code OTHER_} prefix selected by comparing the requester
+     * against the local account JID through {@link #sameUser(Jid, Jid)}.
+     *
+     * @param requester the device-level JID that issued the retry request
+     * @param deviceId  the requester device id, where
+     *                  {@link DeviceConstants#PRIMARY_DEVICE_ID} means primary
+     * @return the resolved {@link E2eDeviceType}
+     */
+    private E2eDeviceType resolveE2eSenderType(Jid requester, int deviceId) {
+        var mine = whatsapp.store().accountStore().jid()
+                .map(self -> sameUser(self, requester))
+                .orElse(false);
+        if (requester.hasHostedServer() || requester.hasHostedLidServer()) {
+            return mine ? E2eDeviceType.MY_HOSTED_COMPANION : E2eDeviceType.OTHER_HOSTED_COMPANION;
+        }
+        if (deviceId == DeviceConstants.PRIMARY_DEVICE_ID) {
+            return mine ? E2eDeviceType.MY_PRIMARY : E2eDeviceType.OTHER_PRIMARY;
+        }
+        return mine ? E2eDeviceType.MY_COMPANION : E2eDeviceType.OTHER_COMPANION;
+    }
+
+    /**
+     * Returns {@code true} when the rejected message is a revoke.
+     *
+     * <p>The result drives the {@code retryRevoke} flag on
+     * {@link com.github.auties00.cobalt.wam.event.E2eRetryRejectEvent}.
+     * Newsletter messages and a {@code null} message resolve to {@code false}
+     * because only chat messages carry a revoke {@link ProtocolMessage}.
+     *
+     * @implNote
+     * This implementation matches WA Web's
+     * {@code f.data.type === MSG_TYPE.REVOKED} check inside
+     * {@code getMsgIfAuthorized}: a Cobalt revoke is a {@link ChatMessageInfo}
+     * whose content is a {@link ProtocolMessage} of type
+     * {@link ProtocolMessage.Type#REVOKE}.
+     *
+     * @param message the resolved original message, or {@code null}
+     * @return {@code true} when {@code message} is a revoke; {@code false}
+     *         otherwise
+     */
+    private static boolean isRevokeMessage(MessageInfo message) {
+        return message instanceof ChatMessageInfo chatMessageInfo
+                && chatMessageInfo.message().content() instanceof ProtocolMessage protocolMessage
+                && protocolMessage.type().orElse(null) == ProtocolMessage.Type.REVOKE;
     }
 
     /**

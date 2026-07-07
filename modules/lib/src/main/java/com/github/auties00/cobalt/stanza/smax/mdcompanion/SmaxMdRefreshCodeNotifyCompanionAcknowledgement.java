@@ -24,7 +24,10 @@ import java.util.Objects;
  * @implNote This implementation folds the WA Web notification-ack mixin into the same builder
  * rather than keeping it as a separate merge pass: {@code class} is pinned to the literal
  * {@code "notification"} that the upstream mixin would otherwise merge in.
+ *
+ * @deprecated companion-pairing notify handled inline by {@code IqStreamHandler}.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxOutMdRefreshCodeNotifyCompanionResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutMdNotificationClientAckMixin")
 public final class SmaxMdRefreshCodeNotifyCompanionAcknowledgement implements SmaxStanza.Request {

@@ -16,13 +16,24 @@ import com.github.auties00.cobalt.listener.linked.LinkedCallPreacceptListener;
 import com.github.auties00.cobalt.listener.linked.LinkedCallVideoStateChangedListener;
 import com.github.auties00.cobalt.listener.linked.LinkedCallVideoUpgradeRequestListener;
 
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * The production {@link CallEventBus}: gates host-facing events and fans them out to listeners.
+ * The single egress through which the wa-voip call engine publishes in-call events to the host: gates
+ * host-facing events and fans them out to listeners.
+ *
+ * <p>Every call-engine unit (the lifecycle controller, the state machine, the in-call controllers)
+ * constructs a typed {@link CallEvent} and hands it here rather than touching the listener registry
+ * directly. The bus owns two responsibilities the native engine couples into one dispatcher: it applies
+ * the should-emit gate that suppresses the engine's internal-only and diagnostic event ids, and it fans
+ * the surviving host-facing events out to the registered listeners. Concentrating both behind this seam
+ * keeps the producers decoupled from the listener bus and gives the engine exactly one place where an
+ * event becomes observable.
  *
  * <p>This implementation collapses the native engine's generic event dispatcher and its 127-slot
  * ring into two pure-Java steps. {@link #shouldEmit(CallEventType)} is the should-emit gate: it admits
@@ -56,7 +67,7 @@ import java.util.function.Consumer;
  * established call-listener dispatch in the legacy call service, where each {@code onCall*} callback is
  * run through {@link Thread#startVirtualThread(Runnable)}.
  */
-public final class LiveCallEventBus implements CallEventBus {
+public final class LiveCallEventBus {
     /**
      * Logs a listener-dispatch failure without letting it reach the call engine.
      */
@@ -83,7 +94,7 @@ public final class LiveCallEventBus implements CallEventBus {
      * {@link CallEvent#type()}, so {@link #shouldEmit(CallEventType)} admits every event this bus can be
      * handed; it is the consulted-with type set, not a transcription of the native id space.
      */
-    private static final Set<CallEventType> HOST_FACING = Set.of(
+    private static final Set<CallEventType> HOST_FACING = Collections.unmodifiableSet(EnumSet.of(
             CallEventType.CALL_OFFER_RECEIVED,
             CallEventType.CALL_PREACCEPT_RECEIVED,
             CallEventType.CALL_TERMINATE_RECEIVED,
@@ -117,7 +128,7 @@ public final class LiveCallEventBus implements CallEventBus {
             CallEventType.WAITING_ROOM_DENY_ACKED,
             CallEventType.CALL_ADD_EXTENSION_RECEIVED,
             CallEventType.CALL_ADD_EXTENSION_SUCCESS,
-            CallEventType.CALL_ADD_EXTENSION_FAILURE);
+            CallEventType.CALL_ADD_EXTENSION_FAILURE));
 
     /**
      * The client whose listener registry receives the fanned-out events and that the callbacks receive.
@@ -136,20 +147,33 @@ public final class LiveCallEventBus implements CallEventBus {
     }
 
     /**
-     * {@inheritDoc}
+     * Returns whether an event of the given type is fanned out to listeners rather than suppressed.
+     *
+     * <p>Returns {@code true} only for the host-facing event ids and {@code false} for the engine's
+     * internal lifecycle and diagnostic ids. The decision depends solely on the {@link CallEventType}, so
+     * it is stable for a given type and may be consulted by a producer to skip building a payload it knows
+     * will be dropped.
      *
      * @implNote This implementation tests the type against {@link #HOST_FACING}; {@link CallEvent.Generic}
      * events therefore pass when their carried type is host-facing even though no typed callback exists
      * for them.
+     * @param type the event type to test
+     * @return {@code true} if an event of this type is emitted to listeners, {@code false} if suppressed
+     * @throws NullPointerException if {@code type} is {@code null}
      */
-    @Override
     public boolean shouldEmit(CallEventType type) {
         Objects.requireNonNull(type, "type cannot be null");
         return HOST_FACING.contains(type);
     }
 
     /**
-     * {@inheritDoc}
+     * Publishes a call event, gating it and fanning the survivors out to the registered listeners.
+     *
+     * <p>First consults {@link #shouldEmit(CallEventType)} for the event's {@link CallEvent#type()} and
+     * returns without side effect when the gate rejects it. For a gated-in event it maps the typed
+     * {@link CallEvent} onto the matching host callbacks and invokes each interested listener on its own
+     * virtual thread, so that a slow or throwing listener can neither stall the call engine nor abort the
+     * fan-out to the other listeners.
      *
      * @implNote This implementation gates on {@link CallEvent#type()}, then switches over the sealed
      * {@link CallEvent} hierarchy to route each family to its public callbacks. The
@@ -157,8 +181,9 @@ public final class LiveCallEventBus implements CallEventBus {
      * {@link CallEvent.ScreenShareChanged}, {@link CallEvent.PeerVideoPermissionChanged},
      * {@link CallEvent.Transcript}, and {@link CallEvent.Generic} families have no public callback and
      * so reach the gate but dispatch nothing. The exhaustive {@code switch} needs no default branch.
+     * @param event the event to publish
+     * @throws NullPointerException if {@code event} is {@code null}
      */
-    @Override
     public void emit(CallEvent event) {
         Objects.requireNonNull(event, "event cannot be null");
         if (!shouldEmit(event.type())) {
@@ -177,12 +202,18 @@ public final class LiveCallEventBus implements CallEventBus {
                             whatsapp, e.callId(), e.participantJid(), e.enabled()));
             case CallEvent.VideoUpgradeRequest e -> dispatch(LinkedCallVideoUpgradeRequestListener.class,
                     listener -> listener.onCallVideoUpgradeRequest(whatsapp, e.callId(), e.peerJid()));
-            case CallEvent.Reaction e -> dispatch(LinkedCallInteractionListener.class,
-                    listener -> listener.onCallInteraction(
-                            whatsapp, e.callId(), e.participantJid(), e.toInteraction()));
-            case CallEvent.RaiseHand e -> dispatch(LinkedCallInteractionListener.class,
-                    listener -> listener.onCallInteraction(
-                            whatsapp, e.callId(), e.participantJid(), e.toInteraction()));
+            case CallEvent.Reaction e -> {
+                var interaction = e.toInteraction();
+                dispatch(LinkedCallInteractionListener.class,
+                        listener -> listener.onCallInteraction(
+                                whatsapp, e.callId(), e.participantJid(), interaction));
+            }
+            case CallEvent.RaiseHand e -> {
+                var interaction = e.toInteraction();
+                dispatch(LinkedCallInteractionListener.class,
+                        listener -> listener.onCallInteraction(
+                                whatsapp, e.callId(), e.participantJid(), interaction));
+            }
             case CallEvent.WaitingRoomJoinRequest e -> dispatch(LinkedCallLinkLobbyJoinRequestListener.class,
                     listener -> listener.onCallLinkLobbyJoinRequest(whatsapp, e.link(), e.peer()));
             case CallEvent.WaitingRoomAdmitted e -> dispatch(LinkedCallLinkAdmittedListener.class,

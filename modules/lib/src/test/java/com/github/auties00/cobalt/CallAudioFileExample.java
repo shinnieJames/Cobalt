@@ -26,7 +26,7 @@ void main() throws IOException {
     var audio = Path.of("C:\\Users\\Alessandro Autiero\\Downloads\\Brazy girls.mp3");
     var video = Path.of("C:\\Users\\Alessandro Autiero\\Downloads\\file_example_MP4_1920_18MG.mp4");
     LinkedWhatsAppClient.builder()
-            .webClient(LinkedWhatsAppStoreFactory.persistent(Path.of(".temp/cobalt-em1-desktop1")))
+            .webClient(LinkedWhatsAppStoreFactory.persistent(Path.of(".temp/cobalt-em1-desktop2")))
             .loadLatestOrCreateConnection()
             .device(LinkedWhatsAppClientDevice.web())
             .releaseChannel(ClientPayload.ClientReleaseChannel.BETA)

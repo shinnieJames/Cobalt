@@ -63,6 +63,9 @@ public record MlBweOutputs(
      * @return the congestion-only outputs
      */
     public static MlBweOutputs ofCongestion(boolean detected, int probability) {
+        if (!detected && probability == 0) {
+            return DISABLED;
+        }
         return new MlBweOutputs(detected, probability, false, 0.0, 0);
     }
 }

@@ -59,6 +59,40 @@ public final class MlowEntropyWrapper {
     }
 
     /**
+     * Decodes one symbol against a window of a cumulative frequency table, the offset-aware form of
+     * {@link #decodeUpdate(MlowRangeDecoder, int[])} used where the native code passes an interior CMF
+     * pointer ({@code cmf + offset}).
+     *
+     * <p>The window is the half-open range {@code [offset, offset + len)} of {@code cmf}. Every span is
+     * measured relative to the first windowed entry {@code cmf[offset]} and the adjusted total is
+     * {@code cmf[offset + len - 1] - cmf[offset]}, exactly as {@link #decodeUpdate(MlowRangeDecoder, int[])}
+     * would treat a copied sub-array whose element zero is {@code cmf[offset]}. The returned index is
+     * relative to the window start, so this is observationally identical to copying
+     * {@code [offset, offset + len)} out and calling {@link #decodeUpdate(MlowRangeDecoder, int[])} on it,
+     * without the per-call allocation.
+     *
+     * @param decoder the range decoder to advance
+     * @param cmf     the full cumulative frequency table; non-decreasing over the window
+     * @param offset  the index of the first windowed entry
+     * @param len     the number of windowed entries; at least two
+     * @return the decoded symbol index in {@code [0, len - 1)}, relative to the window start
+     */
+    public static int decodeUpdate(MlowRangeDecoder decoder, int[] cmf, int offset, int len) {
+        int last = offset + len - 1;
+        long base = cmf[offset] & 0xFFFFFFFFL;
+        long total = (cmf[last] & 0xFFFFFFFFL) - base;
+        long cmfLow = decoder.decode(total) + base;
+        int s = offset;
+        for (; s < last; s++) {
+            if (Long.compareUnsigned(cmfLow, cmf[s + 1] & 0xFFFFFFFFL) < 0) {
+                break;
+            }
+        }
+        decoder.update((cmf[s] & 0xFFFFFFFFL) - base, (cmf[s + 1] & 0xFFFFFFFFL) - base, total);
+        return s - offset;
+    }
+
+    /**
      * Decodes one value from a uniform distribution over {@code [0, n)}, {@code smpl_ec_decode_uniform}.
      *
      * <p>Every value in {@code [0, n)} has equal probability, so the cumulative value returned by

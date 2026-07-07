@@ -81,7 +81,7 @@ class CustomPaymentMethodsHandlerTest {
      * Sets the local store's platform to {@code IOS_BUSINESS}.
      */
     private void smbPlatform() {
-        store.accountStore().device().setPlatform(ClientPlatformType.IOS_BUSINESS);
+        store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.IOS_BUSINESS));
     }
 
     /**
@@ -162,7 +162,7 @@ class CustomPaymentMethodsHandlerTest {
         @Test
         @DisplayName("IOS_BUSINESS platform is accepted")
         void iosBusinessAccepted() {
-            store.accountStore().device().setPlatform(ClientPlatformType.IOS_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.IOS_BUSINESS));
             enableSync();
             var action = new CustomPaymentMethodsActionBuilder()
                     .customPaymentMethods(List.of(sampleMethod())).build();
@@ -174,7 +174,7 @@ class CustomPaymentMethodsHandlerTest {
         @Test
         @DisplayName("ANDROID_BUSINESS platform is accepted")
         void androidBusinessAccepted() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             enableSync();
             var action = new CustomPaymentMethodsActionBuilder()
                     .customPaymentMethods(List.of(sampleMethod())).build();

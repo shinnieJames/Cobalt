@@ -800,6 +800,26 @@ public sealed class LinkedWhatsAppClientBuilder {
             }
 
             /**
+             * Builds a web client whose linking ceremony authenticates with a passkey and surfaces a
+             * verification code through the supplied handler.
+             *
+             * @apiNote
+             * The passkey itself is asserted by the
+             * {@link LinkedWhatsAppClientVerificationHandler.Web.Passkey#authenticator(LinkedWhatsAppStore)
+             * authenticator the handler resolves}; the handler also presents and confirms the resulting
+             * verification code.
+             *
+             * @param passkeyHandler the passkey verification-code handler
+             * @return the configured client
+             * @throws NullPointerException if {@code passkeyHandler} is {@code null}
+             */
+            public LinkedWhatsAppClient unregistered(LinkedWhatsAppClientVerificationHandler.Web.Passkey passkeyHandler) {
+                Objects.requireNonNull(passkeyHandler, "passkeyHandler must not be null");
+                var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
+                return new LiveLinkedWhatsAppClient(store, passkeyHandler, errorHandler);
+            }
+
+            /**
              * Builds a web client whose linking ceremony surfaces a
              * pairing code through the supplied handler.
              *

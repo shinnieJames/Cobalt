@@ -30,7 +30,10 @@ import java.util.SequencedCollection;
  * {@code <snapshot>} payloads as raw byte arrays; Cobalt decodes the
  * {@code SyncdPatch} and {@code ExternalBlobReference} protobufs at a higher layer
  * rather than inline in the parser.
+ *
+ * @deprecated superseded by the untyped sync package server_sync path ({@code LiveWebAppStateService}).
  */
+@Deprecated
 public sealed interface IqSyncdServerSyncResponse extends IqStanza.Response
         permits IqSyncdServerSyncResponse.Success, IqSyncdServerSyncResponse.ClientError, IqSyncdServerSyncResponse.ServerError {
 

@@ -126,6 +126,14 @@ public final class ParamDecoder {
     private final float[] previousLsf;
 
     /**
+     * The reusable range decoder, re-pointed at each packet's range-coded body by
+     * {@link MlowRangeDecoder#reset(byte[], int, int)} so no per-packet decoder or payload copy is
+     * allocated. {@code null} until the first packet primes it. It carries no cross-packet state: every
+     * {@link #decodePacket} call fully re-primes it before reading.
+     */
+    private MlowRangeDecoder rangeDecoder;
+
+    /**
      * The previous adaptive-codebook gain index, the native {@code ParamsDecoder.prev_acb_idx}; {@code -1}
      * when conditional coding was reset.
      */
@@ -254,19 +262,30 @@ public final class ParamDecoder {
      * method decodes only frame zero when {@link MlowTocByte#sid()} is set. The cross-frame and cross-packet
      * predictors persist on this decoder.
      *
-     * @param toc     the decoded TOC of the packet, supplying the frame count, subframe count, frame
-     *                length, SID flag, low-rate flag, and coded-as-active-voice flag
-     * @param payload the range-coded packet body, the bytes after the TOC byte
+     * <p>The range-coded body is the window {@code [offset + 1, offset + length)} of {@code packet}: the TOC
+     * byte sits at {@code packet[offset]} and is skipped. The decoder reads that window directly through the
+     * reused {@link #rangeDecoder}, so no stripped-payload copy is made.
+     *
+     * @param toc    the decoded TOC of the packet, supplying the frame count, subframe count, frame length,
+     *               SID flag, low-rate flag, and coded-as-active-voice flag
+     * @param packet the backing array holding the packet, with the TOC byte at {@code offset}
+     * @param offset the index of the TOC byte within {@code packet}
+     * @param length the length of the packet including the TOC byte
      * @return one {@link DecodedFrame} per decoded internal frame, in decode order
      * @throws IllegalArgumentException if {@code toc} announces a sample rate above 16 kHz, which is out of
      *                                  the low-band scope of this decoder
      */
-    public DecodedFrame[] decodePacket(MlowTocByte toc, byte[] payload) {
+    public DecodedFrame[] decodePacket(MlowTocByte toc, byte[] packet, int offset, int length) {
         if (toc.sampleRateHz() > 16000) {
             throw new IllegalArgumentException(
                     "high-band decode (fs " + toc.sampleRateHz() + " Hz) is out of low-band scope");
         }
-        MlowRangeDecoder decoder = new MlowRangeDecoder(payload);
+        if (rangeDecoder == null) {
+            rangeDecoder = new MlowRangeDecoder(packet, offset + 1, length - 1);
+        } else {
+            rangeDecoder.reset(packet, offset + 1, length - 1);
+        }
+        MlowRangeDecoder decoder = rangeDecoder;
         int numFrames = toc.numFrames();
         int decodedFrames = toc.sid() ? 1 : numFrames;
         DecodedFrame[] out = new DecodedFrame[decodedFrames];
@@ -418,7 +437,7 @@ public final class ParamDecoder {
                 } else {
                     int minDelta = -prevFcbIdx;
                     int maxDelta = (FCBG_V_N - 1) - prevFcbIdx;
-                    int delta = decodeDeltaWindow(decoder, MiscTables.fcbgVDeltaCmf(),
+                    int delta = MlowEntropyWrapper.decodeUpdate(decoder, MiscTables.fcbgVDeltaCmf(),
                             (FCBG_V_N - 1) + minDelta, maxDelta - minDelta + 2) + minDelta;
                     fcbgIdx[sf] = prevFcbIdx + delta;
                 }
@@ -426,37 +445,6 @@ public final class ParamDecoder {
             }
         }
         return (int) (meanAcbgQ14 / numSubfr);
-    }
-
-    /**
-     * Decodes one symbol against a window of a cumulative frequency table, the windowed form of
-     * {@code smpl_ec_decode_update} used where the native fixed-codebook-gain delta decode passes an
-     * interior CMF pointer.
-     *
-     * <p>The native code windows the delta CMF as {@code &fcbgains_v_delta_cmf[SMPL_FCBG_V_N - 1] +
-     * min_delta} of length {@code max_delta - min_delta + 2} and measures all spans relative to the first
-     * windowed entry. This drives the shared range-decoder primitives over {@code [offset, offset + len)}
-     * so the decoded index is relative to the window start, matching the native call exactly.
-     *
-     * @param decoder the range decoder to advance
-     * @param cmf     the full cumulative frequency table
-     * @param offset  the index of the first windowed entry
-     * @param len     the number of windowed entries; at least two
-     * @return the decoded symbol index in {@code [0, len - 1)}, relative to the window start
-     */
-    private static int decodeDeltaWindow(MlowRangeDecoder decoder, int[] cmf, int offset, int len) {
-        int last = offset + len - 1;
-        long base = cmf[offset] & 0xFFFFFFFFL;
-        long total = (cmf[last] & 0xFFFFFFFFL) - base;
-        long cmfLow = decoder.decode(total) + base;
-        int s = offset;
-        for (; s < last; s++) {
-            if (Long.compareUnsigned(cmfLow, cmf[s + 1] & 0xFFFFFFFFL) < 0) {
-                break;
-            }
-        }
-        decoder.update((cmf[s] & 0xFFFFFFFFL) - base, (cmf[s + 1] & 0xFFFFFFFFL) - base, total);
-        return s - offset;
     }
 
     /**

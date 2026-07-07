@@ -61,16 +61,6 @@ public final class PushSincResampler {
     private static final double WINDOW_A2 = 0.5 * 0.16;
 
     /**
-     * The source sample rate in hertz.
-     */
-    private final int sourceRate;
-
-    /**
-     * The destination sample rate in hertz.
-     */
-    private final int destinationRate;
-
-    /**
      * The fixed source block length in samples this resampler is configured for.
      */
     private final int sourceBlockLength;
@@ -115,8 +105,6 @@ public final class PushSincResampler {
         if (sourceRate <= 0 || destinationRate <= 0 || sourceBlockLength <= 0) {
             throw new IllegalArgumentException("rates and block length must be positive");
         }
-        this.sourceRate = sourceRate;
-        this.destinationRate = destinationRate;
         this.sourceBlockLength = sourceBlockLength;
         this.destinationBlockLength = (int) ((long) sourceBlockLength * destinationRate / sourceRate);
         this.ioSampleRateRatio = (double) sourceRate / destinationRate;

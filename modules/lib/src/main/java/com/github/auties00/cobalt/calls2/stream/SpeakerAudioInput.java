@@ -8,6 +8,7 @@ import javax.sound.sampled.Mixer;
 import javax.sound.sampled.SourceDataLine;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
 import java.util.Objects;
 
 /**
@@ -35,6 +36,21 @@ public final class SpeakerAudioInput extends BufferedAudioInput {
      * Holds the opened playback line, cleared to {@code null} by {@link #shutdown()}.
      */
     private volatile SourceDataLine line;
+
+    /**
+     * Holds the reusable little-endian byte scratch that one frame's samples are encoded into before being
+     * written to the line, grown on demand when a larger frame arrives.
+     *
+     * <p>Confined to the single call render thread that drives {@link #offer(AudioFrame)}, so reuse across
+     * frames is race-free.
+     */
+    private byte[] scratch;
+
+    /**
+     * Holds the {@link ShortBuffer} view over {@link #scratch}, rebuilt whenever {@link #scratch} is grown,
+     * so each frame encodes by rewinding this view instead of wrapping a fresh buffer.
+     */
+    private ShortBuffer scratchView;
 
     /**
      * Opens the default-profile speaker on the JVM default output device and starts playback.
@@ -83,6 +99,7 @@ public final class SpeakerAudioInput extends BufferedAudioInput {
      */
     private static SourceDataLine openLine(int sampleRate, Mixer.Info preferredMixer)
             throws LineUnavailableException {
+        // TODO: wire PushSincResampler - construct/drive PushSincResampler when NetEq/decoder output rate differs from the device playback rate (and symmetrically on capture before the encoder), replacing the ffmpeg swr path on the pure-Java path
         var format = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED,
                 sampleRate, 16, 1, 2, sampleRate, false);
         var info = new DataLine.Info(SourceDataLine.class, format);
@@ -119,11 +136,17 @@ public final class SpeakerAudioInput extends BufferedAudioInput {
             return;
         }
         var pcm = frame.pcm();
-        var bytes = new byte[pcm.length * 2];
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-                .asShortBuffer().put(pcm);
+        var needed = pcm.length * 2;
+        var bytes = scratch;
+        if (bytes == null || bytes.length < needed) {
+            bytes = new byte[needed];
+            scratch = bytes;
+            scratchView = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+        }
+        scratchView.rewind();
+        scratchView.put(pcm);
         try {
-            l.write(bytes, 0, bytes.length);
+            l.write(bytes, 0, needed);
         } catch (RuntimeException _) {
         }
     }

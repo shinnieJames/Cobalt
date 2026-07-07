@@ -57,7 +57,7 @@ public final class SmaxClientNotificationComposing implements SmaxClientNotifica
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutChatstateComposingMixin",
             exports = "mergeComposingMixin", adaptation = WhatsAppAdaptation.DIRECT)
-    public StanzaBuilder toNode() {
+    public StanzaBuilder toStanza() {
         return new StanzaBuilder()
                 .description("composing")
                 .attribute("media", "audio", hasComposingMediaAudio);

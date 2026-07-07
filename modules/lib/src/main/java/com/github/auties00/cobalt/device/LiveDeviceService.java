@@ -45,6 +45,7 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.linked.*;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.AdvMetadataCreationFailureEventBuilder;
 import com.github.auties00.cobalt.wam.event.CoexPrivacySysMsgEventBuilder;
 import com.github.auties00.cobalt.wam.event.ContactSyncEventEventBuilder;
 import com.github.auties00.cobalt.wam.type.CoexSysMsgStateTransitionAttempt;
@@ -2056,7 +2057,10 @@ public final class LiveDeviceService implements DeviceService {
      * @implNote
      * This implementation delegates to {@link IcdcComputer#compute(Jid)}; the underlying
      * hash truncation length is read from the {@link ABProp} cache to match
-     * {@code md_icdc_hash_length} on the WA Web side.
+     * {@code md_icdc_hash_length} on the WA Web side. When the delegate throws, this commits an
+     * {@code AdvMetadataCreationFailure} telemetry event (its {@code advMetadataIsMe} flag reflecting
+     * whether {@code userJid} is the local user) and rethrows, mirroring WA Web's try/catch around
+     * {@code getICDCMeta}.
      *
      * @param userJid the user JID, normalised to user-level by the computer
      * @return the ICDC metadata, or {@link Optional#empty()} when no usable record is
@@ -2066,7 +2070,18 @@ public final class LiveDeviceService implements DeviceService {
             exports = "getICDCMeta",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<IcdcResult> computeIcdc(Jid userJid) {
-        return icdcComputer.compute(userJid);
+        try {
+            return icdcComputer.compute(userJid);
+        } catch (RuntimeException exception) {
+            var advMetadataIsMe = store.accountStore().jid()
+                    .map(Jid::toUserJid)
+                    .map(me -> me.equals(userJid.toUserJid()))
+                    .orElse(false);
+            wamService.commit(new AdvMetadataCreationFailureEventBuilder()
+                    .advMetadataIsMe(advMetadataIsMe)
+                    .build());
+            throw exception;
+        }
     }
 
     /**

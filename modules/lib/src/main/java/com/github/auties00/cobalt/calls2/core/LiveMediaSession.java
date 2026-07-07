@@ -9,11 +9,13 @@ import com.github.auties00.cobalt.calls2.core.participant.CallMembership;
 import com.github.auties00.cobalt.calls2.core.participant.CallSecureSsrcGenerator;
 import com.github.auties00.cobalt.calls2.dsp.*;
 import com.github.auties00.cobalt.calls2.media.audio.*;
+import com.github.auties00.cobalt.calls2.media.audio.processing.WebRtcAudioProcessor;
 import com.github.auties00.cobalt.calls2.media.sframe.SFrameKeyProvider;
 import com.github.auties00.cobalt.calls2.media.video.EncodedVideoFrame;
 import com.github.auties00.cobalt.calls2.media.video.VideoCodec;
 import com.github.auties00.cobalt.calls2.media.video.VideoCodecParams;
 import com.github.auties00.cobalt.calls2.media.video.VideoCodecRegistry;
+import com.github.auties00.cobalt.calls2.media.video.yuv.YuvConverter;
 import com.github.auties00.cobalt.calls2.net.bwe.*;
 import com.github.auties00.cobalt.calls2.net.ratecontrol.AudioRateController;
 import com.github.auties00.cobalt.calls2.net.ratecontrol.SctpBufferCongestionController;
@@ -43,6 +45,7 @@ import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptionsBuil
 import com.github.auties00.cobalt.model.call.datachannel.StreamSubscriptionsEntryBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;
@@ -52,6 +55,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.DatagramChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -94,7 +98,7 @@ import java.util.function.IntSupplier;
  *       fed by the demand-driven {@link AudioWriterPump} and drained by a platform playback device started
  *       through the engine's {@link VoipDriverManager} ({@link LiveAudioPlaybackDriver}).</li>
  *   <li><b>Video:</b> when the local side participates with video, the negotiated {@link VideoCodec} from
- *       the {@link VideoCodecRegistry} drives an inbound {@link LiveVideoJitterBuffer} decode-and-render
+ *       the {@link VideoCodecRegistry} drives an inbound {@link VideoJitterBuffer} decode-and-render
  *       loop that delivers each decoded picture to the call's application {@link VideoInput} sink when one
  *       was supplied (falling back to {@link VoipHostApi#renderVideoFrame}), and an outbound encode loop
  *       that drains the call's application {@link VideoOutput} capture source, encodes each picture, and
@@ -120,7 +124,7 @@ import java.util.function.IntSupplier;
  * {@code start_transport_media_and_stream}, plus {@code put_frame_imp} on the send side and
  * {@code get_frame_neteq} on the receive side. The native HTTP {@code start_session_request} bootstrap of
  * {@code call_http_signaler.cc} is not driven from this media-plane seam: it is a signaling-side transport
- * step owned by {@code CallTransportController} through {@code CallHttpSignaler}. The media plane runs over
+ * step owned by {@code CallTransportController} through {@code LiveCallHttpSignaler}. The media plane runs over
  * the single {@link LiveRelayTransport}, the {@code RTCPeerConnection}-equivalent that brings the call up
  * over ICE and DTLS and carries every packet as SCTP DATA on one SCTP data channel
  * (re/calls2-spec/captures/webrtc-datachannel-transport-2026-06-21.md); the session owns the host UDP
@@ -574,6 +578,21 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
     private final AudioPlaybackLoop playbackRenderLoop;
 
     /**
+     * Holds the WebRTC audio processor conditioning the live microphone capture with echo cancellation and
+     * noise suppression before the encoder, closed on teardown, or {@code null} when the capture is not a
+     * live acoustic source or the native WebRTC APM shim is not built.
+     *
+     * <p>Engaged only when the capture source reports {@link AudioOutput#isLiveCapture()} and the shim is
+     * {@linkplain WebRtcAudioProcessor#nativeApmAvailable() present}; a clean line-level source (a file, a
+     * tone, silence, or application-written frames) and a tree without the native library both leave this
+     * {@code null} and encode the capture unconditioned. When present, the capture reader pump drives its
+     * {@link WebRtcAudioProcessor#process(short[], short[], short[])} from its single virtual thread,
+     * honouring the processor's single-writer contract; the far-end reference it cancels against is the last
+     * block the playback path rendered.
+     */
+    private final WebRtcAudioProcessor audioProcessor;
+
+    /**
      * Holds the inbound NetEq jitter buffer the receiver inserts received packets into and pulls render
      * decisions from, flushed on teardown, or {@code null} when the audio receive pipeline is not up.
      */
@@ -647,7 +666,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
      * publisher is retained for its receive-subscription cache and hop-by-hop RTCP-feedback table, owned and
      * torn down with the call. It is never {@code null}: a relay session always builds it.
      */
-    private final SubscriptionPublisher subscriptionPublisher;
+    private final LiveSubscriptionPublisher subscriptionPublisher;
 
     /**
      * Holds the seam that starts the driver manager's camera capture for a call that sources outbound video
@@ -734,6 +753,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
      *                          application supplied its own capture source
      * @param playbackRenderLoop the render loop delivering decoded frames to the application playback sink,
      *                          or {@code null} when a platform playback device is used
+     * @param audioProcessor    the WebRTC audio processor conditioning the live microphone capture, or
+     *                          {@code null} when the capture is not a live acoustic source or the native
+     *                          WebRTC APM shim is not built
      * @param netEq             the inbound NetEq jitter buffer, or {@code null} when the receive pipeline is
      *                          not up
      * @param audioDecoder      the audio decoder the NetEq and receiver share, or {@code null}
@@ -757,10 +779,11 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                              boolean playbackUsesDevice,
                              AudioReaderPump readerPump, AudioWriterPump writerPump,
                              CaptureSourceBridge captureSource, AudioPlaybackLoop playbackRenderLoop,
+                             WebRtcAudioProcessor audioProcessor,
                              LiveNetEq netEq, AudioDecoder audioDecoder,
                              AtomicReference<VideoPipeline> videoPipeline, LiveVoipParamManager voipParamManager,
                              AppDataController appDataController, Calls2RateControlLoop rateControlLoop,
-                             SubscriptionPublisher subscriptionPublisher) {
+                             LiveSubscriptionPublisher subscriptionPublisher) {
         this.callId = callId;
         this.transport = transport;
         this.channel = channel;
@@ -774,6 +797,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         this.writerPump = writerPump;
         this.captureSource = captureSource;
         this.playbackRenderLoop = playbackRenderLoop;
+        this.audioProcessor = audioProcessor;
         this.netEq = netEq;
         this.audioDecoder = audioDecoder;
         this.videoPipeline = videoPipeline;
@@ -895,7 +919,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
      * pipeline and camera started at bring-up, so the {@link #videoSendStarted} guard makes an in-call camera
      * turn-on a no-op for it; a call brought up audio-only builds its video pipeline here, the first time the
      * camera turns on. The build mirrors fn6326: it opens the negotiated {@link VideoCodec}, builds the inbound
-     * {@link LiveVideoJitterBuffer}, binds the outbound video RTP sink onto the live {@link MediaTransport},
+     * {@link VideoJitterBuffer}, binds the outbound video RTP sink onto the live {@link MediaTransport},
      * brings the rate-control loop's video controller online (fn6326 builds {@code wa_vid_quality_manager},
      * fn4210, in the same transaction), then publishes the pipeline into {@link #videoPipeline} so the
      * transport receive thread routes inbound video and arms the encoder on an inbound picture-loss indication,
@@ -1118,6 +1142,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         stopQuietly(!captureUsesDevice ? null
                 : () -> voipDriverManager.stopAudioCapture(AudioDeviceType.MICROPHONE));
         stopQuietly(captureSource == null ? null : captureSource::shutdown);
+        // Release the capture APM (native arena) after the reader pump that drives its process() is stopped.
+        stopQuietly(audioProcessor == null ? null : audioProcessor::close);
         stopQuietly(playbackRenderLoop == null ? null : playbackRenderLoop::stop);
         stopQuietly(!playbackUsesDevice ? null : () -> {
             if (writerPump != null) {
@@ -1650,6 +1676,10 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             // XOR-MAPPED-ADDRESS carries the selected relay endpoint's transport address; thread both into the
             // transport so its rx-subscription resend can assemble and ship the envelope.
             var relayReflexiveAddress = relayAddress instanceof InetSocketAddress inet ? inet : null;
+            // TODO: wire LiveCallHttpSignaler - at transport construction build a CallTransportController with a
+            //  LiveCallHttpSignaler whose CallSignalingTransport routes {"start_session_request":{}} over the live
+            //  client transport, correlate start_session_response by request id, then start the MediaTransport
+            //  (the ICE/DTLS bring-up needs the ICE/DTLS material the current signaling drops).
             var transport = new LiveRelayTransport(
                     hbhSrtp,
                     warpAuthKey,
@@ -1733,7 +1763,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             var packetCache = new StreamPacketCache(PACKET_CACHE_CAPACITY);
             var rtpPacketizer = new OutboundRtpPacketizer(streamLayout.audioSsrc(),
                     (useMlow ? MLOW_FRAMES_PER_PACKET : OPUS_FRAME_BLOCKS) * AUDIO_FRAME_SAMPLES);
-            // BLOCKED: on a group call, seal the combined payload with the SFrame chain before sending by
+            // TODO: wire SFrameHeaderCodec - group-call SEAL - on a group call, seal the combined payload with the SFrame chain before sending by
             //  wrapping the self device's sframeProvider (built by groupSframeProvider from the call key, the
             //  same key now installed into the membership via installCallKey) in an SFrameSecureFrame and
             //  supplying frame -> secureFrame.seal(frame) here (the symmetric open lands in
@@ -1770,9 +1800,16 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             // for MLow, 320 for Opus) so the playout clock stays in step. Rendering a 60 ms MLow packet a peer
             // sends us (NetEq serving its 960 decoded samples across three 20 ms get periods) is the inbound
             // counterpart and is independent of this send path.
+            // FRAMES_PER_PACKET is 1, so the Opus packer buffers a single frame per flush: a one-frame Opus
+            // packet is the encoded frame itself, so the repacketizer round-trip (three FFI calls and two
+            // native copies) reproduces the input bytes exactly. The encoder allocates a fresh byte[] per
+            // encode, so returning payload() unchanged needs no defensive clone and stays wire-identical.
+            // The repacketizer.combine path stays intact for any FRAMES_PER_PACKET > 1 configuration.
             AudioEncoderSender.FramePacker framePacker = useMlow
                     ? frames -> frames.getFirst().payload()
-                    : frames -> repacketizer.combine(frames.stream().map(EncodedAudioFrame::payload).toList());
+                    : frames -> frames.size() == 1
+                            ? frames.getFirst().payload()
+                            : repacketizer.combine(frames.stream().map(EncodedAudioFrame::payload).toList());
             var sender = new AudioEncoderSender(
                     audioCodec::encode,
                     framePacker,
@@ -1786,17 +1823,36 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             var captureRing = new AudioCaptureRing(RING_CAPACITY_SAMPLES);
             // On the MLow path a Pcm60msAggregator joins MLOW_FRAMES_PER_PACKET captured 20 ms blocks into one
             // 60 ms block before the sender's single MLow encode; Opus drives the sender directly. The pump and
-            // the audio-processing front end stay on the 20 ms cadence either way.
-            AudioReaderPump.AudioBlockSink audioBlockSink = useMlow
+            // the WebRTC APM front end stay on the 20 ms cadence either way.
+            AudioReaderPump.AudioBlockSink encoderSink = useMlow
                     ? new Pcm60msAggregator(sender, MLOW_FRAMES_PER_PACKET)
                     : new Pcm60msAggregator(sender, OPUS_FRAME_BLOCKS);
+            // Auto-plug the WebRTC APM (AEC3 + noise suppression, no AGC) ahead of the encoder for a raw-mic
+            // capture. It engages only for a true live acoustic source (isLiveCapture: the microphone source or
+            // the platform capture-device bridge, never a file/tone/silence/bot source) and only once the
+            // cobalt-native webrtc-apm shim is built (nativeApmAvailable is false until the native lib lands), so
+            // both a non-mic source and the not-yet-built-native tree encode the capture unconditioned. When
+            // engaged the capture APM reads the last block rendered to the speaker as the far-end AEC reference
+            // through the render tap the playback path publishes; process() is driven only from the reader
+            // pump's single virtual thread, honouring the processor's single-writer contract.
+            var conditionCapture = capture.source() != null
+                    && capture.source().isLiveCapture()
+                    && WebRtcAudioProcessor.nativeApmAvailable();
+            WebRtcAudioProcessor audioProcessor = null;
+            RenderReferenceTap renderTap = null;
+            AudioReaderPump.AudioBlockSink audioBlockSink = encoderSink;
+            if (conditionCapture) {
+                audioProcessor = new WebRtcAudioProcessor(WebRtcAudioProcessor.Config.aecAndNoiseSuppression());
+                renderTap = new RenderReferenceTap();
+                audioBlockSink = new ApmCaptureSink(audioProcessor, renderTap, encoderSink);
+            }
             var readerPump = capture.source() == null
                     ? null
                     : new AudioReaderPump(capture.source(), captureRing, audioBlockSink, AUDIO_FRAME_SAMPLES,
                     CAPTURE_STARTUP_SEED_SAMPLES);
 
             var receiver = new com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver(netEq);
-            var playback = openPlaybackSink(callId, receiver, streams);
+            var playback = openPlaybackSink(callId, receiver, streams, renderTap);
 
             var transportConnected = new AtomicBoolean();
             transport.onTransportEvent(event -> onTransportEvent(callId, event, transportConnected));
@@ -1821,8 +1877,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             var session = new LiveMediaSession(callId, transport, channel, relayAddress,
                     audioCodec, repacketizer, voipDriverManager, capture.usesDevice(), playback.usesDevice(),
                     readerPump, playback.writerPump(),
-                    capture.bridge(), playback.renderLoop(), netEq, audioDecoder, videoPipelineRef, voipParamManager,
-                    appDataController, rateControlLoop, subscriptionPublisher);
+                    capture.bridge(), playback.renderLoop(), audioProcessor, netEq, audioDecoder, videoPipelineRef,
+                    voipParamManager, appDataController, rateControlLoop, subscriptionPublisher);
             if (videoUsesDevice) {
                 session.bindVideoCaptureStarter(() -> startManagerVideoCapture(callId, managerVideoBridge));
             }
@@ -1881,7 +1937,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          *       the tokens already negotiated, and the on-wire subscription publish is unwired for every
          *       stream, not just this one (the {@code 0x0003} subscription-envelope send seam exists on the
          *       transport but the publisher is not yet wired to it; see
-         *       {@link SubscriptionPublisher#publishRxSubscription}).</li>
+         *       {@link LiveSubscriptionPublisher#publishRxSubscription}).</li>
          * </ul>
          *
          * @param callId          the call identifier
@@ -2134,21 +2190,37 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * that turns out to be unavailable surfaces only when playback is started, where the session isolates
          * it.
          *
-         * @param callId   the call identifier
-         * @param receiver the decode-and-conceal receiver the playback half pulls rendered frames from
-         * @param streams  the call's application media streams
+         * <p>When {@code renderTap} is non-{@code null} the live-capture APM is engaged, so each decoded 20 ms
+         * block this half renders is published into the tap as the far-end reference the capture echo canceller
+         * cancels against: the render loop publishes it after every full pull on its playback thread, and the
+         * writer-pump path publishes it from the block it pulls before the platform device consumes it. When
+         * {@code renderTap} is {@code null} no reference is tracked and the playback path is unchanged.
+         *
+         * @param callId    the call identifier
+         * @param receiver  the decode-and-conceal receiver the playback half pulls rendered frames from
+         * @param streams   the call's application media streams
+         * @param renderTap the far-end reference tap the rendered block is published into for the capture APM,
+         *                  or {@code null} when live-capture conditioning is not engaged
          * @return the resolved playback half: the render loop or, when device-driven, the writer pump and ring
          */
         private AudioPlaybackHalf openPlaybackSink(String callId,
                                                    com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver receiver,
-                                                   Calls2MediaStreams streams) {
+                                                   Calls2MediaStreams streams,
+                                                   RenderReferenceTap renderTap) {
             var appPlayback = streams.audioPlayback();
             if (appPlayback != null) {
-                var renderLoop = new AudioPlaybackLoop(callId, receiver, appPlayback);
+                var renderLoop = new AudioPlaybackLoop(callId, receiver, appPlayback, renderTap);
                 return new AudioPlaybackHalf(renderLoop, false, null, null);
             }
             var playbackRing = new AudioPlaybackRing(RING_CAPACITY_SAMPLES);
-            var writerPump = new AudioWriterPump(playbackRing, receiver, AUDIO_FRAME_SAMPLES);
+            AudioWriterPump.AudioBlockSource playbackSource = renderTap == null
+                    ? receiver
+                    : (out, length) -> {
+                        var produced = receiver.pull(out, length);
+                        renderTap.publish(out, produced);
+                        return produced;
+                    };
+            var writerPump = new AudioWriterPump(playbackRing, playbackSource, AUDIO_FRAME_SAMPLES);
             voipDriverManager.requestAudioDataSource(
                     (out, frameCount) -> drainPlaybackRing(playbackRing, out, frameCount));
             return new AudioPlaybackHalf(null, true, writerPump, playbackRing);
@@ -2222,8 +2294,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             //  mixer/SFU level metering, not interop with the cleartext payload.
             try {
                 var packet = packetizer.packetize(payload, extendedSequence);
-                var rtpTimestamp = ((packet[4] & 0xFFL) << 24) | ((packet[5] & 0xFFL) << 16)
-                        | ((packet[6] & 0xFFL) << 8) | (packet[7] & 0xFFL);
+                var rtpTimestamp = DataUtils.getInt(packet, 4, ByteOrder.BIG_ENDIAN) & 0xFFFFFFFFL;
                 paceSend(rtpTimestamp);
                 // The wire length excludes the trailing SRTP-tag room the packetizer over-allocates and
                 // includes the packet's populated header extension.
@@ -2358,7 +2429,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * opened.
          *
          * <p>Opens the negotiated baseline {@link VideoCodec} through the registry and wires a
-         * {@link LiveVideoJitterBuffer} inbound decode-and-render loop that delivers each decoded picture to
+         * {@link VideoJitterBuffer} inbound decode-and-render loop that delivers each decoded picture to
          * the call's {@linkplain Calls2MediaStreams#videoPlayback() application video sink} when one was
          * supplied, falling back to {@link VoipHostApi#renderVideoFrame} otherwise; the pipeline also drives
          * the outbound encode leg from {@code videoCaptureSource} when one is present. That source is the
@@ -2380,7 +2451,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private VideoPipeline buildVideoPipeline(String callId, VideoOutput videoCaptureSource,
                                                  VideoInput videoPlayback) {
             try {
-                var registry = new VideoCodecRegistry();
+                var registry = VideoCodecRegistry.INSTANCE;
                 var width = videoCaptureSource != null ? videoCaptureSource.width() : VIDEO_WIDTH;
                 var height = videoCaptureSource != null ? videoCaptureSource.height() : VIDEO_HEIGHT;
                 var frameRate = videoCaptureSource != null ? videoCaptureSource.fps() : VIDEO_FRAME_RATE;
@@ -2388,7 +2459,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 var codec = registry.open(params);
                 var estimator = new VideoJitterEstimator(VIDEO_JITTER_WINDOW);
                 var timing = new VideoTimingController(estimator);
-                var jitterBuffer = new LiveVideoJitterBuffer(estimator, timing,
+                var jitterBuffer = new VideoJitterBuffer(estimator, timing,
                         com.github.auties00.cobalt.calls2.dsp.AvSyncFeedbackSink.noop());
                 return new VideoPipeline(callId, host, codec, params, jitterBuffer, videoCaptureSource,
                         videoPlayback);
@@ -2892,10 +2963,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 @Override
                 public com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver.DecodedFrame
                 decode(byte[] payload, int frameSamples, boolean fec) {
-                    var samples = decoder.decode(payload, frameSamples, fec);
-                    var voiceActive = !fec && decoder.packetHasVoiceActivity(payload);
+                    var decoded = decoder.decodeWithVoiceActivity(payload, frameSamples, fec);
                     return new com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver.DecodedFrame(
-                            samples, voiceActive);
+                            decoded.pcm(), decoded.voiceActive());
                 }
 
                 @Override
@@ -2956,6 +3026,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     .filter(name -> relayInfo.endpoints().stream().anyMatch(e -> name.equals(e.relayName())))
                     .orElse(null);
             RelayEndpoint best = null;
+            InetSocketAddress bestAddress = null;
             var bestRtt = Integer.MAX_VALUE;
             for (var endpoint : relayInfo.endpoints()) {
                 if (endpoint.protocol() != 0) {
@@ -2964,19 +3035,21 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 if (elected != null && !elected.equals(endpoint.relayName())) {
                     continue;
                 }
-                if (endpoint.address().isEmpty() || endpoint.port().isEmpty()) {
+                var socketAddress = endpoint.toSocketAddress();
+                if (socketAddress.isEmpty()) {
                     continue;
                 }
                 var rtt = endpoint.c2rRttValue().orElse(endpoint.xrttMs());
                 if (best == null || rtt < bestRtt) {
                     best = endpoint;
+                    bestAddress = socketAddress.get();
                     bestRtt = rtt;
                 }
             }
             if (best == null) {
                 return Optional.empty();
             }
-            var address = new InetSocketAddress(best.address().orElseThrow(), best.port().orElseThrow());
+            var address = bestAddress;
             var remoteUfrag = relayCredential(relayInfo, best);
             if (remoteUfrag == null) {
                 return Optional.empty();
@@ -3291,6 +3364,19 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver.GET_PERIOD_MILLIS * 1_000L;
 
         /**
+         * The depth of the reusable sample-buffer ring the loop hands borrowed frames out of, sized to
+         * the buffered sink's frame capacity plus one.
+         *
+         * @implNote This implementation uses eleven, one more than the ten-frame capacity of
+         * {@link com.github.auties00.cobalt.calls2.stream.BufferedAudioInput}. A buffer is reused only
+         * after the ring has cycled through the other ten hand-outs, by which point the frame that
+         * borrowed it has necessarily left the sink's bounded queue (which holds at most ten, plus the
+         * one a consumer may hold mid-read), so refilling a ring buffer never aliases a frame still
+         * reachable through {@link com.github.auties00.cobalt.calls2.stream.AudioInput#read()}.
+         */
+        private static final int RING_DEPTH = 11;
+
+        /**
          * The call identifier, used in the render thread name and diagnostics.
          */
         private final String callId;
@@ -3306,6 +3392,12 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private final AudioInput sink;
 
         /**
+         * The far-end reference tap each fully-rendered block is published into for the capture echo
+         * canceller, or {@code null} when the live-capture APM is not engaged.
+         */
+        private final RenderReferenceTap renderTap;
+
+        /**
          * Tracks whether the loop is running, so the render thread exits on {@link #stop()}.
          */
         private final AtomicBoolean running;
@@ -3318,16 +3410,20 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         /**
          * Constructs a playback render loop over the receiver and the application sink.
          *
-         * @param callId   the call identifier
-         * @param receiver the decode-and-conceal receiver to pull rendered frames from
-         * @param sink     the application playback sink to deliver frames to
+         * @param callId    the call identifier
+         * @param receiver  the decode-and-conceal receiver to pull rendered frames from
+         * @param sink      the application playback sink to deliver frames to
+         * @param renderTap the far-end reference tap each rendered block is published into for the capture
+         *                  APM, or {@code null} when live-capture conditioning is not engaged
          */
         private AudioPlaybackLoop(String callId,
                                   com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver receiver,
-                                  AudioInput sink) {
+                                  AudioInput sink,
+                                  RenderReferenceTap renderTap) {
             this.callId = callId;
             this.receiver = receiver;
             this.sink = sink;
+            this.renderTap = renderTap;
             this.running = new AtomicBoolean();
         }
 
@@ -3362,19 +3458,38 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         /**
          * Runs the render loop until the loop is stopped.
          *
-         * <p>Each tick pulls one frame from the receiver into a scratch array, copies the rendered samples
-         * out, stamps the advancing presentation timestamp, and offers the frame to the application sink, then
-         * parks for the render period. A pull yielding no samples still parks so the loop neither spins nor
-         * starves the sink. An interrupt ends the loop.
+         * <p>Each tick pulls one frame from the receiver directly into the next buffer of a reusable
+         * {@link #RING_DEPTH}-deep ring, stamps the advancing presentation timestamp, and offers the
+         * borrowed buffer to the application sink, then parks for the render period. A full-size pull, the
+         * only outcome the steady jitter-buffer cadence produces, hands the ring buffer out as is and
+         * advances the ring, so steady-state playback allocates no per-frame sample array; a short pull is
+         * copied out to the produced length instead, leaving the ring buffer to be refilled in place. A
+         * pull yielding no samples still parks so the loop neither spins nor starves the sink. An interrupt
+         * ends the loop.
+         *
+         * @implNote This implementation is the single writer of the ring: the loop runs on one virtual
+         * thread bound in {@link #start()}, so the round-robin index is touched by no other thread and the
+         * ring depth alone guards against aliasing a buffer still queued in the sink.
          */
         private void loop() {
-            var scratch = new short[com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver.FRAME_SAMPLES];
+            var ring = new short[RING_DEPTH][com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver.FRAME_SAMPLES];
+            var ringIndex = 0;
             var ptsMicros = 0L;
             while (running.get()) {
                 try {
-                    var produced = receiver.pull(scratch, scratch.length);
+                    var buffer = ring[ringIndex];
+                    var produced = receiver.pull(buffer, buffer.length);
                     if (produced > 0) {
-                        var samples = produced == scratch.length ? scratch.clone() : Arrays.copyOf(scratch, produced);
+                        if (renderTap != null) {
+                            renderTap.publish(buffer, produced);
+                        }
+                        short[] samples;
+                        if (produced == buffer.length) {
+                            samples = buffer;
+                            ringIndex = (ringIndex + 1) % RING_DEPTH;
+                        } else {
+                            samples = Arrays.copyOf(buffer, produced);
+                        }
                         sink.offer(new AudioFrame(samples, ptsMicros));
                         ptsMicros += FRAME_PTS_MICROS;
                     }
@@ -3386,6 +3501,136 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     LOGGER.log(System.Logger.Level.DEBUG,
                             "calls2 audio render error for call {0}: {1}", callId, exception.getMessage());
                 }
+            }
+        }
+    }
+
+    /**
+     * A single-slot publisher of the most recently rendered 20 ms playback block, read by the live-capture
+     * echo canceller as its far-end reference.
+     *
+     * <p>The playback path (the render loop on its playback thread, or the writer-pump source on the pump
+     * thread) publishes each fully-rendered block here; the capture {@link WebRtcAudioProcessor}, running on
+     * the reader-pump thread, reads the latest block as the far-end reference the echo canceller cancels
+     * against. The two threads meet only through one {@code volatile} reference, so the read sees a complete,
+     * immutable snapshot with no lock; a slightly stale reference is acceptable because the render-to-capture
+     * algorithmic delay is carried by the APM's stream-delay setting, not by exact block alignment. Until the
+     * first block is published the reference is silence, so the canceller has a valid zero reference from the
+     * first captured block.
+     */
+    private static final class RenderReferenceTap {
+        /**
+         * The shared zero-filled block returned as the reference until the first real block is published.
+         */
+        private static final short[] SILENCE = new short[AUDIO_FRAME_SAMPLES];
+
+        /**
+         * The most recently published 20 ms render block, exactly {@code AUDIO_FRAME_SAMPLES} samples, or
+         * {@code null} before the first block is rendered.
+         *
+         * <p>Written by the playback thread and read by the capture thread through this one {@code volatile}
+         * field; each published value is a fresh immutable array, so a reader never observes a torn block.
+         */
+        private volatile short[] latest;
+
+        /**
+         * Publishes one rendered block as the far-end reference, ignoring a short (concealment) block.
+         *
+         * <p>Copies the first {@code length} samples into a fresh array and stores it, but only when the block
+         * carries a full {@code AUDIO_FRAME_SAMPLES}-sample frame; a shorter pull leaves the previous
+         * reference in place, since the echo canceller requires a full-length reference and one stale full
+         * block is a better reference than a zero-padded partial one.
+         *
+         * @param block  the rendered samples; only the first {@code length} are read
+         * @param length the number of valid samples at the start of {@code block}
+         */
+        private void publish(short[] block, int length) {
+            if (length >= AUDIO_FRAME_SAMPLES) {
+                latest = Arrays.copyOf(block, AUDIO_FRAME_SAMPLES);
+            }
+        }
+
+        /**
+         * Returns the most recently published render block, or silence when none has been rendered yet.
+         *
+         * @return the latest {@code AUDIO_FRAME_SAMPLES}-sample far-end reference block, never {@code null}
+         */
+        private short[] reference() {
+            var current = latest;
+            return current != null ? current : SILENCE;
+        }
+    }
+
+    /**
+     * The live-capture conditioning stage inserted ahead of the encoder: runs each captured 20 ms block
+     * through the {@link WebRtcAudioProcessor} before forwarding it to the encoder sink.
+     *
+     * <p>This sits between the {@link AudioReaderPump} and the encoder-bound {@link Pcm60msAggregator} on the
+     * reader pump's single virtual thread, so it is the sole caller of
+     * {@link WebRtcAudioProcessor#process(short[], short[], short[])} and honours the processor's
+     * single-writer contract. Each 20 ms block is echo-cancelled against the last block the playback path
+     * rendered (read from the {@link RenderReferenceTap}) and noise-suppressed, then the cleaned block is
+     * handed to the downstream encoder sink; the wire payload the encoder produces keeps its size and cadence.
+     * A block that is not exactly one {@link WebRtcAudioProcessor#BLOCK_SAMPLES} frame is forwarded
+     * unconditioned, which the wired {@link AudioReaderPump} never produces (it always drains full 20 ms
+     * blocks) but which keeps the stage total.
+     *
+     * @implNote This implementation conditions into a dedicated scratch block rather than in place, then
+     * forwards that block; the downstream {@link Pcm60msAggregator} copies out of it before the next drain,
+     * so one reusable buffer suffices. It conditions the CAPTURED audio only: it never touches the playback
+     * output, and a non-live-capture source and a tree without the native shim both bypass this sink entirely.
+     */
+    private static final class ApmCaptureSink implements AudioReaderPump.AudioBlockSink {
+        /**
+         * The WebRTC audio processor conditioning each captured block.
+         */
+        private final WebRtcAudioProcessor processor;
+
+        /**
+         * The far-end reference tap the last rendered block is read from as the echo-canceller reference.
+         */
+        private final RenderReferenceTap renderTap;
+
+        /**
+         * The downstream encoder sink each conditioned block is forwarded to.
+         */
+        private final AudioReaderPump.AudioBlockSink downstream;
+
+        /**
+         * The reusable block the processor conditions into before it is forwarded downstream.
+         */
+        private final short[] conditioned;
+
+        /**
+         * Constructs a conditioning sink over the processor, the reference tap, and the downstream sink.
+         *
+         * @param processor  the WebRTC audio processor conditioning each captured block; never {@code null}
+         * @param renderTap  the far-end reference tap the echo-canceller reference is read from; never
+         *                   {@code null}
+         * @param downstream the encoder sink each conditioned block is forwarded to; never {@code null}
+         */
+        private ApmCaptureSink(WebRtcAudioProcessor processor, RenderReferenceTap renderTap,
+                               AudioReaderPump.AudioBlockSink downstream) {
+            this.processor = Objects.requireNonNull(processor, "processor cannot be null");
+            this.renderTap = Objects.requireNonNull(renderTap, "renderTap cannot be null");
+            this.downstream = Objects.requireNonNull(downstream, "downstream cannot be null");
+            this.conditioned = new short[WebRtcAudioProcessor.BLOCK_SAMPLES];
+        }
+
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote This implementation conditions a full {@link WebRtcAudioProcessor#BLOCK_SAMPLES} block
+         * against the latest render reference and forwards the cleaned block; a block of any other length is
+         * forwarded unchanged.
+         */
+        @Override
+        public void accept(short[] block, int length) {
+            if (length == WebRtcAudioProcessor.BLOCK_SAMPLES) {
+                processor.process(block, renderTap.reference(), conditioned);
+                downstream.accept(conditioned, WebRtcAudioProcessor.BLOCK_SAMPLES);
+            } else {
+                downstream.accept(block, length);
             }
         }
     }
@@ -3492,14 +3737,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             markerStamped = true;
             packet[2] = (byte) ((sequence >>> 8) & 0xFF);
             packet[3] = (byte) (sequence & 0xFF);
-            packet[4] = (byte) ((timestamp >>> 24) & 0xFF);
-            packet[5] = (byte) ((timestamp >>> 16) & 0xFF);
-            packet[6] = (byte) ((timestamp >>> 8) & 0xFF);
-            packet[7] = (byte) (timestamp & 0xFF);
-            packet[8] = (byte) ((ssrc >>> 24) & 0xFF);
-            packet[9] = (byte) ((ssrc >>> 16) & 0xFF);
-            packet[10] = (byte) ((ssrc >>> 8) & 0xFF);
-            packet[11] = (byte) (ssrc & 0xFF);
+            DataUtils.putInt(packet, 4, (int) timestamp, ByteOrder.BIG_ENDIAN);
+            DataUtils.putInt(packet, 8, ssrc, ByteOrder.BIG_ENDIAN);
             packet[12] = (byte) 0xDE;
             packet[13] = (byte) 0xBE;
             packet[14] = 0;
@@ -3932,6 +4171,18 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private long currentTimestamp = -1;
 
         /**
+         * Whether any NAL appended to the access unit in progress carries an IDR slice or a parameter set,
+         * accumulated as NALs are reassembled so the completed picture's key-frame verdict needs no rescan.
+         */
+        private boolean currentKeyFrame;
+
+        /**
+         * The key-frame verdict of the most recently completed access unit, read back by
+         * {@link #wasKeyFrame()}.
+         */
+        private boolean lastKeyFrame;
+
+        /**
          * Accepts one cleartext video RTP payload, returning a completed Annex-B access unit when the packet
          * closes one.
          *
@@ -3951,6 +4202,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             if (currentTimestamp != -1 && timestamp != currentTimestamp) {
                 currentFragments.clear();
                 currentAccessUnit.clear();
+                currentKeyFrame = false;
             }
             currentTimestamp = timestamp;
             if (payload.length == 0) {
@@ -3962,7 +4214,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             } else if (type == H264RtpPacketization.NAL_TYPE_STAP_A) {
                 acceptStapA(payload);
             } else {
-                currentAccessUnit.add(payload.clone());
+                addNal(payload.clone());
             }
             return marker ? completeAccessUnit() : null;
         }
@@ -4007,7 +4259,27 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     offset += fragment.length;
                 }
                 currentFragments.clear();
-                currentAccessUnit.add(nal);
+                addNal(nal);
+            }
+        }
+
+        /**
+         * Appends one reassembled NAL to the access unit in progress, updating the running key-frame verdict.
+         *
+         * <p>The NAL's type field (its first byte masked with {@link H264RtpPacketization#NAL_TYPE_MASK}) is
+         * tested for an instantaneous-decoder-refresh slice ({@code 5}), a sequence parameter set ({@code 7}),
+         * or a picture parameter set ({@code 8}); any of these marks the picture as a key frame, mirroring the
+         * bit-identical type test the encode side records on {@link EncodedVideoFrame#keyFrame()}.
+         *
+         * @param nal the reassembled NAL bytes to append
+         */
+        private void addNal(byte[] nal) {
+            currentAccessUnit.add(nal);
+            if (nal.length != 0) {
+                var type = nal[0] & H264RtpPacketization.NAL_TYPE_MASK;
+                if (type == 5 || type == 7 || type == 8) {
+                    currentKeyFrame = true;
+                }
             }
         }
 
@@ -4028,7 +4300,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                 if (nalLength == 0 || offset + nalLength > payload.length) {
                     return;
                 }
-                currentAccessUnit.add(Arrays.copyOfRange(payload, offset, offset + nalLength));
+                addNal(Arrays.copyOfRange(payload, offset, offset + nalLength));
                 offset += nalLength;
             }
         }
@@ -4045,13 +4317,27 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             if (currentAccessUnit.isEmpty()) {
                 currentFragments.clear();
                 currentTimestamp = -1;
+                currentKeyFrame = false;
+                lastKeyFrame = false;
                 return null;
             }
             var accessUnit = H264RtpPacketization.toAnnexB(currentAccessUnit);
             currentAccessUnit.clear();
             currentFragments.clear();
             currentTimestamp = -1;
+            lastKeyFrame = currentKeyFrame;
+            currentKeyFrame = false;
             return accessUnit;
+        }
+
+        /**
+         * Returns whether the access unit last returned by {@link #accept(byte[], long, boolean)} carried an
+         * IDR slice or a parameter set, the running verdict accumulated during reassembly.
+         *
+         * @return {@code true} when the most recently completed access unit is a key frame
+         */
+        private boolean wasKeyFrame() {
+            return lastKeyFrame;
         }
     }
 
@@ -4195,14 +4481,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             packet[1] = (byte) ((marker ? 0x80 : 0x00) | (VIDEO_PAYLOAD_TYPE & 0x7F));
             packet[2] = (byte) ((sequence >>> 8) & 0xFF);
             packet[3] = (byte) (sequence & 0xFF);
-            packet[4] = (byte) ((timestamp >>> 24) & 0xFF);
-            packet[5] = (byte) ((timestamp >>> 16) & 0xFF);
-            packet[6] = (byte) ((timestamp >>> 8) & 0xFF);
-            packet[7] = (byte) (timestamp & 0xFF);
-            packet[8] = (byte) ((ssrc >>> 24) & 0xFF);
-            packet[9] = (byte) ((ssrc >>> 16) & 0xFF);
-            packet[10] = (byte) ((ssrc >>> 8) & 0xFF);
-            packet[11] = (byte) (ssrc & 0xFF);
+            DataUtils.putInt(packet, 4, (int) timestamp, ByteOrder.BIG_ENDIAN);
+            DataUtils.putInt(packet, 8, ssrc, ByteOrder.BIG_ENDIAN);
             packet[12] = (byte) 0xDE;
             packet[13] = (byte) 0xBE;
             packet[14] = (byte) ((words >>> 8) & 0xFF);
@@ -4441,8 +4721,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * @param clockRateHz the stream's RTP timestamp clock rate, in hertz
          */
         private void teeArrivalTiming(byte[] rtpPacket, int clockRateHz) {
-            var rtpTimestamp = ((long) (rtpPacket[4] & 0xFF) << 24) | ((long) (rtpPacket[5] & 0xFF) << 16)
-                    | ((long) (rtpPacket[6] & 0xFF) << 8) | (rtpPacket[7] & 0xFF);
+            var rtpTimestamp = DataUtils.getInt(rtpPacket, 4, ByteOrder.BIG_ENDIAN) & 0xFFFFFFFFL;
             var sendTimeMs = rtpTimestamp * 1000L / clockRateHz;
             var arrivalMs = System.nanoTime() / 1_000_000L;
             var payloadBytes = rtpPacket.length - rtpPayloadOffset(rtpPacket);
@@ -4488,10 +4767,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          */
         private void acceptAudio(byte[] rtpPacket) {
             var sequence = ((rtpPacket[2] & 0xFF) << 8) | (rtpPacket[3] & 0xFF);
-            var timestamp = ((long) (rtpPacket[4] & 0xFF) << 24) | ((long) (rtpPacket[5] & 0xFF) << 16)
-                    | ((long) (rtpPacket[6] & 0xFF) << 8) | (rtpPacket[7] & 0xFF);
-            var ssrc = ((rtpPacket[8] & 0xFF) << 24) | ((rtpPacket[9] & 0xFF) << 16)
-                    | ((rtpPacket[10] & 0xFF) << 8) | (rtpPacket[11] & 0xFF);
+            var timestamp = DataUtils.getInt(rtpPacket, 4, ByteOrder.BIG_ENDIAN) & 0xFFFFFFFFL;
+            var ssrc = DataUtils.getInt(rtpPacket, 8, ByteOrder.BIG_ENDIAN);
             var body = Arrays.copyOfRange(rtpPacket, rtpPayloadOffset(rtpPacket), rtpPacket.length);
             var payload = openSframe(body);
             if (payload == null) {
@@ -4553,10 +4830,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private void acceptVideo(VideoPipeline pipeline, byte[] rtpPacket) {
             var sequence = ((rtpPacket[2] & 0xFF) << 8) | (rtpPacket[3] & 0xFF);
             var marker = (rtpPacket[1] & 0x80) != 0;
-            var timestamp = ((long) (rtpPacket[4] & 0xFF) << 24) | ((long) (rtpPacket[5] & 0xFF) << 16)
-                    | ((long) (rtpPacket[6] & 0xFF) << 8) | (rtpPacket[7] & 0xFF);
-            var ssrc = ((rtpPacket[8] & 0xFF) << 24) | ((rtpPacket[9] & 0xFF) << 16)
-                    | ((rtpPacket[10] & 0xFF) << 8) | (rtpPacket[11] & 0xFF);
+            var timestamp = DataUtils.getInt(rtpPacket, 4, ByteOrder.BIG_ENDIAN) & 0xFFFFFFFFL;
+            var ssrc = DataUtils.getInt(rtpPacket, 8, ByteOrder.BIG_ENDIAN);
             // Gap detection runs per RTP packet, so feed every packet's sequence to this source's tracker
             // before reassembly (a fragment that never completes a picture still advances the sequence and so
             // still reveals a gap). The tracker map is touched only here, on the single transport receive
@@ -4577,7 +4852,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             if (accessUnit != null) {
                 accessUnit = openSframe(accessUnit);
                 if (accessUnit != null) {
-                    keyFrame = accessUnitIsKeyFrame(accessUnit);
+                    keyFrame = videoDepacketizer.wasKeyFrame();
                     var frame = new EncodedVideoFrame(accessUnit, VideoDecoderCapability.H264, keyFrame,
                             VIDEO_WIDTH, VIDEO_HEIGHT, timestamp);
                     pipeline.insert(frame, System.nanoTime() / 1_000_000L, timestamp, sequence);
@@ -4601,29 +4876,6 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         }
 
         /**
-         * Returns whether a reassembled Annex-B access unit carries an independently-decodable picture.
-         *
-         * <p>Scans the access unit's NAL units for an instantaneous-decoder-refresh slice (NAL type
-         * {@code 5}), a sequence parameter set ({@code 7}), or a picture parameter set ({@code 8}); any of
-         * these marks the picture as a key frame the decoder can refresh from.
-         *
-         * @param accessUnit the Annex-B access-unit bytes
-         * @return {@code true} when the access unit carries an IDR slice or a parameter set
-         */
-        private static boolean accessUnitIsKeyFrame(byte[] accessUnit) {
-            for (var nal : H264RtpPacketization.splitAnnexBNalUnits(accessUnit)) {
-                if (nal.length == 0) {
-                    continue;
-                }
-                var type = nal[0] & H264RtpPacketization.NAL_TYPE_MASK;
-                if (type == 5 || type == 7 || type == 8) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /**
          * Opens a group-call SFrame body, or returns the body unchanged on a one-to-one call.
          *
          * <p>A one-to-one call carries no SFrame layer (the relay hop-by-hop SRTP is the only transport
@@ -4638,7 +4890,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             if (sframeProvider == null) {
                 return body;
             }
-            // BLOCKED: open the end-to-end SFrame frame. The integration once the layout is recovered is to
+            // TODO: wire SFrameHeaderCodec - group-call OPEN - open the end-to-end SFrame frame. The integration once the layout is recovered is to
             //  resolve the sender device JID from the inbound RTP SSRC, look up that peer's SFrameKeyProvider
             //  from CallMembership.sframeProvidersByDevice() (the per-peer provider seam the crypto core
             //  exposes; the membership now derives every participant's chain key from the installed call key),
@@ -4902,20 +5154,18 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
      */
     private static final class VideoPipeline implements AutoCloseable {
         /**
-         * A send seam shipping one encoded video access unit as a video RTP packet over the transport.
+         * The depth of the reusable pixel-buffer ring the render loop hands borrowed frames out of, sized
+         * to the buffered sink's frame capacity plus one.
          *
-         * <p>The encode thread hands each non-empty access unit to an instance of this interface, which the
-         * media plane backs by packetizing the unit and calling the transport's media send.
+         * @implNote This implementation uses five, one more than the four-frame capacity of
+         * {@link com.github.auties00.cobalt.calls2.stream.BufferedVideoInput}. A ring buffer is passed
+         * back to the decoder for refill only after the ring has cycled through the other four hand-outs,
+         * by which point the frame that borrowed it has necessarily left the sink's bounded queue (which
+         * holds at most four, plus the one a consumer may hold mid-read), so refilling a ring buffer never
+         * aliases a frame still reachable through
+         * {@link com.github.auties00.cobalt.calls2.stream.VideoInput#read()}.
          */
-        @FunctionalInterface
-        private interface VideoFrameSink {
-            /**
-             * Ships one encoded video access unit over the transport.
-             *
-             * @param frame the encoded access unit to send; never {@code null} and never empty
-             */
-            void send(EncodedVideoFrame frame);
-        }
+        private static final int PLAYBACK_RING_DEPTH = 5;
 
         /**
          * Holds the call identifier, used in the thread names and diagnostics.
@@ -4961,10 +5211,38 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private final VideoInput videoPlayback;
 
         /**
+         * Holds the round-robin ring of reusable pixel buffers the decoder packs each borrowed frame into,
+         * or {@code null} when the call renders through the host and no sink borrows a buffer.
+         *
+         * <p>Confined to the single render thread that drives {@link #renderReleased}. Each slot starts
+         * {@code null} and is seeded with the decoder's first same-geometry output, then handed back to
+         * the decoder as its pack target on the next cycle; a resolution change re-seeds the slot with a
+         * fresh buffer the decoder allocates in its stead.
+         */
+        private final byte[][] playbackRing;
+
+        /**
+         * Holds the next {@link #playbackRing} slot to pack and hand out, advanced only when a decoded
+         * picture is offered to the sink.
+         */
+        private int playbackRingIndex;
+
+        /**
+         * Holds the color-space converter that normalizes each captured picture to planar I420 at the
+         * advertised encoder geometry before the encode hand-off.
+         *
+         * <p>Stateless and thread-confined to the encode loop: it repacks an
+         * {@link com.github.auties00.cobalt.calls2.stream.VideoPixelFormat#NV12 NV12} capture to I420 and
+         * resamples any off-geometry picture to {@link #codecParams} dimensions, so the codec always
+         * receives an I420 frame that matches the geometry it was opened with.
+         */
+        private final YuvConverter yuvConverter;
+
+        /**
          * Holds the send seam each encoded access unit is shipped through, bound after the transport is
          * built and before {@link #start()}, or {@code null} when the call sends no video.
          */
-        private VideoFrameSink frameSink;
+        private Consumer<EncodedVideoFrame> frameSink;
 
         /**
          * Tracks whether the pipeline is running, so both threads exit on close.
@@ -5004,6 +5282,8 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
             this.jitterBuffer = jitterBuffer;
             this.videoCapture = videoCapture;
             this.videoPlayback = videoPlayback;
+            this.playbackRing = videoPlayback != null ? new byte[PLAYBACK_RING_DEPTH][] : null;
+            this.yuvConverter = YuvConverter.create();
             this.running = new AtomicBoolean();
         }
 
@@ -5016,7 +5296,7 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          *
          * @param frameSink the send seam shipping encoded access units over the transport
          */
-        private void bindFrameSink(VideoFrameSink frameSink) {
+        private void bindFrameSink(Consumer<EncodedVideoFrame> frameSink) {
             this.frameSink = frameSink;
         }
 
@@ -5118,13 +5398,42 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         }
 
         /**
+         * Normalizes one captured picture to planar I420 at the advertised encoder geometry for the encode
+         * hand-off.
+         *
+         * <p>A capture that already matches the codec geometry is repacked to
+         * {@link com.github.auties00.cobalt.calls2.stream.VideoPixelFormat#I420 I420} through
+         * {@link YuvConverter#toI420(VideoFrame)}, which returns an already-I420 frame unchanged and splits
+         * an {@link com.github.auties00.cobalt.calls2.stream.VideoPixelFormat#NV12 NV12} frame's interleaved
+         * chroma into the separate planes the native encoders consume. A capture whose dimensions differ
+         * from the codec geometry is resampled to the advertised size through
+         * {@link YuvConverter#scale(VideoFrame, int, int)}, which itself yields I420, so the codec always
+         * receives an I420 picture matching the geometry it was opened with and its geometry check never
+         * trips.
+         *
+         * @implNote This implementation performs the libyuv normalization the wa-voip converter drives at
+         * the encode hand-off, centralizing the NV12-to-I420 repack that would otherwise be duplicated in
+         * every {@link VideoCodec}; rotation is not applied because a captured {@link VideoFrame} carries no
+         * orientation metadata to drive it.
+         *
+         * @param frame the captured picture, in I420 or NV12 and at any geometry
+         * @return the picture as planar I420 at the codec's advertised geometry
+         */
+        private VideoFrame normalizeForEncode(VideoFrame frame) {
+            if (frame.width() != codecParams.width() || frame.height() != codecParams.height()) {
+                return yuvConverter.scale(frame, codecParams.width(), codecParams.height());
+            }
+            return yuvConverter.toI420(frame);
+        }
+
+        /**
          * Drains the capture source, encodes each picture, and ships it until the pipeline stops.
          *
          * <p>Each turn pulls one raw picture from the application video source with a blocking
-         * {@link VideoOutput#take()}, encodes it through the codec, and ships a non-empty access unit through
-         * the send seam; an empty access unit (a rate-controller frame drop) is sent as nothing. A
-         * {@code null} pull or a cleared running flag ends the loop, and an interrupt during the pull is
-         * treated as a stop.
+         * {@link VideoOutput#take()}, normalizes it to planar I420 at the advertised geometry, encodes it
+         * through the codec, and ships a non-empty access unit through the send seam; an empty access unit
+         * (a rate-controller frame drop) is sent as nothing. A {@code null} pull or a cleared running flag
+         * ends the loop, and an interrupt during the pull is treated as a stop.
          */
         private void encodeLoop() {
             while (running.get()) {
@@ -5139,9 +5448,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     break;
                 }
                 try {
-                    var encoded = codec.encode(frame, false);
+                    var encoded = codec.encode(normalizeForEncode(frame), false);
                     if (!encoded.isEmpty()) {
-                        frameSink.send(encoded);
+                        frameSink.accept(encoded);
                     }
                 } catch (RuntimeException exception) {
                     LOGGER.log(System.Logger.Level.DEBUG, "calls2 video encode error for call {0}: {1}",
@@ -5180,21 +5489,37 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * host.
          *
          * <p>Decodes the released frame; a decode that produces no displayable picture is skipped. When the
-         * call supplied an application video sink the decoded {@link VideoFrame}
-         * is offered to it directly; otherwise the decoded planar picture is copied into off-heap plane
-         * segments and handed to {@link VoipHostApi#renderVideoFrame} as a {@link VoipHostApi.RenderedVideoFrame},
-         * whose plane segments are valid only for the duration of the render call.
+         * call supplied an application video sink the decoded picture is packed into the next buffer of a
+         * reusable {@link #playbackRing} and offered to the sink as a borrowed {@link VideoFrame}, so a
+         * steady-resolution stream delivers received video with no per-frame pixel allocation; otherwise
+         * the decoded planar picture is copied into off-heap plane segments and handed to
+         * {@link VoipHostApi#renderVideoFrame} as a {@link VoipHostApi.RenderedVideoFrame}, whose plane
+         * segments are valid only for the duration of the render call.
+         *
+         * @implNote This implementation owns the ring on the single render thread and advances the
+         * round-robin index only when a picture is actually offered, so a decode that yields nothing (a
+         * decoder awaiting a key frame) leaves the current slot untouched for the next pass. It re-seeds a
+         * slot from the returned frame's buffer after every decode: on a same-geometry frame the decoder
+         * packs into the buffer the slot supplied and hands it straight back, while a resolution change
+         * makes the decoder allocate a correctly sized buffer that the slot then adopts for later reuse.
          *
          * @param released the released frame and its render time
          */
         private void renderReleased(VideoJitterBuffer.ReleasedFrame released) {
             var encoded = released.frame();
-            var picture = codec.decode(encoded.payload(), encoded.ptsMicros());
-            if (picture == null) {
+            if (videoPlayback != null) {
+                var slot = playbackRingIndex;
+                var picture = codec.decode(encoded.payload(), encoded.ptsMicros(), playbackRing[slot]);
+                if (picture == null) {
+                    return;
+                }
+                playbackRing[slot] = picture.pixels();
+                playbackRingIndex = (slot + 1) % PLAYBACK_RING_DEPTH;
+                videoPlayback.offer(picture);
                 return;
             }
-            if (videoPlayback != null) {
-                videoPlayback.offer(picture);
+            var picture = codec.decode(encoded.payload(), encoded.ptsMicros());
+            if (picture == null) {
                 return;
             }
             try (var arena = Arena.ofConfined()) {
@@ -5573,24 +5898,6 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
         private volatile int lastVideoTargetBitrateBps;
 
         /**
-         * The combined sender bandwidth estimate, in bits per second, from the most recent rate-control round,
-         * published for the video packetizer's id13 keyframe descriptor.
-         *
-         * <p>Written under {@link #lock} each round and read without it through {@link #bandwidthEstimateBps()};
-         * declared {@code volatile} so the send thread observes each update.
-         */
-        private volatile int lastBandwidthEstimateBps;
-
-        /**
-         * The video target bitrate, in bits per second, from the most recent rate-control round, published for
-         * the video packetizer's id13 keyframe descriptor; zero until the call carries video.
-         *
-         * <p>Written under {@link #lock} each round and read without it through
-         * {@link #videoTargetBitrateBps()}; declared {@code volatile} so the send thread observes each update.
-         */
-        private volatile int lastVideoTargetBitrateBps;
-
-        /**
          * Tracks whether the periodic tick is running, so its thread exits on {@link #stop()}.
          */
         private final AtomicBoolean running;
@@ -5667,6 +5974,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     .orElse(MAX_BITRATE_BPS);
             this.maxBitrateBps = maxBwe;
             var seedBps = seedBitrateBps(isCaller);
+            // TODO: wire PacketPairEstimator - own a PacketPairEstimator (HD thresholds from VoipParamKey), feed
+            //  onPacketPair(combinedBytes, dispersionMs, arrivalMs), and pass linkCapacityBps()/isHdCapable() into
+            //  LiveSenderBandwidthEstimator.update (the linkCapacityBps param nothing currently produces).
             this.senderBwe = new LiveSenderBandwidthEstimator(
                     new AudioSenderBandwidthEstimator(minBwe, maxBwe, seedBps,
                             LOSS_HIGH_THRESHOLD),
@@ -5694,6 +6004,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
          * @return the machine-learning engine for the call, never {@code null}
          */
         private static MlBweEngine selectMlBweEngine() {
+            // TODO: wire LiveMlBweEngine - this hardcodes new NoopMlBweEngine(); construct
+            //  new LiveMlBweEngine(configs, resolver) once the ExecuTorch backend is bundled in cobalt-native,
+            //  voip_settings is decoded to ModelConfig, and a ModelPathResolver resolves downloaded .pte paths.
             return new NoopMlBweEngine();
         }
 
@@ -5883,6 +6196,9 @@ final class LiveMediaSession implements Calls2MediaPlane.Session {
                     linkCapacityBps, nowMs);
             target = applyMlSteering(target, plr, rttNs, remoteBweBps);
             lastBandwidthEstimateBps = (int) target;
+            // TODO: wire BweConfigSender - when the downlink BWE estimate falls, call
+            //  CallTransportController.onDownlinkBweDrop(index, minRemoteBweKbps) from this media-plane BWE
+            //  tracking point (drives BweConfigSender.build + transport.sendStandaloneWarp).
 
             var rttMs = rttNs > 0 ? rttNs / 1_000_000.0 : 0.0;
             var audioTarget = audioShare(target);

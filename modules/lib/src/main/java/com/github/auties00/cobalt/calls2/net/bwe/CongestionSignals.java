@@ -19,4 +19,15 @@ public record CongestionSignals(boolean congested, boolean aggressive) {
      * A signals value with neither flag set, used as the not-congested result.
      */
     public static final CongestionSignals NONE = new CongestionSignals(false, false);
+
+    /**
+     * A signals value with the congested flag set but not the aggressive flag, the default-tier trip.
+     */
+    public static final CongestionSignals CONGESTED = new CongestionSignals(true, false);
+
+    /**
+     * A signals value with both flags set, the high-sensitivity trip; the aggressive flag always implies
+     * the congested flag.
+     */
+    public static final CongestionSignals AGGRESSIVE = new CongestionSignals(true, true);
 }

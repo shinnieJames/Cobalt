@@ -170,7 +170,7 @@ public final class PitchLagDecoder {
             int prevLagidxMod = prevLagidx - prevLagblk * BLOCKSIZE;
             int deltaRangeStart = -prevLagidxMod + deltaBlk * BLOCKSIZE;
             int windowStart = deltaRangeStart + 2 * BLOCKSIZE - 1;
-            int idx = decodeUpdateWindow(decoder, deltaLagCmf, windowStart, BLOCKSIZE + 1);
+            int idx = MlowEntropyWrapper.decodeUpdate(decoder, deltaLagCmf, windowStart, BLOCKSIZE + 1);
             int lagind = idx + deltaRangeStart + prevLagidx;
             for (int j = 0; j < seglens[k]; j++) {
                 laginds[lagindsIx++] = lagind;
@@ -203,7 +203,7 @@ public final class PitchLagDecoder {
         int startIx = range[block0 * 2] & 0xFF;
         int rangeEnd = range[block0 * 2 + 1] & 0xFF;
         int cmfLen = rangeEnd - startIx + 2;
-        return decodeUpdateWindow(decoder, data.blocksegIdxCmf(), startIx, cmfLen) + startIx + 1;
+        return MlowEntropyWrapper.decodeUpdate(decoder, data.blocksegIdxCmf(), startIx, cmfLen) + startIx + 1;
     }
 
     /**
@@ -247,37 +247,5 @@ public final class PitchLagDecoder {
             return 1;
         }
         return 2;
-    }
-
-    /**
-     * Decodes one symbol against a window of a cumulative frequency table, the windowed form of
-     * {@code smpl_ec_decode_update} used where the native code passes an interior CMF pointer.
-     *
-     * <p>The native decoder measures every span relative to the first windowed entry {@code cmf[offset]}
-     * and uses {@code cmf[offset + len - 1] - cmf[offset]} as the total frequency. This drives the shared
-     * range-decoder primitives directly over {@code [offset, offset + len)}, so it is observationally
-     * identical to copying the window out and calling
-     * {@link MlowEntropyWrapper#decodeUpdate(MlowRangeDecoder, int[])} on it, without the per-call
-     * allocation.
-     *
-     * @param decoder the range decoder to advance
-     * @param cmf     the full cumulative frequency table
-     * @param offset  the index of the first windowed entry
-     * @param len     the number of windowed entries; at least two
-     * @return the decoded symbol index in {@code [0, len - 1)}, relative to the window start
-     */
-    private static int decodeUpdateWindow(MlowRangeDecoder decoder, int[] cmf, int offset, int len) {
-        int last = offset + len - 1;
-        long base = cmf[offset] & 0xFFFFFFFFL;
-        long total = (cmf[last] & 0xFFFFFFFFL) - base;
-        long cmfLow = decoder.decode(total) + base;
-        int s = offset;
-        for (; s < last; s++) {
-            if (Long.compareUnsigned(cmfLow, cmf[s + 1] & 0xFFFFFFFFL) < 0) {
-                break;
-            }
-        }
-        decoder.update((cmf[s] & 0xFFFFFFFFL) - base, (cmf[s + 1] & 0xFFFFFFFFL) - base, total);
-        return s - offset;
     }
 }

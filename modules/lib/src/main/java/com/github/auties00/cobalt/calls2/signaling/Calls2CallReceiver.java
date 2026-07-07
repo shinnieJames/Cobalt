@@ -92,11 +92,11 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      * The set of payload tags that create a call, so a buffered one is drained and replayed at once.
      *
      * <p>An offer is the call-creating signal: the call object does not exist when the offer arrives, so
-     * the offer is buffered like any pre-call message, but unlike a transport or rekey message that must
-     * wait for its call, the offer is what brings the call into being. Buffering it and immediately draining
-     * the call's buffer therefore replays the offer (and any non-offer message that raced ahead of it) into
-     * the engine in arrival order, which rings the call; the engine's own message router treats an offer for
-     * a not-yet-created call as a process-and-create verdict.
+     * unlike a transport or rekey message that must wait for its call, the offer is what brings the call
+     * into being. The offer is therefore forwarded to the engine first, which creates and rings the call,
+     * and only then are any non-offer messages that raced ahead of it and were buffered replayed against the
+     * now-live call in arrival order; a racer replayed before the offer created the call would reach no call
+     * object and be dropped, so the offer always precedes the buffered racers.
      */
     private static final Set<String> CALL_CREATING_TAGS = Set.of("offer");
 
@@ -202,17 +202,20 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
         }
 
         if (OfferNoticeStanza.ELEMENT.equals(payload.description())) {
-            handleOfferNotice(stanza, payload);
+            handleOfferNotice(stanza, payload, from);
             return;
         }
 
         var senderLid = stanza.getAttributeAsJid(SENDER_LID_ATTRIBUTE, null);
+        // TODO: pass the already-read call-id into CallSignalingRouter.classify so the router does not
+        //  re-read the call-id attribute; blocked because unowned tests call the 3-arg classify.
         var verdict = router.classify(payload, senderLid,
                 payload.getAttributeAsString(CALL_ID_ATTRIBUTE)
                         .map(callExists::test)
                         .orElse(false));
 
-        acknowledger.acknowledge(stanza, payload, verdict.callId().orElse(null));
+        acknowledger.acknowledge(stanza, payload, verdict.callId().orElse(null), from,
+                verdict.callCreator().orElse(null));
 
         switch (verdict.disposition()) {
             case DROP -> LOGGER.log(System.Logger.Level.DEBUG,
@@ -234,40 +237,49 @@ public final class Calls2CallReceiver extends SocketStreamHandler.Ordered {
      *
      * @param stanza  the inbound {@code <call>} envelope
      * @param payload the {@code <offer_notice>} child element
+     * @param from    the envelope {@code from} sender, threaded from {@link #handle(Stanza)} so the
+     *                acknowledgement does not re-parse it
      */
-    private void handleOfferNotice(Stanza stanza, Stanza payload) {
-        acknowledger.acknowledge(stanza, payload, payload.getAttributeAsString(CALL_ID_ATTRIBUTE).orElse(null));
+    private void handleOfferNotice(Stanza stanza, Stanza payload, Jid from) {
+        acknowledger.acknowledge(stanza, payload, payload.getAttributeAsString(CALL_ID_ATTRIBUTE).orElse(null),
+                from, null);
         OfferNoticeStanza.of(stanza).ifPresentOrElse(offerNoticeSink, () ->
                 LOGGER.log(System.Logger.Level.DEBUG, "Could not decode offer_notice: {0}", stanza));
     }
 
     /**
-     * Buffers a not-yet-routable payload and, when it is the call-creating offer, replays the call's
-     * buffered payloads to the engine.
+     * Buffers a not-yet-routable payload, or forwards the call-creating offer and replays any payloads
+     * that raced ahead of it.
      *
-     * <p>Every pre-call payload is buffered in arrival order through {@link CallMessageBuffer}. A non-offer
-     * payload that races ahead of its call stays buffered until the offer arrives. An offer is the signal
-     * that brings the call into being, so once it is buffered the call's buffer is drained and every drained
-     * payload (the offer and any earlier-raced message) is forwarded to the engine sink in arrival order
-     * with the offer envelope's {@code from}; the engine creates the call from the offer and applies the
-     * replayed messages against it. This is the production caller that makes a fresh inbound offer reach the
-     * lifecycle controller and ring.
+     * <p>A non-offer payload that races ahead of its call is buffered through {@link CallMessageBuffer} and
+     * stays buffered until the offer arrives. An offer is the signal that brings the call into being, so it
+     * is forwarded to the engine sink first, creating the call from the offer and ringing it; only then, and
+     * only when {@link CallMessageBuffer#hasBufferedMessages(String)} reports that messages raced ahead of
+     * it, is the call's buffer drained and replayed against the now-live call in arrival order with the
+     * offer envelope's {@code from}. Forwarding the offer before the buffered racers is required: a racer
+     * replayed while the call object still did not exist would be forwarded to a call the lifecycle
+     * controller does not track and dropped. This is the production caller that makes a fresh inbound offer
+     * reach the lifecycle controller and ring.
      *
      * <p>The {@link CallMessageBuffer} stores only the payload {@link Stanza}, not the sender of the envelope
      * each was carried in, so a drained payload that raced ahead of the offer is replayed under the offer's
-     * envelope sender rather than its own. This matches the engine, which processes the buffered offer and
-     * the messages that raced ahead of it as one batch authored by the same peer device for the same call.
+     * envelope sender rather than its own. This matches the engine, which processes the offer and the
+     * messages that raced ahead of it as one batch authored by the same peer device for the same call.
      *
      * @param callId  the call identifier the payload belongs to
-     * @param payload the {@code <call>} child element being buffered
-     * @param from    the envelope sender of the stanza that triggered this buffering, used as the
-     *                attribution for every drained payload on a call-creating replay
+     * @param payload the {@code <call>} child element being buffered or, for the offer, forwarded
+     * @param from    the envelope sender of the stanza that triggered this call, used as the attribution
+     *                for the offer and for every drained payload on a call-creating replay
      */
     private void bufferAndMaybeReplay(String callId, Stanza payload, Jid from) {
-        buffer.buffer(callId, payload);
         if (CALL_CREATING_TAGS.contains(payload.description())) {
-            buffer.drainBufferedMessages(callId).forEach(drained -> forward(drained, from));
+            forward(payload, from);
+            if (buffer.hasBufferedMessages(callId)) {
+                buffer.drainBufferedMessages(callId).forEach(drained -> forward(drained, from));
+            }
+            return;
         }
+        buffer.buffer(callId, payload);
     }
 
     /**

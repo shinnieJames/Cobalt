@@ -5,6 +5,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.VarHandle;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Wire-exact off-heap single-producer single-consumer ring carrying outbound datagrams
@@ -207,6 +208,15 @@ public final class SctpRingBuffer implements AutoCloseable {
     private volatile boolean initialized;
 
     /**
+     * Guards {@link #close()} so the backing arena is released at most once.
+     *
+     * <p>Flipped from {@code false} to {@code true} by a single {@link AtomicBoolean#compareAndSet}
+     * in {@link #close()}; only the winning caller runs the arena teardown, so two concurrent closes
+     * cannot both invoke {@link Arena#close()} and make the second throw on an already-closed arena.
+     */
+    private final AtomicBoolean closed = new AtomicBoolean();
+
+    /**
      * Constructs a ring with the given data-region capacity in bytes.
      *
      * <p>Allocates a single off-heap segment of {@code capacity + 8} bytes for the two index words
@@ -393,7 +403,7 @@ public final class SctpRingBuffer implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (!initialized) {
+        if (!closed.compareAndSet(false, true)) {
             return;
         }
         initialized = false;
@@ -433,7 +443,8 @@ public final class SctpRingBuffer implements AutoCloseable {
      * @return the advanced index, in {@code [0, cap)}
      */
     private long advance(long index, long delta) {
-        return (index + delta) % capacity;
+        var sum = index + delta;
+        return sum < capacity ? sum : sum % capacity;
     }
 
     /**

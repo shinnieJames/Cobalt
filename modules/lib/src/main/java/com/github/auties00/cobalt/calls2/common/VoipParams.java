@@ -1,10 +1,10 @@
 package com.github.auties00.cobalt.calls2.common;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalLong;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Holds one parsed voip-param set as a wire-path-keyed value map.
@@ -26,9 +26,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>A set is mutable: the dynamic rate-control rule engine ({@link DynVoipParamUpdater}) overwrites
  * individual values on the live set each round, and the manager copies a stored set before mutating it
- * so the stored baseline is never clobbered. The backing map is a {@link ConcurrentHashMap} so a copy
- * taken while a value is being read does not fault, but a set is otherwise expected to be driven from
- * the single call transport thread.
+ * so the stored baseline is never clobbered. The backing map is a plain {@link HashMap}: a set is
+ * confined to one thread at a time (built by the deserializer, then copied and mutated only under the
+ * owning {@link LiveVoipParamManager}'s lock), so it is never accessed concurrently.
  *
  * @implNote This implementation replaces the flat {@code wa_voip_params} struct (the
  * {@code 0x3f6d0}-byte block deep-copied by {@code store_raw_voip_params}) of the wa-voip WASM module
@@ -49,7 +49,7 @@ public final class VoipParams {
      * JSON document.
      */
     public VoipParams() {
-        this.values = new ConcurrentHashMap<>();
+        this.values = new HashMap<>();
     }
 
     /**
@@ -62,8 +62,10 @@ public final class VoipParams {
      * @param source the set to copy
      */
     public VoipParams(VoipParams source) {
-        this.values = new ConcurrentHashMap<>();
-        source.values.forEach((key, value) -> values.put(key, copyValue(value)));
+        this.values = HashMap.newHashMap(source.values.size());
+        for (var entry : source.values.entrySet()) {
+            values.put(entry.getKey(), copyValue(entry.getValue()));
+        }
     }
 
     /**

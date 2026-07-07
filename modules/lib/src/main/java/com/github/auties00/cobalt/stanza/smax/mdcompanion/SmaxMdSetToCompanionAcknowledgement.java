@@ -23,7 +23,10 @@ import java.util.Objects;
  * {@code <iq id="..." to="..." type="result"/>} with no inner payload. The {@code to} attribute
  * echoes the inbound {@code from} (always the {@code s.whatsapp.net} server domain) rather than
  * pinning the literal in the builder.
+ *
+ * @deprecated superseded by the inline companion-pairing flow in {@code IqStreamHandler}.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxOutMdSetToCompanionResponseClientResponse")
 public final class SmaxMdSetToCompanionAcknowledgement implements SmaxStanza.Request {
     /**

@@ -3,8 +3,10 @@ package com.github.auties00.cobalt.stream.notification;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientPasskeyAuthenticator;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
+import com.github.auties00.cobalt.pairing.ShortcakePairingService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -105,6 +107,10 @@ public final class NotificationStreamHandler extends SocketStreamHandler.Concurr
      *                                     that owns the pairing-code
      *                                     handshake state, forwarded to the
      *                                     device sub-dispatcher
+     * @param shortcakePairingService      the {@link ShortcakePairingService}
+     *                                     that owns the passkey-linking
+     *                                     handshake state, forwarded to the
+     *                                     device sub-dispatcher
      * @param lidMigrationService          the {@link LidMigrationService}
      *                                     used to reconcile LID and PN
      *                                     addressing during business
@@ -130,20 +136,27 @@ public final class NotificationStreamHandler extends SocketStreamHandler.Concurr
      *                                     every sub-dispatcher for emitting
      *                                     the per-notification outbound
      *                                     {@code <ack>} stanza
+     * @param passkeyAuthenticator         the {@link LinkedWhatsAppClientPasskeyAuthenticator}
+     *                                     forwarded to the business
+     *                                     sub-dispatcher for answering
+     *                                     integrity checkpoints, or
+     *                                     {@code null} when none is configured
      */
     public NotificationStreamHandler(
             LinkedWhatsAppClient whatsapp,
             CompanionPairingService deviceLinkingService,
+            ShortcakePairingService shortcakePairingService,
             LidMigrationService lidMigrationService,
             ABPropsService abPropsService,
             DeviceService deviceService,
             OfflineNotificationsReporter offlineNotificationsReporter,
             WamService wamService,
-            AckSender ackSender
+            AckSender ackSender,
+            LinkedWhatsAppClientPasskeyAuthenticator passkeyAuthenticator
     ) {
-        this.accountHandler = new NotificationAccountDispatcher(whatsapp, deviceService, ackSender);
-        this.businessHandler = new NotificationBusinessDispatcher(whatsapp, lidMigrationService, ackSender);
-        this.deviceHandler = new NotificationDeviceDispatcher(whatsapp, deviceLinkingService, abPropsService, deviceService, offlineNotificationsReporter, wamService, ackSender);
+        this.accountHandler = new NotificationAccountDispatcher(whatsapp, deviceService, ackSender, wamService);
+        this.businessHandler = new NotificationBusinessDispatcher(whatsapp, lidMigrationService, ackSender, passkeyAuthenticator, wamService);
+        this.deviceHandler = new NotificationDeviceDispatcher(whatsapp, deviceLinkingService, shortcakePairingService, abPropsService, deviceService, offlineNotificationsReporter, wamService, ackSender);
         this.groupHandler = new NotificationGroupStreamHandler(whatsapp, wamService, ackSender);
     }
 
@@ -180,9 +193,9 @@ public final class NotificationStreamHandler extends SocketStreamHandler.Concurr
                     accountHandler.handle(stanza);
             case "business", "digital_commerce_subscription", "fb:update", "mex", "pay" ->
                     businessHandler.handle(stanza);
-            case "companion_reg_refresh", "devices", "encrypt", "hosted", "link_code_companion_reg",
-                    "mediaretry", "newsletter", "psa", "registration", "server", "server_sync",
-                    "w:growth", "waffle" ->
+            case "companion_reg_refresh", "crsc_continuation", "devices", "encrypt", "hosted",
+                    "link_code_companion_reg", "mediaretry", "newsletter", "passkey_prologue_request",
+                    "psa", "registration", "server", "server_sync", "w:growth", "waffle" ->
                     deviceHandler.handle(stanza);
             case "w:gp2" ->
                     groupHandler.handle(stanza);

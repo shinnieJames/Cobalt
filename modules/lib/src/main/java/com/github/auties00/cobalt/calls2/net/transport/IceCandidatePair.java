@@ -68,7 +68,6 @@ public final class IceCandidatePair {
         this.remote = Objects.requireNonNull(remote, "remote cannot be null");
         this.priority = computePairPriority(local.priority(), remote.priority(), controlling);
         this.state = IceCheckState.FROZEN;
-        this.nominated = false;
     }
 
     /**

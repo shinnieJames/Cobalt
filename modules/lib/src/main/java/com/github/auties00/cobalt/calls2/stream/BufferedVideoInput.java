@@ -111,7 +111,9 @@ public final class BufferedVideoInput implements VideoInput {
     @Override
     public void shutdown() {
         if (closed.compareAndSet(false, true)) {
-            queue.offerLast(SENTINEL);
+            while (!queue.offerLast(SENTINEL)) {
+                queue.pollFirst();
+            }
         }
     }
 }

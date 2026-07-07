@@ -191,7 +191,7 @@ public final class SmaxUpdateBlockListRequest implements SmaxStanza.Request {
             itemBuilder.attribute("dhash", itemDhash);
         }
         if (bizOptOut != null) {
-            itemBuilder.content(bizOptOut.toNode());
+            itemBuilder.content(bizOptOut.toStanza());
         }
         var iqBuilder = new StanzaBuilder()
                 .description("iq")
@@ -289,7 +289,7 @@ public final class SmaxUpdateBlockListRequest implements SmaxStanza.Request {
          */
         @WhatsAppWebExport(moduleName = "WASmaxOutBlocklistsUpdateBlockListRequest",
                 exports = "makeUpdateBlockListRequestItemBizOptOut", adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var builder = new StanzaBuilder()
                     .description("biz_opt_out");
             if (reason != null) {

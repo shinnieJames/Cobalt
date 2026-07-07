@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.calls2.dsp;
 import com.github.auties00.cobalt.calls2.media.audio.AudioDecoderReceiver;
 import com.github.auties00.cobalt.calls2.stream.AudioFrame;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -79,7 +80,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * Opus DTX/CNG frame requires the codec, which the {@link AudioDecoderReceiver.FrameDecoder} seam does not
  * yet expose.
  */
-public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSource, AvSyncFeedbackSink {
+public final class LiveNetEq implements AudioDecoderReceiver.NetEqAudioSource, AvSyncFeedbackSink {
     /**
      * The call audio sample rate in hertz, fixed at 16 kHz mono to match the public call audio format.
      *
@@ -397,9 +398,15 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     }
 
     /**
-     * {@inheritDoc}
+     * Inserts one received audio packet into the buffer and updates the delay and NACK estimators.
+     *
+     * <p>Stores the packet for playout, discarding it if it duplicates a buffered packet or precedes the
+     * playout cursor, and updates the inter-arrival histogram and the NACK tracker from its sequence number
+     * and arrival time. May be called from the transport receive thread concurrently with {@link #getAudio()}.
+     *
+     * @param packet the received packet to buffer; never {@code null}
+     * @throws NullPointerException if {@code packet} is {@code null}
      */
-    @Override
     public void insertPacket(RtpAudioPacket packet) {
         Objects.requireNonNull(packet, "packet cannot be null");
         lock.lock();
@@ -503,15 +510,8 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     @Override
     public AudioFrame getAudio() {
         var frameSamples = frameSamples();
-        if (syncBuffer.futureLength() < frameSamples) {
-            var decision = decideInternal();
-            render(decision, frameSamples);
-        }
         var pcm = new short[frameSamples];
-        var served = syncBuffer.getNextAudioInterleaved(pcm, frameSamples);
-        if (served < frameSamples) {
-            Arrays.fill(pcm, served, frameSamples, (short) 0);
-        }
+        renderFrameInto(pcm, frameSamples);
         long pts;
         lock.lock();
         try {
@@ -521,6 +521,61 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
             lock.unlock();
         }
         return new AudioFrame(pcm, pts);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote This implementation renders the frame straight into {@code destination} when it can hold a
+     * whole frame, the steady playback pull, so a same-length pull allocates no sample array and computes
+     * no presentation timestamp the caller would discard. A short pull instead renders a whole frame into
+     * a scratch array and hands out only its requested prefix, discarding the remainder so the
+     * {@link #syncBuffer} still advances by a whole frame. Both paths run the
+     * {@link #decideInternal() decision} and decode under the same locking as {@link #getAudio()} through
+     * the shared {@link #renderFrameInto(short[], int)} core.
+     *
+     * @param destination {@inheritDoc}
+     * @param length      {@inheritDoc}
+     * @return {@inheritDoc}
+     */
+    @Override
+    public int getAudioInto(short[] destination, int length) {
+        var frameSamples = frameSamples();
+        if (length >= frameSamples && destination.length >= frameSamples) {
+            return renderFrameInto(destination, frameSamples);
+        }
+        var pcm = new short[frameSamples];
+        renderFrameInto(pcm, frameSamples);
+        var copied = Math.min(length, frameSamples);
+        System.arraycopy(pcm, 0, destination, 0, copied);
+        return copied;
+    }
+
+    /**
+     * Renders one whole get-period frame into the given buffer, deciding and decoding a fresh packet only
+     * when the output history has run below a frame.
+     *
+     * <p>When the {@link #syncBuffer} holds fewer than {@code frameSamples} unplayed samples it runs the
+     * shared decide core and decodes or conceals the chosen packet into the history; otherwise it serves
+     * the next frame straight from the unplayed span without a fresh decision, keeping the held
+     * voice-activity verdict. The frame is written into {@code destination} from index zero and its tail is
+     * zero-filled when the history serves a short frame, so the buffer always advances by exactly one whole
+     * frame.
+     *
+     * @param destination  the buffer to render the frame into, at least {@code frameSamples} long
+     * @param frameSamples the get-period frame length in samples
+     * @return {@code frameSamples}, the whole-frame count written
+     */
+    private int renderFrameInto(short[] destination, int frameSamples) {
+        if (syncBuffer.futureLength() < frameSamples) {
+            var decision = decideInternal();
+            render(decision, frameSamples);
+        }
+        var served = syncBuffer.getNextAudioInterleaved(destination, frameSamples);
+        if (served < frameSamples) {
+            Arrays.fill(destination, served, frameSamples, (short) 0);
+        }
+        return frameSamples;
     }
 
     /**
@@ -539,9 +594,14 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the sequence numbers to request a retransmission for at the given time.
+     *
+     * <p>Returns the sequence numbers the NACK tracker judges still missing and old enough to retransmit, or
+     * an empty list when none are due or the link is too slow for retransmission to help.
+     *
+     * @param nowMillis the current local monotonic time in milliseconds
+     * @return the sequence numbers to NACK, ascending; never {@code null}, possibly empty
      */
-    @Override
     public List<Integer> pendingNackList(long nowMillis) {
         lock.lock();
         try {
@@ -577,9 +637,12 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     }
 
     /**
-     * {@inheritDoc}
+     * Sets the lower bound on the target playout delay in milliseconds.
+     *
+     * <p>Clamps the estimated target level no lower than this bound from the next estimate onward.
+     *
+     * @param minimumDelayMillis the minimum target playout delay; clamped non-negative
      */
-    @Override
     public void setMinimumDelayMillis(int minimumDelayMillis) {
         lock.lock();
         try {
@@ -591,9 +654,12 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     }
 
     /**
-     * {@inheritDoc}
+     * Sets the upper bound on the target playout delay in milliseconds.
+     *
+     * <p>Clamps the estimated target level no higher than this bound from the next estimate onward.
+     *
+     * @param maximumDelayMillis the maximum target playout delay; clamped no lower than the minimum
      */
-    @Override
     public void setMaximumDelayMillis(int maximumDelayMillis) {
         lock.lock();
         try {
@@ -604,9 +670,13 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     }
 
     /**
-     * {@inheritDoc}
+     * Ingests a lip-sync delay correction from the video timing path.
+     *
+     * <p>Biases the target playout delay by the supplied correction so audio and video stay synchronized; a
+     * positive value lengthens the audio delay to wait for slower video.
+     *
+     * @param correctionMillis the signed delay correction in milliseconds
      */
-    @Override
     public void ingestAvSyncFeedbackMillis(int correctionMillis) {
         lock.lock();
         try {
@@ -630,9 +700,11 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     }
 
     /**
-     * {@inheritDoc}
+     * Flushes the buffer, draining queued packets on a stall.
+     *
+     * <p>Drops queued packets so playout can resume near the target level, and resets the estimators so
+     * jitter from before the stall does not bias the post-flush target.
      */
-    @Override
     public void flush() {
         lock.lock();
         try {
@@ -651,14 +723,14 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a snapshot of the buffer's lifetime counters.
      *
      * @implNote This implementation reports {@link NetEqStatistics#meanWaitTimeMs()} from the running
      * wait-time accumulator {@link #recordWaitTime(int)} maintains as packets are extracted, the
      * lifetime average the native {@code mean_wait_time: (avg)} log carries; the snapshot is taken under
      * the lock so it is consistent with the buffer span and target read in the same critical section.
+     * @return the current statistics snapshot; never {@code null}
      */
-    @Override
     public NetEqStatistics statistics() {
         lock.lock();
         try {
@@ -745,7 +817,8 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
      */
     private NetEqOperation chooseOperation() {
         var next = packetBuffer.peekNext();
-        if (next != null && packetBuffer.nextSequenceContiguous()) {
+        var contiguous = packetBuffer.nextSequenceContiguous();
+        if (next != null && contiguous) {
             if (telephoneEventPayloadTypes.contains(next.payloadType())) {
                 return NetEqOperation.DTMF;
             }
@@ -756,7 +829,6 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
         var span = packetBuffer.spanMillis(packetBuffer.approximateSamplesPerPacket());
         var target = effectiveTargetMillis();
         var available = next != null;
-        var contiguous = packetBuffer.nextSequenceContiguous();
         var comfortNoiseActive = !available && lastDecodedComfortNoise;
         var codecHasPlc = decoderAdvertisesPlc();
         var input = new DecisionLogic.Input(
@@ -1026,9 +1098,7 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
         var lookback = Math.min(syncBuffer.capacity(), STRETCH_LOOKBACK_SAMPLES);
         var buffer = new short[lookback + decoded.length];
         var base = syncBuffer.capacity() - lookback;
-        for (var i = 0; i < lookback; i++) {
-            buffer[i] = syncBuffer.at(base + i);
-        }
+        syncBuffer.copyRange(base, buffer, 0, lookback);
         System.arraycopy(decoded, 0, buffer, lookback, decoded.length);
         return buffer;
     }
@@ -1103,9 +1173,7 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
         }
         var expanded = new short[overlap];
         var base = syncBuffer.capacity() - overlap;
-        for (var i = 0; i < overlap; i++) {
-            expanded[i] = syncBuffer.at(base + i);
-        }
+        syncBuffer.copyRange(base, expanded, 0, overlap);
         var expandWeight = NetEqMerge.signalScaling(expanded, decoded, decoded.length, fsMult, 0);
         var increment = Math.min(4194 / fsMult,
                 Integer.divideUnsigned((1 << 20) - (expandWeight << 6), Math.max(1, overlap)));
@@ -1234,14 +1302,14 @@ public final class LiveNetEq implements NetEq, AudioDecoderReceiver.NetEqAudioSo
      * held, after a successful insert.
      */
     private void pruneStaleInsertTicks() {
-        while (insertTickBySequence.size() > config.maxPacketsInBuffer()) {
-            var oldest = insertTickBySequence.entrySet().iterator().next();
-            for (var entry : insertTickBySequence.entrySet()) {
-                if (entry.getValue() < oldest.getValue()) {
-                    oldest = entry;
-                }
-            }
-            insertTickBySequence.remove(oldest.getKey());
+        var excess = insertTickBySequence.size() - config.maxPacketsInBuffer();
+        if (excess <= 0) {
+            return;
+        }
+        var entries = new ArrayList<>(insertTickBySequence.entrySet());
+        entries.sort(Map.Entry.comparingByValue());
+        for (var i = 0; i < excess; i++) {
+            insertTickBySequence.remove(entries.get(i).getKey());
         }
     }
 

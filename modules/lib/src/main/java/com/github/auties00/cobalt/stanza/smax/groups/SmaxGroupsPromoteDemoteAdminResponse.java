@@ -20,7 +20,10 @@ import java.util.Optional;
  * {@link SuccessMultiAdmin} envelope: the relay returns one {@code <admin>} child that intermixes promotion and
  * demotion outcomes, and callers walk {@link SuccessMultiAdmin#participants()} to inspect each row's {@code type}
  * marker and optional rejection code. {@link ClientError} and {@link ServerError} surface the relay's reason codes.
+ *
+ * @deprecated superseded by {@code SmaxGroupsPromoteDemote}.
  */
+@Deprecated
 public sealed interface SmaxGroupsPromoteDemoteAdminResponse extends SmaxStanza.Response
         permits SmaxGroupsPromoteDemoteAdminResponse.SuccessMultiAdmin, SmaxGroupsPromoteDemoteAdminResponse.ClientError, SmaxGroupsPromoteDemoteAdminResponse.ServerError {
 

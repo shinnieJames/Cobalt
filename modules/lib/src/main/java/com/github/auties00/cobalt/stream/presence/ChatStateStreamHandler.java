@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.stream.presence;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.smax.chatstate.SmaxServerNotificationStateType;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedContactPresenceListener;
@@ -175,8 +176,9 @@ public final class ChatStateStreamHandler extends SocketStreamHandler.Concurrent
      * Any other child tag, and a stanza with no child at all, yields {@code null} after a debug log entry.
      *
      * @implNote
-     * This implementation fuses WhatsApp Web's classification of the child as a composing, composing-media or paused
-     * type and the mapping of that classification to a status string. WhatsApp Web further refines the paused outcome
+     * This implementation delegates the composing, composing-media, and paused classification to the typed
+     * {@link SmaxServerNotificationStateType} SMAX parser and maps the parsed variant to a {@link ContactStatus}, so the
+     * SMAX export stays the single source of truth for the state-type schema. WhatsApp Web further refines the paused outcome
      * into either {@code "available"} or {@code "unavailable"} depending on the participant's {@code isOnline} flag in
      * its presence collection. Cobalt has no per-contact {@code isOnline} tracker (presence arrives exclusively through
      * {@link PresenceStreamHandler}), so the paused branch resolves to {@link ContactStatus#AVAILABLE}, matching the
@@ -191,24 +193,19 @@ public final class ChatStateStreamHandler extends SocketStreamHandler.Concurrent
     @WhatsAppWebExport(moduleName = "WASmaxInChatstateStateTypes", exports = "parseStateTypes",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private ContactStatus resolveState(Stanza stanza) {
-        var child = stanza.getChild().orElse(null);
-        if (child == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring empty chatstate stanza: {0}", stanza);
+        var stateType = SmaxServerNotificationStateType.of(stanza).orElse(null);
+        if (stateType == null) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Ignoring chatstate stanza with a missing or unsupported state: {0}", stanza);
             return null;
         }
 
-        return switch (child.description()) {
-            case "composing" -> "audio".equals(child.getAttributeAsString("media", null))
+        if (stateType instanceof SmaxServerNotificationStateType.Composing composing) {
+            return "audio".equals(composing.composingMedia().orElse(null))
                     ? ContactStatus.RECORDING
                     : ContactStatus.COMPOSING;
-            case "paused" -> ContactStatus.AVAILABLE;
-            default -> {
-                LOGGER.log(System.Logger.Level.DEBUG,
-                        "Ignoring unsupported chatstate child {0} in {1}",
-                        child.description(), stanza);
-                yield null;
-            }
-        };
+        }
+        return ContactStatus.AVAILABLE;
     }
 
     /**

@@ -122,18 +122,23 @@ public final class CallSignalingRouter {
      *                    {@code null}
      * @param callId      the call identifier read from the payload, empty when absent; never
      *                    {@code null}
+     * @param callCreator the {@code call-creator} device JID read from the payload, empty when absent
+     *                    (which occurs only on a header-validation {@link Disposition#DROP}); never
+     *                    {@code null}
      */
-    public record Verdict(Disposition disposition, Optional<Calls2SignalingType> type, Optional<String> callId) {
+    public record Verdict(Disposition disposition, Optional<Calls2SignalingType> type, Optional<String> callId,
+                          Optional<Jid> callCreator) {
         /**
          * Canonicalizes the record components.
          *
-         * @throws NullPointerException if {@code disposition}, {@code type}, or {@code callId} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code disposition}, {@code type}, {@code callId}, or
+         *                              {@code callCreator} is {@code null}
          */
         public Verdict {
             Objects.requireNonNull(disposition, "disposition cannot be null");
             Objects.requireNonNull(type, "type cannot be null");
             Objects.requireNonNull(callId, "callId cannot be null");
+            Objects.requireNonNull(callCreator, "callCreator cannot be null");
         }
     }
 
@@ -172,24 +177,25 @@ public final class CallSignalingRouter {
 
         var callId = payload.getAttributeAsString(CALL_ID_ATTRIBUTE, null);
         var callCreator = payload.getAttributeAsJid(CALL_CREATOR_ATTRIBUTE, null);
+        var callCreatorOpt = Optional.ofNullable(callCreator);
         if (callId == null || callId.isEmpty() || isAllZeroCallId(callId) || callCreator == null) {
-            return new Verdict(Disposition.DROP, Optional.empty(), Optional.ofNullable(callId));
+            return new Verdict(Disposition.DROP, Optional.empty(), Optional.ofNullable(callId), callCreatorOpt);
         }
 
         var type = Calls2SignalingType.ofWireTag(payload.description());
         if (type.isEmpty() && !Calls2CallStanza.isKnownTag(payload.description())) {
-            return new Verdict(Disposition.DROP, Optional.empty(), Optional.of(callId));
+            return new Verdict(Disposition.DROP, Optional.empty(), Optional.of(callId), callCreatorOpt);
         }
 
         if (!isLidAddressed(senderLid, callCreator)) {
-            return new Verdict(Disposition.DROP, type, Optional.of(callId));
+            return new Verdict(Disposition.DROP, type, Optional.of(callId), callCreatorOpt);
         }
 
         if (!callExists) {
-            return new Verdict(Disposition.BUFFER, type, Optional.of(callId));
+            return new Verdict(Disposition.BUFFER, type, Optional.of(callId), callCreatorOpt);
         }
 
-        return new Verdict(Disposition.PROCESS, type, Optional.of(callId));
+        return new Verdict(Disposition.PROCESS, type, Optional.of(callId), callCreatorOpt);
     }
 
     /**

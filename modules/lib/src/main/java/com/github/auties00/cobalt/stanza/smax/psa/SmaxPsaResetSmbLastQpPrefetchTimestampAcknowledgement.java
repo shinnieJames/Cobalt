@@ -18,7 +18,10 @@ import java.util.Objects;
  * notification by echoing its {@code id}, {@code from}, and {@code type} back
  * to the relay. The actual quick-promotion refresh is a separate concern
  * triggered by the notification handler, not by this ack.
+ *
+ * @deprecated not wired: SMB QP-prefetch reset has no headless consumer.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaResetSmbLastQpPrefetchTimestampResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaNotificationClientAckMixin")
 public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement implements SmaxStanza.Request {

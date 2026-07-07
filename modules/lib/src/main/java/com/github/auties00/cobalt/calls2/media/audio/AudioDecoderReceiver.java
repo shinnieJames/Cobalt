@@ -14,8 +14,8 @@ import java.util.Objects;
  * receipt, a demultiplexed and (on the group path) SFrame-opened audio payload is inserted into the
  * {@link NetEqAudioSource} through {@link #receivePacket(int, long, byte[])}, which buffers it and tracks its
  * arrival timing. On playback, the writer pump calls {@link #pull(short[], int)} once per render period; the
- * receiver pulls one rendered frame from the NetEq buffer through {@link NetEqAudioSource#getAudio()} and
- * copies it into the pump's scratch array, recording the frame's voice-activity verdict
+ * receiver has the NetEq buffer render one frame straight into the pump's array through
+ * {@link NetEqAudioSource#getAudioInto(short[], int)}, recording the frame's voice-activity verdict
  * ({@link NetEqAudioSource#lastFrameVoiceActive()}) for level metering and mixing.
  *
  * <p>The NetEq jitter buffer the receiver delegates to owns every render decision: it asks its decision logic
@@ -23,14 +23,14 @@ import java.util.Objects;
  * from the in-band forward-error-correction copy carried in the following packet or conceals it through the
  * codec's packet-loss-concealment or the built-in expander, time-stretches the decoded audio to drain or fill
  * the buffer, and serves comfort noise or silence for a gap. The receiver adds no render logic of its own; it
- * is a thin adapter that copies the served frame into the pump's array. A codec packet that decodes to more
+ * is a thin adapter that has the buffer render the served frame directly into the pump's array. A codec packet that decodes to more
  * than one frame (the sixty millisecond MLow packet decodes to three frames, nine hundred and sixty samples,
  * in a single decode) is served one frame per pull by the NetEq buffer's output history, so the receiver
  * holds no remainder buffer.
  *
  * <p>The jitter buffer get period is fixed at twenty milliseconds, so one pull renders one twenty millisecond
  * frame, which at the call's sixteen kilohertz mono format is three hundred and twenty samples. The receiver
- * copies up to the pump's capacity into its array; a pull for fewer than a whole frame therefore returns a
+ * renders up to the pump's capacity into its array; a pull for fewer than a whole frame therefore returns a
  * truncated frame rather than splitting the decode, and the pump sizes its request to a whole frame in
  * practice.
  *
@@ -46,7 +46,7 @@ import java.util.Objects;
  * forward-error-correction recovery ({@code opus_codec_recover_normal}, fn6272), the codec packet-loss
  * concealment, the time-stretch, and the voice-activity flag ({@code wa_opus_check_vad_flags_wrapper},
  * fn6250) all run inside the NetEq buffer behind the {@link NetEqAudioSource} seam, so this class is pure
- * orchestration of the per-pull get-then-copy cycle; the native get period of twenty milliseconds is kept as
+ * orchestration of the per-pull render-into-array cycle; the native get period of twenty milliseconds is kept as
  * {@link #GET_PERIOD_MILLIS} and the rendered frame is delivered per the demand-driven render contract of
  * {@link AudioWriterPump.AudioBlockSource}. The multi-frame MLow remainder the receiver once held is now
  * served from the NetEq buffer's own decoded-PCM output history (the {@code SyncBuffer}), so the receiver no
@@ -177,6 +177,36 @@ public final class AudioDecoderReceiver implements AudioWriterPump.AudioBlockSou
         AudioFrame getAudio();
 
         /**
+         * Renders the next get-period audio frame directly into the caller's buffer.
+         *
+         * <p>This is the zero-copy playback pull the receiver drives on the hot path: rather than
+         * allocating a frame and returning it for the caller to copy, the source writes the rendered
+         * samples straight into {@code destination}, so a steady playback pull neither allocates a sample
+         * array nor stamps a presentation timestamp the caller would only discard.
+         *
+         * @implSpec Implementations render exactly one get-period frame with the same decide, decode,
+         * conceal, time-stretch, and comfort-noise logic as {@link #getAudio()}, write it into
+         * {@code destination} starting at index zero, and update the {@link #lastFrameVoiceActive()}
+         * verdict identically. When {@code length} is at least one whole frame the whole frame is written
+         * and the frame length is returned; when {@code length} is shorter than a whole frame the
+         * implementation still consumes a whole frame from the buffer but hands out only the first
+         * {@code length} samples, returning that truncated count, so a short pull never splits a decode.
+         * The default implementation delegates to {@link #getAudio()} and copies the served samples,
+         * preserving behaviour for sources that do not override it.
+         *
+         * @param destination the buffer to render the frame into, written from index zero; must hold at
+         *                    least {@code length} samples
+         * @param length      the maximum number of samples to write; never non-positive
+         * @return the number of samples written, in {@code [0, length]}
+         */
+        default int getAudioInto(short[] destination, int length) {
+            var pcm = getAudio().pcm();
+            var copied = Math.min(length, Math.min(FRAME_SAMPLES, pcm.length));
+            System.arraycopy(pcm, 0, destination, 0, copied);
+            return copied;
+        }
+
+        /**
          * Returns whether the most recently rendered frame was judged voice-active.
          *
          * @implSpec Implementations must report the voice-activity verdict of the packet the last
@@ -200,7 +230,7 @@ public final class AudioDecoderReceiver implements AudioWriterPump.AudioBlockSou
      * <p>Set on each pull from the NetEq buffer's verdict (a concealment or silence frame is inactive) and
      * read by {@link #lastFrameVoiceActive()} for level metering and mixing. Written only on the pull thread.
      */
-    private boolean lastFrameVoiceActive;
+    private volatile boolean lastFrameVoiceActive;
 
     /**
      * Constructs an audio decoder-receiver wrapping the NetEq jitter buffer.
@@ -245,17 +275,18 @@ public final class AudioDecoderReceiver implements AudioWriterPump.AudioBlockSou
     }
 
     /**
-     * Renders one frame by pulling it from the NetEq jitter buffer and copies it into the pump's array.
+     * Renders one frame by pulling it from the NetEq jitter buffer directly into the pump's array.
      *
-     * <p>Pulls one rendered get-period frame from the NetEq buffer through
-     * {@link NetEqAudioSource#getAudio()}; the buffer decides the operation, decodes or conceals, and
-     * time-stretches, so this method runs no codec logic. The rendered frame is copied into {@code block} up
-     * to {@code length} and the count copied is returned; a {@code length} shorter than a whole frame
-     * truncates the handed-out samples rather than splitting the decode. The voice-activity verdict the buffer
-     * reports is recorded for {@link #lastFrameVoiceActive()}; a multi-frame MLow packet's three frames each
-     * carry that packet's single verdict because the buffer holds it across the served frames.
+     * <p>Asks the NetEq buffer to render one get-period frame straight into {@code block} through
+     * {@link NetEqAudioSource#getAudioInto(short[], int)}; the buffer decides the operation, decodes or
+     * conceals, and time-stretches, so this method runs no codec logic and, over the production NetEq
+     * source, copies nothing of its own. A {@code length} shorter than a whole frame truncates the
+     * handed-out samples rather than splitting the decode, and the count written is returned. The
+     * voice-activity verdict the buffer reports is recorded for {@link #lastFrameVoiceActive()}; a
+     * multi-frame MLow packet's three frames each carry that packet's single verdict because the buffer
+     * holds it across the served frames.
      *
-     * @param block  the scratch array to fill with rendered samples; writable only during this call
+     * @param block  the array to render the frame into; written only during this call
      * @param length the maximum number of samples to write
      * @return the number of samples written, in {@code [0, length]}
      */
@@ -264,11 +295,8 @@ public final class AudioDecoderReceiver implements AudioWriterPump.AudioBlockSou
         if (length <= 0) {
             return 0;
         }
-        var frame = netEq.getAudio();
+        var written = netEq.getAudioInto(block, length);
         lastFrameVoiceActive = netEq.lastFrameVoiceActive();
-        var pcm = frame.pcm();
-        var copied = Math.min(length, Math.min(FRAME_SAMPLES, pcm.length));
-        System.arraycopy(pcm, 0, block, 0, copied);
-        return copied;
+        return written;
     }
 }

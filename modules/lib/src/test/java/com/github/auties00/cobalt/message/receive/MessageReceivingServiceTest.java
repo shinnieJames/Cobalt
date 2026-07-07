@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.message.receive;
 
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.message.TestSignalSession;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryption;
@@ -11,6 +12,8 @@ import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.wam.TestWamService;
+import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.message.crypto.SignalCryptoLocks;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -37,13 +40,15 @@ class MessageReceivingServiceTest {
     private static final Jid RECIPIENT_BARE = Jid.of("19254863482@s.whatsapp.net");
     private static final Jid NEWSLETTER = Jid.of("120363402045452944@newsletter");
 
+    private static final WamService wamService = TestWamService.create(TestWhatsAppClient.create());
+
     @Test
     @DisplayName("constructor: null store throws NullPointerException")
     void nullStoreThrows() {
         var store = MessageFixtures.temporaryStore(RECIPIENT_BARE, null);
         var decryption = decryption(store);
         assertThrows(NullPointerException.class,
-                () -> new LiveMessageReceivingService(null, decryption));
+                () -> new LiveMessageReceivingService(null, decryption, wamService));
     }
 
     @Test
@@ -62,7 +67,7 @@ class MessageReceivingServiceTest {
                 MessageContainerSpec.encode(MessageContainer.of("dispatched via chat")));
 
         var inbound = buildInbound("3EB0RCV0001", SENDER_PRIMARY, "pkmsg", payload.ciphertext());
-        var service = new LiveMessageReceivingService(recipientStore, decryption(recipientStore));
+        var service = new LiveMessageReceivingService(recipientStore, decryption(recipientStore), wamService);
 
         var info = service.process(inbound);
 
@@ -96,7 +101,7 @@ class MessageReceivingServiceTest {
         var secondInbound = buildInbound("3EB0DEDUP02", SENDER_PRIMARY,
                 secondPayload.type().protocolValue(), secondPayload.ciphertext());
 
-        var service = new LiveMessageReceivingService(recipientStore, decryption(recipientStore));
+        var service = new LiveMessageReceivingService(recipientStore, decryption(recipientStore), wamService);
 
         var first = service.process(firstInbound);
         assertNotNull(first, "first message processes successfully");
@@ -108,7 +113,7 @@ class MessageReceivingServiceTest {
     @DisplayName("process: null stanza throws NullPointerException")
     void nullNodeThrows() {
         var store = MessageFixtures.temporaryStore(RECIPIENT_BARE, null);
-        var service = new LiveMessageReceivingService(store, decryption(store));
+        var service = new LiveMessageReceivingService(store, decryption(store), wamService);
         assertThrows(NullPointerException.class, () -> service.process(null));
     }
 
@@ -116,7 +121,7 @@ class MessageReceivingServiceTest {
     @DisplayName("clearPendingMessages: safe to call on a fresh service (idempotent no-op)")
     void clearPendingMessagesIdempotent() {
         var store = MessageFixtures.temporaryStore(RECIPIENT_BARE, null);
-        var service = new LiveMessageReceivingService(store, decryption(store));
+        var service = new LiveMessageReceivingService(store, decryption(store), wamService);
         Assertions.assertDoesNotThrow(service::clearPendingMessages);
         Assertions.assertDoesNotThrow(service::clearPendingMessages);
     }
@@ -127,7 +132,7 @@ class MessageReceivingServiceTest {
     @DisplayName("process: newsletter-server JID routes to NewsletterMessageReceiver; missing <plaintext> returns null")
     void newsletterDispatchRecognised() {
         var store = MessageFixtures.temporaryStore(RECIPIENT_BARE, null);
-        var service = new LiveMessageReceivingService(store, decryption(store));
+        var service = new LiveMessageReceivingService(store, decryption(store), wamService);
 
         var inbound = new StanzaBuilder()
                 .description("message")

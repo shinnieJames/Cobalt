@@ -17,6 +17,11 @@ import com.github.auties00.cobalt.stream.NodeStreamService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.MdAppStateDirtyBitsEventBuilder;
+import com.github.auties00.cobalt.wam.event.OfflineResumeEventBuilder;
+import com.github.auties00.cobalt.wam.event.WebcOfflineNotificationProcessEventBuilder;
+import com.github.auties00.cobalt.wam.type.OfflineProcessRunReasons;
+import com.github.auties00.cobalt.wam.type.OfflineProcessStages;
+import com.github.auties00.cobalt.wam.type.OfflineResumeResultType;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 /**
@@ -49,6 +55,8 @@ import java.util.stream.Collectors;
 @WhatsAppWebModule(moduleName = "WAWebHandleRoutingInfo")
 @WhatsAppWebModule(moduleName = "WAWebHandleServerClientExpiration")
 @WhatsAppWebModule(moduleName = "WASmaxClientExpirationClientExpirationRPC")
+@WhatsAppWebModule(moduleName = "WAWebWamOfflineResumeReporter")
+@WhatsAppWebModule(moduleName = "WAWebWamWorkerOfflineProcessReporter")
 public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurrent {
     /**
      * The system logger used for diagnostic output during info bulletin processing.
@@ -140,6 +148,16 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
     private static final long CLIENT_EXPIRATION_MIN_FLOOR_SECONDS = 3L * 86_400L;
 
     /**
+     * The nominal encrypted wire size, in bytes, attributed to each delivered offline stanza when synthesizing the
+     * offline-resume {@code offlineSizeBytes} figure.
+     *
+     * @implNote This implementation multiplies the delivered envelope count by this constant and rounds to the nearest
+     * kilobyte because Cobalt does not accumulate the true per-stanza byte lengths during offline delivery; the value
+     * approximates a typical Signal-encrypted message envelope.
+     */
+    private static final long OFFLINE_AVERAGE_STANZA_BYTES = 256L;
+
+    /**
      * The {@link LinkedWhatsAppClient} used for store access, outbound stanza dispatch and delegated service calls.
      */
     private final LinkedWhatsAppClient whatsapp;
@@ -177,6 +195,39 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * rejected as noise.
      */
     private volatile long firstOfflinePreviewMillis;
+
+    /**
+     * The {@code count} (envelope total) attribute carried by the most recent {@code <offline_preview/>} bulletin, or
+     * {@code 0} when no preview has been observed since the last offline-resume completion.
+     *
+     * <p>Captured so the {@code OfflineResume} summary committed by {@link #emitOfflineResumeTelemetry(int)} can report
+     * the pre-delivery backlog size that WA Web's offline-resume reporter records from the same preview.
+     */
+    private volatile int lastOfflinePreviewEnvelopeCount;
+
+    /**
+     * The {@code message} count carried by the most recent {@code <offline_preview/>} bulletin, or {@code 0} when no
+     * preview has been observed since the last offline-resume completion.
+     */
+    private volatile int lastOfflinePreviewMessageCount;
+
+    /**
+     * The {@code receipt} count carried by the most recent {@code <offline_preview/>} bulletin, or {@code 0} when no
+     * preview has been observed since the last offline-resume completion.
+     */
+    private volatile int lastOfflinePreviewReceiptCount;
+
+    /**
+     * The {@code notification} count carried by the most recent {@code <offline_preview/>} bulletin, or {@code 0} when
+     * no preview has been observed since the last offline-resume completion.
+     */
+    private volatile int lastOfflinePreviewNotificationCount;
+
+    /**
+     * The {@code call} count carried by the most recent {@code <offline_preview/>} bulletin, or {@code 0} when no
+     * preview has been observed since the last offline-resume completion.
+     */
+    private volatile int lastOfflinePreviewCallCount;
 
     /**
      * Constructs a new info bulletin handler bound to the given client, web app-state service, shared reporter, WAM
@@ -478,8 +529,10 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
      * @implNote This implementation always flushes the accumulated offline {@code server_sync} notification counts
      * through {@link OfflineNotificationsReporter#report()} and, when {@code count == 0}, drives a best-effort
      * {@link WebAppStateService#retryAllOrphanMutations()} retry to pick up app-state changes that landed just before
-     * connect. WA Web's UI bookkeeping has no Cobalt analogue. The scheduled device sync runs on a fresh virtual
-     * thread; an {@link InterruptedException} during the delay sets the interrupt flag and returns quietly.
+     * connect. The completing transition additionally emits the offline-resume telemetry pair through
+     * {@link #emitOfflineResumeTelemetry(int)}. WA Web's UI bookkeeping has no Cobalt analogue. The scheduled device
+     * sync runs on a fresh virtual thread; an {@link InterruptedException} during the delay sets the interrupt flag and
+     * returns quietly.
      *
      * @param offlineStanza the {@code <offline/>} child stanza
      */
@@ -505,6 +558,8 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
         if (current == LinkedWhatsAppClientOfflineResumeState.COMPLETE) {
             return;
         }
+
+        emitOfflineResumeTelemetry(count);
 
         if (current == LinkedWhatsAppClientOfflineResumeState.RESUME_WITH_OPEN_TAB) {
             try {
@@ -566,14 +621,23 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
             exports = "OfflineMessageHandlerImpl",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void handleOfflinePreview(Stanza previewStanza) {
+        var envelopeCount = previewStanza.getAttributeAsInt("count", 0);
         var messageCount = previewStanza.getAttributeAsInt("message", 0);
+        var receiptCount = previewStanza.getAttributeAsInt("receipt", 0);
+        var notificationCount = previewStanza.getAttributeAsInt("notification", 0);
+        var callCount = previewStanza.getAttributeAsInt("call", 0);
+        lastOfflinePreviewEnvelopeCount = envelopeCount;
+        lastOfflinePreviewMessageCount = messageCount;
+        lastOfflinePreviewReceiptCount = receiptCount;
+        lastOfflinePreviewNotificationCount = notificationCount;
+        lastOfflinePreviewCallCount = callCount;
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Received offline preview bulletin count={0} message={1} receipt={2} notification={3} call={4}",
-                previewStanza.getAttributeAsInt("count", 0),
+                envelopeCount,
                 messageCount,
-                previewStanza.getAttributeAsInt("receipt", 0),
-                previewStanza.getAttributeAsInt("notification", 0),
-                previewStanza.getAttributeAsInt("call", 0));
+                receiptCount,
+                notificationCount,
+                callCount);
 
         var store = whatsapp.store();
         if (store.connectionStore().isResumeFromRestartComplete()) {
@@ -736,6 +800,154 @@ public final class InfoBulletinStreamHandler extends SocketStreamHandler.Concurr
         whatsapp.store().accountStore().setClientExpiration(clampedExpiration);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Received client expiration bulletin, clamped to {0}", clampedExpiration);
+    }
+
+    /**
+     * Commits the {@code OfflineResume} summary event and the staged {@code WebcOfflineNotificationProcess} completion
+     * event when the {@code <offline/>} bulletin closes an offline-resume cycle.
+     *
+     * <p>The message, receipt, notification and call counts are taken from the counts captured on the last
+     * {@code <offline_preview/>} bulletin (fields such as {@link #lastOfflinePreviewMessageCount}), falling back to the
+     * {@code <offline/>} {@code count} attribute for the message and envelope totals. The chat thread count is read live
+     * from {@link LinkedWhatsAppClient#store()} and rounded to the nearest ten; the processing duration is the wall-clock
+     * interval since {@link #firstOfflinePreviewMillis}. The whole cycle is skipped when neither the bulletin nor any
+     * preview reported an offline envelope, mirroring WA Web's "no envelopes" short-circuit. The captured preview counts
+     * are cleared on return so a subsequent cycle starts clean.
+     *
+     * @implNote This implementation fabricates the browser page-lifecycle timers ({@code pageLoadT},
+     * {@code socketConnectT}, {@code passiveModeT}, {@code offlinePreviewT}, {@code mainScreenLoadT}) as a coherent
+     * monotonic sequence anchored at a notional navigation start because a headless client has no navigation timeline;
+     * {@code offlineProcessingT} and {@code lastStanzaT} fold in the real drain duration. The offline wire size is
+     * synthesized from the envelope count at {@value #OFFLINE_AVERAGE_STANZA_BYTES} bytes per stanza. The decrypt-error,
+     * pre-ack and mailbox-age figures are reported as zero, matching WA Web's initialised defaults for a clean resume.
+     *
+     * @param count the {@code count} attribute of the {@code <offline/>} bulletin (total delivered envelopes)
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamOfflineResumeReporter", exports = "commit",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebWamWorkerOfflineProcessReporter", exports = "logProcessComplete",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitOfflineResumeTelemetry(int count) {
+        var messageCount = Math.max(lastOfflinePreviewMessageCount, count);
+        var receiptCount = lastOfflinePreviewReceiptCount;
+        var notificationCount = lastOfflinePreviewNotificationCount;
+        var callCount = lastOfflinePreviewCallCount;
+        var envelopeCount = Math.max(lastOfflinePreviewEnvelopeCount, count);
+        try {
+            if (envelopeCount == 0 && messageCount == 0 && receiptCount == 0 && notificationCount == 0 && callCount == 0) {
+                return;
+            }
+
+            var previewMillis = firstOfflinePreviewMillis;
+            var processingMillis = previewMillis > 0L
+                    ? Math.max(0L, System.currentTimeMillis() - previewMillis)
+                    : Math.max(200L, (long) envelopeCount * 5L);
+
+            var pageLoadMillis = 1_450L;
+            var socketConnectMillis = 1_650L;
+            var passiveModeMillis = 1_700L;
+            var offlinePreviewMillis = 1_900L;
+            var mainScreenLoadMillis = 2_150L;
+            var lastStanzaMillis = offlinePreviewMillis + processingMillis;
+
+            var chatThreadCount = roundToNearest(whatsapp.store().chatStore().chats().size(), 10L);
+            var offlineSizeBytes = roundToNearest((long) envelopeCount * OFFLINE_AVERAGE_STANZA_BYTES, 1_000L);
+
+            wamService.commit(new OfflineResumeEventBuilder()
+                    .offlineMessageCount(messageCount)
+                    .offlineReceiptCount(receiptCount)
+                    .offlineNotificationCount(notificationCount)
+                    .offlineCallCount(callCount)
+                    .offlineDecryptErrorCount(0L)
+                    .offlineSizeBytes(offlineSizeBytes)
+                    .chatThreadCount(chatThreadCount)
+                    .preackMessageCount(0L)
+                    .preackReceiptCount(0L)
+                    .processedMessageCount(messageCount)
+                    .processedReceiptCount(receiptCount)
+                    .processedNotificationCount(notificationCount)
+                    .processedCallCount(callCount)
+                    .mailboxAge(0L)
+                    .isOfflineCompleteMissed(Boolean.FALSE)
+                    .isResumeStartedInForeground(Boolean.TRUE)
+                    .isResumeInForeground(Boolean.TRUE)
+                    .offlineResumeResult(OfflineResumeResultType.COMPLETE)
+                    .pageLoadT(Instant.ofEpochMilli(pageLoadMillis))
+                    .socketConnectT(Instant.ofEpochMilli(socketConnectMillis))
+                    .passiveModeT(Instant.ofEpochMilli(passiveModeMillis))
+                    .offlinePreviewT(Instant.ofEpochMilli(offlinePreviewMillis))
+                    .mainScreenLoadT(Instant.ofEpochMilli(mainScreenLoadMillis))
+                    .lastStanzaT(Instant.ofEpochMilli(lastStanzaMillis))
+                    .offlineProcessingT(Instant.ofEpochMilli(processingMillis))
+                    .build());
+
+            wamService.commit(new WebcOfflineNotificationProcessEventBuilder()
+                    .currentOfflineProcessStage(OfflineProcessStages.PROCESS_COMPLETE)
+                    .runReason(OfflineProcessRunReasons.PUSH_NOTIFICATION)
+                    .offlineProcessSessionId(nextOfflineProcessSessionId())
+                    .offlineProcessStageTimestampMs(processingMillis)
+                    .offlineProcessMessageCount(roundToNearest(messageCount, 10L))
+                    .offlineProcessNotificationCount(roundToNearest(notificationCount, 10L))
+                    .offlineProcessDecryptErrorCount(0L)
+                    .offlineProcessMailboxAge(0L)
+                    .swVersion(offlineProcessSwVersion())
+                    .build());
+        } finally {
+            lastOfflinePreviewEnvelopeCount = 0;
+            lastOfflinePreviewMessageCount = 0;
+            lastOfflinePreviewReceiptCount = 0;
+            lastOfflinePreviewNotificationCount = 0;
+            lastOfflinePreviewCallCount = 0;
+        }
+    }
+
+    /**
+     * Generates a fresh offline-process session identifier of four random hexadecimal digits followed by the current
+     * Unix time in seconds.
+     *
+     * @implNote This implementation mirrors WA Web's {@code randomHex(4) + unixTime} construction; the
+     * {@code 0x1_0000 | random} then {@code substring(1)} idiom left-pads the random component to exactly four hex
+     * digits.
+     *
+     * @return the generated session identifier
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamWorkerOfflineProcessReporter", exports = "offlineProcessSessionId",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String nextOfflineProcessSessionId() {
+        var random = ThreadLocalRandom.current().nextInt(0x1_0000);
+        return Integer.toHexString(0x1_0000 | random).substring(1) + Instant.now().getEpochSecond();
+    }
+
+    /**
+     * Returns the client application version string reported as the offline-process software version, or {@code null}
+     * when the version has not been resolved.
+     *
+     * @implNote This implementation reads the lazily-derived client version off the account store, standing in for WA
+     * Web's {@code WAWebBuildConstants.VERSION_BASE} build constant.
+     *
+     * @return the version string, or {@code null} if unresolved
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBuildConstants", exports = "VERSION_BASE",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private String offlineProcessSwVersion() {
+        var version = whatsapp.store().accountStore().clientVersion();
+        return version == null ? null : version.toString();
+    }
+
+    /**
+     * Rounds a non-negative value to the nearest multiple of the given granularity.
+     *
+     * @implNote This implementation reproduces WA Web's {@code Math.round(value / granularity) * granularity} coarsening
+     * applied to offline counts and byte totals before they are reported.
+     *
+     * @param value       the value to round
+     * @param granularity the rounding step; must be positive
+     * @return the value rounded to the nearest multiple of {@code granularity}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamOfflineResumeReporter", exports = "roundUp",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static long roundToNearest(long value, long granularity) {
+        return Math.round((double) value / granularity) * granularity;
     }
 
     /**

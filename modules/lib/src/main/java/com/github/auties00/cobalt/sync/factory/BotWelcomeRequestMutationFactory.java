@@ -10,9 +10,15 @@ import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestActionB
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.HatchUserJourneyEvent;
+import com.github.auties00.cobalt.wam.event.HatchUserJourneyEventBuilder;
+import com.github.auties00.cobalt.wam.type.BotEntryPointType;
+import com.github.auties00.cobalt.wam.type.HatchActionType;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Builds outgoing app-state mutations that record whether a bot welcome message has been requested for a chat.
@@ -22,15 +28,27 @@ import java.util.List;
  * the per-bot-chat welcome affordance consistent across linked devices. This
  * factory builds the outgoing mutation; the inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.BotWelcomeRequestHandler}.
+ *
+ * <p>When the welcome request is sent (not when the flag is cleared) the factory
+ * also emits the {@link HatchUserJourneyEvent} telemetry beacon, mirroring
+ * WhatsApp Web's {@code WAWebHatchLogging.logHatchRequestWelcomeMsgSent} which
+ * fires from the same {@code bot_request_welcome} send path.
  */
 public final class BotWelcomeRequestMutationFactory {
     /**
-     * Creates a stateless factory with no collaborators.
+     * Telemetry sink used to emit the Hatch (Meta AI bot) user-journey beacon on a welcome-request send.
+     */
+    private final WamService wamService;
+
+    /**
+     * Creates a factory that emits Hatch user-journey telemetry through the given {@link WamService}.
      *
      * <p>A single instance may be shared across the lifetime of the client.
+     *
+     * @param wamService the telemetry service that receives the {@link HatchUserJourneyEvent} beacon
      */
-    public BotWelcomeRequestMutationFactory() {
-
+    public BotWelcomeRequestMutationFactory(WamService wamService) {
+        this.wamService = wamService;
     }
 
     /**
@@ -45,6 +63,10 @@ public final class BotWelcomeRequestMutationFactory {
      * }
      * and the {@link BotWelcomeRequestAction} sub-message carries the
      * {@code isSent} flag.
+     *
+     * <p>As a side effect, when {@code isSent} is {@code true} this also emits the
+     * {@link HatchUserJourneyEvent} telemetry beacon through {@link #emitHatchWelcomeRequestSent()};
+     * the {@code isSent == false} clearing call emits nothing.
      *
      * @implNote
      * This implementation captures the timestamp via {@link Instant#now()} and
@@ -72,6 +94,37 @@ public final class BotWelcomeRequestMutationFactory {
                 timestamp,
                 BotWelcomeRequestAction.ACTION_VERSION
         );
+        if (isSent) {
+            emitHatchWelcomeRequestSent();
+        }
         return new SyncPendingMutation(mutation, 0);
+    }
+
+    /**
+     * Emits the {@link HatchUserJourneyEvent} beacon that records a welcome-request send to a Meta AI (Hatch) bot.
+     *
+     * <p>Fires with {@link HatchActionType#REQUEST_WELCOME_MSG_SENT} to mirror
+     * WhatsApp Web's {@code logHatchRequestWelcomeMsgSent}, which commits the
+     * same event immediately after a {@code bot_request_welcome} protocol message
+     * is delivered. The event is only produced on the send path; the flag-clearing
+     * mutation that follows the bot reply has no WhatsApp Web counterpart and emits
+     * nothing.
+     *
+     * @implNote
+     * WhatsApp Web sources {@code aiSessionId} and {@code unifiedSessionId} from an
+     * active Meta AI journey context that Cobalt does not model, so this
+     * implementation mints a fresh {@link UUID} for each to carry a well-formed,
+     * unique session correlator, and reports {@link BotEntryPointType#WA_CHAT} as
+     * the entry point because the welcome request originates from an open bot chat.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHatchLogging", exports = "logHatchRequestWelcomeMsgSent", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitHatchWelcomeRequestSent() {
+        var event = new HatchUserJourneyEventBuilder()
+                .hatchActionType(HatchActionType.REQUEST_WELCOME_MSG_SENT)
+                .botEntryPoint(BotEntryPointType.WA_CHAT)
+                .aiSessionId(UUID.randomUUID().toString())
+                .unifiedSessionId(UUID.randomUUID().toString())
+                .build();
+        wamService.commit(event);
     }
 }

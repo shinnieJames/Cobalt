@@ -216,7 +216,7 @@ public record RekeyStanza(String callId, Jid callCreator, int transactionId, int
                 .attribute(TRANSACTION_ID_ATTRIBUTE, transactionId, transactionId >= 0)
                 .attribute(VERSION_ATTRIBUTE, version, version >= 0)
                 .attribute(RETRY_ATTRIBUTE, retry, retry >= 0)
-                .attribute(REQUEST_KEYS_ATTRIBUTE, true, requestKeys);
+                .attribute(REQUEST_KEYS_ATTRIBUTE, "1", requestKeys);
         if (payload != null) {
             builder.content(E2eRekeyPayloadSpec.encode(payload));
         }

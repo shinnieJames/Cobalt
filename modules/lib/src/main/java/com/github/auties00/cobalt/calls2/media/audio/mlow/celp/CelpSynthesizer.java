@@ -142,6 +142,15 @@ public final class CelpSynthesizer {
     private final float[] acbState;
 
     /**
+     * Reusable scratch for the interleaved long-term-prediction basis vectors, sized to the maximum
+     * {@code SMPL_MAX_SF_LEN * SMPL_ACBG_M}. Each voiced {@link #celpDecode} fully overwrites its
+     * {@code [0, 2 * numLags * SMPL_LAG_SUBFRLEN)} read region through {@link #synLtpBasis}, so reusing one
+     * instance-owned buffer avoids a per-subframe allocation without altering any consumed value; the decode
+     * kernel is single-threaded per stream, so the single owner is safe.
+     */
+    private final float[] acbBasisScratch;
+
+    /**
      * Constructs a CELP excitation synthesizer with freshly computed gain tables and a zeroed
      * adaptive-codebook ring.
      *
@@ -153,6 +162,7 @@ public final class CelpSynthesizer {
         this.fcbgainsV = buildVoicedGains();
         this.fcbgainsUv = buildUnvoicedGains();
         this.acbState = new float[2 * MAX_PITCH_LAG + MAX_SF_LEN + LTP_INTERPOL_DELAY];
+        this.acbBasisScratch = new float[MAX_SF_LEN * ACBG_M];
     }
 
     /**
@@ -258,12 +268,11 @@ public final class CelpSynthesizer {
             if (lowRate) {
                 pitchSharp(excSubframe, iLag, subfrLen);
             }
-            float[] acbBasis = new float[MAX_SF_LEN * ACBG_M];
+            float[] acbBasis = acbBasisScratch;
             synLtpBasis(lags, numLags, acbStateLen, acbBasis);
-            float[] acb = new float[subfrLen];
-            acbSynthesize(subfrLen, acbBasis, acbGain, acb, highBoost);
+            adjustAcbGains(acbGain, highBoost);
             for (int i = 0; i < subfrLen; i++) {
-                excSubframe[i] += acb[i];
+                excSubframe[i] += acbBasis[i] * acbGain[0] + acbBasis[subfrLen + i] * acbGain[1];
             }
         }
         System.arraycopy(acbState, subfrLen, acbState, 0, acbStateLen - 2 * subfrLen);
@@ -336,31 +345,6 @@ public final class CelpSynthesizer {
                 acbBasis[sideOut + LAG_SUBFRLEN - 1] = acbState[pEnd + LAG_SUBFRLEN - 2] + last;
             }
             pEnd += LAG_SUBFRLEN;
-        }
-    }
-
-    /**
-     * Combines the long-term-prediction basis vectors into the adaptive-codebook contribution,
-     * {@code acb_synthesize}.
-     *
-     * <p>First boosts the gains by {@link #adjustAcbGains}, then forms the linear combination of the two basis
-     * vectors weighted by the (boosted) gains: the center basis scaled by the first gain plus the side basis
-     * scaled by the second.
-     *
-     * @param subfrLen  the subframe length in samples
-     * @param acbBasis  the interleaved center and side basis vectors from {@link #synLtpBasis}
-     * @param acbG      the adaptive-codebook gains, {@code SMPL_ACBG_M} entries; mutated by the high boost
-     * @param acb       the contribution output, {@code subfrLen} entries written
-     * @param highBoost the adaptive-codebook high-boost amount
-     */
-    private static void acbSynthesize(int subfrLen, float[] acbBasis, float[] acbG, float[] acb,
-                                      float highBoost) {
-        adjustAcbGains(acbG, highBoost);
-        for (int i = 0; i < subfrLen; i++) {
-            acb[i] = acbBasis[i] * acbG[0];
-        }
-        for (int i = 0; i < subfrLen; i++) {
-            acb[i] += acbBasis[subfrLen + i] * acbG[1];
         }
     }
 

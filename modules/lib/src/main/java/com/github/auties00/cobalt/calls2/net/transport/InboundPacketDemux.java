@@ -218,14 +218,14 @@ public final class InboundPacketDemux {
             return PacketClass.UNKNOWN;
         }
         var b0 = packet[0] & 0xFF;
+        if (b0 >= RTP_MIN && b0 <= RTP_MAX) {
+            return PacketClass.RTP;
+        }
         if (b0 <= STUN_MAX || (b0 >= CHANNEL_DATA_MIN && b0 <= CHANNEL_DATA_MAX)) {
             return PacketClass.STUN;
         }
         if (b0 >= DTLS_MIN && b0 <= DTLS_MAX) {
             return PacketClass.DTLS;
-        }
-        if (b0 >= RTP_MIN && b0 <= RTP_MAX) {
-            return PacketClass.RTP;
         }
         return PacketClass.UNKNOWN;
     }

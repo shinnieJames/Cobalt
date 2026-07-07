@@ -95,8 +95,6 @@ public sealed interface WarpMessage permits WarpMessage.Piggybacked, WarpMessage
      * {@link #encode(int)}.
      *
      * @return the encoded message bytes with a zero timestamp field
-     * @throws IllegalStateException if a {@link Piggybacked} message carries a
-     *                               {@link WarpAttributeFlag#BANDWIDTH_REPORT} attribute
      */
     default byte[] encode() {
         return encode(0);
@@ -123,21 +121,13 @@ public sealed interface WarpMessage permits WarpMessage.Piggybacked, WarpMessage
      * @param timestamp the sixteen-bit timestamp written big-endian at offsets two and three; a sample
      *                  of the caller's rolling millisecond clock, masked to sixteen bits
      * @return the encoded message bytes
-     * @throws IllegalStateException if a {@link Piggybacked} message carries a
-     *                               {@link WarpAttributeFlag#BANDWIDTH_REPORT} attribute
      */
     default byte[] encode(int timestamp) {
-        var sorted = new ArrayList<>(attributes());
-        sorted.sort((a, b) -> Integer.compare(a.flag().ordinal(), b.flag().ordinal()));
-
         var flags = 0;
         var attributeBytes = 0;
         var hasExtension = false;
-        for (var attribute : sorted) {
+        for (var attribute : attributes()) {
             var flag = attribute.flag();
-            if (flag == WarpAttributeFlag.BANDWIDTH_REPORT && !allowsBandwidthReport()) {
-                throw new IllegalStateException("bandwidth-report attribute is not allowed on a piggybacked WARP message");
-            }
             flags |= flag.mask();
             if (flag == WarpAttributeFlag.PARTICIPANT_REPORT) {
                 flags |= WarpAttributeFlag.PARTICIPANT_REPORT_COMPANION.mask();
@@ -167,7 +157,7 @@ public sealed interface WarpMessage permits WarpMessage.Piggybacked, WarpMessage
             out[HEADER_LENGTH] = (byte) ((flags >>> 8) & 0xff);
             cursor = HEADER_LENGTH + 1;
         }
-        for (var attribute : sorted) {
+        for (var attribute : attributes()) {
             cursor = attribute.writeValue(out, cursor);
         }
         return out;
@@ -296,7 +286,9 @@ public sealed interface WarpMessage permits WarpMessage.Piggybacked, WarpMessage
          *                                  {@link WarpAttributeFlag#BANDWIDTH_REPORT} attribute
          */
         public Piggybacked {
-            attributes = List.copyOf(Objects.requireNonNull(attributes, "attributes cannot be null"));
+            var sorted = new ArrayList<>(Objects.requireNonNull(attributes, "attributes cannot be null"));
+            sorted.sort(WarpAttribute.FLAG_ORDER);
+            attributes = List.copyOf(sorted);
             for (var attribute : attributes) {
                 if (attribute.flag() == WarpAttributeFlag.BANDWIDTH_REPORT) {
                     throw new IllegalArgumentException("a piggybacked WARP message cannot carry a bandwidth report");
@@ -326,7 +318,9 @@ public sealed interface WarpMessage permits WarpMessage.Piggybacked, WarpMessage
          * @throws NullPointerException if {@code attributes} is {@code null}
          */
         public Standalone {
-            attributes = List.copyOf(Objects.requireNonNull(attributes, "attributes cannot be null"));
+            var sorted = new ArrayList<>(Objects.requireNonNull(attributes, "attributes cannot be null"));
+            sorted.sort(WarpAttribute.FLAG_ORDER);
+            attributes = List.copyOf(sorted);
         }
 
         @Override

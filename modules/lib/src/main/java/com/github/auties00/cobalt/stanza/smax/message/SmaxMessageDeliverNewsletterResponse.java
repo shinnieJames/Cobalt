@@ -21,7 +21,11 @@ import java.util.Optional;
  * callers can decrypt and extract any of the documented fanout-content shapes (text, media, reaction,
  * poll, and so on) without Cobalt modelling each shape. A projection is answered with a
  * {@link SmaxMessageDeliverNewsletterAcknowledgement} to ack or NACK the delivery.
+ *
+ * @deprecated superseded by the general newsletter-message decode ({@code MessageStreamHandler}/{@code messageService});
+ * too narrow (media-only).
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInMessageDeliverNewsletterRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMessageDeliverNewsletterMessageWithJIDMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInMessageDeliverNewsletterMessageFanoutMixin")

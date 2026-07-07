@@ -8,6 +8,7 @@ import javax.sound.sampled.Mixer;
 import javax.sound.sampled.TargetDataLine;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
 
 /**
  * Captures the operating-system microphone as the local audio of a call.
@@ -76,6 +77,16 @@ public final class MicrophoneAudioOutput extends BufferedAudioOutput {
     private final byte[] readBuffer;
 
     /**
+     * Holds the little-endian {@link ShortBuffer} view over {@link #readBuffer}, reused across
+     * {@link #take()} calls so each frame decodes by rewinding this view instead of wrapping the byte
+     * buffer anew.
+     *
+     * @implNote This implementation is confined to the single consumer thread that drains {@link #take()},
+     * the same confinement {@link #readBuffer} already relies on, so reusing the view is race-free.
+     */
+    private final ShortBuffer sampleView;
+
+    /**
      * Holds the opened capture line, cleared to {@code null} by {@link #shutdown()}.
      */
     private volatile TargetDataLine line;
@@ -124,6 +135,7 @@ public final class MicrophoneAudioOutput extends BufferedAudioOutput {
         this.frameSize = frameSize;
         this.frameDurationMicros = 1_000_000L * frameSize / sampleRate;
         this.readBuffer = new byte[frameSize * 2];
+        this.sampleView = ByteBuffer.wrap(readBuffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
         try {
             this.line = openLine(sampleRate, frameSize, preferredMixer);
         } catch (LineUnavailableException e) {
@@ -191,8 +203,8 @@ public final class MicrophoneAudioOutput extends BufferedAudioOutput {
             total += n;
         }
         var pcm = new short[frameSize];
-        ByteBuffer.wrap(readBuffer).order(ByteOrder.LITTLE_ENDIAN)
-                .asShortBuffer().get(pcm);
+        sampleView.rewind();
+        sampleView.get(pcm);
         var pts = ptsMicros;
         ptsMicros += frameDurationMicros;
         return new AudioFrame(pcm, pts);

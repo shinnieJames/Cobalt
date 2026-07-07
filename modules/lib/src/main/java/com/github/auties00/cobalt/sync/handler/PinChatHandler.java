@@ -16,8 +16,12 @@ import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.wam.event.MdSyncdDogfoodingFeatureUsageEventBuilder;
+import com.github.auties00.cobalt.wam.event.PinnedChatsMaxAlertEventBuilder;
 import com.github.auties00.cobalt.wam.type.MdFeatureCode;
+import com.github.auties00.cobalt.wam.type.PremiumStatusType;
 import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -213,6 +217,7 @@ public final class PinChatHandler implements WebAppStateActionHandler {
             this.wamService.commit(new MdSyncdDogfoodingFeatureUsageEventBuilder()
                     .mdSyncdDogfoodingFeature(MdFeatureCode.UNPIN_4TH_CHAT_MUTATION)
                     .build());
+            emitPinnedChatsMaxAlert();
 
             var oldestPinned = allPinnedChats.stream()
                     .min(Comparator.comparing(c -> c.pinnedTimestamp().orElse(Instant.EPOCH)))
@@ -232,6 +237,40 @@ public final class PinChatHandler implements WebAppStateActionHandler {
         } catch (Exception e) {
             return MutationApplicationResult.failed();
         }
+    }
+
+    /**
+     * Commits the max-pinned-chats alert telemetry beacon when an incoming
+     * pin action is rejected because the {@value #MAX_PINNED_CHATS} chat cap
+     * is already reached.
+     *
+     * <p>WA Web surfaces a premium-upsell alert at this exact point and reports
+     * the user's premium standing together with whether the alert's "add to
+     * list" or "subscribe" upsell option was selected. A headless client shows
+     * no interactive alert, so the two selection flags are reported as
+     * {@code false} (no upsell option is chosen) and the premium status
+     * resolves to {@link PremiumStatusType#DISABLED}.
+     *
+     * @implNote
+     * This implementation fixes the {@link PinnedChatsMaxAlertEvent#premiumStatus()}
+     * field to {@link PremiumStatusType#DISABLED} because Cobalt implements no
+     * Aura premium gating; WA Web derives the value from
+     * {@code WAWebAuraGating.isPinnedChatsBenefitActive} /
+     * {@code isPinnedChatsEnabled}, and the free-tier cap of
+     * {@value #MAX_PINNED_CHATS} is only enforced precisely when that benefit
+     * is inactive, so {@code DISABLED} is the sole reachable value at this
+     * branch. The {@link PinnedChatsMaxAlertEvent#addToListSelected()} and
+     * {@link PinnedChatsMaxAlertEvent#subscribeSelected()} selection flags,
+     * which WA Web populates from later alert button taps, are reported as
+     * {@code false} because a headless client never renders the alert.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPinnedChatsWamUtils", exports = "logPinnedChatsMaxAlert", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitPinnedChatsMaxAlert() {
+        this.wamService.commit(new PinnedChatsMaxAlertEventBuilder()
+                .premiumStatus(PremiumStatusType.DISABLED)
+                .addToListSelected(false)
+                .subscribeSelected(false)
+                .build());
     }
 
     /**

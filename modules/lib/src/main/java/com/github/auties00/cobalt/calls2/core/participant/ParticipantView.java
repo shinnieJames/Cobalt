@@ -1,11 +1,9 @@
 package com.github.auties00.cobalt.calls2.core.participant;
 
-import com.github.auties00.cobalt.calls2.common.CallDeviceJid;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 
 /**
  * An immutable flattened snapshot of a {@link CallParticipant} taken under the membership
@@ -108,6 +106,26 @@ public record ParticipantView(
     public static final int NO_SUBSCRIBED_STREAM = -1;
 
     /**
+     * The shared invalid (unpopulated) view.
+     *
+     * <p>Because the invalid view is immutable and carries no participant-specific state, one instance is
+     * reused for every absent participant slot rather than allocated per lookup.
+     */
+    private static final ParticipantView INVALID = new ParticipantView(
+            false,
+            false,
+            false,
+            false,
+            CallParticipantPlatform.UNKNOWN,
+            null,
+            null,
+            VIDEO_STATE_UNKNOWN,
+            false,
+            false,
+            NO_SUBSCRIBED_STREAM,
+            NO_SUBSCRIBED_STREAM);
+
+    /**
      * Validates the record components during construction.
      *
      * @throws NullPointerException if {@code platform} is {@code null}
@@ -127,19 +145,7 @@ public record ParticipantView(
      * @return an invalid view
      */
     public static ParticipantView invalid() {
-        return new ParticipantView(
-                false,
-                false,
-                false,
-                false,
-                CallParticipantPlatform.UNKNOWN,
-                null,
-                null,
-                VIDEO_STATE_UNKNOWN,
-                false,
-                false,
-                NO_SUBSCRIBED_STREAM,
-                NO_SUBSCRIBED_STREAM);
+        return INVALID;
     }
 
     /**
@@ -159,44 +165,6 @@ public record ParticipantView(
      */
     public Optional<Jid> deviceJidOptional() {
         return Optional.ofNullable(deviceJid);
-    }
-
-    /**
-     * Returns the participant's active-device JID as a {@link CallDeviceJid}, if present and
-     * device-callable.
-     *
-     * <p>This wraps the snapshotted device JID through {@link CallDeviceJid#of(Jid)}; it is
-     * empty when no active device is set.
-     *
-     * @return an {@link Optional} over the call-layer device JID, or empty when no active
-     *         device is set
-     */
-    public Optional<CallDeviceJid> callDeviceJid() {
-        return deviceJid == null ? Optional.empty() : Optional.of(CallDeviceJid.of(deviceJid));
-    }
-
-    /**
-     * Returns the subscribed encoded video stream id, if the participant is subscribed.
-     *
-     * @return the subscribed video stream id, or {@link OptionalInt#empty()} when there is
-     *         no subscription
-     */
-    public OptionalInt subscribedVideoStream() {
-        return subscribedVideoStreamId == NO_SUBSCRIBED_STREAM
-                ? OptionalInt.empty()
-                : OptionalInt.of(subscribedVideoStreamId);
-    }
-
-    /**
-     * Returns the subscribed encoded RTCP stream id, if the participant is subscribed.
-     *
-     * @return the subscribed RTCP stream id, or {@link OptionalInt#empty()} when there is
-     *         no subscription
-     */
-    public OptionalInt subscribedRtcpStream() {
-        return subscribedRtcpStreamId == NO_SUBSCRIBED_STREAM
-                ? OptionalInt.empty()
-                : OptionalInt.of(subscribedRtcpStreamId);
     }
 
     /**

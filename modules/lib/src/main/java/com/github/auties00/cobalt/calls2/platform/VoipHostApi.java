@@ -289,6 +289,12 @@ public interface VoipHostApi {
             H264(100);
 
             /**
+             * Caches the constant array so the per-frame {@link #ofCode(int)} decode scan does not pay
+             * the defensive-clone cost of {@link #values()} on every rendered frame.
+             */
+            private static final Format[] VALUES = values();
+
+            /**
              * Holds the integer format code the native render boundary uses for this layout.
              */
             private final int code;
@@ -322,7 +328,7 @@ public interface VoipHostApi {
              * @return the matching constant, or {@link #UNKNOWN} when none matches
              */
             public static Format ofCode(int code) {
-                for (var format : values()) {
+                for (var format : VALUES) {
                     if (format.code == code) {
                         return format;
                     }

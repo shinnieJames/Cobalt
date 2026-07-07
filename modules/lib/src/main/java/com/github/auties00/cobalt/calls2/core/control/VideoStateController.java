@@ -5,7 +5,6 @@ import com.github.auties00.cobalt.calls2.signaling.VideoStateStanza;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.util.Objects;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Drives the in-call video control: the local camera lifecycle and the video-upgrade negotiation.
@@ -20,7 +19,7 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <p>Inbound peer reports are delivered through {@link #onPeerVideoState(Jid, VideoStreamState)}, which
  * emits a {@link VideoStateChanged} for the peer, and {@link #onPeerVideoPermission(Jid, boolean)}, which
- * emits a {@link PeerVideoPermissionChanged}. The controller holds the local state behind a lock and is
+ * emits a {@link PeerVideoPermissionChanged}. The controller holds the local state in volatile fields and is
  * bound to one call's identity and its signaling and event seams at construction; it owns no timers, so it
  * needs no explicit shutdown. This is the real video-state mechanism and supersedes the deprecated
  * video-upgrade string facade.
@@ -34,8 +33,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * {@link VideoStreamState#UPGRADE_CANCEL} (reason {@code 8}). Each transition sends the {@code video_state}
  * element (type {@code 15}) and emits event {@code 0x92} ({@code VideoStateChanged}); a peer video
  * permission change emits event {@code 0x93} ({@code PeerVideoPermissionChanged}). The picture-in-picture
- * flag is a local rendering hint that does not itself change the broadcast state. The info-mutex is
- * replaced by a {@link ReentrantLock} per the threading design.
+ * flag is a local rendering hint that does not itself change the broadcast state. The local video state and
+ * picture-in-picture flag are held in volatile fields rather than behind the info-mutex, per the threading
+ * design.
  */
 public final class VideoStateController {
     /**
@@ -54,19 +54,20 @@ public final class VideoStateController {
     private final CallEventSink events;
 
     /**
-     * Guards the local video state and the picture-in-picture flag.
-     */
-    private final ReentrantLock lock = new ReentrantLock();
-
-    /**
      * The local user's current video stream state.
+     *
+     * <p>Volatile so {@link #transition(VideoStreamState)} can store it and {@link #state()} can read it
+     * without a lock: the field is a lone reference with no compound read-modify-write.
      */
-    private VideoStreamState state = VideoStreamState.DISABLED;
+    private volatile VideoStreamState state = VideoStreamState.DISABLED;
 
     /**
      * Whether the local preview is currently minimized to picture-in-picture.
+     *
+     * <p>Volatile so {@link #setPictureInPicture(boolean)} can store it and {@link #isPictureInPicture()}
+     * can read it without a lock: the field is a lone flag with no compound read-modify-write.
      */
-    private boolean pictureInPicture;
+    private volatile boolean pictureInPicture;
 
     /**
      * Constructs a video-state controller bound to a call and its signaling and event seams.
@@ -162,12 +163,7 @@ public final class VideoStateController {
      * @param pictureInPicture {@code true} when the local preview is minimized to picture-in-picture
      */
     public void setPictureInPicture(boolean pictureInPicture) {
-        lock.lock();
-        try {
-            this.pictureInPicture = pictureInPicture;
-        } finally {
-            lock.unlock();
-        }
+        this.pictureInPicture = pictureInPicture;
     }
 
     /**
@@ -176,12 +172,7 @@ public final class VideoStateController {
      * @return {@code true} when the local preview is minimized to picture-in-picture
      */
     public boolean isPictureInPicture() {
-        lock.lock();
-        try {
-            return pictureInPicture;
-        } finally {
-            lock.unlock();
-        }
+        return pictureInPicture;
     }
 
     /**
@@ -190,12 +181,7 @@ public final class VideoStateController {
      * @return the current local video stream state; never {@code null}
      */
     public VideoStreamState state() {
-        lock.lock();
-        try {
-            return state;
-        } finally {
-            lock.unlock();
-        }
+        return state;
     }
 
     /**
@@ -230,18 +216,13 @@ public final class VideoStateController {
     /**
      * Sets the local video state, broadcasts it, and emits the local change.
      *
-     * <p>Records the new state under the lock, sends a {@code video_state} action carrying it, and emits a
+     * <p>Records the new state, sends a {@code video_state} action carrying it, and emits a
      * {@link VideoStateChanged} for the local user.
      *
      * @param next the new local video stream state
      */
     private void transition(VideoStreamState next) {
-        lock.lock();
-        try {
-            this.state = next;
-        } finally {
-            lock.unlock();
-        }
+        this.state = next;
         sender.send(new VideoStateStanza(context.callId(), context.callCreator(), next));
         events.emit(new VideoStateChanged(context.selfJid(), next, true));
     }

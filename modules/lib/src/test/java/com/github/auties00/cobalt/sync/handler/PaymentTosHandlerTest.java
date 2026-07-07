@@ -59,7 +59,7 @@ class PaymentTosHandlerTest {
     }
 
     private void smbPlatform() {
-        store.accountStore().device().setPlatform(ClientPlatformType.IOS_BUSINESS);
+        store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.IOS_BUSINESS));
     }
 
     private void enablePix() {
@@ -119,7 +119,7 @@ class PaymentTosHandlerTest {
         @Test
         @DisplayName("IOS_BUSINESS platform is accepted")
         void iosBusinessAccepted() {
-            store.accountStore().device().setPlatform(ClientPlatformType.IOS_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.IOS_BUSINESS));
             enablePix();
             assertEquals(SyncActionState.SUCCESS,
                     handler.applyMutation(testClient, setMutation(validAction())).actionState());
@@ -128,7 +128,7 @@ class PaymentTosHandlerTest {
         @Test
         @DisplayName("ANDROID_BUSINESS platform is accepted")
         void androidBusinessAccepted() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             enablePix();
             assertEquals(SyncActionState.SUCCESS,
                     handler.applyMutation(testClient, setMutation(validAction())).actionState());

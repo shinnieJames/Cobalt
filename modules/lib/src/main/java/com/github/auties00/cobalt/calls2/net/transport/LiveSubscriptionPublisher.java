@@ -28,8 +28,19 @@ import java.util.function.LongSupplier;
 import java.util.function.ToIntFunction;
 
 /**
- * Production {@link SubscriptionPublisher} backed by the reused subscription protobufs
- * and a {@link TimerHeap}-driven resend.
+ * Publishes a client's send layout and receive wishes to the selective-forwarding unit.
+ *
+ * <p>A group call reaches the selective-forwarding unit through the relay, and the unit
+ * forwards only the streams and qualities each client asks for. A client expresses what
+ * it sends and what it wants to receive by embedding serialized protobufs inside STUN
+ * binding-request attributes: a {@link SenderSubscriptions} in the sender attribute and
+ * an {@link RxSubscriptions} in the receiver attribute. This class turns the call's
+ * {@link StreamLayout} into the {@link StreamDescriptors} list, frames the sender and
+ * receiver subscriptions as {@link SubscriptionStunAttribute} values for the STUN
+ * message writer, and drives the periodic resend of the cached receive subscription so a
+ * dropped binding does not strand the receiver. It also owns the hop-by-hop
+ * {@link RtcpRxSubscriptionTable} that records which RTCP feedback the unit should
+ * forward, exposed through {@link #rtcpRxTable()}.
  *
  * <p>Builds {@link StreamDescriptors} from a {@link StreamLayout}, serializes the sender
  * and receive subscriptions with their generated protobuf specs into
@@ -57,7 +68,7 @@ import java.util.function.ToIntFunction;
  * driven through the existing {@link TimerHeap} rather than the native PJSIP timer the engine uses, and
  * the resend re-arms itself on each fire to model the native periodic callback.
  */
-public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
+public final class LiveSubscriptionPublisher {
     /**
      * The default interval between resends of the cached receive subscription.
      *
@@ -173,6 +184,21 @@ public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
     private TimerEntry resendTimer;
 
     /**
+     * The framed receiver attribute for the last-published subscription, or {@code null}
+     * when nothing is cached.
+     *
+     * <p>Built once in {@link #publishRxSubscription(RxSubscriptions, long)} alongside the
+     * {@link RxSubscriptionState} record and forwarded verbatim by {@link #onResendTimer()}
+     * so the 10 Hz resend does not re-encode the protobuf and re-clone it into a fresh
+     * {@link SubscriptionStunAttribute} every tick. Kept in lockstep with the
+     * {@link #rxState} cache: set when that cache is recorded, nulled when it is cleared in
+     * {@link #close()}. {@link SubscriptionStunAttribute} is an immutable record (its
+     * constructor and {@link SubscriptionStunAttribute#value() value()} both clone), so the
+     * one instance is shared across the initial publish and every resend without aliasing.
+     */
+    private SubscriptionStunAttribute cachedReceiverAttribute;
+
+    /**
      * Whether this publisher has been closed.
      *
      * <p>Once {@code true} the resend timer stays cancelled and {@link #close()} is a
@@ -265,7 +291,21 @@ public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
         return Optional.ofNullable(participantProvider);
     }
 
-    @Override
+    /**
+     * Builds the stream-descriptor list declaring every stream the layout publishes.
+     *
+     * <p>Emits one {@link com.github.auties00.cobalt.model.call.datachannel.StreamDescriptor}
+     * per active stream: the audio media plus its forward-error-correction and
+     * negative-acknowledgement descriptors, the same triple for each present video
+     * simulcast layer, and the application-data, live-transcription, and hop-by-hop
+     * forward-error-correction descriptors for whichever feature SSRCs the layout
+     * allocates. Absent SSRCs yield no descriptors. The result is the
+     * {@link StreamDescriptors} the SFU reads to set up forwarding.
+     *
+     * @param layout the SSRC and feature layout this client publishes; must not be {@code null}
+     * @return the stream descriptors for the layout
+     * @throws NullPointerException if {@code layout} is {@code null}
+     */
     public StreamDescriptors buildStreamDescriptors(StreamLayout layout) {
         Objects.requireNonNull(layout, "layout cannot be null");
         var descriptors = new ArrayList<StreamDescriptor>(StreamLayout.MAX_STREAM_DESCRIPTORS);
@@ -344,14 +384,37 @@ public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
                 .build());
     }
 
-    @Override
+    /**
+     * Frames a sender subscription as the proprietary STUN sender-subscription attribute.
+     *
+     * <p>Serializes the {@link SenderSubscriptions} protobuf and wraps the bytes in a
+     * {@link SubscriptionStunAttribute} of type
+     * {@link SubscriptionStunAttribute#SENDER_SUBSCRIPTIONS_TYPE} so the STUN message
+     * writer can append it to a binding request.
+     *
+     * @param senderSubscriptions the sender subscription to frame; must not be {@code null}
+     * @return the STUN attribute carrying the serialized sender subscription
+     * @throws NullPointerException if {@code senderSubscriptions} is {@code null}
+     */
     public SubscriptionStunAttribute buildSenderAttribute(SenderSubscriptions senderSubscriptions) {
         Objects.requireNonNull(senderSubscriptions, "senderSubscriptions cannot be null");
         var bytes = SenderSubscriptionsSpec.encode(senderSubscriptions);
         return new SubscriptionStunAttribute(SubscriptionStunAttribute.SENDER_SUBSCRIPTIONS_TYPE, bytes);
     }
 
-    @Override
+    /**
+     * Frames a receive subscription as the proprietary STUN receiver-subscription attribute.
+     *
+     * <p>Serializes the {@link RxSubscriptions} protobuf and wraps the bytes in a
+     * {@link SubscriptionStunAttribute} of type
+     * {@link SubscriptionStunAttribute#RECEIVER_SUBSCRIPTION_TYPE}. Unlike
+     * {@link #publishRxSubscription(RxSubscriptions, long)} this performs no suppression and
+     * does not touch the cached state; it is the framing primitive the publish path builds on.
+     *
+     * @param rxSubscriptions the receive subscription to frame; must not be {@code null}
+     * @return the STUN attribute carrying the serialized receive subscription
+     * @throws NullPointerException if {@code rxSubscriptions} is {@code null}
+     */
     public SubscriptionStunAttribute buildReceiverAttribute(RxSubscriptions rxSubscriptions) {
         Objects.requireNonNull(rxSubscriptions, "rxSubscriptions cannot be null");
         var bytes = RxSubscriptionsSpec.encode(rxSubscriptions);
@@ -430,7 +493,23 @@ public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
                 .build();
     }
 
-    @Override
+    /**
+     * Publishes a receive subscription, suppressing it when it has not changed.
+     *
+     * <p>When the subscription is identical to the last published one this returns an
+     * empty result and changes nothing, so the caller sends no binding. When it differs
+     * this records it as the new cached subscription, arms or re-arms the resend timer
+     * against the supplied clock, and returns the framed
+     * {@link SubscriptionStunAttribute} for the caller to attach to a STUN binding
+     * request. The subsequent resend the timer drives carries the most recently published
+     * subscription.
+     *
+     * @param rxSubscriptions the receive subscription to publish; must not be {@code null}
+     * @param nowNanos        the current time in the resend timer's nanosecond timebase
+     * @return the STUN attribute to send, or an empty result when the subscription is a
+     *         redundant resend
+     * @throws NullPointerException if {@code rxSubscriptions} is {@code null}
+     */
     public Optional<SubscriptionStunAttribute> publishRxSubscription(RxSubscriptions rxSubscriptions,
                                                                      long nowNanos) {
         Objects.requireNonNull(rxSubscriptions, "rxSubscriptions cannot be null");
@@ -445,8 +524,10 @@ public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
             return Optional.empty();
         }
         rxState.record(rxSubscriptions);
+        var attribute = buildReceiverAttribute(rxSubscriptions);
+        cachedReceiverAttribute = attribute;
         armResendTimer(nowNanos);
-        return Optional.of(buildReceiverAttribute(rxSubscriptions));
+        return Optional.of(attribute);
     }
 
     /**
@@ -473,30 +554,44 @@ public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
      * Resends the cached receive subscription and re-arms the resend timer.
      *
      * <p>Invoked by the timer heap when the resend interval elapses. When a subscription
-     * has been cached and the publisher is open, it frames the cached subscription and
-     * hands it to the resend callback, then schedules the next resend; when nothing is
-     * cached or the publisher is closed it does neither, ending the cadence. Reading the
-     * current time from the injected clock keeps the re-armed deadline on the heap's
-     * timebase.
+     * has been cached and the publisher is open, it hands the pre-built
+     * {@link #cachedReceiverAttribute} to the resend callback, then schedules the next
+     * resend; when nothing is cached or the publisher is closed it does neither, ending the
+     * cadence. Reading the current time from the injected clock keeps the re-armed deadline
+     * on the heap's timebase.
      */
     private void onResendTimer() {
         if (closed) {
             return;
         }
-        var cached = rxState.cached().orElse(null);
+        var cached = cachedReceiverAttribute;
         if (cached == null) {
             return;
         }
-        rxResender.accept(buildReceiverAttribute(cached));
+        rxResender.accept(cached);
         armResendTimer(clock.getAsLong());
     }
 
-    @Override
+    /**
+     * Returns the hop-by-hop RTCP-feedback subscription table for this call.
+     *
+     * <p>The caller registers and removes feedback subscriptions on the returned table to
+     * tell the selective-forwarding unit which RTCP feedback to forward for each media
+     * SSRC.
+     *
+     * @return the RTCP-feedback subscription table, never {@code null}
+     */
     public RtcpRxSubscriptionTable rtcpRxTable() {
         return rtcpRxTable;
     }
 
-    @Override
+    /**
+     * Releases the publisher's timer and clears its cached subscription and feedback table.
+     *
+     * <p>Cancels the resend timer if it is armed, clears the cached receive subscription
+     * so a later transport republishes from scratch, and empties the RTCP-feedback table.
+     * Idempotent: a second close is a no-op.
+     */
     public void close() {
         if (closed) {
             return;
@@ -507,6 +602,7 @@ public final class LiveSubscriptionPublisher implements SubscriptionPublisher {
             resendTimer = null;
         }
         rxState.clear();
+        cachedReceiverAttribute = null;
         rtcpRxTable.clear();
     }
 }

@@ -281,6 +281,7 @@ public final class LiveVideoCaptureDriver implements VideoCaptureDriver {
             this.lastWidth = -1;
             this.lastHeight = -1;
             toClose = source;
+            this.source = null;
         } finally {
             lock.unlock();
         }
@@ -289,12 +290,6 @@ public final class LiveVideoCaptureDriver implements VideoCaptureDriver {
         }
         if (toClose != null) {
             toClose.shutdown();
-        }
-        lock.lock();
-        try {
-            this.source = null;
-        } finally {
-            lock.unlock();
         }
     }
 
@@ -308,6 +303,13 @@ public final class LiveVideoCaptureDriver implements VideoCaptureDriver {
     @Override
     public void selectCamera(String deviceId) {
         Objects.requireNonNull(deviceId, "deviceId cannot be null");
+        // TODO: open the replacement source before taking the lock so the (potentially slow) camera open
+        //  does not run under the lock. It is kept under the lock here because the VOID guard must reject
+        //  before any source is opened; opening before the lock would open (and then have to close) a
+        //  camera on the VOID rejection path, an observable device side effect the current
+        //  guard-before-open ordering does not have. Moving it out needs the guard read hoisted (a volatile
+        //  state or a pre-check) without reintroducing a check-then-open race.
+        VideoOutput previous;
         lock.lock();
         try {
             if (state == State.VOID) {
@@ -315,15 +317,15 @@ public final class LiveVideoCaptureDriver implements VideoCaptureDriver {
             }
             var next = Objects.requireNonNull(sourceFactory.open(deviceId),
                     "camera source factory returned null");
-            var previous = this.source;
+            previous = this.source;
             this.source = next;
             this.lastWidth = -1;
             this.lastHeight = -1;
-            if (previous != null) {
-                previous.shutdown();
-            }
         } finally {
             lock.unlock();
+        }
+        if (previous != null) {
+            previous.shutdown();
         }
     }
 

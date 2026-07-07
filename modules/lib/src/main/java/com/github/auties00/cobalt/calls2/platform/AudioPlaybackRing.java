@@ -2,7 +2,6 @@ package com.github.auties00.cobalt.calls2.platform;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
 /**
@@ -100,7 +99,7 @@ public final class AudioPlaybackRing {
      * {@link #signalDemand()} to unpark a waiting producer. Holding the reference lets a demand pulse
      * unpark the producer without a condition variable.
      */
-    private final AtomicReference<Thread> parkedProducer;
+    private volatile Thread parkedProducer;
 
     /**
      * Constructs a playback ring holding at least the requested number of samples.
@@ -129,7 +128,6 @@ public final class AudioPlaybackRing {
         this.writeCursor = new AtomicInteger();
         this.readCursor = new AtomicInteger();
         this.demand = new AtomicInteger();
-        this.parkedProducer = new AtomicReference<>();
     }
 
     /**
@@ -244,7 +242,7 @@ public final class AudioPlaybackRing {
      */
     public void signalDemand() {
         demand.getAndIncrement();
-        var parked = parkedProducer.get();
+        var parked = parkedProducer;
         if (parked != null) {
             LockSupport.unpark(parked);
         }
@@ -284,14 +282,14 @@ public final class AudioPlaybackRing {
         if (current - (int) lastObservedDemand > 0) {
             return current;
         }
-        parkedProducer.set(Thread.currentThread());
+        parkedProducer = Thread.currentThread();
         try {
             current = demand.getAcquire();
             if (current - (int) lastObservedDemand <= 0) {
                 LockSupport.park(this);
             }
         } finally {
-            parkedProducer.set(null);
+            parkedProducer = null;
         }
         return demand.getAcquire();
     }
@@ -313,14 +311,14 @@ public final class AudioPlaybackRing {
         if (current - (int) lastObservedDemand > 0) {
             return current;
         }
-        parkedProducer.set(Thread.currentThread());
+        parkedProducer = Thread.currentThread();
         try {
             current = demand.getAcquire();
             if (current - (int) lastObservedDemand <= 0) {
                 LockSupport.parkNanos(this, timeoutNanos);
             }
         } finally {
-            parkedProducer.set(null);
+            parkedProducer = null;
         }
         return demand.getAcquire();
     }

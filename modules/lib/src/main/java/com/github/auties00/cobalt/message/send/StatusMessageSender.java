@@ -21,6 +21,11 @@ import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.media.AudioMessage;
+import com.github.auties00.cobalt.model.message.media.DocumentMessage;
+import com.github.auties00.cobalt.model.message.media.ImageMessage;
+import com.github.auties00.cobalt.model.message.media.StickerMessage;
+import com.github.auties00.cobalt.model.message.media.VideoMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
 import com.github.auties00.cobalt.model.privacy.StatusPrivacyMode;
@@ -29,9 +34,15 @@ import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder;
+import com.github.auties00.cobalt.wam.event.StatusPostEventBuilder;
+import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.PrekeysFetchContext;
+import com.github.auties00.cobalt.wam.type.PrivacySettingsValueType;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
+import com.github.auties00.cobalt.wam.type.StatusCategory;
+import com.github.auties00.cobalt.wam.type.StatusPostOrigin;
+import com.github.auties00.cobalt.wam.type.StatusPostResult;
 
 import java.util.*;
 
@@ -138,7 +149,8 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
         var container = messageInfo.message();
         var selfJid = requireSelfJid();
 
-        var audienceDevices = deviceService.getStatusFanout(resolveStatusAudience());
+        var statusAudience = resolveStatusAudience();
+        var audienceDevices = deviceService.getStatusFanout(statusAudience);
 
         var revokeResult = resolveRevokeDevices(container, audienceDevices);
         if (revokeResult.useDirect()) {
@@ -253,6 +265,10 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
             for (var device : skDistribDevices) {
                 store.signalStore().markSenderKeyDistributed(statusJid, device);
             }
+        }
+
+        if (!isRevoke) {
+            emitStatusPostEvent(messageInfo, statusAudience.size(), ack);
         }
 
         return ack;
@@ -480,6 +496,131 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
         flushStore();
         var ackNode = client.sendNode(stanza);
         return AckParser.parse(ackNode);
+    }
+
+    /**
+     * Commits one {@link com.github.auties00.cobalt.wam.event.StatusPostEvent}
+     * recording the outcome and composition of a completed status post.
+     *
+     * <p>Invoked once the SKMSG status stanza has been dispatched and acked, for
+     * genuine status posts only; status revokes are excluded because they carry
+     * their own telemetry. The {@code statusPostResult} is folded from the server
+     * {@link AckResult} ({@link StatusPostResult#OK} on acceptance, otherwise
+     * {@link StatusPostResult#ERROR_UNKNOWN}); {@code statusCategory} is fixed to
+     * {@link StatusCategory#REGULAR_STATUS} because this sender only publishes to
+     * {@code status@broadcast}; {@code mediaType}, {@code hasCaption},
+     * {@code defaultStatusPrivacySetting}, {@code statusAudienceSize}, and
+     * {@code statusId} are read from the outbound container, the store privacy
+     * preference, and the message key. The media-editing flags
+     * ({@code hasFilters}, {@code isCropped}, {@code isRotated}, the video-trim
+     * flags), the audience-selector flags, {@code statusContainsMusic}, and
+     * {@code isReshare} are reported {@code false} because this transport performs
+     * no client-side media editing or selector interaction, and {@code retryCount}
+     * is {@code 0} because {@link #doSend(Jid, ChatMessageInfo)} makes a single
+     * dispatch attempt.
+     *
+     * @param messageInfo  the dispatched status {@link ChatMessageInfo}
+     * @param audienceSize the number of audience user JIDs resolved from the
+     *                     status privacy preference
+     * @param ack          the parsed server {@link AckResult} for the send
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusPost", exports = "logStatusPost",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStatusPostEvent(ChatMessageInfo messageInfo, int audienceSize, AckResult ack) {
+        var container = messageInfo.message();
+        wamService.commit(new StatusPostEventBuilder()
+                .statusPostResult(ack.isSuccess() ? StatusPostResult.OK : StatusPostResult.ERROR_UNKNOWN)
+                .statusPostOrigin(StatusPostOrigin.STATUS_TAB)
+                .statusCategory(StatusCategory.REGULAR_STATUS)
+                .mediaType(resolveWamMediaType(container))
+                .defaultStatusPrivacySetting(resolveDefaultStatusPrivacySetting())
+                .statusAudienceSize(audienceSize)
+                .statusId(messageInfo.key().id().orElse(null))
+                .hasCaption(resolveHasCaption(container))
+                .hasFilters(false)
+                .isCropped(false)
+                .isReshare(false)
+                .isRotated(false)
+                .isVideoManuallyTrimmed(false)
+                .isVideoMuted(false)
+                .isVideoTrimmed(false)
+                .statusContainsMusic(false)
+                .statusAudienceSelectorClicked(false)
+                .statusAudienceSelectorUpdated(false)
+                .retryCount(0)
+                .build());
+    }
+
+    /**
+     * Maps the outbound status container to the WAM {@link MediaType} slot.
+     *
+     * <p>Classifies by the top-level content type: images map to
+     * {@link MediaType#PHOTO}, videos to {@link MediaType#VIDEO}, audio to
+     * {@link MediaType#AUDIO}, documents to {@link MediaType#DOCUMENT}, stickers
+     * to {@link MediaType#STICKER}, and every other content (text status
+     * included) to {@link MediaType#NONE}.
+     *
+     * @param container the outbound status {@link MessageContainer}
+     * @return the matching {@link MediaType}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusPost", exports = "getStatusMediaType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static MediaType resolveWamMediaType(MessageContainer container) {
+        return switch (container.content()) {
+            case ImageMessage _ -> MediaType.PHOTO;
+            case VideoMessage _ -> MediaType.VIDEO;
+            case AudioMessage _ -> MediaType.AUDIO;
+            case DocumentMessage _ -> MediaType.DOCUMENT;
+            case StickerMessage _ -> MediaType.STICKER;
+            default -> MediaType.NONE;
+        };
+    }
+
+    /**
+     * Returns the {@code defaultStatusPrivacySetting} value derived from the
+     * user's stored status privacy preference.
+     *
+     * <p>{@link StatusPrivacyMode#CONTACTS} maps to
+     * {@link PrivacySettingsValueType#MY_CONTACTS},
+     * {@link StatusPrivacyMode#WHITELIST} to
+     * {@link PrivacySettingsValueType#ONLY_SHARE_WITH}, and
+     * {@link StatusPrivacyMode#CONTACTS_EXCEPT} to
+     * {@link PrivacySettingsValueType#MY_CONTACTS_EXCEPT}. An absent preference is
+     * treated as {@link StatusPrivacyMode#CONTACTS}, matching
+     * {@link #resolveStatusAudience()}.
+     *
+     * @return the mapped {@link PrivacySettingsValueType}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusPost", exports = "logStatusPost",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private PrivacySettingsValueType resolveDefaultStatusPrivacySetting() {
+        var mode = store.settingsStore().statusPrivacy()
+                .flatMap(StatusPrivacySetting::mode)
+                .orElse(StatusPrivacyMode.CONTACTS);
+        return switch (mode) {
+            case CONTACTS -> PrivacySettingsValueType.MY_CONTACTS;
+            case WHITELIST -> PrivacySettingsValueType.ONLY_SHARE_WITH;
+            case CONTACTS_EXCEPT -> PrivacySettingsValueType.MY_CONTACTS_EXCEPT;
+        };
+    }
+
+    /**
+     * Returns whether the outbound status media carries a caption.
+     *
+     * <p>Only captioned media content ({@link ImageMessage},
+     * {@link VideoMessage}, {@link DocumentMessage}) can supply a caption; every
+     * other content type reports {@code false}.
+     *
+     * @param container the outbound status {@link MessageContainer}
+     * @return {@code true} when the content carries a non-empty caption
+     */
+    private static boolean resolveHasCaption(MessageContainer container) {
+        return switch (container.content()) {
+            case ImageMessage image -> image.caption().isPresent();
+            case VideoMessage video -> video.caption().isPresent();
+            case DocumentMessage document -> document.caption().isPresent();
+            default -> false;
+        };
     }
 
     /**

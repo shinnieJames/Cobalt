@@ -13,7 +13,7 @@ import java.util.function.Consumer;
  * Drives one call's media-transport bring-up and runs its transport state machine.
  *
  * <p>The controller sequences a call's media plane from the bootstrap request to flowing media: it posts
- * the {@code start_session_request} through the {@link CallHttpSignaler}, starts the
+ * the {@code start_session_request} through the {@link LiveCallHttpSignaler}, starts the
  * {@link MediaTransport} (the ICE/DTLS/SCTP-data-channel web transport), seeds the
  * bandwidth estimate from the {@link BweHistory}, and reacts to the transport's {@link TransportEvent}s
  * by advancing its {@link State} and notifying the application. Inbound application-data bytes are
@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  *
  * <p>Once the relay leg is active the controller keeps it live and adapts it: {@link #tick(long)} drives
  * the relay keepalive watchdog (through the relay transport) and the periodic receive-subscription resend
- * (through the {@link SubscriptionPublisher}); {@link #onDownlinkBweDrop(int, int)} sends a standalone WARP
+ * (through the {@link LiveSubscriptionPublisher}); {@link #onDownlinkBweDrop(int, int)} sends a standalone WARP
  * BWE-configuration when the downlink estimate drops; and a relay-bind failure after the leg was active is
  * surfaced for failover. The relay election that precedes relay-create success runs inside the transport
  * through its relay binder; this controller drives only the post-active upkeep that the captures and the
@@ -47,7 +47,7 @@ public final class CallTransportController implements AutoCloseable {
     /**
      * Holds the signaler that posts the call-bootstrap request.
      */
-    private final CallHttpSignaler signaler;
+    private final LiveCallHttpSignaler signaler;
 
     /**
      * Holds the media transport this controller drives.
@@ -71,7 +71,7 @@ public final class CallTransportController implements AutoCloseable {
      * <p>Present on a group/SFU call so {@link #tick(long)} can resend the cached receive subscription on
      * the relay leg; {@code null} on a one-to-one call, which subscribes to no SFU.
      */
-    private final SubscriptionPublisher subscriptionPublisher;
+    private final LiveSubscriptionPublisher subscriptionPublisher;
 
     /**
      * Holds the relay {@code <key>} keying the {@code 0x0003} subscription envelope's HMAC-SHA1
@@ -105,7 +105,7 @@ public final class CallTransportController implements AutoCloseable {
     /**
      * Constructs a controller over the given collaborators with no subscription publisher.
      *
-     * <p>Equivalent to {@link #CallTransportController(CallHttpSignaler, MediaTransport, BweHistory, Consumer, SubscriptionPublisher, byte[], InetSocketAddress)}
+     * <p>Equivalent to {@link #CallTransportController(LiveCallHttpSignaler, MediaTransport, BweHistory, Consumer, LiveSubscriptionPublisher, byte[], InetSocketAddress)}
      * with a {@code null} publisher and no relay subscription-envelope material; suitable for a one-to-one
      * call that subscribes to no SFU.
      *
@@ -115,7 +115,7 @@ public final class CallTransportController implements AutoCloseable {
      * @param stateObserver the consumer notified of each state transition
      * @throws NullPointerException if any argument is {@code null}
      */
-    public CallTransportController(CallHttpSignaler signaler,
+    public CallTransportController(LiveCallHttpSignaler signaler,
                                   MediaTransport transport,
                                   BweHistory bweHistory,
                                   Consumer<State> stateObserver) {
@@ -126,7 +126,7 @@ public final class CallTransportController implements AutoCloseable {
      * Constructs a controller over the given collaborators and subscription publisher with no relay
      * subscription-envelope material.
      *
-     * <p>Equivalent to {@link #CallTransportController(CallHttpSignaler, MediaTransport, BweHistory, Consumer, SubscriptionPublisher, byte[], InetSocketAddress)}
+     * <p>Equivalent to {@link #CallTransportController(LiveCallHttpSignaler, MediaTransport, BweHistory, Consumer, LiveSubscriptionPublisher, byte[], InetSocketAddress)}
      * with a {@code null} relay key and reflexive address; the controller drives the resend cadence but cannot
      * emit a {@code 0x0003} envelope until the relay subscription-envelope material is supplied.
      *
@@ -139,11 +139,11 @@ public final class CallTransportController implements AutoCloseable {
      * @throws NullPointerException if {@code signaler}, {@code transport}, {@code bweHistory}, or
      *                              {@code stateObserver} is {@code null}
      */
-    public CallTransportController(CallHttpSignaler signaler,
+    public CallTransportController(LiveCallHttpSignaler signaler,
                                   MediaTransport transport,
                                   BweHistory bweHistory,
                                   Consumer<State> stateObserver,
-                                  SubscriptionPublisher subscriptionPublisher) {
+                                  LiveSubscriptionPublisher subscriptionPublisher) {
         this(signaler, transport, bweHistory, stateObserver, subscriptionPublisher, null, null);
     }
 
@@ -165,11 +165,11 @@ public final class CallTransportController implements AutoCloseable {
      * @throws NullPointerException if {@code signaler}, {@code transport}, {@code bweHistory}, or
      *                              {@code stateObserver} is {@code null}
      */
-    public CallTransportController(CallHttpSignaler signaler,
+    public CallTransportController(LiveCallHttpSignaler signaler,
                                   MediaTransport transport,
                                   BweHistory bweHistory,
                                   Consumer<State> stateObserver,
-                                  SubscriptionPublisher subscriptionPublisher,
+                                  LiveSubscriptionPublisher subscriptionPublisher,
                                   byte[] relayKey,
                                   InetSocketAddress relayReflexiveAddress) {
         this.signaler = Objects.requireNonNull(signaler, "signaler cannot be null");
@@ -195,7 +195,7 @@ public final class CallTransportController implements AutoCloseable {
      * @throws IllegalStateException if the controller has been closed or bring-up has already started
      * @throws WhatsAppCallException if the bootstrap request fails or the transport cannot start
      */
-    public CallHttpSignaler.StartSessionResult start() {
+    public LiveCallHttpSignaler.StartSessionResult start() {
         ensureOpen();
         if (state != State.UNINITIALIZED) {
             throw new IllegalStateException("transport bring-up already started in state " + state);
@@ -291,6 +291,7 @@ public final class CallTransportController implements AutoCloseable {
         if (closed || !isRelayActive()) {
             return;
         }
+        // TODO: wire BweConfigSender - onDownlinkBweDrop builds BweConfigSender + transport.sendStandaloneWarp but has no caller; not yet driven by a live estimator
         var message = BweConfigSender.build(index, minRemoteBweKbps);
         try {
             transport.sendStandaloneWarp(message);
@@ -303,7 +304,7 @@ public final class CallTransportController implements AutoCloseable {
     /**
      * Publishes the given receive subscription and sends it on the relay leg when it changed.
      *
-     * <p>Frames the subscription through the {@link SubscriptionPublisher} (which suppresses an unchanged
+     * <p>Frames the subscription through the {@link LiveSubscriptionPublisher} (which suppresses an unchanged
      * resend and arms the resend timer) and ships the framed attribute on the relay leg when the publish
      * was not suppressed. It is a no-op when the call publishes no subscriptions, before the relay leg is
      * active, or after {@link #close()}.
@@ -328,7 +329,7 @@ public final class CallTransportController implements AutoCloseable {
      *
      * @return an {@link Optional} holding the subscription publisher, or empty on a one-to-one call
      */
-    public Optional<SubscriptionPublisher> subscriptionPublisher() {
+    public Optional<LiveSubscriptionPublisher> subscriptionPublisher() {
         return Optional.ofNullable(subscriptionPublisher);
     }
 
@@ -388,10 +389,11 @@ public final class CallTransportController implements AutoCloseable {
      * @return {@code true} when the relay leg is active and its upkeep should run
      */
     private boolean isRelayActive() {
+        var current = state;
         return everActive
-                && (state == State.RX_TRAFFIC_STARTED
-                || state == State.TX_TRAFFIC_STARTED
-                || state == State.RELAY_CREATE_SUCCESS);
+                && (current == State.RX_TRAFFIC_STARTED
+                || current == State.TX_TRAFFIC_STARTED
+                || current == State.RELAY_CREATE_SUCCESS);
     }
 
     /**

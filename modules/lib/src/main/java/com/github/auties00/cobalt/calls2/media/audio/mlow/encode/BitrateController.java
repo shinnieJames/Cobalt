@@ -151,6 +151,18 @@ public final class BitrateController {
     private static final float RATE_THRES_KBPS = 9.0f;
 
     /**
+     * The two bitrate anchors, in bits per second, of the high-rate unvoiced non-flatness threshold line,
+     * the native {@code (10000, 18000)} pair {@link #hrNonflatThres} interpolates between.
+     */
+    private static final float[] HR_NONFLAT_BITRATES = {10000.0f, 18000.0f};
+
+    /**
+     * The two threshold anchors of the high-rate unvoiced non-flatness threshold line, the native
+     * {@code (0.5, 0.0)} pair {@link #hrNonflatThres} interpolates between.
+     */
+    private static final float[] HR_NONFLAT_THRESHOLDS = {0.5f, 0.0f};
+
+    /**
      * The previous frame's voicing decision, the native {@code prev_voiced}.
      *
      * <p>Read to bump the importance on a voicing transition and overwritten at the end of each rate-point loop
@@ -524,8 +536,8 @@ public final class BitrateController {
      * @return the clamped non-flatness threshold
      */
     public static float hrNonflatThres(int bitrate, float spActProb) {
-        float[] bitrates = {10000.0f, 18000.0f};
-        float[] thresholds = {0.5f, 0.0f};
+        float[] bitrates = HR_NONFLAT_BITRATES;
+        float[] thresholds = HR_NONFLAT_THRESHOLDS;
         float a = (thresholds[1] - thresholds[0]) / (bitrates[1] - bitrates[0]);
         float b = thresholds[0] - a * bitrates[0];
         int scaledBitrate = (int) (bitrate * (float) Math.sqrt(spActProb + 1e-12f));

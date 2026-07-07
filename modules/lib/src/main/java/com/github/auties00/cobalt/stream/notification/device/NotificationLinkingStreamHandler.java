@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.exception.WhatsAppIntegrityChallengeException;
 import com.github.auties00.cobalt.listener.linked.LinkedNewContactListener;
 import com.github.auties00.cobalt.listener.WhatsAppListener;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
@@ -12,16 +13,29 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.stanza.smax.coexistence.SmaxCoexistenceOffboardingNotificationResponse;
 import com.github.auties00.cobalt.stanza.smax.coexistence.SmaxCoexistenceOnboardingStatusNotificationResponse;
+import com.github.auties00.cobalt.stanza.smax.newsletters.SmaxNewslettersLiveUpdatesNotificationResponse;
+import com.github.auties00.cobalt.stanza.smax.newsletters.SmaxNewslettersLiveUpdatesNotificationResponse.NewsletterMessage;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
+import com.github.auties00.cobalt.pairing.ShortcakePairingService;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
+import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
-import com.github.auties00.cobalt.model.newsletter.NewsletterViewerMetadata;
-import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfoBuilder;
+import com.github.auties00.cobalt.model.newsletter.NewsletterPollVote;
+import com.github.auties00.cobalt.model.newsletter.NewsletterReaction;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.ChatMessageCountsEventBuilder;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -50,6 +64,11 @@ import java.util.function.Consumer;
 @WhatsAppWebModule(moduleName = "WAWebHandleQPPrefetchTimestampNotification")
 @WhatsAppWebModule(moduleName = "WAWebHandleWaChat")
 @WhatsAppWebModule(moduleName = "WAWebHandleNewsletterNotification")
+@WhatsAppWebModule(moduleName = "WAWebNewsletterHandleLiveUpdatesNotification")
+@WhatsAppWebModule(moduleName = "WAWebNewsletterBackendAddOnsUtils")
+@WhatsAppWebModule(moduleName = "WAWebNewsletterMapMsgAndAddOns")
+@WhatsAppWebModule(moduleName = "WAWebNewsletterMsgUtils")
+@WhatsAppWebModule(moduleName = "WAWebNewsletterExtendedGatingUtils")
 final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurrent {
 
     /**
@@ -66,6 +85,8 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             "link_code_companion_reg",
             "companion_reg_refresh",
+            "crsc_continuation",
+            "passkey_prologue_request",
             "waffle",
             "hosted",
             "w:growth",
@@ -123,10 +144,25 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
     private final CompanionPairingService deviceLinkingService;
 
     /**
+     * Drives the Shortcake passkey-linking ceremony when the primary device replies.
+     *
+     * <p>May be {@code null} when the local account is not a passkey-linking companion, in which case
+     * {@link #handleShortcakeContinuation(Stanza)} and {@link #handlePasskeyPrologueRequest(Stanza)}
+     * short-circuit.
+     */
+    private final ShortcakePairingService shortcakePairingService;
+
+    /**
      * Commits the {@code ChatMessageCounts} event after a successful invite-driven new-chat
      * creation in {@link #handleGrowth(Stanza)}.
      */
     private final WamService wamService;
+
+    /**
+     * Gates the newsletter {@code live_updates} apply behind the
+     * {@link ABProp#CHANNEL_REACTIONS_ENABLED} feature flag in {@link #handleNewsletter(Stanza)}.
+     */
+    private final ABPropsService abPropsService;
 
     /**
      * Ships the post-processing {@code <ack class="notification">} stanza, reflecting the inbound
@@ -139,20 +175,26 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
      *
      * <p>Called once by {@link NotificationDeviceDispatcher}.
      *
-     * @param whatsapp             the {@link LinkedWhatsAppClient}
-     * @param deviceLinkingService the {@link CompanionPairingService}, may be {@code null} when the local account is not a pairing companion
-     * @param wamService           the {@link WamService}
-     * @param ackSender            the {@link AckSender}
+     * @param whatsapp                the {@link LinkedWhatsAppClient}
+     * @param deviceLinkingService    the {@link CompanionPairingService}, may be {@code null} when the local account is not a pairing companion
+     * @param shortcakePairingService the {@link ShortcakePairingService}, may be {@code null} when the local account is not a passkey-linking companion
+     * @param wamService              the {@link WamService}
+     * @param abPropsService          the {@link ABPropsService} used to gate the newsletter {@code live_updates} apply
+     * @param ackSender               the {@link AckSender}
      */
     NotificationLinkingStreamHandler(
             LinkedWhatsAppClient whatsapp,
             CompanionPairingService deviceLinkingService,
+            ShortcakePairingService shortcakePairingService,
             WamService wamService,
+            ABPropsService abPropsService,
             AckSender ackSender
     ) {
         this.whatsapp = whatsapp;
         this.deviceLinkingService = deviceLinkingService;
+        this.shortcakePairingService = shortcakePairingService;
         this.wamService = wamService;
+        this.abPropsService = abPropsService;
         this.ackSender = ackSender;
     }
 
@@ -176,6 +218,8 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
         try {
             switch (type) {
                 case "link_code_companion_reg", "companion_reg_refresh" -> handleLinkCodeRefresh(stanza);
+                case "crsc_continuation" -> handleShortcakeContinuation(stanza);
+                case "passkey_prologue_request" -> handlePasskeyPrologueRequest(stanza);
                 case "waffle" -> handleWaffle(stanza);
                 case "hosted" -> handleHosted(stanza);
                 case "w:growth" -> handleGrowth(stanza);
@@ -258,6 +302,61 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
             case "refresh_code" -> deviceLinkingService.handleRefreshCode(ref);
             default -> LOGGER.log(System.Logger.Level.DEBUG,
                     "Ignoring link_code_companion_reg notification with stage {0}", stage);
+        }
+    }
+
+    /**
+     * Continues the Shortcake passkey ceremony with the primary device's ephemeral identity.
+     *
+     * <p>Reads the {@code <primary_ephemeral_identity>} child and hands its bytes to
+     * {@link ShortcakePairingService#handlePrimaryEphemeralIdentity(byte[])}. Returns early when no
+     * passkey-linking companion is configured or the child is absent.
+     *
+     * @param stanza the notification stanza
+     */
+    private void handleShortcakeContinuation(Stanza stanza) {
+        if (shortcakePairingService == null) {
+            return;
+        }
+        var primaryEphemeralIdentity = stanza.getChild("primary_ephemeral_identity")
+                .flatMap(Stanza::toContentBytes)
+                .orElse(null);
+        if (primaryEphemeralIdentity == null) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Rejecting crsc_continuation notification missing primary_ephemeral_identity");
+            return;
+        }
+        try {
+            shortcakePairingService.handlePrimaryEphemeralIdentity(primaryEphemeralIdentity);
+        } catch (Throwable throwable) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Cannot complete Shortcake passkey linking: {0}", throwable.getMessage());
+        }
+    }
+
+    /**
+     * Starts the Shortcake passkey ceremony when the server prompts for it.
+     *
+     * <p>The ceremony is idempotent, so this is a no-op when it has already been started from the
+     * {@code pair-device} IQ. When no passkey authenticator is configured the prompt cannot be
+     * answered, so the failure is routed to {@link LinkedWhatsAppClient#handleFailure} as a
+     * {@link WhatsAppIntegrityChallengeException}; its default recovery logs the session out, which an
+     * embedder that wants to keep an in-progress QR or pairing-code link can override to
+     * {@link com.github.auties00.cobalt.client.linked.WhatsAppLinkedClientErrorResult#DISCARD}.
+     *
+     * @param stanza the notification stanza
+     */
+    private void handlePasskeyPrologueRequest(Stanza stanza) {
+        if (shortcakePairingService == null || !shortcakePairingService.isEnabled()) {
+            whatsapp.handleFailure(new WhatsAppIntegrityChallengeException(
+                    "Server requested passkey companion linking but no passkey authenticator is configured"));
+            return;
+        }
+        try {
+            shortcakePairingService.start();
+        } catch (Throwable throwable) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Cannot start Shortcake passkey linking: {0}", throwable.getMessage());
         }
     }
 
@@ -462,45 +561,271 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
     }
 
     /**
-     * Refreshes newsletter metadata and recent messages when a {@code newsletter} notification
-     * carries the {@code live_updates} child.
+     * Applies a newsletter {@code live_updates} delta to the local store when a {@code newsletter}
+     * notification carries the {@code <live_updates>} child.
      *
-     * <p>Returns early when the {@code from} JID is absent or is not a newsletter-server JID. When
-     * the {@code <live_updates>} child is present, the newsletter metadata is refreshed and the most
-     * recent twenty messages are re-queried; both steps are best effort and their failures are
-     * debug-logged.
+     * <p>Returns early when the {@code from} JID is absent or is not a newsletter-server JID, or when
+     * the notification carries no {@code <live_updates>} child. The whole delta is dropped (and only
+     * the protocol ACK fires) when the {@link ABProp#CHANNEL_REACTIONS_ENABLED} feature flag is off,
+     * matching WA Web's {@code isNewsletterReactionEnabled} gate. Otherwise the
+     * {@code <live_updates><messages>} envelope is parsed through
+     * {@link SmaxNewslettersLiveUpdatesNotificationResponse} and every {@code <message>} is projected
+     * onto the newsletter's stored messages: content posts are inserted or updated, admin edits mutate
+     * an existing message only when strictly newer, admin revokes remove the stored message, and the
+     * add-on children (reactions, poll votes, view/forward/response counts) are reconciled against the
+     * resolved message. The notification's own {@code from} and {@code t} attributes drive the apply,
+     * not the {@code <messages>} echo. The protocol ACK is always emitted by {@link #handle(Stanza)};
+     * this method never re-queries the newsletter.
      *
-     * @implNote This implementation processes synchronously on the calling virtual thread, whereas
-     * WA Web serialises via a notification queue so a slow refresh cannot stack notifications on top
-     * of each other. The Cobalt store's per-newsletter merge is idempotent and serial, so the queue
-     * is not strictly required.
+     * @implNote This implementation folds WA Web's two write paths (the {@code updateAddOnDbRecords}
+     * IndexedDB write and the {@code frontendFireAndForget("updateNewsletterMessages")} model push)
+     * into a single pass over Cobalt's unified newsletter store. It processes synchronously on the
+     * calling virtual thread, whereas WA Web serialises through {@code WAWebNewsletterNotificationQueue};
+     * the per-newsletter store merge is serial and idempotent, so the queue is not required. Message
+     * resolution keys on {@code server_id}, matching WA Web's {@code getMessageByServerId}.
      *
      * @param stanza the notification stanza
      */
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterHandleLiveUpdatesNotification",
+            exports = "handleNewsletterLiveUpdatesNotification",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private void handleNewsletter(Stanza stanza) {
         var newsletterJid = stanza.getAttributeAsJid("from").orElse(null);
         if (newsletterJid == null || !newsletterJid.hasNewsletterServer()) {
             return;
         }
 
-        if (stanza.hasChild("live_updates")) {
-            try {
-                refreshNewsletter(newsletterJid);
-            } catch (Throwable throwable) {
-                LOGGER.log(System.Logger.Level.DEBUG,
-                        "Cannot refresh newsletter metadata for {0}: {1}",
-                        newsletterJid,
-                        throwable.getMessage());
-            }
+        if (!stanza.hasChild("live_updates")) {
+            return;
+        }
 
-            try {
-                whatsapp.queryNewsletterMessages(newsletterJid, 20);
-            } catch (Throwable throwable) {
-                LOGGER.log(System.Logger.Level.DEBUG,
-                        "Cannot refresh newsletter live updates for {0}: {1}",
-                        newsletterJid,
-                        throwable.getMessage());
+        if (!abPropsService.getBool(ABProp.CHANNEL_REACTIONS_ENABLED)) {
+            return;
+        }
+
+        var response = SmaxNewslettersLiveUpdatesNotificationResponse.of(stanza).orElse(null);
+        if (response == null) {
+            return;
+        }
+
+        var notificationTimestamp = stanza.getAttributeAsLong("t");
+        if (notificationTimestamp.isEmpty() || notificationTimestamp.getAsLong() < 0) {
+            return;
+        }
+        var updateTimestamp = Instant.ofEpochSecond(notificationTimestamp.getAsLong());
+
+        var newsletter = ensureNewsletter(newsletterJid);
+        for (var message : response.messages()) {
+            applyLiveUpdate(newsletter, newsletterJid, message, updateTimestamp);
+        }
+    }
+
+    /**
+     * Projects a single parsed {@link NewsletterMessage} onto the newsletter's stored messages.
+     *
+     * <p>Content resolution follows WA Web: an admin revoke removes the stored message (and drops its
+     * add-ons); an admin edit mutates an existing message only, keyed by {@code server_id}; a content
+     * post is inserted or updated; and an add-on-only update resolves the existing message and drops
+     * the add-ons when the message is unknown. When a message is resolved, its add-ons are reconciled
+     * and the mutated message is re-stored.
+     *
+     * @implNote This implementation never synthesises a stub for an unresolvable add-on-only update or
+     * revoke, matching WA Web which only writes add-ons against a message it can resolve.
+     *
+     * @param newsletter    the owning newsletter
+     * @param newsletterJid the newsletter JID used for the message key
+     * @param message       the parsed message delta
+     * @param updateTimestamp the notification timestamp driving the apply
+     */
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterMapMsgAndAddOns", exports = "mapMsgAndAddOns",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void applyLiveUpdate(Newsletter newsletter, Jid newsletterJid, NewsletterMessage message, Instant updateTimestamp) {
+        var serverIdKey = String.valueOf(message.serverId());
+
+        if (message.isRevoke()) {
+            if (newsletter.getMessageById(serverIdKey).isPresent()) {
+                newsletter.removeMessage(serverIdKey);
             }
+            return;
+        }
+
+        NewsletterMessageInfo info;
+        if (message.isEdit()) {
+            info = newsletter.getMessageById(serverIdKey).orElse(null);
+            if (info == null) {
+                return;
+            }
+            applyEdit(info, message);
+        } else if (message.hasContent()) {
+            info = applyContent(newsletter, newsletterJid, message, serverIdKey);
+            if (info == null) {
+                info = newsletter.getMessageById(serverIdKey).orElse(null);
+                if (info == null) {
+                    return;
+                }
+            }
+        } else {
+            info = newsletter.getMessageById(serverIdKey).orElse(null);
+            if (info == null) {
+                return;
+            }
+        }
+
+        applyAddOns(info, message, updateTimestamp);
+        newsletter.addMessage(info);
+    }
+
+    /**
+     * Inserts or updates a content post's {@link NewsletterMessageInfo}.
+     *
+     * <p>Decodes the {@code <plaintext>} payload into a {@link MessageContainer}; returns {@code null}
+     * when the payload is absent (a WAMO placeholder) or fails to decode, so the caller can fall back
+     * to add-on-only resolution. An existing message with the same {@code server_id} has its content
+     * and timestamp refreshed in place, preserving its stored add-ons; otherwise a fresh
+     * {@link NewsletterMessageInfo} is built with {@link MessageStatus#DELIVERED}, mirroring the
+     * newsletter receive path.
+     *
+     * @param newsletter    the owning newsletter
+     * @param newsletterJid the newsletter JID used for the message key
+     * @param message       the parsed content message
+     * @param serverIdKey   the stringified {@code server_id} used for store lookup
+     * @return the inserted or updated message, or {@code null} when the payload is absent or undecodable
+     */
+    private NewsletterMessageInfo applyContent(Newsletter newsletter, Jid newsletterJid, NewsletterMessage message, String serverIdKey) {
+        var plaintext = message.plaintext().orElse(null);
+        if (plaintext == null) {
+            return null;
+        }
+        var container = decodeContainer(plaintext);
+        if (container == null) {
+            return null;
+        }
+
+        var existing = newsletter.getMessageById(serverIdKey).orElse(null);
+        if (existing != null) {
+            existing.setMessage(container);
+            message.timestamp().ifPresent(seconds -> existing.setTimestamp(Instant.ofEpochSecond(seconds)));
+            return existing;
+        }
+
+        var key = new MessageKeyBuilder()
+                .id(message.stanzaId().orElse(null))
+                .parentJid(newsletterJid)
+                .fromMe(message.fromSelf())
+                .build();
+        return new NewsletterMessageInfoBuilder()
+                .key(key)
+                .serverId((int) message.serverId())
+                .timestamp(message.timestamp().map(Instant::ofEpochSecond).orElse(null))
+                .message(container)
+                .status(MessageStatus.DELIVERED)
+                .build();
+    }
+
+    /**
+     * Applies an admin edit to an existing message.
+     *
+     * <p>The edit lands only when its effective timestamp ({@code original_msg_t}, falling back to the
+     * message {@code t}) is strictly greater than the stored message's timestamp, replicating WA Web's
+     * last-writer-wins guard. When it lands, the decoded payload replaces the message content, the
+     * sender-side edit timestamp is recorded in milliseconds, and the original send timestamp is set
+     * to the effective timestamp.
+     *
+     * @param info    the stored message to edit
+     * @param message the parsed edit message
+     */
+    private void applyEdit(NewsletterMessageInfo info, NewsletterMessage message) {
+        var original = message.originalMessageTimestamp();
+        Long incomingSeconds;
+        if (original.isPresent()) {
+            incomingSeconds = original.getAsLong();
+        } else {
+            incomingSeconds = message.timestamp().orElse(null);
+        }
+        if (incomingSeconds == null) {
+            return;
+        }
+        var existingSeconds = info.timestamp().map(Instant::getEpochSecond).orElse(Long.MIN_VALUE);
+        if (incomingSeconds <= existingSeconds) {
+            return;
+        }
+
+        var container = message.plaintext().map(this::decodeContainer).orElse(null);
+        if (container != null) {
+            info.setMessage(container);
+        }
+        message.editTimestampMs().ifPresent(editMs -> info.setLatestEditSenderTimestampMs(editMs));
+        info.setOriginalTimestamp(Instant.ofEpochSecond(incomingSeconds));
+    }
+
+    /**
+     * Reconciles a resolved message's add-on state against a parsed delta.
+     *
+     * <p>Reactions are replaced from the {@code emoji -> count} tally when the delta carries a
+     * non-empty {@code <reactions>} element and the notification timestamp is newer than the stored
+     * server-update timestamp; an absent or empty element clears them unconditionally. Poll votes are
+     * replaced only when the delta carries them. The stored server-update timestamp is advanced to the
+     * notification timestamp; the view count is overwritten only when present (preserved otherwise),
+     * while the forward and response counts are overwritten to zero when absent, replicating WA Web's
+     * count asymmetry.
+     *
+     * @implNote This implementation uses the message's prior
+     * {@link NewsletterMessageInfo#lastUpdateFromServerTimestamp()} as the reaction last-writer-wins
+     * clock, captured before it is advanced by the count step, because Cobalt stores reactions on the
+     * message rather than in WA Web's separate reaction table.
+     *
+     * @param info            the resolved message to reconcile
+     * @param message         the parsed message delta
+     * @param updateTimestamp the notification timestamp driving the apply
+     */
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterBackendAddOnsUtils", exports = "updateAddOnDbRecords",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void applyAddOns(NewsletterMessageInfo info, NewsletterMessage message, Instant updateTimestamp) {
+        var previousUpdate = info.lastUpdateFromServerTimestamp().orElse(null);
+
+        var reactions = message.reactions().orElse(null);
+        if (reactions != null && !reactions.isEmpty()) {
+            if (previousUpdate == null || updateTimestamp.isAfter(previousUpdate)) {
+                var tallies = reactions.entrySet()
+                        .stream()
+                        .map(entry -> new NewsletterReaction(entry.getKey(), entry.getValue(), false))
+                        .toList();
+                info.setReactions(tallies);
+            }
+        } else {
+            info.setReactions(List.of());
+        }
+
+        var votes = message.pollVotes();
+        if (!votes.isEmpty()) {
+            var tallies = votes.stream()
+                    .map(vote -> new NewsletterPollVote(vote.hash(), vote.count()))
+                    .toList();
+            info.setPollVotes(tallies);
+        }
+
+        info.setLastUpdateFromServerTimestamp(updateTimestamp);
+        message.viewsCount().ifPresent(views -> info.setViews(views));
+        info.setForwardsCount(message.forwardsCount().orElse(0));
+        info.setQuestionResponsesCount(message.responsesCount().orElse(0));
+    }
+
+    /**
+     * Decodes a newsletter {@code <plaintext>} payload into a {@link MessageContainer}.
+     *
+     * <p>Returns {@code null} rather than throwing when the payload cannot be parsed, matching the
+     * newsletter receive path which treats an undecodable payload as a silent drop.
+     *
+     * @param plaintext the raw protobuf payload bytes
+     * @return the decoded container, or {@code null} when the payload cannot be parsed
+     */
+    private MessageContainer decodeContainer(byte[] plaintext) {
+        try {
+            return MessageContainerSpec.decode(plaintext);
+        } catch (Throwable throwable) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Cannot decode newsletter live-update payload: {0}", throwable.getMessage());
+            return null;
         }
     }
 
@@ -521,7 +846,8 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
     /**
      * Returns the newsletter for the given JID, creating a blank record when none exists.
      *
-     * <p>Used only by {@link #refreshNewsletter(Jid)}.
+     * <p>Used only by {@link #handleNewsletter(Stanza)} to obtain the target of a {@code live_updates}
+     * apply.
      *
      * @param newsletterJid the newsletter JID
      * @return the matching {@link Newsletter}
@@ -529,36 +855,6 @@ final class NotificationLinkingStreamHandler extends SocketStreamHandler.Concurr
     private Newsletter ensureNewsletter(Jid newsletterJid) {
         return whatsapp.store().chatStore().findNewsletterByJid(newsletterJid)
                 .orElseGet(() -> whatsapp.store().chatStore().addNewNewsletter(newsletterJid));
-    }
-
-    /**
-     * Refreshes a newsletter's state, metadata, viewer metadata, unread count, and timestamp by
-     * re-querying it from the server.
-     *
-     * <p>The existing viewer role is preserved across the refresh by passing it as the query
-     * parameter (defaulting to {@link NewsletterViewerRole#GUEST} when the current role is
-     * {@link NewsletterViewerRole#UNKNOWN}) so a non-guest viewer is not downgraded to guest on a
-     * stale server response. When the re-query yields no newsletter, the cached record is left
-     * unchanged.
-     *
-     * @param newsletterJid the newsletter JID to refresh
-     */
-    private void refreshNewsletter(Jid newsletterJid) {
-        var newsletter = ensureNewsletter(newsletterJid);
-        var role = newsletter.viewerMetadata()
-                .map(NewsletterViewerMetadata::role)
-                .filter(existingRole -> existingRole != NewsletterViewerRole.UNKNOWN)
-                .orElse(NewsletterViewerRole.GUEST);
-        var refreshed = whatsapp.queryNewsletter(newsletterJid, role).orElse(null);
-        if (refreshed == null) {
-            return;
-        }
-
-        newsletter.setState(refreshed.state().orElse(null));
-        newsletter.setMetadata(refreshed.metadata().orElse(null));
-        newsletter.setViewerMetadata(refreshed.viewerMetadata().orElse(null));
-        newsletter.setUnreadMessagesCount(refreshed.unreadMessagesCount());
-        newsletter.setTimestamp(refreshed.timestamp().orElse(null));
     }
 
     /**

@@ -1,14 +1,10 @@
 package com.github.auties00.cobalt.calls2.net.transport;
 
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
-import org.bouncycastle.tls.DTLSClientProtocol;
-import org.bouncycastle.tls.DTLSServerProtocol;
-import org.bouncycastle.tls.DTLSTransport;
-import org.bouncycastle.tls.DatagramTransport;
 
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.security.SecureRandom;
+import java.security.GeneralSecurityException;
 import java.util.Objects;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -107,6 +103,14 @@ public final class RelayDataChannel implements LiveRelayTransport.DataChannel {
      * bring-up thread forever.
      */
     private static final int SCTP_CONNECT_TIMEOUT_SECONDS = 10;
+
+    /**
+     * The maximum time the DTLS handshake is allowed to take before {@link #connect()} fails, in milliseconds.
+     *
+     * @implNote This implementation bounds the {@link VoipDtlsTransport#handshake(long)} wait so a relay that
+     * never completes DTLS fails the bring-up rather than retransmitting forever.
+     */
+    private static final long DTLS_HANDSHAKE_TIMEOUT_MILLIS = 10_000L;
 
     /**
      * The per-receive datagram-transport read timeout, in milliseconds.
@@ -225,9 +229,9 @@ public final class RelayDataChannel implements LiveRelayTransport.DataChannel {
         this.relayAddress = Objects.requireNonNull(relayAddress, "relayAddress cannot be null");
         this.relayActiveMode = relayActiveMode;
         Objects.requireNonNull(pinnedFingerprint, "pinnedFingerprint cannot be null");
-        if (pinnedFingerprint.length != VoipDtlsClient.SHA256_FINGERPRINT_LENGTH) {
+        if (pinnedFingerprint.length != VoipDtlsCertificates.SHA256_FINGERPRINT_LENGTH) {
             throw new IllegalArgumentException("pinned fingerprint must be "
-                    + VoipDtlsClient.SHA256_FINGERPRINT_LENGTH + " bytes, got " + pinnedFingerprint.length);
+                    + VoipDtlsCertificates.SHA256_FINGERPRINT_LENGTH + " bytes, got " + pinnedFingerprint.length);
         }
         this.pinnedFingerprint = pinnedFingerprint.clone();
     }
@@ -287,31 +291,30 @@ public final class RelayDataChannel implements LiveRelayTransport.DataChannel {
      * Runs the DTLS handshake over the datagram transport and returns the established DTLS transport.
      *
      * <p>The role is chosen by {@link #relayActiveMode}: in the common passive mode the relay is the DTLS
-     * server and this side runs the {@link VoipDtlsClient}; when the relay block set
-     * {@code enable_edgeray_dtls_active_mode} the relay is the DTLS client and this side runs the
-     * {@link VoipDtlsServer} instead. Both roles present a freshly generated self-signed ECDSA P-256
-     * certificate and pin the relay's certificate to {@link #pinnedFingerprint}; the established transport is
-     * identical whichever role ran it, so everything after this method (the SCTP association and the
-     * pre-negotiated channel) does not branch on the role.
+     * server and this side is the DTLS client; when the relay block set {@code enable_edgeray_dtls_active_mode}
+     * the relay is the DTLS client and this side is the DTLS server instead. Both roles present a freshly
+     * generated self-signed ECDSA P-256 certificate and pin the relay's certificate to
+     * {@link #pinnedFingerprint} through {@link VoipDtlsCertificates#createEngine(boolean, byte[])}; the
+     * established transport is identical whichever role ran it, so everything after this method (the SCTP
+     * association and the pre-negotiated channel) does not branch on the role.
      *
      * @param datagramTransport the datagram transport wired to the host egress and the inbound queue
      * @return the established DTLS application-data transport
      * @throws WhatsAppCallException.DataChannel if the handshake fails or the relay certificate does not pin
-     * @implNote This implementation runs the active-mode {@link VoipDtlsServer} path as a defensive,
-     *           uncaptured branch: every live relay answer observed carries {@code a=setup:passive}, so the
-     *           relay-as-DTLS-client role has never run against a real relay, but the reverse engineering
-     *           deterministically defines it (re/calls2-spec/web-transport-construction-RE.md), so it is
-     *           implemented rather than rejected.
+     * @implNote This implementation runs the active-mode server path as a defensive, uncaptured branch: every
+     *           live relay answer observed carries {@code a=setup:passive}, so the relay-as-DTLS-client role has
+     *           never run against a real relay, but the reverse engineering deterministically defines it
+     *           (re/calls2-spec/web-transport-construction-RE.md), so it is implemented rather than rejected.
+     *           The DTLS record and handshake layer is the JDK's own {@code DTLSv1.2} {@link javax.net.ssl.SSLEngine}
+     *           driven by {@link VoipDtlsTransport}, not a third-party provider.
      */
-    private DTLSTransport handshake(DatagramTransport datagramTransport) {
+    private VoipDtlsTransport handshake(RelayDatagramTransport datagramTransport) {
         try {
-            if (relayActiveMode) {
-                var server = new VoipDtlsServer(pinnedFingerprint);
-                return new DTLSServerProtocol().accept(server, datagramTransport);
-            }
-            var client = new VoipDtlsClient(pinnedFingerprint);
-            return new DTLSClientProtocol().connect(client, datagramTransport);
-        } catch (IOException exception) {
+            var engine = VoipDtlsCertificates.createEngine(!relayActiveMode, pinnedFingerprint);
+            var transport = new VoipDtlsTransport(engine, datagramTransport);
+            transport.handshake(DTLS_HANDSHAKE_TIMEOUT_MILLIS);
+            return transport;
+        } catch (GeneralSecurityException | IOException exception) {
             throw new WhatsAppCallException.DataChannel("relay DTLS handshake failed", exception);
         }
     }
@@ -449,123 +452,63 @@ public final class RelayDataChannel implements LiveRelayTransport.DataChannel {
     }
 
     /**
-     * Bridges BouncyCastle's DTLS record layer to the host UDP egress and the inbound DTLS-record queue.
+     * Bridges the JDK DTLS record layer to the host UDP egress and the inbound DTLS-record queue.
      *
-     * <p>BouncyCastle drives DTLS over a {@link DatagramTransport}: it writes one DTLS record per
-     * {@link #send(byte[], int, int)} and reads one per {@link #receive(byte[], int, int, int)}.
-     * {@link #send(byte[], int, int)} forwards the record to {@link RelayDataChannel#egress} addressed to the
-     * relay; {@link #receive(byte[], int, int, int)} polls {@link RelayDataChannel#inbound}, which
-     * {@link RelayDataChannel#feedDtlsRecord(byte[])} fills from the host socket reader. The poison record
-     * offered on close returns a non-positive read so the DTLS layer observes the closed transport.
+     * <p>{@link VoipDtlsTransport} drives DTLS over this {@link VoipDtlsTransport.Datagrams} seam: it writes one
+     * DTLS record per {@link #send(byte[])} and reads one per {@link #receive(int)}. {@link #send(byte[])}
+     * forwards the record to {@link RelayDataChannel#egress} addressed to the relay; {@link #receive(int)} polls
+     * {@link RelayDataChannel#inbound}, which {@link RelayDataChannel#feedDtlsRecord(byte[])} fills from the host
+     * socket reader. The poison record offered on close returns {@code null} so the DTLS layer observes the
+     * closed transport.
      */
-    private final class RelayDatagramTransport implements DatagramTransport {
-        /**
-         * {@inheritDoc}
-         *
-         * @return {@link RelayDataChannel#MAX_MESSAGE_SIZE}, the path MTU advertised to the DTLS layer
-         */
-        @Override
-        public int getReceiveLimit() {
-            return MAX_MESSAGE_SIZE;
-        }
-
-        /**
-         * {@inheritDoc}
-         *
-         * @return {@link RelayDataChannel#MAX_MESSAGE_SIZE}, the path MTU advertised to the DTLS layer
-         */
-        @Override
-        public int getSendLimit() {
-            return MAX_MESSAGE_SIZE;
-        }
-
-        /**
-         * {@inheritDoc}
-         *
-         * <p>Polls the inbound DTLS-record queue with the given timeout and copies one record into the
-         * buffer; a timeout, a closed transport (the poison record), or an empty record returns {@code -1} so
-         * the DTLS layer retries or observes the close.
-         *
-         * @param buf      {@inheritDoc}
-         * @param off      {@inheritDoc}
-         * @param len      {@inheritDoc}
-         * @param waitMillis {@inheritDoc}
-         * @return the number of bytes read, or {@code -1} on timeout or close
-         * @throws IOException if the wait is interrupted
-         */
-        @Override
-        public int receive(byte[] buf, int off, int len, int waitMillis) throws IOException {
-            if (closed.get()) {
-                return -1;
-            }
-            byte[] record;
-            try {
-                record = inbound.poll(Math.max(1, waitMillis), TimeUnit.MILLISECONDS);
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                throw new IOException("interrupted while reading a DTLS record", exception);
-            }
-            if (record == null || record == POISON || record.length == 0) {
-                return -1;
-            }
-            var count = Math.min(len, record.length);
-            System.arraycopy(record, 0, buf, off, count);
-            return count;
-        }
-
+    private final class RelayDatagramTransport implements VoipDtlsTransport.Datagrams {
         /**
          * {@inheritDoc}
          *
          * <p>Writes one DTLS record to the host egress addressed to the relay. A failed egress send is a
          * best-effort loss the DTLS retransmission recovers, so it does not raise.
          *
-         * @param buf {@inheritDoc}
-         * @param off {@inheritDoc}
-         * @param len {@inheritDoc}
+         * @param record {@inheritDoc}
          */
         @Override
-        public void send(byte[] buf, int off, int len) {
+        public void send(byte[] record) {
             if (closed.get()) {
                 return;
             }
-            var record = new byte[len];
-            System.arraycopy(buf, off, record, 0, len);
             var sent = egress.send(record, relayAddress);
             if (firstOutboundDtlsLogged.compareAndSet(false, true)) {
                 LOGGER.log(System.Logger.Level.INFO,
                         "calls2 relay first outbound DTLS record (ClientHello) to {0}: {1} of {2} bytes accepted",
-                        relayAddress, sent, len);
+                        relayAddress, sent, record.length);
             }
         }
 
         /**
          * {@inheritDoc}
          *
-         * <p>Wakes any blocked {@link #receive(byte[], int, int, int)} with the poison record; the channel's
-         * own {@link RelayDataChannel#close()} owns the rest of the teardown.
+         * <p>Polls the inbound DTLS-record queue with the given timeout; a timeout, a closed transport (the
+         * poison record), or an empty record returns {@code null} so the DTLS layer retries or observes the
+         * close.
+         *
+         * @param waitMillis {@inheritDoc}
+         * @return {@inheritDoc}
          */
         @Override
-        public void close() {
-            inbound.offer(POISON);
+        public byte[] receive(int waitMillis) {
+            if (closed.get()) {
+                return null;
+            }
+            byte[] record;
+            try {
+                record = inbound.poll(Math.max(1, waitMillis), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+            if (record == null || record == POISON || record.length == 0) {
+                return null;
+            }
+            return record;
         }
-    }
-
-    /**
-     * Returns the shared secure random source the DTLS client draws nonces and key material from.
-     *
-     * @return a process-shared {@link SecureRandom}
-     */
-    static SecureRandom secureRandom() {
-        return SecureRandomHolder.INSTANCE;
-    }
-
-    /**
-     * Lazily holds the shared {@link SecureRandom} so its one-time seeding is deferred to first DTLS use.
-     */
-    private static final class SecureRandomHolder {
-        /**
-         * The single secure random source for the relay DTLS client.
-         */
-        private static final SecureRandom INSTANCE = new SecureRandom();
     }
 }

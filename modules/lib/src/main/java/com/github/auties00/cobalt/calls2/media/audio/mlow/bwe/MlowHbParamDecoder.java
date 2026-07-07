@@ -3,8 +3,6 @@ package com.github.auties00.cobalt.calls2.media.audio.mlow.bwe;
 import com.github.auties00.cobalt.calls2.media.audio.mlow.entropy.MlowEntropyWrapper;
 import com.github.auties00.cobalt.calls2.media.audio.mlow.entropy.MlowRangeDecoder;
 
-import java.util.Arrays;
-
 /**
  * Per-frame high-band parameter decoder for the MLow speech codec, the port of {@code smpl_decode_hb_params}
  * ({@code smpl_param_coding.c}).
@@ -26,9 +24,10 @@ import java.util.Arrays;
  * @implNote This implementation ports {@code smpl_decode_hb_params} statement for statement: the gain decode
  * first, then the LSF decode, then the {@code prev_hb_lpc_ix} update. The conditional LSF CMF row is windowed
  * out of the concatenated conditional block by {@code hb_lpc_vq_sel_cond[voiced][prev_hb_lpc_ix] * CMFLen}, the
- * native pointer arithmetic; the windowed row is copied to a fresh array so the shared
- * {@link MlowEntropyWrapper#decodeUpdate(MlowRangeDecoder, int[])} (which measures all spans relative to its
- * first entry) reads it as a standalone CMF. The frame-length index is the native {@code frame_length_16 == 320}
+ * native pointer arithmetic; the offset-aware
+ * {@link MlowEntropyWrapper#decodeUpdate(MlowRangeDecoder, int[], int, int)} reads that row in place (measuring
+ * every span relative to its first windowed entry) without copying it out. The frame-length index is the
+ * native {@code frame_length_16 == 320}
  * test, expressed here as the four-high-band-subframe (20 ms) case.
  */
 public final class MlowHbParamDecoder {
@@ -84,16 +83,15 @@ public final class MlowHbParamDecoder {
         int gainQi = MlowEntropyWrapper.decodeUpdate(decoder, gainCmf);
 
         // Decode LSFs.
-        int[] lsfCmf;
+        int lsfIdx;
         if (condCoding && lowRate) {
             int cmfLen = MlowHbTables.lsfSize(v, lr) + 1;
             int row = MlowHbTables.selCond(v)[prevHbLpcIx];
             int[] condBlock = MlowHbTables.lsfCmfCond(v);
-            lsfCmf = Arrays.copyOfRange(condBlock, row * cmfLen, row * cmfLen + cmfLen);
+            lsfIdx = MlowEntropyWrapper.decodeUpdate(decoder, condBlock, row * cmfLen, cmfLen);
         } else {
-            lsfCmf = MlowHbTables.lsfCmf(v, lr);
+            lsfIdx = MlowEntropyWrapper.decodeUpdate(decoder, MlowHbTables.lsfCmf(v, lr));
         }
-        int lsfIdx = MlowEntropyWrapper.decodeUpdate(decoder, lsfCmf);
         prevHbLpcIx = lsfIdx;
 
         return new MlowBandwidthExtension.HbFrameParams(gainQi, lsfIdx);

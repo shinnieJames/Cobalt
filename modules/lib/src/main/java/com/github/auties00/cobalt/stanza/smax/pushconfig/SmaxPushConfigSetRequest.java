@@ -55,7 +55,7 @@ public final class SmaxPushConfigSetRequest implements SmaxStanza.Request {
      * Builds the {@code <iq>} envelope and nests the payload variant as its sole child.
      *
      * <p>The envelope is addressed to the user server with {@code xmlns="urn:xmpp:whatsapp:push"}
-     * and {@code type="set"}; the payload is produced by {@link SmaxPushConfigSetSetVariant#toNode()}.
+     * and {@code type="set"}; the payload is produced by {@link SmaxPushConfigSetSetVariant#toStanza()}.
      *
      * @implNote This implementation addresses the stanza to {@link Jid#userServer()} rather than a
      * literal {@code s.whatsapp.net} string so the destination tracks the shared server constant.
@@ -70,7 +70,7 @@ public final class SmaxPushConfigSetRequest implements SmaxStanza.Request {
                 .attribute("xmlns", "urn:xmpp:whatsapp:push")
                 .attribute("to", Jid.userServer())
                 .attribute("type", "set")
-                .content(variant.toNode());
+                .content(variant.toStanza());
     }
 
     /**

@@ -20,11 +20,16 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.wam.event.NonMessagePeerDataRequestEventBuilder;
+import com.github.auties00.cobalt.wam.event.WaffleCompanionStateLifecycleEventBuilder;
 import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
+import com.github.auties00.cobalt.wam.type.WaffleLifecycleLinkStateType;
+import com.github.auties00.cobalt.wam.type.WaffleLifecycleTraceActionType;
+import com.github.auties00.cobalt.wam.type.WaffleLifecycleTraceSourceType;
 import com.github.auties00.cobalt.wam.WamService;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Mirrors the WAFFLE (WhatsApp - Meta Account) account-linking state and triggers a primary-device
@@ -106,13 +111,20 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
      * timestamp are persisted via
      * {@link LinkedWhatsAppAccountStore#setLinkedMetaAccountState(WaffleAccountLinkStateAction.AccountLinkState)}
      * and
-     * {@link LinkedWhatsAppAccountStore#setLinkedMetaAccountStateTimestamp(java.time.Instant)},
-     * and an {@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE} state triggers
-     * {@link #requestNonceFromPrimary(LinkedWhatsAppClient)}.
+     * {@link LinkedWhatsAppAccountStore#setLinkedMetaAccountStateTimestamp(java.time.Instant)}.
+     * A resolved {@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE} state emits the
+     * syncd-received WAFFLE lifecycle event via {@link #emitSyncdReceived(Optional)} and, unless the
+     * account was already {@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE}, triggers
+     * {@link #requestNonceFromPrimary(LinkedWhatsAppClient)}; the link state recorded before the store
+     * overwrite is captured first so the emitted trace action can distinguish a first link, a state
+     * transition, and an already-active re-sync.
      *
      * @implNote
-     * This implementation drops WA Web's per-mutation warning counters and "already Active" no-op
-     * log as telemetry; Cobalt's store layer absorbs WA Web's account-linking-state record.
+     * This implementation drops WA Web's per-mutation warning counters (unsupported and malformed
+     * mutation counts); Cobalt's store layer absorbs WA Web's account-linking-state record. Unlike WA
+     * Web the store is written for every resolved state (including paused and unlinked), whereas the
+     * lifecycle telemetry and the nonce fetch stay confined to the active resolution to match WA Web's
+     * {@code logSyncdReceived} contract.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebWaffleAccountLinkStateSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -145,10 +157,14 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
         if (latest != null) {
             var action = (WaffleAccountLinkStateAction) latest.value().flatMap(sav -> sav.action()).orElseThrow();
             var linkState = action.linkState().orElseThrow();
+            var previousState = client.store().accountStore().linkedMetaAccountState();
             client.store().accountStore().setLinkedMetaAccountState(linkState);
             client.store().accountStore().setLinkedMetaAccountStateTimestamp(latest.timestamp());
             if (linkState == WaffleAccountLinkStateAction.AccountLinkState.ACTIVE) {
-                requestNonceFromPrimary(client);
+                emitSyncdReceived(previousState);
+                if (previousState.orElse(null) != WaffleAccountLinkStateAction.AccountLinkState.ACTIVE) {
+                    requestNonceFromPrimary(client);
+                }
             }
         }
 
@@ -159,9 +175,10 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
      * {@inheritDoc}
      *
      * <p>This is the single-mutation adapter and applies the same gate-and-validate-and-persist
-     * sequence as the batch entry point on a list of size one. The
-     * {@link #requestNonceFromPrimary(LinkedWhatsAppClient)} side-effect runs inline when the resolved
-     * state is {@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE}.
+     * sequence as the batch entry point on a list of size one. When the resolved state is
+     * {@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE} the syncd-received lifecycle event
+     * is emitted via {@link #emitSyncdReceived(Optional)} and, unless the account was already active,
+     * the {@link #requestNonceFromPrimary(LinkedWhatsAppClient)} side-effect runs inline.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebWaffleAccountLinkStateSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -180,10 +197,14 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
         }
 
         var linkState = action.linkState().orElseThrow();
+        var previousState = client.store().accountStore().linkedMetaAccountState();
         client.store().accountStore().setLinkedMetaAccountState(linkState);
         client.store().accountStore().setLinkedMetaAccountStateTimestamp(mutation.timestamp());
         if (linkState == WaffleAccountLinkStateAction.AccountLinkState.ACTIVE) {
-            requestNonceFromPrimary(client);
+            emitSyncdReceived(previousState);
+            if (previousState.orElse(null) != WaffleAccountLinkStateAction.AccountLinkState.ACTIVE) {
+                requestNonceFromPrimary(client);
+            }
         }
         return MutationApplicationResult.success();
     }
@@ -196,19 +217,24 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
      * a fresh WAFFLE linking nonce that the companion needs to complete the linking handshake with
      * Meta's servers. A {@link PeerDataOperationRequestType#WAFFLE_LINKING_NONCE_FETCH} request is
      * wrapped in a {@link ProtocolMessage.Type#PEER_DATA_OPERATION_REQUEST_MESSAGE} and dispatched
-     * to the current account on device 0, and a corresponding peer-data-request event is committed
-     * through the {@link WamService}. The method returns without effect when the store has no
-     * current JID.
+     * to the current account on device 0. Two telemetry events are committed through the
+     * {@link WamService}: the WAFFLE lifecycle event with trace action
+     * {@link WaffleLifecycleTraceActionType#NONCE_FETCH_INITIATED} and trace source
+     * {@link WaffleLifecycleTraceSourceType#PRIMARY_NONCE_REQUEST}, and the generic
+     * peer-data-request event. The method returns without effect when the store has no current JID.
      *
      * @implNote
      * This implementation rebuilds the peer protocol message directly rather than going through WA
-     * Web's nonce-fetch API delegation chain. The in-flight promise memoization performed by WA Web
-     * is dropped because Cobalt's sync pipeline already serializes mutations on a virtual thread.
+     * Web's nonce-fetch API delegation chain. The in-flight promise memoization and 3-second rate
+     * limit performed by WA Web are dropped because Cobalt's sync pipeline already serializes
+     * mutations on a virtual thread, so every reachable call is an initiated fetch and WA Web's
+     * {@link WaffleLifecycleTraceActionType#NONCE_FETCH_DEDUPLICATED} branch is never taken.
      *
      * @param client the {@link LinkedWhatsAppClient} used to dispatch the peer message
      */
     @WhatsAppWebExport(moduleName = "WAWebAccountLinkingNonceFetchAPI", exports = "requestNonceFromPrimary", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSendNonMessageDataRequest", exports = "sendPeerDataOperationRequest", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebWaffleLifecycleWamLogger", exports = "logNonceFetch", adaptation = WhatsAppAdaptation.ADAPTED)
     private void requestNonceFromPrimary(LinkedWhatsAppClient client) {
         var me = client.store().accountStore().jid().orElse(null);
         if (me == null) {
@@ -226,11 +252,89 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
                 .protocolMessage(protocol)
                 .build();
         var sessionId = MessageIdGenerator.generate(MessageIdVersion.V2, me);
+        this.wamService.commit(new WaffleCompanionStateLifecycleEventBuilder()
+                .waffleLifecycleTraceAction(WaffleLifecycleTraceActionType.NONCE_FETCH_INITIATED)
+                .waffleLifecycleTraceSource(WaffleLifecycleTraceSourceType.PRIMARY_NONCE_REQUEST)
+                .build());
         this.wamService.commit(new NonMessagePeerDataRequestEventBuilder()
                 .peerDataRequestCount(1)
                 .peerDataRequestType(PeerDataRequestType.WAFFLE_LINKING_NONCE_FETCH)
                 .peerDataRequestSessionId(sessionId)
                 .build());
         client.sendMessage(me.withDevice(0), container);
+    }
+
+    /**
+     * Commits the WAFFLE companion-state lifecycle event for an app-state syncd-received transition.
+     *
+     * <p>Invoked once per applied mutation (or per applied batch) when the resolved link state is
+     * {@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE}, mirroring WA Web's
+     * {@code logSyncdReceived} trace. The {@code previousState} captured before the store overwrite
+     * selects the trace action:
+     * <ul>
+     *     <li>empty (no prior record) yields
+     *     {@link WaffleLifecycleTraceActionType#SYNCD_RECEIVED_NO_EXISTING_ROW} with link state
+     *     {@link WaffleLifecycleLinkStateType#NOT_APPLICABLE};</li>
+     *     <li>a non-{@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE} prior state yields
+     *     {@link WaffleLifecycleTraceActionType#SYNCD_RECEIVED_STATE_TRANSITION} with the prior link
+     *     state mapped through {@link #mapLinkStateToWam(WaffleAccountLinkStateAction.AccountLinkState)};</li>
+     *     <li>an already-{@link WaffleAccountLinkStateAction.AccountLinkState#ACTIVE} prior state yields
+     *     {@link WaffleLifecycleTraceActionType#SYNCD_RECEIVED_ALREADY_ACTIVE} with link state
+     *     {@link WaffleLifecycleLinkStateType#ACTIVE}.</li>
+     * </ul>
+     * The trace source is always {@link WaffleLifecycleTraceSourceType#SYNCD}, and the has-existing-row
+     * flag reflects whether {@code previousState} was present.
+     *
+     * @implNote
+     * This implementation reports {@code waffleLifecycleHasAccessToken} as {@code false} unconditionally
+     * because Cobalt's account store persists only the link state and its timestamp, never a Meta
+     * access token; WA Web derives the flag from the {@code accesstoken} column of its account-linking
+     * database row.
+     *
+     * @param previousState the link state recorded before this mutation was applied, empty when no prior
+     *                       WAFFLE record existed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWaffleLifecycleWamLogger", exports = "logSyncdReceived", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitSyncdReceived(Optional<WaffleAccountLinkStateAction.AccountLinkState> previousState) {
+        WaffleLifecycleTraceActionType traceAction;
+        WaffleLifecycleLinkStateType linkState;
+        if (previousState.isEmpty()) {
+            traceAction = WaffleLifecycleTraceActionType.SYNCD_RECEIVED_NO_EXISTING_ROW;
+            linkState = WaffleLifecycleLinkStateType.NOT_APPLICABLE;
+        } else if (previousState.get() != WaffleAccountLinkStateAction.AccountLinkState.ACTIVE) {
+            traceAction = WaffleLifecycleTraceActionType.SYNCD_RECEIVED_STATE_TRANSITION;
+            linkState = mapLinkStateToWam(previousState.get());
+        } else {
+            traceAction = WaffleLifecycleTraceActionType.SYNCD_RECEIVED_ALREADY_ACTIVE;
+            linkState = WaffleLifecycleLinkStateType.ACTIVE;
+        }
+        this.wamService.commit(new WaffleCompanionStateLifecycleEventBuilder()
+                .waffleLifecycleTraceAction(traceAction)
+                .waffleLifecycleTraceSource(WaffleLifecycleTraceSourceType.SYNCD)
+                .waffleLifecycleLinkState(linkState)
+                .waffleLifecycleHasExistingRow(previousState.isPresent())
+                .waffleLifecycleHasAccessToken(false)
+                .build());
+    }
+
+    /**
+     * Maps a Cobalt {@link WaffleAccountLinkStateAction.AccountLinkState} to its WAM
+     * {@link WaffleLifecycleLinkStateType} counterpart.
+     *
+     * <p>{@link WaffleAccountLinkStateAction.AccountLinkState#UNKNOWN} has no dedicated WAM constant
+     * and collapses to {@link WaffleLifecycleLinkStateType#NOT_APPLICABLE}, matching WA Web's
+     * {@code mapLinkStateToWam} default branch.
+     *
+     * @param state the account link state to translate
+     * @return the corresponding WAM link-state enum constant
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWaffleLifecycleWamLogger", exports = "mapLinkStateToWam", adaptation = WhatsAppAdaptation.DIRECT)
+    private static WaffleLifecycleLinkStateType mapLinkStateToWam(WaffleAccountLinkStateAction.AccountLinkState state) {
+        return switch (state) {
+            case ACTIVE -> WaffleLifecycleLinkStateType.ACTIVE;
+            case PAUSED -> WaffleLifecycleLinkStateType.PAUSED;
+            case UNLINKED -> WaffleLifecycleLinkStateType.UNLINKED;
+            case UNKNOWN -> WaffleLifecycleLinkStateType.NOT_APPLICABLE;
+        };
     }
 }

@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.calls2.stream.AudioInput;
 import com.github.auties00.cobalt.calls2.stream.AudioOutput;
 import com.github.auties00.cobalt.calls2.stream.VideoInput;
 import com.github.auties00.cobalt.calls2.stream.VideoOutput;
+import com.github.auties00.cobalt.emoji.WhatsAppEmoji;
 import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.call.CallInteraction;
@@ -17,6 +18,8 @@ import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
 import com.github.auties00.cobalt.graphql.whatsapp.WhatsAppGraphQlOperation;
 import com.github.auties00.cobalt.listener.WhatsAppListener;
 import com.github.auties00.cobalt.listener.linked.*;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.bot.profile.BotDirectory;
 import com.github.auties00.cobalt.model.bot.profile.BotProfile;
 import com.github.auties00.cobalt.model.business.*;
@@ -1679,6 +1682,23 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void sendCallReaction(Call call, String emoji);
 
     /**
+     * Broadcasts a typed emoji reaction to every other participant of an in-progress call.
+     *
+     * <p>Convenience overload of {@link #sendCallReaction(Call, String)} that broadcasts the
+     * {@linkplain WhatsAppEmoji#value() canonical value} of {@code emoji}.
+     *
+     * @param call  the in-progress call; never {@code null}
+     * @param emoji the emoji to broadcast; never {@code null}
+     * @throws NullPointerException            if {@code call} or {@code emoji} is {@code null}
+     * @throws WhatsAppSessionException.Closed if the socket has been closed
+     * @see #sendCallReaction(Call, String)
+     */
+    default void sendCallReaction(Call call, WhatsAppEmoji emoji) {
+        Objects.requireNonNull(emoji, "emoji cannot be null");
+        sendCallReaction(call, emoji.value());
+    }
+
+    /**
      * Raises the local participant's hand in an in-progress call.
      *
      * @apiNote
@@ -2582,6 +2602,30 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     void revokeNewsletterMessage(JidProvider newsletter, String serverMessageId);
 
     /**
+     * Admin-revokes a status (story) previously posted to a newsletter owned by this account.
+     *
+     * <p>This is the channel status/story revoke, distinct from
+     * {@link #revokeNewsletterMessage(JidProvider, String)}: it removes a
+     * status published to the newsletter's status feed rather than a message
+     * from its main timeline. The revoke rides on a {@code <status>} root
+     * addressed to the newsletter and identifying the status by
+     * {@code statusId}.
+     *
+     * @apiNote
+     * Drives the "Delete" affordance on a newsletter status from the channel
+     * admin context: revokes the published status identified by
+     * {@code statusId} so followers no longer see it.
+     *
+     * @param newsletter the newsletter JID hosting the status; never {@code null}
+     * @param statusId   the target status id; never {@code null}
+     * @throws NullPointerException            if {@code newsletter} or {@code statusId} is {@code null}
+     * @throws WhatsAppSessionException.Closed if the socket is closed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterRevokeStatusAction", exports = "revokeNewsletterStatusAction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    void revokeNewsletterStatus(JidProvider newsletter, String statusId);
+
+    /**
      * Accepts a pending newsletter admin invitation addressed to this account.
      *
      * @apiNote
@@ -3209,6 +3253,25 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *                                         open
      */
     void editTextStatus(String text, String emoji, Duration ephemeralDuration);
+
+    /**
+     * Publishes or clears the authenticated user's ephemeral text status with a typed emoji decoration.
+     *
+     * <p>Convenience overload of {@link #editTextStatus(String, String, Duration)} that publishes the
+     * {@linkplain WhatsAppEmoji#value() canonical value} of {@code emoji} as the decoration, or no
+     * decoration when {@code emoji} is {@code null}.
+     *
+     * @param text              the status body, or {@code null} / empty to clear the existing status
+     * @param emoji             the optional emoji decoration, or {@code null} to publish without an emoji
+     * @param ephemeralDuration the auto-expiry duration; {@code null} or {@link Duration#ZERO} disables auto-expiry
+     * @throws IllegalArgumentException        if {@code ephemeralDuration} is negative
+     * @throws WhatsAppServerRuntimeException  if the relay rejects the mutation
+     * @throws WhatsAppSessionException.Closed if the socket is no longer open
+     * @see #editTextStatus(String, String, Duration)
+     */
+    default void editTextStatus(String text, WhatsAppEmoji emoji, Duration ephemeralDuration) {
+        editTextStatus(text, emoji == null ? null : emoji.value(), ephemeralDuration);
+    }
 
     /**
      * Refreshes the cached text statuses published by one or more users from the server.
@@ -5525,6 +5588,36 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
      *                                  or the collection is empty
      */
     Map<Jid, GroupParticipantStatus> addGroupParticipants(JidProvider group, Collection<? extends JidProvider> toAdd);
+
+    /**
+     * Registers a server-side pending group "store invite" for invitees who
+     * cannot be reached on WhatsApp, returning the per-invitee relay outcome.
+     *
+     * <p>Backs the SMS fallback for group invitations: when a target phone
+     * number is not registered on WhatsApp, the relay stores a pending
+     * invitation keyed by that number so the invitee is auto-joined to the
+     * group once they register and come online. The returned map pairs each
+     * requested invitee, in the supplied order, with an opaque relay
+     * {@link OptionalLong} outcome code; an empty {@code OptionalLong} means the
+     * invite was stored successfully, while a present value carries the
+     * relay-defined failure code for that invitee. The codes are telemetry
+     * grade: this method never branches on them or throws on a per-invitee
+     * failure, it merely surfaces them. When the relay answers without a
+     * result envelope the returned map is empty.
+     *
+     * @param group    the target group JID; never {@code null}
+     * @param invitees the invitee JIDs to store invites for; never
+     *                 {@code null} and must be non-empty
+     * @return a map from each requested invitee JID to its relay outcome code;
+     *         an empty {@link OptionalLong} value signals success and an empty
+     *         map signals a missing result envelope
+     * @throws NullPointerException     if any argument is {@code null}
+     * @throws IllegalArgumentException if the JID is not a group/community or
+     *                                  the collection is empty
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMexGroupStoreInviteSmsJob", exports = "mexGroupStoreInviteSms",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    Map<Jid, OptionalLong> storeGroupInviteSms(JidProvider group, Collection<? extends JidProvider> invitees);
 
     /**
      * Removes one or more participants from a WhatsApp group without
@@ -8819,6 +8912,8 @@ public non-sealed interface LinkedWhatsAppClient extends WhatsAppClient<LinkedWh
     LinkedWhatsAppClient addNewStatusListener(LinkedNewStatusListener listener);
 
     LinkedWhatsAppClient addAboutChangedListener(LinkedAboutChangedListener listener);
+
+    LinkedWhatsAppClient addIntegrityChallengeListener(LinkedIntegrityChallengeListener listener);
 
     LinkedWhatsAppClient addPrivacySettingChangedListener(LinkedPrivacySettingChangedListener listener);
 

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.group;
 
 import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.smax.groups.SmaxGroupsGroupsDirtyNotificationResponse;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
@@ -22,6 +23,7 @@ import com.github.auties00.cobalt.wam.event.GroupJoinCEventBuilder;
 
 import java.time.Instant;
 import java.util.LinkedHashSet;
+import java.util.List;
 
 /**
  * Handles {@code type="w:gp2"} group and community notifications.
@@ -36,7 +38,8 @@ import java.util.LinkedHashSet;
  * {@link ChatMetadata}, then fires a full metadata refresh for every group
  * JID the notification references (including linked groups and subgroup
  * suggestions). A {@code groups_dirty} child short-circuits to a metadata
- * refresh and skips inline mutation.
+ * refresh of every group named in its {@code <group jid>} list and skips
+ * inline mutation.
  *
  * @implNote
  * This implementation follows a two-phase approach: every action child is
@@ -127,10 +130,11 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
      *
      * <p>Processing aborts when the {@code from} attribute is absent or does
      * not name a group or community. A {@code groups_dirty} child
-     * short-circuits to a metadata refresh of the target group and skips the
-     * action loop. Otherwise the chat is resolved (creating a new one when
-     * absent), the action children are applied in order, and every group JID
-     * accumulated across the actions is refreshed.
+     * short-circuits to a metadata refresh of every group named in its
+     * {@code <group jid>} list (falling back to the envelope group when the
+     * list is empty) and skips the action loop. Otherwise the chat is resolved
+     * (creating a new one when absent), the action children are applied in
+     * order, and every group JID accumulated across the actions is refreshed.
      *
      * @implNote
      * This implementation bumps the chat's {@code conversationTimestamp} and
@@ -147,7 +151,13 @@ public final class NotificationGroupStreamHandler extends SocketStreamHandler.Co
         }
 
         if (stanza.hasChild("groups_dirty")) {
-            refreshGroup(groupJid);
+            var dirtyGroups = SmaxGroupsGroupsDirtyNotificationResponse.of(stanza)
+                    .map(SmaxGroupsGroupsDirtyNotificationResponse::dirtyGroups)
+                    .filter(groups -> !groups.isEmpty())
+                    .orElseGet(() -> List.of(groupJid));
+            for (var dirtyGroup : dirtyGroups) {
+                refreshGroup(dirtyGroup);
+            }
             return;
         }
 

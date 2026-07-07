@@ -10,7 +10,7 @@ package com.github.auties00.cobalt.calls2.dsp;
  * sides are wired together at call bring-up so neither has a compile-time dependency on the other's
  * concrete type: the video unit depends only on this interface, and the audio unit supplies the
  * implementation. The audio jitter buffer's ingestion entry point is
- * {@link NetEq#ingestAvSyncFeedbackMillis(int)}, so the wiring-time implementation of this sink rounds
+ * {@link LiveNetEq#ingestAvSyncFeedbackMillis(int)}, so the wiring-time implementation of this sink rounds
  * {@link AvSyncFeedback#correctionMs()} to whole milliseconds and forwards it there; the sign convention
  * matches, a positive correction lengthening the audio delay to wait for slower video.
  *

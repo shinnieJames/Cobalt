@@ -123,7 +123,7 @@ public final class SmaxNewsletterReportRequest implements SmaxStanza.Request {
     public StanzaBuilder toStanza() {
         var children = new ArrayList<Stanza>(messages.size());
         for (var message : messages) {
-            children.add(message.toNode());
+            children.add(message.toStanza());
         }
         var spamListBuilder = new StanzaBuilder()
                 .description("spam_list")

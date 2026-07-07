@@ -252,6 +252,7 @@ public final class LiveAudioPlaybackDriver implements AudioPlaybackDriver {
         var blockSamples = framesPerBuffer * channelCount;
         var pcm = new short[blockSamples];
         var bytes = new byte[blockSamples * 2];
+        var shortView = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
         while (state == AudioDriverState.ACTIVE) {
             var produced = 0;
             var s = source;
@@ -270,7 +271,8 @@ public final class LiveAudioPlaybackDriver implements AudioPlaybackDriver {
             if (produced < blockSamples) {
                 Arrays.fill(pcm, produced, blockSamples, (short) 0);
             }
-            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(pcm);
+            shortView.rewind();
+            shortView.put(pcm);
             if (state != AudioDriverState.ACTIVE) {
                 break;
             }

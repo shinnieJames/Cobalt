@@ -61,6 +61,12 @@ public interface VideoInput {
      * while no frame is ready and returns {@code null} exactly once the sink has been
      * {@linkplain #shutdown() ended} and drained.
      *
+     * <p>The returned frame's {@linkplain VideoFrame#pixels() pixel buffer} is borrowed from a pool the
+     * engine reuses across frames: it is valid only until the next call to this method on the same
+     * input, after which the engine may refill and re-offer it. A consumer that needs the pixels beyond
+     * the next read copies them out; it must never retain the returned array past the next read nor
+     * mutate it.
+     *
      * @return the next frame, or {@code null} at end-of-stream
      * @throws InterruptedException if the calling thread is interrupted while waiting
      */

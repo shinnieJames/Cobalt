@@ -49,6 +49,11 @@ import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationReq
 import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
 import com.github.auties00.cobalt.model.message.text.CommentMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
+import com.github.auties00.cobalt.model.message.commerce.OrderMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.message.payment.PaymentInviteMessage;
+import com.github.auties00.cobalt.model.message.payment.RequestPaymentMessage;
+import com.github.auties00.cobalt.model.message.payment.SendPaymentMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.payment.OrphanPaymentNotificationBuilder;
 import com.github.auties00.cobalt.model.payment.PaymentInfo;
@@ -67,11 +72,22 @@ import com.github.auties00.cobalt.wam.event.MessageHighRetryCountEventBuilder;
 import com.github.auties00.cobalt.wam.event.MessageReceiveEventBuilder;
 import com.github.auties00.cobalt.wam.event.NonMessagePeerDataOperationResponseEventBuilder;
 import com.github.auties00.cobalt.wam.event.OfflineCountTooHighEventBuilder;
+import com.github.auties00.cobalt.wam.event.BusinessTemplateRichOrderStatusEventBuilder;
+import com.github.auties00.cobalt.wam.event.PlaceholderActivityEventBuilder;
+import com.github.auties00.cobalt.wam.event.PsRichOrderStatusMessageInconsistentPayloadReceivedEventBuilder;
+import com.github.auties00.cobalt.wam.event.StructuredMessageBuyerReceiveEventBuilder;
 import com.github.auties00.cobalt.wam.event.StructuredMessageReceiveEventBuilder;
 import com.github.auties00.cobalt.wam.event.UnknownStanzaEventBuilder;
+import com.github.auties00.cobalt.wam.event.WebcMessageProcessingPerfEventBuilder;
 import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingActivity;
 import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingMessages;
 import com.github.auties00.cobalt.wam.type.BizPlatform;
+import com.github.auties00.cobalt.wam.type.ChatsFolderType;
+import com.github.auties00.cobalt.wam.type.ContactType;
+import com.github.auties00.cobalt.wam.type.PlaceholderAction;
+import com.github.auties00.cobalt.wam.type.PlaceholderChatType;
+import com.github.auties00.cobalt.wam.type.PlaceholderReasonType;
+import com.github.auties00.cobalt.wam.type.PlaceholderType;
 import com.github.auties00.cobalt.wam.type.StructuredMessageClass;
 import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
@@ -99,8 +115,11 @@ import java.io.ByteArrayInputStream;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -180,6 +199,28 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
     @WhatsAppWebExport(moduleName = "WAWebMaybePostOfflineCountTooHighMetric",
             exports = "OFFLINE_COUNT_TOO_HIGH_THRESHOLD", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int OFFLINE_COUNT_TOO_HIGH_THRESHOLD = 11;
+
+    /**
+     * The native-flow button name marking an interactive order-details card.
+     *
+     * @implNote
+     * This implementation matches
+     * {@code WAWebInteractiveMessagesNativeFlowName.ORDER_DETAILS}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebInteractiveMessagesNativeFlowName",
+            exports = "ORDER_DETAILS", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final String ORDER_DETAILS_FLOW = "order_details";
+
+    /**
+     * The native-flow button name marking an interactive rich-order-status card.
+     *
+     * @implNote
+     * This implementation matches
+     * {@code WAWebInteractiveMessagesNativeFlowName.ORDER_STATUS}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebInteractiveMessagesNativeFlowName",
+            exports = "ORDER_STATUS", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final String ORDER_STATUS_FLOW = "order_status";
 
     /**
      * Owning {@link LinkedWhatsAppClient} used to send acknowledgments and
@@ -263,6 +304,27 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
      * Classifies inbound messages against the Defense Mode quarantine policy.
      */
     private final QuarantineService quarantineService;
+
+    /**
+     * Per-chat reference payload of the last received rich-order-status
+     * interactive message, keyed by chat JID.
+     *
+     * <p>Holds the {@code order_status} native-flow button JSON of the most
+     * recently received rich-order-status message in each chat. When a newer
+     * rich-order-status message arrives the stored payload is the referenced
+     * version against which
+     * {@link #emitRichOrderStatusInconsistency(MessageReceiveStanza, String)}
+     * computes the per-field changed flags.
+     *
+     * @implNote
+     * This implementation replaces WA Web's {@code WAWebOrderStatus.getMergedOrderStatus}
+     * lookup of the merged order-status {@code firstMessage}: Cobalt does not
+     * maintain a merged per-order state machine, so the last-seen order-status
+     * payload for the chat serves as the reference version. The map is bounded
+     * only by the number of distinct chats that ever send a rich-order-status
+     * message and is never persisted.
+     */
+    private final Map<Jid, String> lastOrderStatusPayloadByChat = new ConcurrentHashMap<>();
 
     /**
      * Constructs a handler bound to the given collaborators.
@@ -495,6 +557,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
             return;
         }
 
+        var handleStartNanos = System.nanoTime();
         ackSender.sendAck(AckClass.MESSAGE, node);
 
         if ("medianotify".equals(node.getAttributeAsString("type", null))) {
@@ -506,6 +569,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
             return;
         }
 
+        var parsingStartNanos = System.nanoTime();
         MessageReceiveStanza stanza;
         try {
             stanza = MessageReceiveStanzaParser.parse(
@@ -521,26 +585,46 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
             sendNack(node, "487");
             return;
         }
+        var parsingNanos = System.nanoTime() - parsingStartNanos;
+        var preProcessingNanos = parsingStartNanos - handleStartNanos;
 
         maybePostOfflineCountTooHigh(stanza);
 
         try {
+            var processingStartNanos = System.nanoTime();
             var info = messageService.process(node);
+            var processingNanos = System.nanoTime() - processingStartNanos;
             if (info != null) {
                 var quarantined = info instanceof ChatMessageInfo quarantineCandidate
                         && quarantineService.quarantine(quarantineCandidate);
-                storeIncomingMessage(info);
+                var dbStoringStartNanos = System.nanoTime();
+                try {
+                    storeIncomingMessage(info);
+                } catch (RuntimeException storeFailure) {
+                    LOGGER.log(System.Logger.Level.WARNING,
+                            "Failed to persist incoming message {0}: {1}",
+                            stanza.id(), storeFailure.getMessage());
+                    emitIncomingMessageDropForDbFailure(stanza);
+                    return;
+                }
+                var dbStoringNanos = System.nanoTime() - dbStoringStartNanos;
+                var postProcessingStartNanos = System.nanoTime();
                 if (info instanceof ChatMessageInfo chatInfo) {
                     handleProtocolMessage(chatInfo);
                     emitMessageReceiveForChatMessage(chatInfo, stanza);
                     emitGatedMessageReceivedIfApplicable(chatInfo, stanza);
                     emitStructuredMessageReceiveIfApplicable(stanza);
+                    emitCommerceStructuredReceiveIfApplicable(chatInfo, stanza);
+                    emitRichOrderStatusIfApplicable(chatInfo, stanza);
                 }
                 resolveOrphanPayment(info);
                 if (!quarantined) {
                     var quoted = whatsapp.store().chatStore().findQuotedMessage(info);
                     notifyMessageReceived(info, quoted);
                 }
+                var postProcessingNanos = System.nanoTime() - postProcessingStartNanos;
+                maybeEmitMessageProcessingPerf(stanza, preProcessingNanos, parsingNanos,
+                        processingNanos, dbStoringNanos, postProcessingNanos);
             }
 
             if (info == null) {
@@ -712,6 +796,7 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
         if (retryCount == 1) {
             var placeholder = buildUndecryptablePlaceholder(stanza);
             storeIncomingMessage(placeholder);
+            emitPlaceholderActivityAdd(stanza, exception);
             notifyMessageReceived(placeholder, Optional.empty());
         }
 
@@ -1363,6 +1448,698 @@ public final class MessageStreamHandler extends SocketStreamHandler.Ordered {
         }
 
         wamService.commit(builder.build());
+        emitStructuredMessageBuyerReceive(mediaType);
+    }
+
+    /**
+     * Commits a
+     * {@link com.github.auties00.cobalt.wam.event.StructuredMessageReceiveEvent}
+     * and its buyer-receive sibling for an inbound commerce structured message
+     * that Cobalt detects from the decoded message content.
+     *
+     * <p>Extends {@link #emitStructuredMessageReceiveIfApplicable(MessageReceiveStanza)}
+     * (which keys off the stanza-level {@code nativeFlowName}) to the three
+     * content-typed structured classes WA Web logs from dedicated receive
+     * loggers: order details ({@link OrderMessage} or an {@code order_details}
+     * native-flow interactive message), payment info
+     * ({@link SendPaymentMessage} or {@link PaymentInviteMessage}), and the
+     * unified payment request ({@link RequestPaymentMessage}). Each emits the
+     * receive event with {@code messageClass=BUTTON_NFM},
+     * {@code bizPlatform=CLOUDAPI}, the sender's business JID, and the message's
+     * WAM media type, then fans out the buyer-receive event.
+     *
+     * @implNote
+     * This implementation classifies the message from its decoded content type
+     * because Cobalt carries the order and payment payloads on typed
+     * {@link MessageContainer} content rather than on the stanza envelope. The
+     * {@code messageClassAttributes}, {@code entryPoint*}, {@code templateId},
+     * {@code messageDepth}, and {@code threadIdHmac} properties are left absent
+     * because the WA Web helpers ({@code P2XFunnelIdGenerator.genFunnelInfo},
+     * the per-conversation CTWA entry-point state) that populate them are not
+     * modelled in Cobalt; WA Web omits them when its helpers yield {@code null}.
+     *
+     * @param info   the decoded chat message info
+     * @param stanza the parsed inbound stanza carrying the sender JID
+     */
+    @WhatsAppWebExport(moduleName = "WAWebOrderDetailsReceivedWamLogger", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebPaymentInfoReceivedWamLogger", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebUprReceivedWamLogger", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitCommerceStructuredReceiveIfApplicable(ChatMessageInfo info, MessageReceiveStanza stanza) {
+        if (!isCommerceStructuredMessage(info.message())) {
+            return;
+        }
+
+        var mediaType = WamMsgUtils.getWamMediaType(info);
+        var businessOwnerJid = stanza.senderJid().toUserJid().user();
+
+        var builder = new StructuredMessageReceiveEventBuilder()
+                .messageClass(StructuredMessageClass.BUTTON_NFM)
+                .bizPlatform(BizPlatform.CLOUDAPI);
+        if (mediaType != null) {
+            builder.messageMediaType(mediaType);
+        }
+        if (businessOwnerJid != null) {
+            builder.businessOwnerJid(businessOwnerJid);
+        }
+
+        wamService.commit(builder.build());
+        emitStructuredMessageBuyerReceive(mediaType);
+    }
+
+    /**
+     * Tests whether a decoded message container carries a commerce structured
+     * payload that drives the buyer-side receive telemetry.
+     *
+     * <p>Returns {@code true} for an {@link OrderMessage}, a
+     * {@link RequestPaymentMessage}, a {@link SendPaymentMessage}, a
+     * {@link PaymentInviteMessage}, or an interactive native-flow message whose
+     * button is named {@link #ORDER_DETAILS_FLOW}. The {@code order_status}
+     * native flow is deliberately excluded here because it is handled by the
+     * rich-order-status path
+     * ({@link #emitRichOrderStatusIfApplicable(ChatMessageInfo, MessageReceiveStanza)}).
+     *
+     * @param container the decoded message container
+     * @return {@code true} when the message is a commerce structured message
+     */
+    private static boolean isCommerceStructuredMessage(MessageContainer container) {
+        var content = container.content();
+        return content instanceof OrderMessage
+                || content instanceof RequestPaymentMessage
+                || content instanceof SendPaymentMessage
+                || content instanceof PaymentInviteMessage
+                || isNativeFlow(container, ORDER_DETAILS_FLOW);
+    }
+
+    /**
+     * Tests whether a decoded message container is an interactive native-flow
+     * message carrying a button with the given flow name.
+     *
+     * <p>Backs {@link #isCommerceStructuredMessage(MessageContainer)} and
+     * {@link #orderStatusButtonJson(MessageContainer)}.
+     *
+     * @param container the decoded message container
+     * @param flowName  the native-flow button name to match
+     * @return {@code true} when a native-flow button with the name is present
+     */
+    private static boolean isNativeFlow(MessageContainer container, String flowName) {
+        if (!(container.content() instanceof InteractiveMessage interactive)) {
+            return false;
+        }
+        return interactive.content()
+                .filter(InteractiveMessage.NativeFlowMessage.class::isInstance)
+                .map(InteractiveMessage.NativeFlowMessage.class::cast)
+                .map(InteractiveMessage.NativeFlowMessage::buttons)
+                .orElseGet(List::of)
+                .stream()
+                .map(InteractiveMessage.NativeFlowMessage.NativeFlowButton::name)
+                .flatMap(Optional::stream)
+                .anyMatch(flowName::equals);
+    }
+
+    /**
+     * Commits a
+     * {@link com.github.auties00.cobalt.wam.event.StructuredMessageBuyerReceiveEvent}
+     * for a buyer receiving a structured commerce message.
+     *
+     * <p>Fired alongside every {@link StructuredMessageReceiveEventBuilder}
+     * emission, gated on {@link ABProp#PAYMENTS_BR_P2M_BUYER_LOGGING_PHASE_2},
+     * mirroring WA Web's paired emission from every structured-receive logger.
+     *
+     * @implNote
+     * This implementation sets {@code messageClass=BUTTON_NFM}, the message's
+     * WAM media type, and a compact {@code messageClassAttributes} JSON derived
+     * from the media type. The {@code bizPlatform} and {@code messageInteraction}
+     * properties are left absent because WA Web's buyer-receive call at the
+     * native-flow receive site populates only class, media type, and attributes.
+     *
+     * @param mediaType the WAM media type of the received structured message,
+     *                  or {@code null} when unavailable
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBuyerEventLogger", exports = "submitBuyerReceiveEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStructuredMessageBuyerReceive(MediaType mediaType) {
+        if (!abPropsService.getBool(ABProp.PAYMENTS_BR_P2M_BUYER_LOGGING_PHASE_2)) {
+            return;
+        }
+
+        var builder = new StructuredMessageBuyerReceiveEventBuilder()
+                .messageClass(StructuredMessageClass.BUTTON_NFM);
+        if (mediaType != null) {
+            builder.messageMediaType(mediaType);
+            builder.messageClassAttributes("{\"media_type\":\"" + mediaType.name().toLowerCase() + "\"}");
+        }
+
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits the rich-order-status WAM telemetry when the inbound message is
+     * an interactive rich-order-status card.
+     *
+     * <p>Gated on {@link ABProp#UTILITY_ORDER_STATUS_LOGGING_ENABLED}. When the
+     * message carries an {@code order_status} native-flow button this emits the
+     * {@link com.github.auties00.cobalt.wam.event.BusinessTemplateRichOrderStatusEvent}
+     * template telemetry and, when a previously received rich-order-status
+     * message for the same chat exists as a reference, the
+     * {@link com.github.auties00.cobalt.wam.event.PsRichOrderStatusMessageInconsistentPayloadReceivedEvent}
+     * payload-consistency check.
+     *
+     * @param info   the decoded chat message info
+     * @param stanza the parsed inbound stanza carrying the chat and sender JIDs
+     */
+    @WhatsAppWebExport(moduleName = "WAWebRichOrderStatusLogger", exports = "logRichOrderStatusInteraction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebRichOrderStatusLogger", exports = "logRichOrderStatusInconsistencies",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitRichOrderStatusIfApplicable(ChatMessageInfo info, MessageReceiveStanza stanza) {
+        if (!abPropsService.getBool(ABProp.UTILITY_ORDER_STATUS_LOGGING_ENABLED)) {
+            return;
+        }
+
+        var orderStatusJson = orderStatusButtonJson(info.message()).orElse(null);
+        if (orderStatusJson == null) {
+            return;
+        }
+
+        emitBusinessTemplateRichOrderStatus(stanza);
+        emitRichOrderStatusInconsistency(stanza, orderStatusJson);
+    }
+
+    /**
+     * Extracts the {@code order_status} native-flow button JSON payload from a
+     * decoded message container.
+     *
+     * <p>Backs {@link #emitRichOrderStatusIfApplicable(ChatMessageInfo, MessageReceiveStanza)}:
+     * the returned JSON is both the marker that the message is a
+     * rich-order-status card and the reference payload compared field-by-field
+     * against the previously received card for the same chat.
+     *
+     * @param container the decoded message container
+     * @return the {@code order_status} button JSON, or {@link Optional#empty()}
+     *         when the message is not a rich-order-status card
+     */
+    private static Optional<String> orderStatusButtonJson(MessageContainer container) {
+        if (!(container.content() instanceof InteractiveMessage interactive)) {
+            return Optional.empty();
+        }
+        return interactive.content()
+                .filter(InteractiveMessage.NativeFlowMessage.class::isInstance)
+                .map(InteractiveMessage.NativeFlowMessage.class::cast)
+                .map(InteractiveMessage.NativeFlowMessage::buttons)
+                .orElseGet(List::of)
+                .stream()
+                .filter(button -> button.name().map(ORDER_STATUS_FLOW::equals).orElse(false))
+                .map(InteractiveMessage.NativeFlowMessage.NativeFlowButton::buttonParamsJson)
+                .flatMap(Optional::stream)
+                .findFirst();
+    }
+
+    /**
+     * Commits a
+     * {@link com.github.auties00.cobalt.wam.event.BusinessTemplateRichOrderStatusEvent}
+     * for a received rich-order-status business template message.
+     *
+     * <p>Carries the folder, contact, mute, read-receipt, and subscription
+     * context WA Web reports when a rich-order-status template lands and its
+     * interactive actions are resolved.
+     *
+     * @implNote
+     * This implementation derives {@code businessJid} from the chat JID and
+     * {@code chatsFolderType}/{@code isMuted} from the stored {@link com.github.auties00.cobalt.model.chat.Chat};
+     * {@code contactType} is {@link ContactType#ENTERPRISE} for a
+     * Facebook-hosted (Cloud API) business and {@link ContactType#SMB}
+     * otherwise, and {@code isBizIntent} is always {@code true} because the
+     * message is itself a business template. The {@code actionTypeRichOrderStatus}
+     * is set to {@link #ORDER_STATUS_FLOW} because Cobalt is a headless library
+     * with no rendered order-status affordance to attribute a click action to;
+     * {@code readReceiptsEnabled} defaults to {@code true} (WA Web's default
+     * privacy state) and {@code templateId} is omitted because the receive path
+     * does not carry it.
+     *
+     * @param stanza the parsed inbound stanza carrying the chat JID
+     */
+    @WhatsAppWebExport(moduleName = "WAWebRichOrderStatusLogger", exports = "logRichOrderStatusInteraction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitBusinessTemplateRichOrderStatus(MessageReceiveStanza stanza) {
+        var chatJid = stanza.chatJid();
+        var chat = whatsapp.store().chatStore().findChatByJid(chatJid).orElse(null);
+        var contact = whatsapp.store().contactStore().findContactByJid(chatJid).orElse(null);
+        var enterprise = contact != null && contact.hostedOnFacebook();
+
+        var builder = new BusinessTemplateRichOrderStatusEventBuilder()
+                .actionTypeRichOrderStatus(ORDER_STATUS_FLOW)
+                .chatsFolderType(chat != null && chat.archived() ? ChatsFolderType.ARCHIVED : ChatsFolderType.INBOX)
+                .contactType(enterprise ? ContactType.ENTERPRISE : ContactType.SMB)
+                .isBizIntent(true)
+                .isInsubContact(contact != null)
+                .isMuted(chat != null && chat.mute().map(mute -> mute.isMuted()).orElse(false))
+                .readReceiptsEnabled(true);
+
+        var businessJid = chatJid.toUserJid().user();
+        if (businessJid != null) {
+            builder.businessJid(businessJid);
+        }
+
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a
+     * {@link com.github.auties00.cobalt.wam.event.PsRichOrderStatusMessageInconsistentPayloadReceivedEvent}
+     * when a newer rich-order-status card disagrees field-by-field with the
+     * previously received card for the same chat.
+     *
+     * <p>The current {@code order_status} button JSON is stored as the new
+     * reference for the chat. When a prior reference exists the two payloads are
+     * compared field-by-field and the per-field changed flags (currency, header
+     * and item image, item name, item count, item price, item quantity, item
+     * variant) are reported. When no prior reference exists nothing is emitted,
+     * mirroring WA Web which needs the merged order-status {@code firstMessage}
+     * to compare against.
+     *
+     * @implNote
+     * This implementation compares the raw {@code order_status} button JSON
+     * strings with a lightweight key-value extractor rather than a decoded order
+     * model: {@code hasItemNumberChanged} compares the count of {@code quantity}
+     * entries as a proxy for the item-count delta, {@code hasItemPriceChanged}
+     * folds both the amount {@code value} and {@code offset} keys, and
+     * {@code hasHeaderImageChanged} compares the header {@code header} key. Keys
+     * absent from both payloads compare equal and therefore report no change,
+     * which is the faithful outcome for a field the card never carried.
+     *
+     * @param stanza      the parsed inbound stanza carrying the chat JID
+     * @param currentJson the current message's {@code order_status} button JSON
+     */
+    @WhatsAppWebExport(moduleName = "WAWebRichOrderStatusLogger", exports = "logRichOrderStatusInconsistencies",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitRichOrderStatusInconsistency(MessageReceiveStanza stanza, String currentJson) {
+        var priorJson = lastOrderStatusPayloadByChat.put(stanza.chatJid(), currentJson);
+        if (priorJson == null) {
+            return;
+        }
+
+        var builder = new PsRichOrderStatusMessageInconsistentPayloadReceivedEventBuilder()
+                .hasCurrencyChanged(fieldChanged(currentJson, priorJson, "currency"))
+                .hasHeaderImageChanged(fieldChanged(currentJson, priorJson, "header"))
+                .hasItemImageChanged(fieldChanged(currentJson, priorJson, "file_sha256"))
+                .hasItemNameChanged(fieldChanged(currentJson, priorJson, "name"))
+                .hasItemNumberChanged(countOccurrences(currentJson, "\"quantity\"") != countOccurrences(priorJson, "\"quantity\""))
+                .hasItemPriceChanged(fieldChanged(currentJson, priorJson, "value") || fieldChanged(currentJson, priorJson, "offset"))
+                .hasItemQuantityChanged(fieldChanged(currentJson, priorJson, "quantity"))
+                .hasItemVariantChanged(fieldChanged(currentJson, priorJson, "variant"));
+
+        var businessJid = stanza.chatJid().toUserJid().user();
+        if (businessJid != null) {
+            builder.businessJid(businessJid);
+        }
+
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Returns whether the first value for the given key differs between two JSON
+     * payloads.
+     *
+     * <p>Backs the per-field comparison in
+     * {@link #emitRichOrderStatusInconsistency(MessageReceiveStanza, String)}.
+     *
+     * @param current the current payload JSON
+     * @param prior   the reference payload JSON
+     * @param key     the JSON key to compare
+     * @return {@code true} when the extracted values differ
+     */
+    private static boolean fieldChanged(String current, String prior, String key) {
+        return !Objects.equals(jsonRawValue(current, key), jsonRawValue(prior, key));
+    }
+
+    /**
+     * Extracts the first scalar value for a key from a flat JSON string.
+     *
+     * <p>Reads the first {@code "key":value} occurrence, returning the unquoted
+     * string body for a quoted value or the raw token for a numeric, boolean, or
+     * {@code null} value.
+     *
+     * @implNote
+     * This implementation is a deliberately minimal string scanner rather than a
+     * full JSON parser: the rich-order-status button payload is a flat object
+     * and only the first occurrence of each compared key is significant, so a
+     * substring scan suffices and avoids pulling a JSON dependency into the
+     * receive path.
+     *
+     * @param json the JSON string to scan; may be {@code null}
+     * @param key  the object key to read
+     * @return the extracted value, or {@code null} when the key is absent
+     */
+    private static String jsonRawValue(String json, String key) {
+        if (json == null) {
+            return null;
+        }
+        var needle = "\"" + key + "\"";
+        var keyIndex = json.indexOf(needle);
+        if (keyIndex < 0) {
+            return null;
+        }
+        var colon = json.indexOf(':', keyIndex + needle.length());
+        if (colon < 0) {
+            return null;
+        }
+        var cursor = colon + 1;
+        while (cursor < json.length() && Character.isWhitespace(json.charAt(cursor))) {
+            cursor++;
+        }
+        if (cursor >= json.length()) {
+            return null;
+        }
+        if (json.charAt(cursor) == '"') {
+            var end = json.indexOf('"', cursor + 1);
+            return end < 0 ? null : json.substring(cursor + 1, end);
+        }
+        var start = cursor;
+        while (cursor < json.length() && ",}] \t\r\n".indexOf(json.charAt(cursor)) < 0) {
+            cursor++;
+        }
+        return json.substring(start, cursor);
+    }
+
+    /**
+     * Counts the non-overlapping occurrences of a substring inside a string.
+     *
+     * <p>Backs the item-count delta proxy in
+     * {@link #emitRichOrderStatusInconsistency(MessageReceiveStanza, String)}.
+     *
+     * @param haystack the string to scan; may be {@code null}
+     * @param needle   the substring to count
+     * @return the number of occurrences, or {@code 0} when {@code haystack} is
+     *         {@code null}
+     */
+    private static int countOccurrences(String haystack, String needle) {
+        if (haystack == null) {
+            return 0;
+        }
+        var count = 0;
+        var index = haystack.indexOf(needle);
+        while (index >= 0) {
+            count++;
+            index = haystack.indexOf(needle, index + needle.length());
+        }
+        return count;
+    }
+
+    /**
+     * Commits a
+     * {@link com.github.auties00.cobalt.wam.event.PlaceholderActivityEvent} for
+     * the insertion of the {@link ChatMessageInfo.StubType#CIPHERTEXT}
+     * placeholder that stands in for an undecryptable message.
+     *
+     * <p>Runs from {@link #surfaceUndecryptableMessage(MessageReceiveStanza, WhatsAppMessageException.Receive, int)}
+     * on the first failed delivery, mirroring WA Web's placeholder-add beacon.
+     * The action is {@link PlaceholderAction#ADD}, the type is
+     * {@link PlaceholderType#CIPHERTEXT}, and the add reason is mapped from the
+     * decrypt-failure subtype.
+     *
+     * @implNote
+     * This implementation populates the properties derivable from the parsed
+     * {@link MessageReceiveStanza} alone: chat type, elapsed placeholder time
+     * period, add reason, revoke flag, message type and media type, e2e sender
+     * type, hosted-encryption flag, and the LID flag. The group-only
+     * ({@code participantCount}, {@code deviceCount}, {@code deviceSizeBucket},
+     * {@code typeOfGroup}) and {@code messageKeyHash} properties are left absent
+     * because Cobalt has no equivalent of WA Web's
+     * {@code WAWebWamGroupMetricCache}/{@code WAWebHandlePlaceholderMsgKeyHashUtils},
+     * which WA Web also omits when those caches are unavailable.
+     *
+     * @param stanza    the parsed inbound stanza whose decrypt failed
+     * @param exception the decrypt failure that triggered the placeholder
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandlePlaceholderWam", exports = "postPlaceholderActivityAddEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitPlaceholderActivityAdd(MessageReceiveStanza stanza, WhatsAppMessageException.Receive exception) {
+        var builder = new PlaceholderActivityEventBuilder()
+                .placeholderActionInd(PlaceholderAction.ADD)
+                .placeholderTypeInd(PlaceholderType.CIPHERTEXT)
+                .placeholderChatTypeInd(mapPlaceholderChatType(stanza.chatJid()))
+                .placeholderAddReason(mapPlaceholderReason(exception))
+                .messageIsRevoke(isRevokeStanza(stanza))
+                .isLid(stanza.senderJid().hasLidServer());
+
+        var elapsedSeconds = Instant.now().getEpochSecond() - stanza.timestamp().getEpochSecond();
+        builder.placeholderTimePeriod(Math.max(elapsedSeconds, 0));
+
+        var messageType = WamMsgUtils.getWamMessageTypeFromStanzaType(stanza.messageType());
+        if (messageType != null) {
+            builder.messageType(messageType);
+        }
+
+        var mediaType = mapEncMediaTypeToWamMediaType(
+                firstEncMediaType(stanza), stanza.stanzaType(), stanza.pollType().orElse(null));
+        if (mediaType != null) {
+            builder.messageMediaType(mediaType);
+        }
+
+        var selfJid = whatsapp.store().accountStore().jid().orElse(null);
+        var senderType = WamMsgUtils.getWamE2eSenderType(stanza.senderJid(), selfJid);
+        if (senderType != null) {
+            builder.e2eSenderType(senderType);
+        }
+
+        if (stanza.senderJid().hasHostedServer() || stanza.senderJid().hasHostedLidServer()) {
+            builder.encryptionType(EncryptionTypeCode.COEX);
+        }
+
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Maps a chat JID onto its WAM {@link PlaceholderChatType} bucket.
+     *
+     * <p>Drives the {@code placeholderChatTypeInd} property on the
+     * {@link com.github.auties00.cobalt.wam.event.PlaceholderActivityEvent}.
+     *
+     * @implNote
+     * This implementation checks the JID flavours in the same order as WA Web's
+     * {@code WAWebHandlePlaceholderWam} chat-type resolver (status first, then
+     * group/community, broadcast, newsletter, user/LID) and falls back to
+     * {@link PlaceholderChatType#OTHER}.
+     *
+     * @param chatJid the chat JID
+     * @return the matching {@link PlaceholderChatType}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandlePlaceholderWam", exports = "getPlaceholderChatType",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static PlaceholderChatType mapPlaceholderChatType(Jid chatJid) {
+        if (chatJid.isStatusBroadcastAccount()) {
+            return PlaceholderChatType.STATUS;
+        }
+        if (chatJid.hasGroupOrCommunityServer()) {
+            return PlaceholderChatType.GROUP;
+        }
+        if (chatJid.hasBroadcastServer()) {
+            return PlaceholderChatType.BROADCAST;
+        }
+        if (chatJid.hasNewsletterServer()) {
+            return PlaceholderChatType.CHANNEL;
+        }
+        if (chatJid.hasUserServer() || chatJid.hasLidServer()) {
+            return PlaceholderChatType.INDIVIDUAL;
+        }
+        return PlaceholderChatType.OTHER;
+    }
+
+    /**
+     * Maps a receive-failure subtype onto its WAM {@link PlaceholderReasonType}
+     * add reason.
+     *
+     * <p>Drives the {@code placeholderAddReason} property on the
+     * {@link com.github.auties00.cobalt.wam.event.PlaceholderActivityEvent}.
+     *
+     * @implNote
+     * This implementation maps the Signal-level decrypt failures Cobalt
+     * distinguishes onto their WA Web reason counterparts and falls back to
+     * {@link PlaceholderReasonType#OTHER} for any subtype without a dedicated
+     * reason.
+     *
+     * @param exception the decrypt failure
+     * @return the matching {@link PlaceholderReasonType}; never {@code null}
+     */
+    private static PlaceholderReasonType mapPlaceholderReason(WhatsAppMessageException.Receive exception) {
+        if (exception instanceof WhatsAppMessageException.Receive.NoSession) {
+            return PlaceholderReasonType.SIGNAL_NO_SESSION;
+        }
+        if (exception instanceof WhatsAppMessageException.Receive.InvalidKey) {
+            return PlaceholderReasonType.SIGNAL_INVALID_KEY;
+        }
+        if (exception instanceof WhatsAppMessageException.Receive.InvalidKeyId) {
+            return PlaceholderReasonType.SIGNAL_INVALID_KEY_ID;
+        }
+        if (exception instanceof WhatsAppMessageException.Receive.InvalidMessage) {
+            return PlaceholderReasonType.SIGNAL_INVALID_MESSAGE;
+        }
+        if (exception instanceof WhatsAppMessageException.Receive.BadMac) {
+            return PlaceholderReasonType.SIGNAL_BAD_MAC;
+        }
+        if (exception instanceof WhatsAppMessageException.Receive.FutureMessage) {
+            return PlaceholderReasonType.SIGNAL_FUTURE_MESSAGE;
+        }
+        if (exception instanceof WhatsAppMessageException.Receive.InvalidSignature) {
+            return PlaceholderReasonType.SIGNAL_INVALID_SIGNATURE;
+        }
+        if (exception instanceof WhatsAppMessageException.Receive.BroadcastEphemeralSettings) {
+            return PlaceholderReasonType.BAD_EPHEMERAL_SETTING;
+        }
+        return PlaceholderReasonType.OTHER;
+    }
+
+    /**
+     * Returns whether a parsed stanza carries a message revocation edit.
+     *
+     * <p>Drives the {@code messageIsRevoke} property on the
+     * {@link com.github.auties00.cobalt.wam.event.PlaceholderActivityEvent} when
+     * the underlying message body is not yet decrypted.
+     *
+     * @param stanza the parsed inbound stanza
+     * @return {@code true} when the stanza's {@code edit} attribute is a sender
+     *         or admin revoke
+     */
+    private static boolean isRevokeStanza(MessageReceiveStanza stanza) {
+        var editAttr = stanza.editAttribute();
+        return editAttr == MessageReceiveStanza.EDIT_SENDER_REVOKE
+                || editAttr == MessageReceiveStanza.EDIT_ADMIN_REVOKE;
+    }
+
+    /**
+     * Returns the first {@code mediatype} attribute among a stanza's
+     * {@code <enc>} children.
+     *
+     * <p>Backs the {@code messageMediaType} derivation shared by the placeholder
+     * and offline-count metrics.
+     *
+     * @param stanza the parsed inbound stanza
+     * @return the first non-{@code null} enc media type, or {@code null} when
+     *         none carry one
+     */
+    private static String firstEncMediaType(MessageReceiveStanza stanza) {
+        return stanza.encs().stream()
+                .map(enc -> enc.encMediaType().orElse(null))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Commits an
+     * {@link com.github.auties00.cobalt.wam.event.IncomingMessageDropEvent} with
+     * {@link MessageDropReasonType#DB_OPERATION_FAILED} when persisting a
+     * decoded message row fails.
+     *
+     * <p>Emitted when {@link #storeIncomingMessage(MessageInfo)} throws while
+     * writing an already-decrypted message, mirroring WA Web's per-row drop for
+     * a failed message persist.
+     *
+     * @implNote
+     * This implementation populates the {@code offline}, {@code offlineCount},
+     * {@code e2eDestination}, and {@code isLid} properties derivable from the
+     * parsed stanza; the ciphertext, retry, and Signal-scope properties are
+     * absent because the failure occurs after decryption, past the point where
+     * those per-slot signals apply.
+     *
+     * @param stanza the parsed inbound stanza whose persist failed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPostIncomingMessageDropMetric",
+            exports = "postIncomingMessageDropDBOperationFailedForMsgRows",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitIncomingMessageDropForDbFailure(MessageReceiveStanza stanza) {
+        var builder = new IncomingMessageDropEventBuilder()
+                .messageDropReason(MessageDropReasonType.DB_OPERATION_FAILED)
+                .offline(stanza.isOffline())
+                .isLid(stanza.senderJid().hasLidServer());
+
+        stanza.offline().ifPresent(raw -> {
+            try {
+                builder.offlineCount(Integer.parseInt(raw));
+            } catch (NumberFormatException _) {
+            }
+        });
+
+        var destination = mapDestination(stanza);
+        if (destination != null) {
+            builder.e2eDestination(destination);
+        }
+
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a
+     * {@link com.github.auties00.cobalt.wam.event.WebcMessageProcessingPerfEvent}
+     * carrying the per-stage processing durations of an inbound offline message.
+     *
+     * <p>Only offline messages contribute; live-delivered messages return
+     * without emitting. The five measured stages (pre-processing, parsing,
+     * processing, DB storing, post-processing) are reported as elapsed
+     * milliseconds.
+     *
+     * @implNote
+     * This implementation emits one event per offline message rather than one
+     * aggregated event per offline-resume batch: Cobalt's message handler has no
+     * equivalent of WA Web's {@code WAWebEventsWaitForOfflineDeliveryEnd}
+     * barrier at which {@code WAWebOfflineResumeMsgProcessReporter} flushes the
+     * summed cache, so the reporter's batch cadence is unreachable from this
+     * single dispatch path. The {@code decryptionT}, {@code lidProcessingT}, and
+     * {@code reportTokenValidationT} sub-stages are reported as {@code 0}
+     * because Cobalt folds Signal decryption into the single
+     * {@link MessageService#process(Stanza)} call and does not time the LID and
+     * reporting-token sub-stages separately; WA Web likewise reports {@code 0}
+     * for a stage whose marker never fired.
+     *
+     * @param stanza             the parsed inbound stanza
+     * @param preProcessingNanos elapsed nanoseconds from stanza receipt to parse
+     * @param parsingNanos       elapsed nanoseconds parsing the stanza
+     * @param processingNanos    elapsed nanoseconds decrypting and decoding
+     * @param dbStoringNanos     elapsed nanoseconds persisting the message
+     * @param postProcessingNanos elapsed nanoseconds of listener and metric fan-out
+     */
+    @WhatsAppWebExport(moduleName = "WAWebOfflineResumeMsgProcessReporter", exports = "msgProcessReporter",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeEmitMessageProcessingPerf(
+            MessageReceiveStanza stanza,
+            long preProcessingNanos,
+            long parsingNanos,
+            long processingNanos,
+            long dbStoringNanos,
+            long postProcessingNanos
+    ) {
+        if (!stanza.isOffline()) {
+            return;
+        }
+
+        wamService.commit(new WebcMessageProcessingPerfEventBuilder()
+                .isOffline(true)
+                .preProcessingT(toMillis(preProcessingNanos))
+                .parsingT(toMillis(parsingNanos))
+                .processingT(toMillis(processingNanos))
+                .dbStoringT(toMillis(dbStoringNanos))
+                .postProcessingT(toMillis(postProcessingNanos))
+                .decryptionT(0)
+                .lidProcessingT(0)
+                .reportTokenValidationT(0)
+                .build());
+    }
+
+    /**
+     * Converts an elapsed-nanoseconds duration into non-negative whole
+     * milliseconds.
+     *
+     * <p>Backs the timer fields of
+     * {@link #maybeEmitMessageProcessingPerf(MessageReceiveStanza, long, long, long, long, long)}.
+     *
+     * @param nanos the elapsed nanoseconds
+     * @return the duration in milliseconds, clamped at {@code 0}
+     */
+    private static long toMillis(long nanos) {
+        return Math.max(0, nanos) / 1_000_000L;
     }
 
     /**

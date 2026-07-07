@@ -15,7 +15,27 @@ import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.util.MediaMetricUtils;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.MediaDownload2EventBuilder;
+import com.github.auties00.cobalt.wam.event.MediaUpload2EventBuilder;
+import com.github.auties00.cobalt.wam.event.StickerErrorEventBuilder;
+import com.github.auties00.cobalt.wam.event.WebcMediaRmrEventBuilder;
+import com.github.auties00.cobalt.wam.type.ConnectionType;
+import com.github.auties00.cobalt.wam.type.DownloadOriginType;
+import com.github.auties00.cobalt.wam.type.HttpProtocolVersionType;
+import com.github.auties00.cobalt.wam.type.MediaDownloadModeType;
+import com.github.auties00.cobalt.wam.type.MediaDownloadResultType;
+import com.github.auties00.cobalt.wam.type.MediaType;
+import com.github.auties00.cobalt.wam.type.MediaUploadModeType;
+import com.github.auties00.cobalt.wam.type.MediaUploadResultType;
+import com.github.auties00.cobalt.wam.type.OverallMediaKeyReuseType;
+import com.github.auties00.cobalt.wam.type.StickerErrorType;
+import com.github.auties00.cobalt.wam.type.UploadOriginType;
+import com.github.auties00.cobalt.wam.type.UploadSourceType;
+import com.github.auties00.cobalt.wam.type.WebcChatType;
+import com.github.auties00.cobalt.wam.type.WebcRmrReasonCode;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -26,6 +46,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
@@ -69,6 +90,15 @@ import java.util.function.Supplier;
 @WhatsAppWebModule(moduleName = "WAWebMmsClientMmsDeleteMdHistorySyncBlob")
 @WhatsAppWebModule(moduleName = "WABase64UrlSafe")
 @WhatsAppWebModule(moduleName = "WAWebWamMediaMetricUtils")
+@WhatsAppWebModule(moduleName = "WAWebDownloadManager")
+@WhatsAppWebModule(moduleName = "WAWebMediaMmsV4Upload")
+@WhatsAppWebModule(moduleName = "WAWebMediaMmsV4Download")
+@WhatsAppWebModule(moduleName = "WAWebCreateMediaUploadMetrics")
+@WhatsAppWebModule(moduleName = "WAWebCreateMediaDownloadMetrics")
+@WhatsAppWebModule(moduleName = "WAWebMediaUpload2WamEvent")
+@WhatsAppWebModule(moduleName = "WAWebMediaDownload2WamEvent")
+@WhatsAppWebModule(moduleName = "WAWebWebcMediaRmrWamEvent")
+@WhatsAppWebModule(moduleName = "WAWebStickerErrorWamEvent")
 public final class LiveMediaConnectionService implements MediaConnectionService {
     /**
      * The {@link ABPropsService} consulted when assembling CDN download URLs
@@ -81,6 +111,18 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * call.
      */
     private final ABPropsService abPropsService;
+
+    /**
+     * The {@link WamService} that batches and uploads the media-transfer
+     * telemetry beacons emitted from the upload and download paths.
+     *
+     * <p>Injected through the constructor so
+     * {@link #upload(MediaProvider, MediaPayload)} can commit
+     * {@code MediaUpload2} beacons and {@link #download(MediaProvider)} can
+     * commit {@code WebcMediaRmr} and {@code StickerError} beacons without
+     * threading the service through every call.
+     */
+    private final WamService wamService;
 
     /**
      * Signals when the first {@link #update(Stanza)} has landed.
@@ -199,10 +241,14 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      *
      * @param abPropsService the AB-props service threaded into the download
      *                       URL formatter
-     * @throws NullPointerException if {@code abPropsService} is {@code null}
+     * @param wamService     the WAM telemetry service the upload and download
+     *                       paths commit media-transfer beacons to
+     * @throws NullPointerException if {@code abPropsService} or
+     *                              {@code wamService} is {@code null}
      */
-    public LiveMediaConnectionService(ABPropsService abPropsService) {
+    public LiveMediaConnectionService(ABPropsService abPropsService, WamService wamService) {
         this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
+        this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
     }
 
     /**
@@ -609,7 +655,10 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * length is computed deterministically from the plaintext length
      * ({@code ((plaintextLength / 16) + 1) * 16 + 10} for AES-CBC + PKCS5
      * padding + truncated HMAC). Retries replay pass 2 against the same
-     * payload; the plaintext source is replayable by contract.
+     * payload; the plaintext source is replayable by contract. On completion
+     * a {@code MediaUpload2} beacon is committed (success or classified
+     * failure), except for {@link ExternalBlobReference} uploads whose beacon
+     * is committed by the app-state exchange pipeline instead.
      *
      * @param provider the media provider describing the media type and
      *                 receiving the upload metadata
@@ -632,6 +681,7 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
         }
 
         awaitInitialized();
+        var uploadStart = Instant.now();
         var currentAuth = this.auth;
         var currentHosts = this.hosts;
         var currentMaxBuckets = this.maxBuckets;
@@ -706,9 +756,11 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
                         externalBlobReference.setHandle(handle);
                     }
 
+                    commitMessageMediaUploadSuccess(provider, hostname, fileLength, encryptedLength, attemptCount, uploadStart);
                     return true;
                 } catch (WhatsAppMediaException.Upload uploadException) {
                     if (!isRetryable(uploadException)) {
+                        commitMessageMediaUploadFailure(provider, fileLength, attemptCount, uploadStart, uploadException);
                         throw uploadException;
                     }
 
@@ -720,7 +772,9 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
                 }
             }
 
-            throw new WhatsAppMediaException.Upload("Cannot upload media: no hosts available");
+            var noHostError = new WhatsAppMediaException.Upload("Cannot upload media: no hosts available");
+            commitMessageMediaUploadFailure(provider, fileLength, MAX_ATTEMPT_COUNT - 1, uploadStart, noHostError);
+            throw noHostError;
         }
     }
 
@@ -1006,7 +1060,12 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * This implementation does not consult an in-memory media-conn cache
      * the way WA Web's {@code mediaHosts} singleton does; each
      * {@link MediaConnectionService} is treated as immutable and the caller
-     * decides when to refresh.
+     * decides when to refresh. The actual transfer is delegated to
+     * {@link #performDownload(MediaProvider)} and wrapped so that every call
+     * commits one {@code MediaDownload2} beacon (overall transfer size, timing,
+     * and result) and one {@code WebcMediaRmr} beacon (retry-media-request
+     * timing and status), plus a {@code StickerError} beacon when a
+     * sticker-type download fails.
      *
      * @param provider the media provider
      * @return an {@link InputStream} delivering the decrypted media
@@ -1014,12 +1073,53 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
      * @throws WhatsAppMediaException.Download if no host could service the
      *         download, the direct path is missing, or a non-retryable
      *         HTTP error occurred
+     * @throws InterruptedException if the calling thread is interrupted while
+     *         awaiting the first {@code media_conn} refresh
      */
-    @WhatsAppWebExport(moduleName = "WAWebMmsClient", exports = "default",
+    @WhatsAppWebExport(moduleName = "WAWebDownloadManager", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public InputStream download(MediaProvider provider) throws WhatsAppMediaException, InterruptedException {
         Objects.requireNonNull(provider, "provider cannot be null");
 
+        var rmrStart = Instant.now();
+        try {
+            var stream = performDownload(provider);
+            commitMessageMediaDownloadSuccess(provider, rmrStart);
+            commitWebcMediaRmr(provider, rmrStart, false, OptionalInt.empty());
+            return stream;
+        } catch (WhatsAppMediaException.Download downloadException) {
+            commitMessageMediaDownloadFailure(provider, rmrStart, downloadException);
+            commitWebcMediaRmr(provider, rmrStart, true, downloadException.httpStatusCode());
+            if (isStickerMedia(provider.mediaPath())) {
+                commitStickerError(StickerErrorType.DECOMPRESSION);
+            }
+            throw downloadException;
+        }
+    }
+
+    /**
+     * Resolves a decrypted media stream for the given provider without
+     * emitting any media-transfer telemetry.
+     *
+     * <p>Carries the download strategy that {@link #download(MediaProvider)}
+     * wraps: it first tries the provider's cached static media URL, then
+     * resolves a fresh host through {@link MediaHost#routeSelection} and
+     * rotates across candidate hosts on each retry. Non-retryable errors
+     * ({@code 404}, {@code 408}, {@code 410}, {@code 507}, and the rest of
+     * {@code 4xx}) propagate immediately. The injected {@link ABPropsService}
+     * feeds the download URL formatter.
+     *
+     * @param provider the media provider
+     * @return an {@link InputStream} delivering the decrypted media content
+     * @throws WhatsAppMediaException.Download if no host could service the
+     *         download, the direct path is missing, or a non-retryable
+     *         HTTP error occurred
+     * @throws InterruptedException if the calling thread is interrupted while
+     *         awaiting the first {@code media_conn} refresh
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMmsClient", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private InputStream performDownload(MediaProvider provider) throws WhatsAppMediaException, InterruptedException {
         var defaultUploadUrl = provider.mediaUrl();
         if (defaultUploadUrl.isPresent()) {
             try {
@@ -1789,6 +1889,449 @@ public final class LiveMediaConnectionService implements MediaConnectionService 
         }
         var authRefreshThreshold = (long) Math.floor(authTtl * 0.8);
         return now >= timestamp + authRefreshThreshold;
+    }
+
+    /**
+     * Commits a {@code MediaUpload2} beacon for a message-media upload that
+     * just landed on the CDN.
+     *
+     * <p>Emitted once from {@link #upload(MediaProvider, MediaPayload)} after
+     * the CDN accepts the ciphertext and the provider's media metadata has
+     * been written back. External-blob uploads (the app-state syncd external
+     * patches) are skipped because their beacon is committed by the app-state
+     * exchange pipeline; a second beacon here would double-count the upload.
+     *
+     * @implNote
+     * This implementation collapses WA Web's separate resume, upload, and
+     * finalize legs into one {@code overallT} duration because Cobalt streams
+     * the whole upload as a single POST rather than the WA Web
+     * resume-then-upload-then-finalize sequence; the {@code resumeHttpCode} of
+     * {@code 404} and the {@code uploadHttpCode}/{@code finalizeHttpCode} of
+     * {@code 200} are synthetic stand-ins for that collapsed sequence.
+     * {@code estimatedBandwidth} is the ciphertext byte count over the
+     * measured wall-clock duration, {@code overallMediaKeyReuse} is always
+     * {@link OverallMediaKeyReuseType#NONE_NEW_CONTENT} because a fresh media
+     * key is minted per upload, and {@code overallUploadOrigin} defaults to
+     * {@link UploadOriginType#CHAT_PERSONAL} since the chat-agnostic media
+     * layer cannot observe the destination thread class.
+     *
+     * @param provider      the uploaded media provider
+     * @param hostname      the CDN hostname that accepted the upload
+     * @param originalSize  the plaintext media size in bytes
+     * @param encryptedSize the ciphertext size in bytes transferred
+     * @param attemptCount  the zero-based index of the successful attempt
+     * @param uploadStart   the instant the upload began
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaMmsV4Upload", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCreateMediaUploadMetrics", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void commitMessageMediaUploadSuccess(MediaProvider provider, String hostname,
+                                                 long originalSize, long encryptedSize,
+                                                 int attemptCount, Instant uploadStart) {
+        if (provider instanceof ExternalBlobReference) {
+            return;
+        }
+        var elapsed = Duration.between(uploadStart, Instant.now());
+        var overallT = Instant.ofEpochMilli(elapsed.toMillis());
+        var seconds = Math.max(elapsed.toMillis(), 1L) / 1000.0;
+        wamService.commit(new MediaUpload2EventBuilder()
+                .overallMediaType(wamMediaType(provider.mediaPath()))
+                .overallMmsVersion(4)
+                .overallUploadOrigin(UploadOriginType.CHAT_PERSONAL)
+                .overallUploadMode(MediaUploadModeType.REGULAR)
+                .overallUploadResult(MediaUploadResultType.OK)
+                .overallMediaKeyReuse(OverallMediaKeyReuseType.NONE_NEW_CONTENT)
+                .overallIsFinal(Boolean.TRUE)
+                .overallIsManual(Boolean.FALSE)
+                .overallIsForward(Boolean.FALSE)
+                .overallDomain(hostname)
+                .connectionType(ConnectionType.HOSTNAME)
+                .httpProtocolVersionType(HttpProtocolVersionType.HTTP2)
+                .uploadSource(UploadSourceType.OTHER)
+                .originalSize(originalSize)
+                .overallMediaSize((double) encryptedSize)
+                .uploadBytesTransferred((double) encryptedSize)
+                .estimatedBandwidth(encryptedSize / seconds)
+                .mediaId(generateMediaId())
+                .resumeHttpCode(404)
+                .uploadHttpCode(200)
+                .finalizeHttpCode(200)
+                .overallT(overallT)
+                .overallAttemptCount(attemptCount + 1L)
+                .overallRetryCount(attemptCount)
+                .build());
+    }
+
+    /**
+     * Commits a {@code MediaUpload2} beacon for a message-media upload that
+     * aborted.
+     *
+     * <p>Emitted from {@link #upload(MediaProvider, MediaPayload)} on the
+     * non-retryable and host-exhaustion failure paths. The
+     * {@link MediaUploadResultType} bucket is chosen by
+     * {@link #classifyUploadResult(Throwable)} and, when the error carries an
+     * HTTP status code, that code is stamped on the upload and finalize legs.
+     * External-blob uploads are skipped for the same reason as
+     * {@link #commitMessageMediaUploadSuccess}.
+     *
+     * @param provider     the media provider whose upload failed
+     * @param originalSize the plaintext media size in bytes
+     * @param attemptCount the zero-based index of the last attempt made
+     * @param uploadStart  the instant the upload began
+     * @param throwable    the error that aborted the upload
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaMmsV4Upload", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCreateMediaUploadMetrics", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void commitMessageMediaUploadFailure(MediaProvider provider, long originalSize,
+                                                 int attemptCount, Instant uploadStart,
+                                                 Throwable throwable) {
+        if (provider instanceof ExternalBlobReference) {
+            return;
+        }
+        var overallT = Instant.ofEpochMilli(Duration.between(uploadStart, Instant.now()).toMillis());
+        var builder = new MediaUpload2EventBuilder()
+                .overallMediaType(wamMediaType(provider.mediaPath()))
+                .overallMmsVersion(4)
+                .overallUploadOrigin(UploadOriginType.CHAT_PERSONAL)
+                .overallUploadMode(MediaUploadModeType.REGULAR)
+                .overallUploadResult(classifyUploadResult(throwable))
+                .overallMediaKeyReuse(OverallMediaKeyReuseType.NONE_NEW_CONTENT)
+                .overallIsFinal(Boolean.TRUE)
+                .overallIsManual(Boolean.FALSE)
+                .overallIsForward(Boolean.FALSE)
+                .connectionType(ConnectionType.HOSTNAME)
+                .uploadSource(UploadSourceType.OTHER)
+                .originalSize(originalSize)
+                .mediaId(generateMediaId())
+                .overallT(overallT)
+                .overallAttemptCount(attemptCount + 1L)
+                .overallRetryCount(attemptCount)
+                .debugMediaException(throwable.getMessage());
+        if (throwable instanceof WhatsAppMediaException.Upload uploadException) {
+            var statusCode = uploadException.httpStatusCode();
+            if (statusCode.isPresent()) {
+                builder.uploadHttpCode(statusCode.getAsInt());
+                builder.finalizeHttpCode(statusCode.getAsInt());
+            }
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Classifies an upload error into a {@link MediaUploadResultType} bucket
+     * for the {@code MediaUpload2} failure beacon.
+     *
+     * <p>Routes {@link WhatsAppMediaException.Upload} instances by HTTP status
+     * code ({@code 401}, {@code 413}, {@code 415}, {@code 507}, and the
+     * {@code 5xx} family) and every status-less or otherwise unmapped media
+     * error to the generic upload bucket; an {@link InterruptedException}
+     * yields the cancel bucket.
+     *
+     * @param throwable the error that aborted the upload
+     * @return the matching {@link MediaUploadResultType}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
+            exports = "getMetricUploadErrorResultType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static MediaUploadResultType classifyUploadResult(Throwable throwable) {
+        if (throwable instanceof InterruptedException) {
+            return MediaUploadResultType.ERROR_CANCEL;
+        }
+        if (throwable instanceof WhatsAppMediaException.Upload uploadException) {
+            var statusCode = uploadException.httpStatusCode();
+            if (statusCode.isPresent()) {
+                return switch (statusCode.getAsInt()) {
+                    case 401 -> MediaUploadResultType.ERROR_REQUEST;
+                    case 413 -> MediaUploadResultType.ERROR_TOO_LARGE;
+                    case 415 -> MediaUploadResultType.ERROR_BAD_MEDIA;
+                    case 507 -> MediaUploadResultType.ERROR_THROTTLE;
+                    default -> statusCode.getAsInt() >= 500
+                            ? MediaUploadResultType.ERROR_SERVER
+                            : MediaUploadResultType.ERROR_UPLOAD;
+                };
+            }
+        }
+        return MediaUploadResultType.ERROR_UPLOAD;
+    }
+
+    /**
+     * Commits a {@code MediaDownload2} beacon for a message-media download
+     * that just completed successfully.
+     *
+     * <p>Emitted once from {@link #download(MediaProvider)} after
+     * {@link #performDownload(MediaProvider)} hands back the decrypted media
+     * stream, mirroring the {@code MediaUpload2} beacon committed on the upload
+     * side so the two media-transfer legs are symmetric. The overall result is
+     * fixed to {@link MediaDownloadResultType#OK}, the HTTP code to
+     * {@code 200}, and the transferred-byte and bandwidth figures are derived
+     * from the provider's decoded media size.
+     *
+     * @implNote
+     * This implementation reports the transfer as a single {@code overallT}
+     * leg because Cobalt streams the whole download as one GET rather than WA
+     * Web's queue-connect-network-decrypt timeline; {@code overallMediaSize}
+     * and {@code downloadBytesTransferred} both carry the provider's decoded
+     * media size, {@code estimatedBandwidth} is that size over the measured
+     * wall-clock duration, and {@code overallBackendStore} is derived from the
+     * direct path via
+     * {@link MediaMetricUtils#getMetricBackendStore(String)}.
+     * {@code overallDownloadMode} defaults to
+     * {@link MediaDownloadModeType#FULL} and {@code overallDownloadOrigin} to
+     * {@link DownloadOriginType#CHAT_PERSONAL} because the chat-agnostic media
+     * layer observes neither the download reason nor the destination thread
+     * class. The {@code overallAttemptCount} of {@code 1} and
+     * {@code overallRetryCount} of {@code 0} are synthetic stand-ins since the
+     * retry bookkeeping lives inside {@link #performDownload(MediaProvider)}
+     * and is not surfaced to this commit point.
+     *
+     * @param provider      the downloaded media provider
+     * @param downloadStart the instant the download began
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaMmsV4Download", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCreateMediaDownloadMetrics",
+            exports = "createMediaDownloadMetrics",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void commitMessageMediaDownloadSuccess(MediaProvider provider, Instant downloadStart) {
+        var elapsed = Duration.between(downloadStart, Instant.now());
+        var overallT = Instant.ofEpochMilli(elapsed.toMillis());
+        var seconds = Math.max(elapsed.toMillis(), 1L) / 1000.0;
+        var builder = new MediaDownload2EventBuilder()
+                .overallMediaType(wamMediaType(provider.mediaPath()))
+                .overallMmsVersion(4)
+                .overallDownloadOrigin(DownloadOriginType.CHAT_PERSONAL)
+                .overallDownloadMode(MediaDownloadModeType.FULL)
+                .overallDownloadResult(MediaDownloadResultType.OK)
+                .overallIsFinal(Boolean.TRUE)
+                .connectionType(ConnectionType.HOSTNAME)
+                .httpProtocolVersionType(HttpProtocolVersionType.HTTP2)
+                .mediaId(generateMediaId())
+                .downloadHttpCode(200)
+                .overallT(overallT)
+                .overallAttemptCount(1L)
+                .overallRetryCount(0L);
+        var backendStore = MediaMetricUtils.getMetricBackendStore(provider.mediaDirectPath().orElse(null));
+        if (backendStore != null) {
+            builder.overallBackendStore(backendStore);
+        }
+        var mediaSize = provider.mediaSize();
+        if (mediaSize.isPresent()) {
+            var size = mediaSize.getAsLong();
+            builder.overallMediaSize((double) size)
+                    .downloadBytesTransferred((double) size)
+                    .estimatedBandwidth(size / seconds);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@code MediaDownload2} beacon for a message-media download
+     * that aborted.
+     *
+     * <p>Emitted from {@link #download(MediaProvider)} on the non-retryable
+     * and host-exhaustion failure paths, mirroring the {@code MediaUpload2}
+     * failure beacon. The {@link MediaDownloadResultType} bucket is chosen by
+     * {@link MediaMetricUtils#getMetricDownloadErrorResultType(Throwable)} and,
+     * when the error carries an HTTP status code, that code is stamped on the
+     * download leg.
+     *
+     * @implNote
+     * This implementation routes the error classification and HTTP status
+     * extraction through {@link MediaMetricUtils} so the failure bucket matches
+     * the one WA Web would have picked; {@code overallDownloadMode},
+     * {@code overallDownloadOrigin}, {@code overallBackendStore},
+     * {@code overallAttemptCount}, and {@code overallRetryCount} carry the same
+     * defaults as
+     * {@link #commitMessageMediaDownloadSuccess(MediaProvider, Instant)}.
+     *
+     * @param provider      the media provider whose download failed
+     * @param downloadStart the instant the download began
+     * @param throwable     the error that aborted the download
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaMmsV4Download", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCreateMediaDownloadMetrics",
+            exports = "createMediaDownloadMetrics",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void commitMessageMediaDownloadFailure(MediaProvider provider, Instant downloadStart,
+                                                   Throwable throwable) {
+        var overallT = Instant.ofEpochMilli(Duration.between(downloadStart, Instant.now()).toMillis());
+        var builder = new MediaDownload2EventBuilder()
+                .overallMediaType(wamMediaType(provider.mediaPath()))
+                .overallMmsVersion(4)
+                .overallDownloadOrigin(DownloadOriginType.CHAT_PERSONAL)
+                .overallDownloadMode(MediaDownloadModeType.FULL)
+                .overallDownloadResult(MediaMetricUtils.getMetricDownloadErrorResultType(throwable))
+                .overallIsFinal(Boolean.TRUE)
+                .connectionType(ConnectionType.HOSTNAME)
+                .mediaId(generateMediaId())
+                .overallT(overallT)
+                .overallAttemptCount(1L)
+                .overallRetryCount(0L)
+                .debugMediaException(throwable.getMessage());
+        var backendStore = MediaMetricUtils.getMetricBackendStore(provider.mediaDirectPath().orElse(null));
+        if (backendStore != null) {
+            builder.overallBackendStore(backendStore);
+        }
+        var statusCode = MediaMetricUtils.getStatusCode(throwable);
+        if (statusCode != null) {
+            builder.downloadHttpCode(statusCode);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@code WebcMediaRmr} beacon for a media download that just
+     * completed or failed.
+     *
+     * <p>Emitted once per {@link #download(MediaProvider)} call. WhatsApp Web
+     * models every media download as a retry-media-request (RMR) round trip to
+     * the primary device, so the beacon records the elapsed RMR timer, the
+     * observed HTTP status code, the media type and size, and whether the
+     * download failed.
+     *
+     * @implNote
+     * This implementation reports the effective network type as {@code "4g"}
+     * and derives the browser storage-quota figures from the host filesystem
+     * because Cobalt is a headless library with no {@code navigator.connection}
+     * or {@code navigator.storage} surface to sample. The chat-viewport fields
+     * WA Web sources from the on-screen message list ({@code webcChatPosition},
+     * {@code webcMessageIndex}) are derived deterministically from the
+     * provider's encrypted-hash identity so the values are stable per media
+     * rather than random per commit, and {@code webcRmrReason} is always
+     * {@link WebcRmrReasonCode#OTHER} because the media layer receives no
+     * user-intent hint.
+     *
+     * @param provider   the downloaded media provider
+     * @param rmrStart   the instant the download began
+     * @param error      whether the download failed
+     * @param statusCode the HTTP status code observed, when available
+     */
+    @WhatsAppWebExport(moduleName = "WAWebDownloadManager", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void commitWebcMediaRmr(MediaProvider provider, Instant rmrStart,
+                                    boolean error, OptionalInt statusCode) {
+        var elapsed = Instant.ofEpochMilli(Duration.between(rmrStart, Instant.now()).toMillis());
+        var mediaIdentity = provider.mediaEncryptedSha256()
+                .or(provider::mediaSha256)
+                .map(Arrays::hashCode)
+                .orElse(0);
+        var builder = new WebcMediaRmrEventBuilder()
+                .messageMediaType(wamMediaType(provider.mediaPath()))
+                .webcMediaRmrError(error)
+                .webcMediaRmrT(elapsed)
+                .webcRmrReason(WebcRmrReasonCode.OTHER)
+                .webcBrowserNetworkType("4g")
+                .webcBrowserStorageQuotaBytes(browserStorageQuotaBytes())
+                .webcBrowserStorageQuotaUsedBytes(browserStorageUsedBytes())
+                .webcChatType(WebcChatType.INDIVIDUAL)
+                .webcChatPosition(Math.floorMod(mediaIdentity, 32) + 1L)
+                .webcMessageIndex(Math.floorMod(mediaIdentity, 512) + 1L);
+        provider.mediaSize().ifPresent(builder::webcMediaSize);
+        statusCode.ifPresent(code -> builder.webcRmrStatusCode(code));
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@code StickerError} beacon recording a sticker download or
+     * decode failure.
+     *
+     * <p>Emitted from {@link #download(MediaProvider)} when a sticker-type
+     * media download fails, mirroring WA Web's {@code WAWebMediaMmsV4Download}
+     * catch block that commits {@link StickerErrorType#DECOMPRESSION} when the
+     * downloaded Lottie payload cannot be extracted.
+     *
+     * @param type the sticker error classification
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaMmsV4Download", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void commitStickerError(StickerErrorType type) {
+        wamService.commit(new StickerErrorEventBuilder()
+                .stickerErrorType(type)
+                .build());
+    }
+
+    /**
+     * Maps a {@link MediaPath} routing classification to the WAM
+     * {@link MediaType} enum reported on media-transfer beacons.
+     *
+     * @param path the media routing classification
+     * @return the corresponding WAM media type, or {@link MediaType#NONE}
+     *         when the path has no telemetry counterpart
+     */
+    @WhatsAppWebExport(moduleName = "WAServerMediaType", exports = "castToServerMediaType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static MediaType wamMediaType(MediaPath path) {
+        return switch (path) {
+            case IMAGE, PRODUCT, THUMBNAIL_IMAGE, THUMBNAIL_LINK, NEWSLETTER_IMAGE,
+                 NEWSLETTER_THUMBNAIL_LINK, XMA_IMAGE, WAFFLE_IMAGE, NATIVE_AD_IMAGE,
+                 PRODUCT_CATALOG_IMAGE, PREVIEW -> MediaType.PHOTO;
+            case VIDEO, THUMBNAIL_VIDEO, NEWSLETTER_VIDEO, NATIVE_AD_VIDEO, WAFFLE_VIDEO -> MediaType.VIDEO;
+            case GIF, THUMBNAIL_GIF, NEWSLETTER_GIF -> MediaType.GIF;
+            case AUDIO, NEWSLETTER_AUDIO -> MediaType.AUDIO;
+            case VOICE, NEWSLETTER_VOICE -> MediaType.PTT;
+            case DOCUMENT, THUMBNAIL_DOCUMENT, NEWSLETTER_DOCUMENT, MAIBA_FILE -> MediaType.DOCUMENT;
+            case STICKER, NEWSLETTER_STICKER -> MediaType.STICKER;
+            case STICKER_PACK, THUMBNAIL_STICKER_PACK, NEWSLETTER_STICKER_PACK -> MediaType.STICKER_PACK;
+            case PROFILE_PICTURE, BUSINESS_COVER_PHOTO -> MediaType.PROFILE_PIC;
+            case APP_STATE -> MediaType.MD_APP_STATE;
+            case HISTORY_SYNC -> MediaType.MD_HISTORY_SYNC;
+            case GROUP_HISTORY -> MediaType.GROUP_HISTORY;
+            case PTV, NEWSLETTER_PTV -> MediaType.PUSH_TO_VIDEO;
+            case MUSIC_ARTWORK, NEWSLETTER_MUSIC_ARTWORK -> MediaType.MUSIC_ARTWORK;
+            default -> MediaType.NONE;
+        };
+    }
+
+    /**
+     * Tests whether a media routing classification denotes sticker content.
+     *
+     * @param path the media routing classification
+     * @return {@code true} when the path is a sticker or sticker-pack type
+     */
+    private static boolean isStickerMedia(MediaPath path) {
+        return switch (path) {
+            case STICKER, NEWSLETTER_STICKER, STICKER_PACK, THUMBNAIL_STICKER_PACK,
+                 NEWSLETTER_STICKER_PACK -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * Estimates the browser storage quota in bytes from the host filesystem.
+     *
+     * <p>Stand-in for WA Web's {@code navigator.storage.estimate().quota}.
+     * Cobalt has no browser storage manager, so the value is derived from the
+     * total capacity of the volume backing the user's home directory, scaled
+     * by the same fraction Chromium reserves for per-origin quota.
+     *
+     * @return the estimated storage quota in bytes
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBrowserApi", exports = "getStorageQuota",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static long browserStorageQuotaBytes() {
+        var total = new File(System.getProperty("user.home", ".")).getTotalSpace();
+        return total > 0 ? (long) (total * 0.6) : 10L * 1024 * 1024 * 1024;
+    }
+
+    /**
+     * Estimates the used browser storage in bytes from the host filesystem.
+     *
+     * <p>Stand-in for WA Web's {@code navigator.storage.estimate().usage}.
+     * Derived from the used capacity (total minus usable) of the volume
+     * backing the user's home directory.
+     *
+     * @return the estimated used storage in bytes
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBrowserApi", exports = "getStorageUsage",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static long browserStorageUsedBytes() {
+        var home = new File(System.getProperty("user.home", "."));
+        var used = home.getTotalSpace() - home.getUsableSpace();
+        return used > 0 ? used : 1L;
     }
 
     /**

@@ -136,15 +136,20 @@ public final class LpcAnalysis {
      * after the per-lag {@value #LPC_BWE} bandwidth expansion and is the one the quantizer and synthesis
      * consume. {@code lsf} is the line spectral frequency vector of {@code lpc} in radians within
      * {@code (0, PI)}. {@code autocorr} is the regularization-free autocorrelation that the brute-DCT
-     * recovered, retained for the perceptual and validation paths.
+     * recovered, retained for the perceptual and validation paths. {@code f2} is the magnitude-squared power
+     * spectrum ({@value #NFFT}{@code / 2 + 1} bins) formed by the single forward FFT this analysis already
+     * runs, emitted as a byproduct so callers that need the same spectrum (the pitch estimator and the signal
+     * -mode classifier) do not re-transform the identical windowed buffer.
      *
      * @param lpcRaw   the monic analysis filter before bandwidth expansion, {@value #LPC_ORDER}{@code  + 1}
      *                 entries
      * @param lpc      the bandwidth-expanded monic analysis filter, {@value #LPC_ORDER}{@code  + 1} entries
      * @param lsf      the line spectral frequencies of {@code lpc}, {@value #LPC_ORDER} entries in radians
      * @param autocorr the recovered autocorrelation lags, {@value #LPC_ORDER}{@code  + 1} entries
+     * @param f2       the magnitude-squared power spectrum, {@value #NFFT}{@code / 2 + 1} bins, identical to
+     *                 {@link #powerSpectrum(float[], int)} on the same windowed buffer
      */
-    public record Result(float[] lpcRaw, float[] lpc, float[] lsf, double[] autocorr) {
+    public record Result(float[] lpcRaw, float[] lpc, float[] lsf, double[] autocorr, float[] f2) {
     }
 
     /**
@@ -225,7 +230,8 @@ public final class LpcAnalysis {
      * @return the raw and bandwidth-expanded filters, the line spectral frequencies, and the autocorrelation
      */
     public Result analyze(float[] windowed, int len) {
-        double[] r = autocorrelation(windowed, len);
+        float[] f2 = powerSpectrum(windowed, len);
+        double[] r = bruteDctFromPowerSpectrum(f2);
 
         float[] lpcRaw = new float[LPC_ORDER + 1];
         float[] rc = ac2rc(r, LPC_ORDER, LPC_REG);
@@ -235,7 +241,7 @@ public final class LpcAnalysis {
         bweExpand(lpc, LPC_ORDER, LPC_BWE);
 
         float[] lsf = A2nlsfBridge.a2nlsf(lpc);
-        return new Result(lpcRaw, lpc, lsf, r);
+        return new Result(lpcRaw, lpc, lsf, r, f2);
     }
 
     /**
@@ -245,9 +251,10 @@ public final class LpcAnalysis {
      * <p>The buffer is zero-padded to {@value #NFFT}, forward-transformed, and folded into the half-spectrum
      * {@code F2[i]} for {@code i} in {@code [0, }{@value #NFFT}{@code / 2]}: bin zero is {@code F[0]^2}, the
      * Nyquist bin is {@code F[1]^2}, and bin {@code i} is {@code F[2i]^2 + F[2i+1]^2}. The result is
-     * {@value #NFFT}{@code / 2 + 1} single-precision bins, the native {@code SMPL_F_LEN}. This is the same
-     * spectrum {@link #autocorrelation(float[], int)} forms internally; the pitch estimator and the signal-mode
-     * classifier read it directly. The fold order matches the native {@code smpl_lpc} exactly.
+     * {@value #NFFT}{@code / 2 + 1} single-precision bins, the native {@code SMPL_F_LEN}. This is the spectrum
+     * {@link #analyze(float[], int)} runs once and returns as {@link Result#f2()} for the autocorrelation and
+     * for the pitch estimator and signal-mode classifier to read directly. The fold order matches the native
+     * {@code smpl_lpc} exactly.
      *
      * @param windowed the windowed look-back buffer
      * @param len      the number of valid samples in {@code windowed}, at most {@value #NFFT}
@@ -268,32 +275,26 @@ public final class LpcAnalysis {
     }
 
     /**
-     * Recovers the first {@value #LPC_ORDER}{@code  + 1} autocorrelation lags of a windowed buffer through
-     * the spectral brute-force DCT, the autocorrelation half of {@code smpl_lpc}.
+     * Recovers the first {@value #LPC_ORDER}{@code  + 1} autocorrelation lags from an already-computed power
+     * spectrum through the spectral brute-force DCT, the autocorrelation half of {@code smpl_lpc}.
      *
-     * <p>The buffer is zero-padded to {@value #NFFT}, forward-transformed, squared into a power spectrum, and
-     * combined with the precomputed cosine tables to yield the autocorrelation in {@code double}. The
-     * symmetric folding of the power spectrum ({@code F2sum}, {@code F2_dif}, {@code F2_sumsum},
-     * {@code F2_sumdif}) and the per-lag dot products follow the native {@code brute_dct} order exactly.
+     * <p>The single-precision power spectrum {@link #powerSpectrum(float[], int)} produced from the one forward
+     * FFT is widened to {@code double} bin by bin and combined with the precomputed cosine tables to yield the
+     * autocorrelation. The widening {@code (double) f2[i]} is bit-identical to forming the spectrum directly in
+     * {@code double} because each bin was already rounded to a {@code float} by the native fold, so a single FFT
+     * feeds both the power-spectrum byproduct and the autocorrelation. The symmetric folding
+     * ({@code F2sum}, {@code F2_dif}, {@code F2_sumsum}, {@code F2_sumdif}) and the per-lag dot products follow
+     * the native {@code brute_dct} order exactly.
      *
-     * @param windowed the windowed buffer
-     * @param len      the number of valid samples in {@code windowed}, at most {@value #NFFT}
+     * @param f2 the single-precision power spectrum, {@value #NFFT}{@code / 2 + 1} bins
      * @return the autocorrelation lags zero through {@value #LPC_ORDER} in {@code double}
      */
-    private double[] autocorrelation(float[] windowed, int len) {
-        float[] xBuf = new float[NFFT];
-        System.arraycopy(windowed, 0, xBuf, 0, len);
-        float[] f = new float[NFFT];
-        fft.transformOrdered(xBuf, f, null, true);
-
-        double[] f2 = new double[NFFT / 2 + 1];
-        f2[0] = (double) (f[0] * f[0]);
-        f2[NFFT / 2] = (double) (f[1] * f[1]);
-        for (int i = 1; i < NFFT / 2; i++) {
-            f2[i] = (double) (f[2 * i] * f[2 * i] + f[2 * i + 1] * f[2 * i + 1]);
+    private static double[] bruteDctFromPowerSpectrum(float[] f2) {
+        double[] f2d = new double[NFFT / 2 + 1];
+        for (int i = 0; i < f2d.length; i++) {
+            f2d[i] = f2[i];
         }
-
-        return bruteDct(f2);
+        return bruteDct(f2d);
     }
 
     /**

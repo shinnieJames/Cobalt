@@ -16,7 +16,11 @@ import com.github.auties00.cobalt.wam.binary.WamEventEncoder;
 import com.github.auties00.cobalt.wam.binary.WamGlobalEncoder;
 import com.github.auties00.cobalt.wam.event.PsIdUpdateEventBuilder;
 import com.github.auties00.cobalt.wam.event.WamClientErrorsEventBuilder;
+import com.github.auties00.cobalt.wam.event.WamDroppedEventEvent;
+import com.github.auties00.cobalt.wam.event.WamDroppedEventEventBuilder;
 import com.github.auties00.cobalt.wam.event.WamEventRegistry;
+import com.github.auties00.cobalt.wam.event.WebWamForceFlushEvent;
+import com.github.auties00.cobalt.wam.event.WebWamForceFlushEventBuilder;
 import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.privatestats.WamPrivateStatsId;
@@ -641,7 +645,7 @@ public abstract class WamService {
         }
         this.beaconing = Objects.requireNonNull(beaconing, "beaconing cannot be null");
         this.privateStatsId = new WamPrivateStatsId();
-        this.privateStatsUploader = new WamPrivateStatsUploader(new WamPrivateStatsTokenIssuer(client));
+        this.privateStatsUploader = new WamPrivateStatsUploader(new WamPrivateStatsTokenIssuer(client), this);
         this.samplingOverride = new WamSamplingOverride();
         this.prevSessionGlobals = new EnumMap<>(WamChannel.class);
         this.initQueue = new ConcurrentLinkedQueue<>();
@@ -988,13 +992,14 @@ public abstract class WamService {
      * </ul>
      *
      * @implNote
-     * This implementation does not emit a {@code WamDroppedEvent}
-     * counter on validation failure; WA Web's
-     * {@code WAWebWamCodegenWamEvent.WamEvent.commit} catches the
-     * validator's exception and commits a
-     * {@code WamDroppedEventWamEvent(droppedEventCode=id,
-     * droppedEventCount=1)} in its place. The log line is the only
-     * surface for the failure.
+     * This implementation mirrors WA Web's
+     * {@code WAWebWamCodegenWamEvent.WamEvent.commit}: a failed
+     * pre-commit validation is logged and then accounted with a
+     * {@link WamDroppedEventEvent} counter
+     * ({@code droppedEventCode=id, droppedEventCount=1}) committed in
+     * the rejected event's place through {@link #emitDroppedEvent(int)}.
+     * The redundant-commit and sampling-drop paths carry no such
+     * counter because WA Web has no equivalent accounting for them.
      *
      * @param event the event to commit, must not be {@code null}
      * @throws NullPointerException if {@code event} is {@code null}
@@ -1016,6 +1021,7 @@ public abstract class WamService {
 
         if (!event.validate()) {
             LOGGER.warning("WAM event failed validation: " + event.getClass().getSimpleName());
+            emitDroppedEvent(event.id());
             return;
         }
 
@@ -1038,6 +1044,61 @@ public abstract class WamService {
         if (event.channel() == WamChannel.REALTIME) {
             Thread.ofVirtual().start(() -> flushChannel(WamChannel.REALTIME));
         }
+    }
+
+    /**
+     * Commits the WAM self-telemetry counter that accounts a single
+     * event dropped for failing pre-commit validation.
+     *
+     * <p>{@link #commit(WamEventSpec)} calls this from its
+     * validation-failure branch, passing the rejected event's numeric
+     * id as {@code droppedEventCode} and a fixed count of one. The
+     * emitted {@link WamDroppedEventEvent} declares no validators of its
+     * own, so it always clears {@link #commit(WamEventSpec)} and lands
+     * on the regular channel; the drop accounting can therefore never
+     * itself be dropped and recurse.
+     *
+     * @implNote
+     * This implementation leaves {@code isFromWamsys} unset because
+     * Cobalt has no {@code wamsys} native pipeline to attribute the
+     * drop to; WA Web's {@code WAWebWamCodegenWamEvent.WamEvent.commit}
+     * likewise commits only {@code droppedEventCode} and
+     * {@code droppedEventCount} from this call site.
+     *
+     * @param droppedEventCode the numeric id of the event that failed
+     *                         validation
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamCodegenWamEvent", exports = "WamEvent", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebWamDroppedEventWamEvent", exports = "WamDroppedEventWamEvent", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitDroppedEvent(int droppedEventCode) {
+        commit(new WamDroppedEventEventBuilder()
+                .droppedEventCode(droppedEventCode)
+                .droppedEventCount(1)
+                .build());
+    }
+
+    /**
+     * Commits the empty {@link WebWamForceFlushEvent} sentinel that
+     * marks a forced drain of the WAM buffers.
+     *
+     * <p>{@link #close()} calls this immediately before its terminal
+     * {@link #flush()} so the sentinel lands in the regular channel's
+     * pending list and ships in the same drain. The event carries no
+     * fields; its presence on the wire is the sole signal that the
+     * buffer was force-flushed on shutdown rather than rotated by the
+     * 120-second scheduler.
+     *
+     * @implNote
+     * This implementation emits the sentinel only from {@link #close()},
+     * the sole Cobalt forced-flush path; WA Web's
+     * {@code WAWebForceFlushWamBuffers.forceFlushAllWamAndQplBuffers}
+     * additionally fires it ten seconds after page load, a lifecycle
+     * hook Cobalt has no equivalent for. The scheduled 120-second
+     * {@link #flush()} rotation deliberately does not emit it.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebForceFlushWamBuffers", exports = "forceFlushAllWamAndQplBuffers", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitForceFlush() {
+        commit(new WebWamForceFlushEventBuilder().build());
     }
 
     /**
@@ -2219,16 +2280,22 @@ public abstract class WamService {
     }
 
     /**
-     * Tears down the recurring schedulers, performs a final flush,
+     * Tears down the recurring schedulers, commits the
+     * {@link WebWamForceFlushEvent} sentinel, performs a final flush,
      * and clears the {@code initialized} flag.
      *
-     * <p>After this returns, every {@link #commit(WamEventSpec)} again
-     * defers to the init queue and {@link #flush()} and
-     * {@link #checkMidCycleUpload()} become no-ops; a subsequent
-     * {@link #initialize()} call is required to resume the pipeline.
+     * <p>The sentinel is committed through {@link #emitForceFlush()}
+     * before the terminal {@link #flush()} so it ships in the same
+     * drain, marking the buffer as force-flushed on shutdown rather
+     * than rotated by the scheduler. After this returns, every
+     * {@link #commit(WamEventSpec)} again defers to the init queue and
+     * {@link #flush()} and {@link #checkMidCycleUpload()} become
+     * no-ops; a subsequent {@link #initialize()} call is required to
+     * resume the pipeline.
      */
     public void close() {
         cancelAllScheduled();
+        emitForceFlush();
         flush();
         // TODO: persist pending buffers and restore on initialize(). WA Web
         //       writes to IndexedDB every serialize tick; Cobalt currently

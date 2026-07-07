@@ -259,6 +259,13 @@ public final class CallKeyCryptography implements CallKeyExchange {
 
         var slots = new ArrayList<CallKeyDistribution>(devices.size());
         var encryptionFailed = false;
+        // FIXME: after encryptionFailed is set this loop keeps calling encryptForDevice() for every
+        //  remaining device, each advancing that session's Signal ratchet counter, and then slots.clear()
+        //  discards all ciphertext for a bare fanout, leaving the local counter ahead of the peer on
+        //  sessions the message plane also uses (ratchet desync). WA's partial-fanout failure semantics
+        //  (break-early vs best-effort-encrypt-all) are unconfirmed and this crosses into the shared
+        //  Signal session layer; do not change ratchet consumption (e.g. break out on first failure and
+        //  build the bare list post-loop) until confirmed against the message-encryption path.
         for (var deviceJid : devices) {
             try {
                 var payload = encryption.encryptForDevice(deviceJid, plaintext);

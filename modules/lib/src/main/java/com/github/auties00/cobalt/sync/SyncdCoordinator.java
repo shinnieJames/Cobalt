@@ -4,9 +4,14 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.MdCriticalEventEventBuilder;
+import com.github.auties00.cobalt.wam.type.Collection;
+import com.github.auties00.cobalt.wam.type.MdSyncdCriticalEventCode;
 
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -74,16 +79,49 @@ public final class SyncdCoordinator {
     private final Set<SyncPatchType> pendingRetrigger;
 
     /**
-     * Constructs an empty coordinator with no collection in flight.
+     * The telemetry sink that receives the {@code MdCriticalEventEvent} emitted by
+     * {@link #reportCriticalEvent(MdSyncdCriticalEventCode, SyncPatchType, String)},
+     * or {@code null} when this coordinator was constructed without one.
      *
-     * <p>One instance is created per {@link WebAppStateService} and shared with
-     * the key-rotation, missing-key request, and missing-key timeout collaborators
-     * so all of them serialize against the same monitor and in-flight set.
+     * <p>WhatsApp Web routes every syncd critical fault through the single
+     * {@code uploadMdCriticalEventMetric} reporter in {@code WAWebSyncdMetrics};
+     * this field is that reporter's WAM back end. A {@code null} value disables
+     * emission so the coordinator can still be built purely for state coordination
+     * (for example in unit tests) without a telemetry pipeline attached.
+     */
+    private final WamService wamService;
+
+    /**
+     * Constructs an empty coordinator with no telemetry sink and no collection in
+     * flight.
+     *
+     * <p>Equivalent to {@link #SyncdCoordinator(WamService)} with a {@code null}
+     * sink: state coordination works fully, but
+     * {@link #reportCriticalEvent(MdSyncdCriticalEventCode, SyncPatchType, String)}
+     * becomes a no-op because there is no pipeline to commit the event to.
      */
     public SyncdCoordinator() {
+        this(null);
+    }
+
+    /**
+     * Constructs an empty coordinator that emits syncd critical-event telemetry
+     * through the given sink.
+     *
+     * <p>One instance is created per {@link WebAppStateService} and shared with the
+     * key-rotation, missing-key request, and missing-key timeout collaborators so
+     * all of them serialize against the same monitor and in-flight set. The sink is
+     * the WAM back end for
+     * {@link #reportCriticalEvent(MdSyncdCriticalEventCode, SyncPatchType, String)}.
+     *
+     * @param wamService the telemetry sink for critical-event reporting, or
+     *                   {@code null} to disable emission
+     */
+    public SyncdCoordinator(WamService wamService) {
         this.monitor = new ReentrantLock();
         this.inFlight = EnumSet.noneOf(SyncPatchType.class);
         this.pendingRetrigger = EnumSet.noneOf(SyncPatchType.class);
+        this.wamService = wamService;
     }
 
     /**
@@ -277,5 +315,142 @@ public final class SyncdCoordinator {
      */
     public boolean isHeldByCurrentThread() {
         return monitor.isHeldByCurrentThread();
+    }
+
+    /**
+     * Reports a critical syncd processing fault as a WAM
+     * {@link com.github.auties00.cobalt.wam.event.MdCriticalEventEvent}.
+     *
+     * <p>WhatsApp Web funnels every unrecoverable app-state condition (a message
+     * range that fails validation, a malformed pending mutation, invalid action
+     * index data, an anti-tampering missing-remove, an LT-Hash inconsistency, an
+     * unapplied mutation, and the rest of {@link MdSyncdCriticalEventCode}) through
+     * a single {@code uploadMdCriticalEventMetric} reporter; this method is the
+     * Cobalt equivalent. {@code code} identifies which fault fired, {@code collection}
+     * names the affected app-state collection (mapped to the WAM {@link Collection}
+     * enum), and {@code mutationActionName} carries the sync-action name of the
+     * offending mutation when one is known. When this coordinator was constructed
+     * without a telemetry sink the call is a no-op.
+     *
+     * @apiNote
+     * Callers on the syncd decode, patch-apply, anti-tampering, and message-range
+     * validation paths invoke this the moment they detect an unrecoverable fault,
+     * before they discard the mutation or fail the round; the codes are mutually
+     * exclusive, so exactly one call is made per detected fault.
+     *
+     * @implNote
+     * This implementation derives {@code mdCriticalEventStage} from {@code code}
+     * because the processing stage is fully determined by which fault fired, and
+     * leaves {@code mdCriticalEventErrorMessage} unset here; use the
+     * {@link #reportCriticalEvent(MdSyncdCriticalEventCode, SyncPatchType, String, Throwable)}
+     * overload to attach a decode or apply exception message.
+     *
+     * @param code               the critical-event code that fired, must not be {@code null}
+     * @param collection         the affected collection, or {@code null} if the fault is not collection-scoped
+     * @param mutationActionName the sync-action name of the offending mutation, or {@code null} if unknown
+     * @throws NullPointerException if {@code code} is {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMetrics", exports = "uploadMdCriticalEventMetric", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void reportCriticalEvent(MdSyncdCriticalEventCode code, SyncPatchType collection, String mutationActionName) {
+        reportCriticalEvent(code, collection, mutationActionName, null);
+    }
+
+    /**
+     * Reports a critical syncd processing fault, attaching the causing exception's
+     * message as {@code mdCriticalEventErrorMessage}.
+     *
+     * <p>Behaves as
+     * {@link #reportCriticalEvent(MdSyncdCriticalEventCode, SyncPatchType, String)}
+     * but additionally records {@code cause}'s message when the fault surfaced as a
+     * thrown exception (a decode or patch-apply failure), giving the telemetry the
+     * concrete failure text alongside the coded reason. A {@code null} {@code cause}
+     * or a {@code cause} with no message leaves the field unset.
+     *
+     * @param code               the critical-event code that fired, must not be {@code null}
+     * @param collection         the affected collection, or {@code null} if the fault is not collection-scoped
+     * @param mutationActionName the sync-action name of the offending mutation, or {@code null} if unknown
+     * @param cause              the exception that surfaced the fault, or {@code null} if the fault was detected without one
+     * @throws NullPointerException if {@code code} is {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMetrics", exports = "uploadMdCriticalEventMetric", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void reportCriticalEvent(MdSyncdCriticalEventCode code, SyncPatchType collection, String mutationActionName, Throwable cause) {
+        Objects.requireNonNull(code, "code cannot be null");
+        if (wamService == null) {
+            return;
+        }
+        var builder = new MdCriticalEventEventBuilder()
+                .mdCriticalEventCode(code)
+                .mdCriticalEventStage(stageOf(code));
+        if (collection != null) {
+            builder.collection(toCollectionMetric(collection));
+        }
+        if (mutationActionName != null) {
+            builder.mutationActionName(mutationActionName);
+        }
+        if (cause != null && cause.getMessage() != null) {
+            builder.mdCriticalEventErrorMessage(cause.getMessage());
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Maps a {@link SyncPatchType} to the matching WAM {@link Collection} constant.
+     *
+     * @param collection the affected collection, must not be {@code null}
+     * @return the corresponding WAM collection enum constant
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMetrics", exports = "collectionNameToMetric", adaptation = WhatsAppAdaptation.DIRECT)
+    private static Collection toCollectionMetric(SyncPatchType collection) {
+        return switch (collection) {
+            case CRITICAL_BLOCK -> Collection.CRITICAL_BLOCK;
+            case CRITICAL_UNBLOCK_LOW -> Collection.CRITICAL_UNBLOCK_LOW;
+            case REGULAR -> Collection.REGULAR;
+            case REGULAR_HIGH -> Collection.REGULAR_HIGH;
+            case REGULAR_LOW -> Collection.REGULAR_LOW;
+        };
+    }
+
+    /**
+     * Returns the syncd processing stage at which the given critical-event code is
+     * raised.
+     *
+     * <p>The stage is fully determined by the code: the message-range codes come
+     * from message-range validation; {@link MdSyncdCriticalEventCode#MISSING_MUTATION_TO_REMOVE},
+     * {@link MdSyncdCriticalEventCode#NO_CONFIRMED_SET_MUTATION_FOR_A_PENDING_REMOVE}, and
+     * {@link MdSyncdCriticalEventCode#NO_KEY_DATA_FOR_A_PENDING_REMOVE_MUTATION} come from the
+     * anti-tampering pass; the LT-Hash codes come from the daily consistency check and the
+     * snapshot MAC verification respectively; and the remaining codes name their own
+     * decode or apply stage. The returned label is a short lowercase identifier suitable
+     * for the WAM {@code mdCriticalEventStage} string.
+     *
+     * @param code the critical-event code, must not be {@code null}
+     * @return a short identifier naming the processing stage
+     */
+    private static String stageOf(MdSyncdCriticalEventCode code) {
+        return switch (code) {
+            case MESSAGE_RANGE_UNSET,
+                 MESSAGE_RANGE_LAST_SYSTEM_MESSAGE_TIMESTAMP_SET,
+                 MESSAGE_RANGE_MESSAGES_UNSET,
+                 MESSAGE_RANGE_MESSAGES_EMPTY,
+                 MESSAGE_RANGE_MESSAGES_CROSS_LIMIT,
+                 MESSAGE_RANGE_MESSAGE_KEY_UNSET,
+                 MESSAGE_RANGE_MESSAGE_KEY_REMOTE_JID_UNSET,
+                 MESSAGE_RANGE_MESSAGE_KEY_FROM_ME_UNSET,
+                 MESSAGE_RANGE_MESSAGE_KEY_STANZA_ID_UNSET,
+                 MESSAGE_RANGE_MESSAGE_KEY_REMOTE_JID_INVALID,
+                 MESSAGE_RANGE_MESSAGE_KEY_PARTICIPANT_UNSET -> "message_range_validation";
+            case MALFORMED_PENDING_MUTATION -> "pending_mutation_decode";
+            case ACTION_INVALID_INDEX_DATA -> "index_decode";
+            case MISSING_MUTATION_TO_REMOVE,
+                 NO_CONFIRMED_SET_MUTATION_FOR_A_PENDING_REMOVE,
+                 NO_KEY_DATA_FOR_A_PENDING_REMOVE_MUTATION -> "anti_tampering";
+            case LTHASH_INCONSISTENCY_ON_DAILY_CHECK -> "daily_lthash_check";
+            case LTHASH_INCONSISTENCY_ON_SNAPSHOT_MAC_MISMATCH -> "snapshot_mac_verification";
+            case EMPTY_PATCH -> "patch_decode";
+            case HISTORY_SYNC_ILLEGAL_STATE_EXCEPTION -> "history_sync";
+            case MUTATION_SKIPPED_ON_STORE_LOAD -> "store_load";
+            case MUTATION_SKIPPED_ON_OUTGOING_SYNC_REQUEST_PREPARATION -> "outgoing_sync_request_preparation";
+            case UNAPPLIED_MUTATION_ON_PATCH_APPLICATION -> "patch_application";
+        };
     }
 }

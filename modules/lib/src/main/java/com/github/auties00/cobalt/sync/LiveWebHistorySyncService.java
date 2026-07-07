@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.listener.linked.LinkedWebHistorySyncProgressLi
 import com.github.auties00.cobalt.exception.WhatsAppHistorySyncException;
 import com.github.auties00.cobalt.exception.WhatsAppMediaException;
 import com.github.auties00.cobalt.media.MediaConnectionService;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppChatStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
@@ -22,6 +23,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.media.StickerMetadata;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncMessageAccessStatus;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
@@ -41,6 +43,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.zip.InflaterInputStream;
 
 /**
@@ -88,6 +91,8 @@ import java.util.zip.InflaterInputStream;
 @WhatsAppWebModule(moduleName = "WAWebHandleHistorySyncNotification")
 @WhatsAppWebModule(moduleName = "WAWebHistorySyncNotificationUtils")
 @WhatsAppWebModule(moduleName = "WAWebHandleHistorySyncChunk")
+@WhatsAppWebModule(moduleName = "WAWebLogHistorySyncStatusAfterPairingJob")
+@WhatsAppWebModule(moduleName = "WAWebGroupHistoryReceiverUserJourneyLogger")
 public final class LiveWebHistorySyncService implements WebHistorySyncService {
     /**
      * The logger used to record non-fatal download and decode failures
@@ -226,6 +231,8 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
                     MdBootstrapStepResult.FAILURE, exception.getMessage());
             emitHistoryDataApplied(notification, null, sentViaMms, applyStartTs,
                     MdBootstrapStepResult.FAILURE, exception.getMessage());
+            emitBootstrapHistorySyncStatusAfterPairing(notification, null,
+                    MdHistorySyncStatusResult.FAIL_TO_DOWNLOAD);
             return;
         } catch (RuntimeException exception) {
             LOGGER.log(System.Logger.Level.WARNING,
@@ -234,6 +241,8 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
                     MdBootstrapStepResult.FAILURE, exception.getMessage());
             emitHistoryDataApplied(notification, null, sentViaMms, applyStartTs,
                     MdBootstrapStepResult.FAILURE, exception.getMessage());
+            emitBootstrapHistorySyncStatusAfterPairing(notification, null,
+                    MdHistorySyncStatusResult.OTHER_ERROR);
             return;
         }
         if (historySync == null) {
@@ -245,11 +254,17 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
             dispatch(historySync);
             emitHistoryDataApplied(notification, historySync, sentViaMms, applyStartTs,
                     MdBootstrapStepResult.SUCCESS, null);
+            var recentSyncStatus = historySync.progress().orElse(0) >= 100
+                    ? MdHistorySyncStatusResult.SUCCESS
+                    : MdHistorySyncStatusResult.IN_PROGRESS;
+            emitBootstrapHistorySyncStatusAfterPairing(notification, historySync, recentSyncStatus);
         } catch (RuntimeException exception) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "History sync chunk dispatch failed", exception);
             emitHistoryDataApplied(notification, historySync, sentViaMms, applyStartTs,
                     MdBootstrapStepResult.FAILURE, exception.getMessage());
+            emitBootstrapHistorySyncStatusAfterPairing(notification, historySync,
+                    MdHistorySyncStatusResult.FAIL_TO_STORE);
         }
     }
 
@@ -491,6 +506,131 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
             builder.historySyncChunkOrder(chunkOrder.getAsInt());
         }
         wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a
+     * {@link MdBootstrapHistorySyncStatusAfterPairingEventBuilder MdBootstrapHistorySyncStatusAfterPairingEvent}
+     * summarising the state of the recent-history bootstrap sync at the moment a
+     * {@link HistorySyncType#RECENT} chunk finishes processing.
+     *
+     * <p>WhatsApp Web fires this event from a scheduled post-pairing job
+     * ({@code logHistorySyncStatusAfterPairing}) that wakes at fixed 5, 10, 20,
+     * 40, and 60 minute checkpoints after pairing and reports the recent-sync
+     * progress up to five times. Cobalt has no such scheduler in this service,
+     * so the summary is instead emitted at the natural completion boundary of
+     * every recent-history chunk: a {@link MdHistorySyncStatusResult#SUCCESS}
+     * on the terminal chunk (progress at or above {@code 100}),
+     * {@link MdHistorySyncStatusResult#IN_PROGRESS} on an intermediate chunk,
+     * and the caller-supplied failure result on the download, decode, and store
+     * failure paths. Non-recent sync types short-circuit without emitting,
+     * matching WhatsApp Web's exclusive focus on the recent sync (the job always
+     * reports {@link MdBootstrapHistoryPayloadType#RECENT_HISTORY}).
+     *
+     * @implNote This implementation derives {@code activeTimeAfterPairing} from
+     * {@link LinkedWhatsAppAccountStore#pairingTimestamp()}, falling back to
+     * {@link LinkedWhatsAppAccountStore#initializationTimeStamp()} when the
+     * pairing instant has not been recorded, and clamps any elapsed time under
+     * five minutes up to {@link ActiveTimeAfterPairing#MINS_5} because Cobalt
+     * emits at chunk completion rather than on the timer that WhatsApp Web uses
+     * to gate the sub-five-minute window out. The {@code mdSessionId} and
+     * {@code missingNotificationCount} fields are omitted: the former is an
+     * identity-key hash Cobalt has no equivalent derivation for, and the latter
+     * is never set by the WhatsApp Web emitter. {@code unprocessedNotificationCount}
+     * and {@code nextNotificationChunkOrder} are reported only on the
+     * non-success paths, mirroring the WhatsApp Web control flow that commits the
+     * completed case before those fields are computed; Cobalt processes one
+     * chunk at a time with no notification backlog, so the unprocessed count is
+     * a genuine zero and the next order is the successor of the current chunk.
+     *
+     * @param notification the notification whose recent-sync chunk was
+     *                     processed
+     * @param historySync  the decoded payload, or {@code null} when the
+     *                     download or decode failed before a payload was
+     *                     available
+     * @param result       the recent-sync status result to record
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogHistorySyncStatusAfterPairingJob",
+            exports = "commitHistorySyncStatusData", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitBootstrapHistorySyncStatusAfterPairing(
+            HistorySyncNotification notification,
+            HistorySync historySync,
+            MdHistorySyncStatusResult result
+    ) {
+        var syncType = historySync != null
+                ? historySync.syncType()
+                : notification.syncType().orElse(null);
+        if (syncType != HistorySyncType.RECENT) {
+            return;
+        }
+        var accountStore = whatsapp.store().accountStore();
+        var pairing = accountStore.pairingTimestamp()
+                .orElseGet(accountStore::initializationTimeStamp);
+        var elapsedMinutes = Duration.between(pairing, Instant.now()).toMinutes();
+        var succeeded = result == MdHistorySyncStatusResult.SUCCESS;
+        var chunkOrder = notification.chunkOrder();
+        var lastChunkOrder = chunkOrder.isPresent() ? chunkOrder.getAsInt() : -1;
+        var messagesCount = 0L;
+        if (historySync != null) {
+            for (var chat : historySync.chats()) {
+                messagesCount += chat.messageCount();
+            }
+        }
+        var builder = new MdBootstrapHistorySyncStatusAfterPairingEventBuilder()
+                .mdBootstrapHistoryPayloadType(MdBootstrapHistoryPayloadType.RECENT_HISTORY)
+                .activeTimeAfterPairing(mapActiveTimeAfterPairing(elapsedMinutes))
+                .isLoopRunning(!succeeded)
+                .mdTimestamp(System.currentTimeMillis())
+                .mdHistorySyncStatusResult(result)
+                .lastProcessedNotificationChunkOrder(lastChunkOrder)
+                .lastProcessedNotificationChunkProgress(notification.progress().orElse(-1))
+                .totalProcessedMessageCount(messagesCount);
+        if (!succeeded) {
+            builder.unprocessedNotificationCount(0);
+            builder.nextNotificationChunkOrder(lastChunkOrder < 0 ? -1 : lastChunkOrder + 1);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Maps the number of minutes elapsed since pairing onto the
+     * {@link ActiveTimeAfterPairing} bucket reported by the recent-history
+     * bootstrap status summary.
+     *
+     * <p>Invoked from
+     * {@link #emitBootstrapHistorySyncStatusAfterPairing(HistorySyncNotification, HistorySync, MdHistorySyncStatusResult)}.
+     * The buckets follow WhatsApp Web's checkpoint schedule: 60 or more minutes
+     * to {@link ActiveTimeAfterPairing#MINS_60}, 40 or more to
+     * {@link ActiveTimeAfterPairing#MINS_40}, 20 or more to
+     * {@link ActiveTimeAfterPairing#MINS_20}, 10 or more to
+     * {@link ActiveTimeAfterPairing#MINS_10}, and anything below to
+     * {@link ActiveTimeAfterPairing#MINS_5}.
+     *
+     * @implNote This implementation returns {@link ActiveTimeAfterPairing#MINS_5}
+     * for any value under five minutes rather than declining to log, because
+     * Cobalt emits the summary at recent-sync-chunk completion and cannot defer
+     * an early completion to the next checkpoint the way WhatsApp Web's timer
+     * does.
+     *
+     * @param elapsedMinutes the whole minutes elapsed since pairing
+     * @return the matching {@link ActiveTimeAfterPairing} bucket
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogHistorySyncStatusAfterPairingJob",
+            exports = "logHistorySyncStatusAfterPairing", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static ActiveTimeAfterPairing mapActiveTimeAfterPairing(long elapsedMinutes) {
+        if (elapsedMinutes >= 60) {
+            return ActiveTimeAfterPairing.MINS_60;
+        }
+        if (elapsedMinutes >= 40) {
+            return ActiveTimeAfterPairing.MINS_40;
+        }
+        if (elapsedMinutes >= 20) {
+            return ActiveTimeAfterPairing.MINS_20;
+        }
+        if (elapsedMinutes >= 10) {
+            return ActiveTimeAfterPairing.MINS_10;
+        }
+        return ActiveTimeAfterPairing.MINS_5;
     }
 
     /**
@@ -893,9 +1033,14 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
         }
 
         var historyChats = historySync.chats();
+        var createdRegularUserChats = 0L;
         for (var historyChat : historyChats) {
-            applyChat(historyChat, store);
+            if (applyChat(historyChat, store) && isRegularUserChat(historyChat.jid())) {
+                createdRegularUserChats++;
+            }
+            emitGroupHistoryReceiverJourney(historyChat);
         }
+        emitWebcChatCreate(createdRegularUserChats);
         if (!historyChats.isEmpty()) {
             List<Chat> syncedChats = List.copyOf(historyChats);
             for (var listener : listeners) {
@@ -985,6 +1130,135 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
     }
 
     /**
+     * Commits a
+     * {@link GroupHistoryReceiverUserJourneyEventBuilder GroupHistoryReceiverUserJourneyEvent}
+     * recording that one group's embedded message history was inserted into the
+     * store from the current history-sync chunk.
+     *
+     * <p>Invoked from {@link #dispatch(HistorySync)} once per chat carried by
+     * the chunk. WhatsApp Web tracks the group-history receiver journey through
+     * a dedicated on-demand bundle download
+     * ({@code WAWebDownloadHistoryBundleAction}) whose stages are download
+     * started, download succeeded or failed, parse succeeded or failed, and
+     * database inserted. Cobalt receives group history inline with the
+     * bootstrap history-sync chunks rather than through a separate per-group
+     * download, so only the terminal database-insert stage
+     * ({@link GroupHistoryReceiverUserJourneyActionType#GROUP_HISTORY_DB_INSERTED})
+     * has a faithful analogue here; it fires as the group's messages are merged
+     * into the local {@link Chat}. Non-group chats and groups that carry no
+     * embedded messages in this chunk are skipped so the event is emitted only
+     * when history is actually inserted.
+     *
+     * @implNote This implementation reports {@code groupHistoryDbIgnoredOlderMessages}
+     * as {@code false} and {@code groupHistoryOutWindowPinsCount} as {@code 0}
+     * because Cobalt appends every message the chunk carries without an
+     * age-based drop and applies no pin-retention-window filter. Matching
+     * WhatsApp Web's own field, {@code userJourneyMs} is the current wall-clock
+     * epoch millisecond rather than a duration. A fresh {@code unifiedSessionId}
+     * is minted per emission with {@link UUID#randomUUID()} because Cobalt has no
+     * cross-event unified-session tracker.
+     *
+     * @param historyChat the wire-shape chat carrying the group's chunk
+     *                    metadata and embedded messages
+     */
+    @WhatsAppWebExport(moduleName = "WAWebGroupHistoryReceiverUserJourneyLogger",
+            exports = "dbInserted", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitGroupHistoryReceiverJourney(Chat historyChat) {
+        if (!historyChat.jid().hasServer(JidServer.groupOrCommunity())) {
+            return;
+        }
+        var messagesCount = historyChat.messageCount();
+        if (messagesCount == 0) {
+            return;
+        }
+        wamService.commit(new GroupHistoryReceiverUserJourneyEventBuilder()
+                .groupHistoryReceiverActionType(GroupHistoryReceiverUserJourneyActionType.GROUP_HISTORY_DB_INSERTED)
+                .groupHistoryReceiverGroupId(historyChat.jid().toString())
+                .groupHistoryMessagesCount(messagesCount)
+                .groupHistoryDbIgnoredOlderMessages(false)
+                .groupHistoryOutWindowPinsCount(0)
+                .userJourneyMs(System.currentTimeMillis())
+                .unifiedSessionId(UUID.randomUUID().toString())
+                .build());
+    }
+
+    /**
+     * Commits a {@link WebcChatCreateEventBuilder WebcChatCreateEvent} recording
+     * how many regular-user chats were implicitly created while ingesting the
+     * current history-sync chunk.
+     *
+     * <p>Invoked from {@link #dispatch(HistorySync)} once per chunk, after every
+     * carried conversation has been merged through
+     * {@link #applyChat(Chat, LinkedWhatsAppStore)}. The event is emitted only
+     * when at least one regular-user chat was newly created, mirroring
+     * WhatsApp Web, which commits the metric solely on the {@code noCreated > 0}
+     * branch. The creation method is always
+     * {@link WebcChatCreateCreationMethod#MISSING_WHEN_SAVING_MESSAGE} because the
+     * chats are materialised as a side effect of persisting the chunk's embedded
+     * messages for conversations that had no existing chat row.
+     *
+     * @implNote This implementation counts only chats whose {@link Chat#jid()}
+     * passes {@link #isRegularUserChat(Jid)}, matching WhatsApp Web's
+     * {@code isRegularUserNoImply} filter that excludes groups, newsletters,
+     * broadcasts, the announcements (PSA) account, and bots from the count.
+     * WhatsApp Web derives the count by diffing the referenced chat ids against
+     * the rows returned by a bulk chat lookup; Cobalt instead accumulates the
+     * per-chat creation flag returned by
+     * {@link #applyChat(Chat, LinkedWhatsAppStore)} across the dispatch loop,
+     * which naturally deduplicates repeated ids because a second occurrence finds
+     * the just-created chat.
+     *
+     * @param createdCount the number of regular-user chats created during the
+     *                     current chunk; no event is emitted when it is not
+     *                     positive
+     */
+    @WhatsAppWebExport(moduleName = "WAWebDBMessageBulkHelper",
+            exports = "persistNewMessagesInBulk", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitWebcChatCreate(long createdCount) {
+        if (createdCount <= 0) {
+            return;
+        }
+        wamService.commit(new WebcChatCreateEventBuilder()
+                .creationMethod(WebcChatCreateCreationMethod.MISSING_WHEN_SAVING_MESSAGE)
+                .noCreated(createdCount)
+                .build());
+    }
+
+    /**
+     * Returns whether a chat JID identifies a regular WhatsApp user for the
+     * purpose of the {@link #emitWebcChatCreate(long)} creation count.
+     *
+     * <p>Invoked from {@link #dispatch(HistorySync)} once per newly created chat.
+     * A JID is a regular user when it lives on a user domain
+     * ({@code s.whatsapp.net} or the legacy {@code c.us}) or the Linked Identity
+     * domain ({@code lid}), is not the announcements (PSA) account
+     * ({@code 0@s.whatsapp.net}), and is not a bot. Groups, communities,
+     * broadcasts, newsletters, and every other addressable entity are excluded.
+     *
+     * @implNote This implementation mirrors WhatsApp Web's
+     * {@code isRegularUserNoImply} ({@code isUser && !isPSA && !isBot}); the
+     * user-or-LID domain check maps onto {@link Jid#hasUserServer()} and
+     * {@link Jid#hasLidServer()}, the PSA exclusion onto the {@code "0"} user
+     * check, and the bot exclusion onto {@link Jid#isBot()}, which already folds
+     * in both the {@code bot} domain and the reserved phone-number bot ranges.
+     *
+     * @param jid the chat JID to classify
+     * @return {@code true} when the JID identifies a regular user, {@code false}
+     *         otherwise
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWid", exports = "isRegularUserNoImply",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static boolean isRegularUserChat(Jid jid) {
+        if (jid.isBot()) {
+            return false;
+        }
+        if (jid.hasUserServer()) {
+            return !"0".equals(jid.user());
+        }
+        return jid.hasLidServer();
+    }
+
+    /**
      * Folds one history-sync {@link StickerMetadata} entry into the local
      * recent-stickers collection.
      *
@@ -1034,7 +1308,9 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      * Merges one wire-shape history-sync chat into the local store and appends
      * its embedded messages to the corresponding store-side {@link Chat}.
      *
-     * <p>Invoked from {@link #dispatch} once per chat carried by the chunk.
+     * <p>Invoked from {@link #dispatch} once per chat carried by the chunk; the
+     * returned creation flag feeds the per-batch {@link #emitWebcChatCreate(long)}
+     * count.
      *
      * @implNote This implementation looks up the existing store chat keyed by
      * {@link Chat#jid()} and creates a fresh record via
@@ -1050,15 +1326,19 @@ public final class LiveWebHistorySyncService implements WebHistorySyncService {
      * @param historyChat the wire-shape chat carrying chunk metadata and
      *                    embedded messages
      * @param store       the store to mutate
+     * @return {@code true} when no store chat existed for the wire-shape chat's
+     *         {@link Chat#jid()} and a fresh record was created, {@code false}
+     *         when an existing chat was merged into
      */
-    private static void applyChat(Chat historyChat, LinkedWhatsAppStore store) {
+    private static boolean applyChat(Chat historyChat, LinkedWhatsAppStore store) {
         var jid = historyChat.jid();
-        var localChat = store.chatStore().findChatByJid(jid)
-                .orElseGet(() -> store.chatStore().addNewChat(jid));
+        var existing = store.chatStore().findChatByJid(jid);
+        var localChat = existing.orElseGet(() -> store.chatStore().addNewChat(jid));
         if (localChat != historyChat) {
             copyChatMetadata(historyChat, localChat);
         }
         historyChat.messages().forEach(localChat::addMessage);
+        return existing.isEmpty();
     }
 
     /**

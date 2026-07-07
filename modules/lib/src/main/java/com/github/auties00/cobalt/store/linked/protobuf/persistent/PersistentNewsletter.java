@@ -93,15 +93,17 @@ final class PersistentNewsletter extends Newsletter {
      *
      * @implNote
      * This implementation delegates to
-     * {@link PersistentMessageStore#putNewsletterMessage(Jid, NewsletterMessageInfo)} and
-     * increments {@link #messageCount}; the MVStore key is
-     * {@code newsletterJid + 0x00 + info.serverId()}.
+     * {@link PersistentMessageStore#putNewsletterMessage(Jid, NewsletterMessageInfo)} and increments
+     * {@link #messageCount} only when the put inserted a new {@code serverId} key; a re-put under an existing
+     * server id (an edit or add-on update) overwrites in place and leaves the count unchanged. The MVStore key
+     * is {@code newsletterJid + 0x00 + info.serverId()}.
      */
     @Override
     public void addMessage(NewsletterMessageInfo info) {
         Objects.requireNonNull(info, "info cannot be null");
-        messageStore.putNewsletterMessage(jid(), info);
-        messageCount.incrementAndGet();
+        if (messageStore.putNewsletterMessage(jid(), info)) {
+            messageCount.incrementAndGet();
+        }
     }
 
     /**

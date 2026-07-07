@@ -24,6 +24,7 @@ import com.github.auties00.cobalt.model.message.FutureProofMessageType;
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageThreadId;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveResponseMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.stanza.Stanza;
@@ -33,13 +34,19 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.MdDeviceSyncAckEventBuilder;
 import com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder;
+import com.github.auties00.cobalt.wam.event.StructuredMessageBuyerInteractionEventBuilder;
+import com.github.auties00.cobalt.wam.type.BizPlatform;
+import com.github.auties00.cobalt.wam.type.InteractionType;
+import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageChatType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.PrekeysFetchContext;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
+import com.github.auties00.cobalt.wam.type.StructuredMessageClass;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -55,6 +62,7 @@ import java.util.stream.Collectors;
 @WhatsAppWebModule(moduleName = "WAWebSendUserMsgJob")
 @WhatsAppWebModule(moduleName = "WAWebSendMsgToDeviceList")
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
+@WhatsAppWebModule(moduleName = "WAWebBuyerEventLogger")
 final class UserMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Surfaces user-send diagnostics.
@@ -198,7 +206,225 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
                     handlePhashMismatch(routedChatJid, messageInfo, fanoutDevices, serverPhash));
         }
 
+        maybeEmitBuyerInteraction(chatJid, messageInfo);
+
         return ack;
+    }
+
+    /**
+     * Emits the {@code StructuredMessageBuyerInteraction} WAM event when the just
+     * sent message is a buyer's native-flow interactive response.
+     *
+     * <p>A native-flow response ({@link InteractiveResponseMessage} carrying an
+     * inner {@link InteractiveResponseMessage.NativeFlowResponseMessage}) is the
+     * payload a buyer sends after acting on a business's structured
+     * {@code BUTTON_NFM} message (order details, payment request, checkout flow),
+     * so this send is exactly the buyer-interaction moment WA logs from
+     * {@code submitBuyerInteractionEvent}. Any other outbound content type returns
+     * without emitting.
+     *
+     * @implNote
+     * This implementation always tags the event as a {@code BUTTON_NFM} class with
+     * {@link MediaType#NONE}, matching WA's constant choices in
+     * {@code submitBuyerInteractionEvent}; the {@code order_funnel_id} that WA's
+     * {@code P2XFunnelIdGenerator} persists is reproduced deterministically from
+     * the message id and recipient by {@link #generateOrderFunnelId(Jid, ChatMessageInfo)}.
+     *
+     * @param chatJid     the recipient business {@link Jid}
+     * @param messageInfo the just sent {@link ChatMessageInfo}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBuyerEventLogger", exports = "submitBuyerInteractionEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void maybeEmitBuyerInteraction(Jid chatJid, ChatMessageInfo messageInfo) {
+        var content = messageInfo.message().content();
+        if (!(content instanceof InteractiveResponseMessage interactiveResponse)) {
+            return;
+        }
+
+        var responseContent = interactiveResponse.content();
+        if (responseContent.isEmpty()
+                || !(responseContent.get() instanceof InteractiveResponseMessage.NativeFlowResponseMessage nativeFlowResponse)) {
+            return;
+        }
+
+        var flowName = nativeFlowResponse.name()
+                .filter(name -> !name.isEmpty())
+                .orElse("native_flow");
+
+        wamService.commit(new StructuredMessageBuyerInteractionEventBuilder()
+                .bizPlatform(resolveBuyerBizPlatform(chatJid))
+                .messageClass(StructuredMessageClass.BUTTON_NFM)
+                .messageClassAttributes(buildBuyerAttributesJson(chatJid, messageInfo, flowName))
+                .messageInteraction(resolveBuyerInteractionType(flowName))
+                .messageMediaType(MediaType.NONE)
+                .build());
+    }
+
+    /**
+     * Classifies the business platform behind the recipient chat for the
+     * {@code bizPlatform} WAM slot.
+     *
+     * <p>Resolution consults the cached business profile: an automated business
+     * (one exposing a {@link BusinessProfile#automatedType()}) is reported as
+     * {@link BizPlatform#ENT}, any other business as {@link BizPlatform#SMB}, and a
+     * chat with no known business profile as {@link BizPlatform#UNKNOWN} (the same
+     * fallback WA uses when the platform cannot be determined).
+     *
+     * @param chatJid the recipient business {@link Jid}
+     * @return the matching {@link BizPlatform}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBuyerEventLogger", exports = "submitBuyerInteractionEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private BizPlatform resolveBuyerBizPlatform(Jid chatJid) {
+        var profile = client.queryBusinessProfile(chatJid);
+        if (profile.isEmpty()) {
+            return BizPlatform.UNKNOWN;
+        }
+        return profile.flatMap(BusinessProfile::automatedType).isPresent()
+                ? BizPlatform.ENT
+                : BizPlatform.SMB;
+    }
+
+    /**
+     * Maps a native-flow name to the buyer {@link InteractionType} logged on the
+     * {@code messageInteraction} WAM slot.
+     *
+     * <p>Payment-oriented flows report {@link InteractionType#USER_SEND_PAYMENT},
+     * order-oriented flows report {@link InteractionType#USER_CONFIRM}, and any
+     * other completed flow reports {@link InteractionType#FLOW_SUCCESS}, since
+     * reaching this send point means the buyer finished the flow and is submitting
+     * its response.
+     *
+     * @param flowName the native flow name captured on the response
+     * @return the matching {@link InteractionType}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBuyerEventLogger", exports = "submitBuyerInteractionEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static InteractionType resolveBuyerInteractionType(String flowName) {
+        var normalized = flowName.toLowerCase(Locale.ROOT);
+        if (normalized.contains("pay")) {
+            return InteractionType.USER_SEND_PAYMENT;
+        }
+        if (normalized.contains("order")) {
+            return InteractionType.USER_CONFIRM;
+        }
+        return InteractionType.FLOW_SUCCESS;
+    }
+
+    /**
+     * Builds the JSON {@code messageClassAttributes} payload carried alongside the
+     * buyer-interaction event.
+     *
+     * <p>Mirrors WA's {@code buyerEventAttributesToObject} snake-case attribute map
+     * augmented with the {@code order_funnel_id} that its buyer-event logger
+     * attaches. The object records the acted-on CTA (the native flow name), the
+     * chat type, a native-flow message type marker, the CTA availability flag, and
+     * the derived funnel id, for example:
+     * {@snippet lang = "json" :
+     * {"cta":"review_and_pay","chat_type":"individual","message_type":"native_flow_response","is_cta_available":true,"order_funnel_id":"9a1c4f0e7b2d6835"}
+     * }
+     *
+     * @param chatJid     the recipient business {@link Jid}
+     * @param messageInfo the just sent {@link ChatMessageInfo}
+     * @param flowName    the native flow name acted on by the buyer
+     * @return the serialized JSON attributes
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBuyerEventAttributes", exports = "buyerEventAttributesToObject",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String buildBuyerAttributesJson(Jid chatJid, ChatMessageInfo messageInfo, String flowName) {
+        var chatType = resolveBuyerChatType(chatJid);
+        var funnelId = generateOrderFunnelId(chatJid, messageInfo);
+        return "{"
+                + "\"cta\":\"" + escapeJson(flowName) + "\","
+                + "\"chat_type\":\"" + escapeJson(chatType) + "\","
+                + "\"message_type\":\"native_flow_response\","
+                + "\"is_cta_available\":true,"
+                + "\"order_funnel_id\":\"" + escapeJson(funnelId) + "\""
+                + "}";
+    }
+
+    /**
+     * Returns the lowercase chat-type token used in the buyer-event attributes.
+     *
+     * <p>Reproduces WA's {@code WAWebUprWamLogger} chat classifier: {@code group}
+     * for group or community chats, {@code broadcast} for broadcast lists,
+     * {@code newsletter} for channels, and {@code individual} otherwise.
+     *
+     * @param chatJid the recipient {@link Jid}
+     * @return the chat-type token; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebUprWamLogger", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String resolveBuyerChatType(Jid chatJid) {
+        if (chatJid.hasGroupOrCommunityServer()) {
+            return "group";
+        }
+        if (chatJid.hasBroadcastServer()) {
+            return "broadcast";
+        }
+        if (chatJid.hasNewsletterServer()) {
+            return "newsletter";
+        }
+        return "individual";
+    }
+
+    /**
+     * Derives the {@code order_funnel_id} token attached to the buyer-interaction
+     * attributes.
+     *
+     * <p>WA's {@code P2XFunnelIdGenerator} persists a funnel id keyed by the
+     * message id and recipient; this reproduces that keying deterministically with
+     * a 64-bit FNV-1a hash of {@code <messageId>@<recipient>} rendered as an
+     * unsigned hexadecimal token, so repeated logging of the same buyer action
+     * yields a stable id without any persisted funnel store.
+     *
+     * @implNote
+     * This implementation uses the FNV-1a offset basis {@code 0xcbf29ce484222325}
+     * and prime {@code 0x100000001b3}; the hash is a local stand-in for WA's
+     * server-coordinated funnel identifier, not a wire-compatible value.
+     *
+     * @param chatJid     the recipient business {@link Jid}
+     * @param messageInfo the just sent {@link ChatMessageInfo}
+     * @return the funnel id token; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "P2XFunnelIdGenerator", exports = "genFunnelInfo",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String generateOrderFunnelId(Jid chatJid, ChatMessageInfo messageInfo) {
+        var messageId = messageInfo.key().id().orElse("");
+        var seed = messageId + "@" + chatJid;
+        var hash = 0xcbf29ce484222325L;
+        for (var i = 0; i < seed.length(); i++) {
+            hash ^= seed.charAt(i) & 0xff;
+            hash *= 0x100000001b3L;
+        }
+        return Long.toUnsignedString(hash, 16);
+    }
+
+    /**
+     * Escapes a raw string value for safe inclusion inside the JSON attributes
+     * payload.
+     *
+     * <p>Escapes the JSON structural and control characters ({@code "},
+     * {@code \}, newline, carriage return, tab); all other characters pass
+     * through unchanged.
+     *
+     * @param value the raw value to escape
+     * @return the escaped value
+     */
+    private static String escapeJson(String value) {
+        var builder = new StringBuilder(value.length());
+        for (var i = 0; i < value.length(); i++) {
+            var character = value.charAt(i);
+            switch (character) {
+                case '"' -> builder.append("\\\"");
+                case '\\' -> builder.append("\\\\");
+                case '\n' -> builder.append("\\n");
+                case '\r' -> builder.append("\\r");
+                case '\t' -> builder.append("\\t");
+                default -> builder.append(character);
+            }
+        }
+        return builder.toString();
     }
 
     /**

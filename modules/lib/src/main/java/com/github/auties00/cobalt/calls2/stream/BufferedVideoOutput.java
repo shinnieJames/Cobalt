@@ -344,7 +344,21 @@ public sealed class BufferedVideoOutput implements VideoOutput
     @Override
     public void shutdown() {
         if (closed.compareAndSet(false, true)) {
-            queue.offerFirst(SENTINEL);
+            var interrupted = false;
+            try {
+                while (true) {
+                    try {
+                        queue.putFirst(SENTINEL);
+                        break;
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
+                }
+            } finally {
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         }
     }
 

@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.calls2.stream;
 
+import com.github.auties00.cobalt.util.DataUtils;
+
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -7,6 +9,7 @@ import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
@@ -53,12 +56,7 @@ public final class WavFileAudioInput extends BufferedAudioInput {
     private final RandomAccessFile raf;
 
     /**
-     * Holds the writable channel view of {@link #raf}.
-     */
-    private final WritableByteChannel channel;
-
-    /**
-     * Holds a buffered stream over {@link #channel} used for the sample appends.
+     * Holds a buffered stream over the writable channel view of {@link #raf} used for the sample appends.
      *
      * @implNote This implementation wraps the channel in a {@link BufferedOutputStream} so the many small
      * per-frame writes coalesce into larger block writes.
@@ -69,6 +67,21 @@ public final class WavFileAudioInput extends BufferedAudioInput {
      * Counts the audio sample bytes written so far, used to compute the final WAV size fields on shutdown.
      */
     private long sampleBytes;
+
+    /**
+     * Holds the reusable little-endian byte scratch that one frame's samples are encoded into before being
+     * appended to the WAV body, grown on demand when a larger frame arrives.
+     *
+     * <p>Confined to the single call render thread that drives {@link #offer(AudioFrame)}, so reuse across
+     * frames is race-free.
+     */
+    private byte[] scratch;
+
+    /**
+     * Holds the {@link ShortBuffer} view over {@link #scratch}, rebuilt whenever {@link #scratch} is grown,
+     * so each frame encodes by rewinding this view instead of allocating a fresh buffer.
+     */
+    private ShortBuffer scratchView;
 
     /**
      * Opens the given path for writing and emits the WAV header with placeholder size fields.
@@ -83,12 +96,12 @@ public final class WavFileAudioInput extends BufferedAudioInput {
     public WavFileAudioInput(Path path) {
         Objects.requireNonNull(path, "path cannot be null");
         try {
-            Files.write(path, new byte[0],
+            Files.write(path, DataUtils.EMPTY_BYTE_ARRAY,
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE);
             this.raf = new RandomAccessFile(path.toFile(), "rw");
-            this.channel = raf.getChannel();
+            WritableByteChannel channel = raf.getChannel();
             this.out = new BufferedOutputStream(Channels.newOutputStream(channel));
             writeHeaderPlaceholder();
         } catch (IOException e) {
@@ -113,13 +126,20 @@ public final class WavFileAudioInput extends BufferedAudioInput {
             return;
         }
         var pcm = frame.pcm();
-        var buf = ByteBuffer.allocate(pcm.length * Short.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        var needed = pcm.length * Short.BYTES;
+        var buf = scratch;
+        if (buf == null || buf.length < needed) {
+            buf = new byte[needed];
+            scratch = buf;
+            scratchView = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+        }
+        scratchView.rewind();
         for (var s : pcm) {
-            buf.putShort(s);
+            scratchView.put(s);
         }
         try {
-            out.write(buf.array());
-            sampleBytes += buf.array().length;
+            out.write(buf, 0, needed);
+            sampleBytes += needed;
         } catch (IOException e) {
             throw new UncheckedIOException("failed to write WAV samples", e);
         }

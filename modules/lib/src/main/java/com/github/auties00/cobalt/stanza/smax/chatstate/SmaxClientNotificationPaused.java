@@ -30,7 +30,7 @@ public final class SmaxClientNotificationPaused implements SmaxClientNotificatio
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutChatstatePausedMixin",
             exports = "mergePausedMixin", adaptation = WhatsAppAdaptation.DIRECT)
-    public StanzaBuilder toNode() {
+    public StanzaBuilder toStanza() {
         return new StanzaBuilder()
                 .description("paused");
     }

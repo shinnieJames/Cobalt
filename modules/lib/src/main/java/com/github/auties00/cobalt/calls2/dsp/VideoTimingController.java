@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.calls2.util.RttEstimator;
  * display it. The target playout delay is the {@link VideoJitterEstimator} jitter allowance, plus the
  * measured decode time, plus a fixed render delay, plus a bounded fraction of the round-trip time, all
  * clamped to a configured minimum and maximum. {@link #renderTimeMs(long, long, int)} adds that delay to the
- * frame's capture-clock timestamp mapped into the local clock, so the {@link LiveVideoJitterBuffer} can
+ * frame's capture-clock timestamp mapped into the local clock, so the {@link VideoJitterBuffer} can
  * hold a frame until its render instant. {@link #onFrameDecoded(long, long)} folds the observed decode
  * duration into the decode-time estimate, and {@link #onRttSample(double, long)} folds a round-trip
  * sample into the round-trip estimator.

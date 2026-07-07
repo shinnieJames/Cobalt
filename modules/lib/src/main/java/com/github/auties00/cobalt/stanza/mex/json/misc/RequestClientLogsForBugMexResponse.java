@@ -18,7 +18,10 @@ import java.util.Optional;
  * acceptance flag; the envelope itself being absent yields {@link Optional#empty()} from the parser.
  *
  * @see RequestClientLogsForBugMexRequest
+ *
+ * @deprecated not wired: bug-report peer-log solicitation has no headless surface.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WAWebMexRequestClientLogsForBugJob")
 public final class RequestClientLogsForBugMexResponse implements MexStanza.Response.Json {
     /**

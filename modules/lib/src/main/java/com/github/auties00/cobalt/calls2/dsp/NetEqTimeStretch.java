@@ -188,7 +188,7 @@ final class NetEqTimeStretch {
         int threshold = activeSpeech ? 14_746 : 8_192;
         boolean criterion = peak <= threshold && precondition;
         if (!criterion || bestLag <= 0 || peakWindow + 2 * bestLag > length) {
-            return new Result(false, java.util.Arrays.copyOf(input, length), bestLag);
+            return new Result(false, input, bestLag);
         }
         int outLength = length - bestLag;
         var out = new short[outLength];
@@ -233,7 +233,7 @@ final class NetEqTimeStretch {
         int peakWindow = fsMult * PEAK_WINDOW_PER_FS;
         boolean criterion = !doStretch || (oldDataLength <= peakWindow && peakOverride);
         if (!criterion || bestLag <= 0 || peakWindow + 2 * bestLag > length) {
-            return new Result(false, java.util.Arrays.copyOf(input, length), bestLag);
+            return new Result(false, input, bestLag);
         }
         int outLength = length + bestLag;
         var out = new short[outLength];

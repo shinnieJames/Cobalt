@@ -3,7 +3,6 @@ package com.github.auties00.cobalt.calls2.core;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Maintains the periodically-updated immutable snapshot of one call's coarse information for listeners,
@@ -19,11 +18,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * engine's event-to-result derivation, mapping the dispatched {@link CallEventType} to the
  * {@link Calls2CallResult} the snapshot should carry when the caller has not already resolved one.
  *
- * <p>The snapshot is published through an {@link AtomicReference}, so {@link #snapshot()} is a lock-free
+ * <p>The snapshot is published through a {@code volatile} field, so {@link #snapshot()} is a lock-free
  * read returning the latest immutable {@link Snapshot} (or an empty result before the first update); this
  * is the only read path and it never blocks an update or another read. Updates are serialised behind a
  * single lock so a snapshot is rebuilt atomically from a consistent set of inputs; the publish itself is
- * a plain reference store on the immutable record. Because every {@link Snapshot} is immutable, handing
+ * a volatile write of the immutable record. Because every {@link Snapshot} is immutable, handing
  * one to a listener or the host leaks no mutable state.
  *
  * @implNote This implementation ports the {@code call_info_manager} (native singleton at
@@ -44,16 +43,16 @@ public final class Calls2CallInfoManager {
     /**
      * Holds the latest published immutable snapshot, or {@code null} before the first update.
      *
-     * <p>Published by a plain reference store after each update and read lock-free by {@link #snapshot()},
+     * <p>Published by a volatile write after each update and read lock-free by {@link #snapshot()},
      * so a reader always observes a fully-built immutable {@link Snapshot} and never a torn one.
      */
-    private final AtomicReference<Snapshot> current;
+    private volatile Snapshot current;
 
     /**
      * Serialises updates so a snapshot is rebuilt atomically from a consistent set of inputs.
      *
      * <p>This is the {@code call-info-mutex} analogue: it guards the rebuild-and-publish sequence, while
-     * the read path bypasses it entirely through the {@link AtomicReference}.
+     * the read path bypasses it entirely through the {@code volatile} field.
      */
     private final Object lock;
 
@@ -64,7 +63,6 @@ public final class Calls2CallInfoManager {
      * has not yet been computed.
      */
     public Calls2CallInfoManager() {
-        this.current = new AtomicReference<>();
         this.lock = new Object();
     }
 
@@ -97,9 +95,8 @@ public final class Calls2CallInfoManager {
         Objects.requireNonNull(lonelyDuration, "lonelyDuration cannot be null");
         Objects.requireNonNull(setupDuration, "setupDuration cannot be null");
         synchronized (lock) {
-            var snapshot = new Snapshot(true, state, result, activeDuration.plus(lonelyDuration),
+            current = new Snapshot(true, state, result, activeDuration.plus(lonelyDuration),
                     activeDuration, lonelyDuration, setupDuration, linkToken);
-            current.set(snapshot);
         }
     }
 
@@ -147,7 +144,7 @@ public final class Calls2CallInfoManager {
      * @return the latest snapshot, or an empty result when none has been computed yet
      */
     public Optional<Snapshot> snapshot() {
-        return Optional.ofNullable(current.get());
+        return Optional.ofNullable(current);
     }
 
     /**
@@ -159,7 +156,7 @@ public final class Calls2CallInfoManager {
      */
     public void reset() {
         synchronized (lock) {
-            current.set(null);
+            current = null;
         }
     }
 

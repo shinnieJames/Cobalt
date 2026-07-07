@@ -21,7 +21,7 @@ import java.util.zip.CRC32;
  * with the length field set to span through the twenty-four-byte integrity attribute; the
  * {@code FINGERPRINT} CRC32 (RFC 8489 section 14.7) is taken over the header and every attribute up to
  * but not including itself, with the length field set to span through the eight-byte fingerprint
- * attribute, and the CRC32 is then XORed with the fixed value {@value #FINGERPRINT_XOR_HEX}. Both
+ * attribute, and the CRC32 is then XORed with the fixed value {@code 0x5354554E}. Both
  * helpers here take the message prefix exactly as it stands before the new attribute is appended and
  * apply the length rewrite internally, so a caller appends attributes, calls
  * {@link #computeMessageIntegrity(byte[], byte[])}, appends the resulting twenty bytes as a
@@ -68,12 +68,6 @@ public final class StunIntegrity {
     public static final long FINGERPRINT_XOR = 0x5354554EL;
 
     /**
-     * Holds the {@value #FINGERPRINT_XOR} constant rendered as a hex string for documentation
-     * cross-reference.
-     */
-    private static final String FINGERPRINT_XOR_HEX = "0x5354554E";
-
-    /**
      * Holds the byte offset of the STUN header's sixteen-bit message-length field.
      */
     private static final int LENGTH_FIELD_OFFSET = 2;
@@ -94,6 +88,21 @@ public final class StunIntegrity {
      * type-length header plus the four-byte CRC32 value.
      */
     private static final int FINGERPRINT_ATTR_SIZE = 4 + FINGERPRINT_LENGTH;
+
+    /**
+     * Holds the per-thread HMAC-SHA1 engine reused across {@code MESSAGE-INTEGRITY} computations.
+     *
+     * <p>The integrity helpers run on transport threads; the mutable JCA engine is thread-confined so a
+     * concurrent computation on another transport thread cannot corrupt it. The ICE password varies per
+     * call, so only the engine is reused and it is re-keyed on each computation.
+     */
+    private static final ThreadLocal<Mac> HMAC = ThreadLocal.withInitial(() -> {
+        try {
+            return Mac.getInstance(HMAC_ALGORITHM);
+        } catch (GeneralSecurityException e) {
+            throw new WhatsAppCallException.Srtp("Cannot create STUN MESSAGE-INTEGRITY HMAC-SHA1", e);
+        }
+    });
 
     /**
      * Prevents instantiation of this stateless integrity-primitive holder.
@@ -123,7 +132,7 @@ public final class StunIntegrity {
         Objects.requireNonNull(password, "password cannot be null");
         var adjusted = withLengthThrough(prefix, MESSAGE_INTEGRITY_ATTR_SIZE);
         try {
-            var mac = Mac.getInstance(HMAC_ALGORITHM);
+            var mac = HMAC.get();
             mac.init(new SecretKeySpec(password, HMAC_ALGORITHM));
             return mac.doFinal(adjusted);
         } catch (GeneralSecurityException e) {
@@ -138,7 +147,7 @@ public final class StunIntegrity {
      * attribute, including the {@code MESSAGE-INTEGRITY} attribute when present, exactly as it stands
      * before the fingerprint attribute is appended. This helper copies the prefix, rewrites the copy's
      * length field to the value the message will carry once the eight-byte fingerprint attribute is
-     * appended, CRC32s the copy, XORs the checksum with {@value #FINGERPRINT_XOR_HEX}, and returns the
+     * appended, CRC32s the copy, XORs the checksum with {@code 0x5354554E}, and returns the
      * four-byte big-endian result the caller writes as the fingerprint attribute value.
      *
      * @param prefix the STUN header and preceding attributes, at least {@value #HEADER_LENGTH} bytes

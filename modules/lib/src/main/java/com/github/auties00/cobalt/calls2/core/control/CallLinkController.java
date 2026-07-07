@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.calls2.core.control;
 
 import com.github.auties00.cobalt.calls2.core.Calls2CallLinkState;
+import com.github.auties00.cobalt.calls2.signaling.LinkCreateAck;
+import com.github.auties00.cobalt.calls2.signaling.LinkCreateStanza;
 import com.github.auties00.cobalt.calls2.signaling.LinkEditAck;
 import com.github.auties00.cobalt.calls2.signaling.LinkEditStanza;
 import com.github.auties00.cobalt.calls2.signaling.LinkJoinAck;
@@ -103,6 +105,35 @@ public final class CallLinkController {
         setLinkState(Calls2CallLinkState.LINK_QUERY_ACKED);
         events.emit(new LinkQueryAcked(ack.link()));
         return ack;
+    }
+
+    /**
+     * Mints a fresh shareable call-link token bound to a media kind and waiting-room setting.
+     *
+     * <p>Dispatches a {@code link_create} request carrying the media kind and the requested waiting-room
+     * gate, parses the reply into a {@link LinkCreateAck}, and returns it; the ack surfaces the minted token
+     * and composes to a {@link com.github.auties00.cobalt.model.call.CallLink} through
+     * {@link LinkCreateAck#toCallLink()}. Unlike {@link #query(String, CallLinkMedia, CallLinkQueryAction)}
+     * and {@link #join(String, int)}, creating a link mints a standalone token rather than advancing a call
+     * through the query-and-join handshake, so it does not touch the {@link Calls2CallLinkState} join
+     * sub-state and emits no {@link CallLinkStateChanged}; the minted link is delivered to the caller through
+     * the return value.
+     *
+     * @implNote This implementation reproduces {@code serialize_link_create} (fn11673, message type
+     * {@code 0xb8}) and its {@code deserialize_link_create_ack} (message type {@code 28}) reply in the
+     * wa-voip WASM module {@code ff-tScznZ8P} ({@code protocol/xmpp/stanzas/call_link.cc}); the five-value
+     * {@link Calls2CallLinkState} table carries no create state, so create leaves the sub-state untouched.
+     *
+     * @param media              the media kind the link is created with; never {@code null}
+     * @param waitingRoomEnabled {@code true} to request the link's waiting-room gate at creation time
+     * @return the create acknowledgement carrying the minted token
+     * @throws NullPointerException if {@code media} is {@code null}
+     */
+    public LinkCreateAck create(CallLinkMedia media, boolean waitingRoomEnabled) {
+        Objects.requireNonNull(media, "media cannot be null");
+        var request = LinkCreateStanza.of(media, waitingRoomEnabled);
+        var reply = iqSender.sendForReply(request);
+        return LinkCreateAck.of(reply);
     }
 
     /**

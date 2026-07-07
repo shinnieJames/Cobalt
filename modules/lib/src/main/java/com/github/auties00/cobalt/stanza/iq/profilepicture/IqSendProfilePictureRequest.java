@@ -24,7 +24,8 @@ import java.util.Optional;
  *
  * <p>The picture is carried as a {@link SizedInputStream} so the payload is streamed straight to
  * the wire at serialisation time rather than buffered into a {@code byte[]} first; the relay
- * echoes the new picture id in its success reply.
+ * echoes the new picture id in its success reply. A self-set may additionally attach a
+ * {@link #preview()} thumbnail streamed into a second {@code <picture type="preview">} child.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendProfilePictureJob")
 public final class IqSendProfilePictureRequest implements IqStanza.Request {
@@ -47,19 +48,46 @@ public final class IqSendProfilePictureRequest implements IqStanza.Request {
     private final SizedInputStream picture;
 
     /**
+     * Holds the optional preview thumbnail stream, or {@code null} when no preview is supplied.
+     *
+     * <p>A non-{@code null} value is streamed into a second {@code <picture type="preview">} child
+     * appended after the full {@code type="image"} picture; the self-picture set path supplies it so
+     * the relay caches a downscaled thumbnail alongside the full image.
+     */
+    private final SizedInputStream preview;
+
+    /**
      * Constructs a send-profile-picture request from a nullable group target and nullable
      * picture stream.
      *
      * <p>Both nullable arguments let one constructor express all four (set or clear) by (self or
-     * group) call shapes.
+     * group) call shapes. Delegates to {@link #IqSendProfilePictureRequest(Jid, SizedInputStream,
+     * SizedInputStream)} with no preview thumbnail.
      *
      * @param groupTarget the group JID for a group-picture update, or {@code null} for a
      *                    self-picture update
      * @param picture     the new JPEG picture, or {@code null} to clear the existing picture
      */
     public IqSendProfilePictureRequest(Jid groupTarget, SizedInputStream picture) {
+        this(groupTarget, picture, null);
+    }
+
+    /**
+     * Constructs a send-profile-picture request that additionally carries a preview thumbnail.
+     *
+     * <p>When {@code preview} is present a second {@code <picture type="preview">} child is appended
+     * after the full {@code type="image"} picture; when it is {@code null} the request behaves
+     * exactly like {@link #IqSendProfilePictureRequest(Jid, SizedInputStream)}.
+     *
+     * @param groupTarget the group JID for a group-picture update, or {@code null} for a
+     *                    self-picture update
+     * @param picture     the new JPEG picture, or {@code null} to clear the existing picture
+     * @param preview     the preview thumbnail, or {@code null} to omit it
+     */
+    public IqSendProfilePictureRequest(Jid groupTarget, SizedInputStream picture, SizedInputStream preview) {
         this.groupTarget = groupTarget;
         this.picture = picture;
+        this.preview = preview;
     }
 
     /**
@@ -83,15 +111,26 @@ public final class IqSendProfilePictureRequest implements IqStanza.Request {
     }
 
     /**
+     * Returns the optional preview thumbnail stream of this update.
+     *
+     * @return an {@link Optional} carrying the preview stream, or {@link Optional#empty()} when no
+     *         preview is supplied
+     */
+    public Optional<SizedInputStream> preview() {
+        return Optional.ofNullable(preview);
+    }
+
+    /**
      * {@inheritDoc}
      *
      * <p>Produces an {@code <iq xmlns="w:profile:picture" type="set">} envelope addressed to
      * {@link JidServer#user()}. The {@code target} attribute is stamped only when
-     * {@link #groupTarget()} is present, and a {@code <picture type="image">} child is appended
-     * only when {@link #picture()} is present, streaming its payload at serialisation time.
+     * {@link #groupTarget()} is present, a {@code <picture type="image">} child is appended only
+     * when {@link #picture()} is present, and a second {@code <picture type="preview">} child is
+     * appended only when {@link #preview()} is present, streaming each payload at serialisation time.
      *
      * @return a {@link StanzaBuilder} carrying the {@code <iq>} envelope and the optional
-     *         {@code <picture>} payload
+     *         {@code <picture>} payloads
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSendProfilePictureJob",
@@ -113,6 +152,14 @@ public final class IqSendProfilePictureRequest implements IqStanza.Request {
                     .build();
             iqBuilder.content(pictureNode);
         }
+        if (preview != null) {
+            var previewNode = new StanzaBuilder()
+                    .description("picture")
+                    .attribute("type", "preview")
+                    .content(preview)
+                    .build();
+            iqBuilder.content(previewNode);
+        }
         return iqBuilder;
     }
 
@@ -120,7 +167,7 @@ public final class IqSendProfilePictureRequest implements IqStanza.Request {
      * Compares this request with another object for value equality.
      *
      * <p>Two requests are equal when their group targets are equal and they carry the same
-     * picture stream instance (a sized stream has no value equality).
+     * picture and preview stream instances (a sized stream has no value equality).
      *
      * @param obj the object to compare against
      * @return {@code true} if {@code obj} is an equal {@link IqSendProfilePictureRequest},
@@ -136,30 +183,34 @@ public final class IqSendProfilePictureRequest implements IqStanza.Request {
         }
         var that = (IqSendProfilePictureRequest) obj;
         return Objects.equals(this.groupTarget, that.groupTarget)
-                && this.picture == that.picture;
+                && this.picture == that.picture
+                && this.preview == that.preview;
     }
 
     /**
      * Returns a hash code consistent with {@link #equals(Object)}.
      *
-     * @return the combined hash of the group target and the advertised picture length
+     * @return the combined hash of the group target and the advertised picture and preview lengths
      */
     @Override
     public int hashCode() {
-        return Objects.hash(groupTarget, picture == null ? -1L : picture.length());
+        return Objects.hash(groupTarget,
+                picture == null ? -1L : picture.length(),
+                preview == null ? -1L : preview.length());
     }
 
     /**
      * Returns a debug representation of this request.
      *
-     * <p>The picture is summarised as its advertised length rather than read, and a length of
-     * {@code -1} denotes a cleared (absent) picture.
+     * <p>The picture and preview are summarised as their advertised lengths rather than read, and a
+     * length of {@code -1} denotes an absent stream.
      *
-     * @return a string carrying the group target and the picture length
+     * @return a string carrying the group target and the picture and preview lengths
      */
     @Override
     public String toString() {
         return "IqSendProfilePictureRequest[groupTarget=" + groupTarget
-                + ", pictureLength=" + (picture == null ? -1 : picture.length()) + ']';
+                + ", pictureLength=" + (picture == null ? -1 : picture.length())
+                + ", previewLength=" + (preview == null ? -1 : preview.length()) + ']';
     }
 }

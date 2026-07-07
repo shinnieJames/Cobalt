@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.calls2.net.transport;
 
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Decides, per outbound media packet, which WARP control attributes to piggyback, applying the
@@ -44,14 +45,10 @@ public final class SendAttrPolicy {
     public static final int DL_BW_FRESHNESS_MS = 0xbb9;
 
     /**
-     * Holds the next WARP sequence number to assign, advanced under {@link #sequenceLock}.
+     * Holds the next WARP sequence number to assign, advanced atomically so a draw is unique across
+     * threads.
      */
-    private int nextSequence;
-
-    /**
-     * Holds the monitor guarding {@link #nextSequence} so a sequence draw is unique across threads.
-     */
-    private final Object sequenceLock = new Object();
+    private final AtomicInteger nextSequence = new AtomicInteger();
 
     /**
      * Holds the timestamp, in the caller's millisecond timebase, at which the last participant report
@@ -63,7 +60,6 @@ public final class SendAttrPolicy {
      * Constructs a policy with its sequence counter at zero and no report yet attached.
      */
     public SendAttrPolicy() {
-        this.nextSequence = 0;
     }
 
     /**
@@ -117,11 +113,7 @@ public final class SendAttrPolicy {
      * @return the next sequence number, masked to sixteen bits
      */
     public int nextSequenceNumber() {
-        synchronized (sequenceLock) {
-            var value = nextSequence & 0xffff;
-            nextSequence = (nextSequence + 1) & 0xffff;
-            return value;
-        }
+        return nextSequence.getAndIncrement() & 0xffff;
     }
 
     /**

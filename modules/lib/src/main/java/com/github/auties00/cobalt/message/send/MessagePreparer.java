@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageContextInfoBuilder;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
@@ -13,6 +14,8 @@ import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.*;
+import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
 import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
@@ -23,6 +26,9 @@ import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfoBuilder;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.util.DataUtils;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.ProtobufValidationErrorEventBuilder;
+import com.github.auties00.cobalt.wam.type.ProtobufValidationFlow;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -65,10 +71,43 @@ final class MessagePreparer {
     private static final int MESSAGE_SECRET_SIZE = 32;
 
     /**
+     * Caps how deep the outgoing {@code messageSecret}-location walk descends
+     * before it gives up and treats the tree as clean.
+     *
+     * <p>Guards against pathological or maliciously deep reply chains: once the
+     * walk reaches this nesting depth it stops recursing, logs a diagnostic, and
+     * reports no violation rather than risking unbounded recursion.
+     *
+     * @implNote This implementation reuses WA Web's
+     * {@code WAWebMessageSecretLocationUtils} depth ceiling of {@code 15}.
+     */
+    private static final int MESSAGE_SECRET_MAX_DEPTH = 15;
+
+    /**
+     * Identifies the validation rule that flags a stray {@code messageSecret}
+     * nested below the top level of an outgoing message.
+     *
+     * <p>Recorded verbatim as the {@code protobufValidationRuleId} of the
+     * emitted {@link ProtobufValidationErrorEventBuilder} so the telemetry
+     * pipeline can attribute the violation to the outgoing-message rule rather
+     * than to the group-history variant.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageSecretLocationUtils", exports = "MESSAGE_SECRET_RULE_ID_OUTGOING",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static final String MESSAGE_SECRET_RULE_ID_OUTGOING = "79";
+
+    /**
      * Supplies self-JID resolution, newsletter lookups, chat metadata, and
      * parent-message resolution during addon promotion.
      */
     private final LinkedWhatsAppStore store;
+
+    /**
+     * Records the {@code ProtobufValidationError} telemetry emitted when an
+     * outgoing message carries a {@code messageSecret} nested below its top
+     * level.
+     */
+    private final WamService wamService;
 
     /**
      * Constructs a {@link MessagePreparer} bound to the supplied store.
@@ -76,13 +115,16 @@ final class MessagePreparer {
      * <p>Constructed once by {@link MessageSendingService}; embedders should not
      * instantiate directly.
      *
-     * @param store the {@link LinkedWhatsAppStore} providing JID and metadata lookups
-     * @throws NullPointerException if {@code store} is {@code null}
+     * @param store      the {@link LinkedWhatsAppStore} providing JID and metadata lookups
+     * @param wamService the {@link WamService} that records the outgoing
+     *                   {@code messageSecret}-location validation error
+     * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebE2EProtoGenerator", exports = "getProtobufMessage",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    MessagePreparer(LinkedWhatsAppStore store) {
+    MessagePreparer(LinkedWhatsAppStore store, WamService wamService) {
         this.store = Objects.requireNonNull(store, "store");
+        this.wamService = Objects.requireNonNull(wamService, "wamService");
     }
 
     /**
@@ -124,6 +166,8 @@ final class MessagePreparer {
                 .messageSecret(messageSecret)
                 .build();
         preparedContainer = preparedContainer.withMessageContextInfo(deviceInfo);
+
+        verifyTopLevelMessageSecret(preparedContainer);
 
         var key = new MessageKeyBuilder()
                 .id(messageId)
@@ -348,5 +392,105 @@ final class MessagePreparer {
                 .flatMap(id -> store.chatStore().findMessageById(parentJid, id))
                 .filter(entry -> entry instanceof ChatMessageInfo)
                 .map(entry -> (ChatMessageInfo) entry);
+    }
+
+    /**
+     * Verifies that the fully-prepared outgoing {@code message} carries its
+     * {@code messageSecret} only at the top level and records a
+     * {@code ProtobufValidationError} when it does not.
+     *
+     * <p>WhatsApp stamps the per-message secret onto the top-level
+     * {@link MessageContainer#messageContextInfo()} exclusively; a secret found
+     * on any nested submessage is a construction bug that lets the server
+     * correlate the ciphertext across chats. When
+     * {@link #findMessageSecretViolation(MessageContainer, int, String)}
+     * reports such a nested secret, a {@link ProtobufValidationErrorEventBuilder}
+     * is committed with {@code protobufValidationFlow} set to
+     * {@link ProtobufValidationFlow#STANZA_MESSAGE_SEND} and the offending path;
+     * a clean tree emits nothing, mirroring the sender-side branch of WA Web's
+     * {@code verifyTopLevelMessageSecret}.
+     *
+     * @param message the prepared top-level {@link MessageContainer}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageSecretLocationUtils", exports = "verifyTopLevelMessageSecret",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void verifyTopLevelMessageSecret(MessageContainer message) {
+        findMessageSecretViolation(message, 0, "")
+                .ifPresent(this::emitProtobufValidationError);
+    }
+
+    /**
+     * Walks the reply chain of {@code node} looking for a submessage that
+     * carries a {@code messageSecret} nested below the top level.
+     *
+     * <p>The top-level container (depth {@code 0}) is expected to hold the
+     * secret and is never flagged; from depth {@code 1} onward any container
+     * whose {@link MessageContainer#messageContextInfo()} exposes a
+     * {@link ChatMessageContextInfo#messageSecret()} yields the accumulated
+     * dotted {@code path} as the violation location. The walk descends through
+     * the quoted-message content reachable from a payload's
+     * {@link ContextInfo#quotedMessageContent()}, the nesting WA Web's
+     * {@code findMessageSecretViolation} traverses when it recurses into
+     * {@code contextInfo.quotedMessage}; the {@code deviceSentMessage} envelope
+     * is skipped exactly as WA Web skips it. Recursion halts at
+     * {@link #MESSAGE_SECRET_MAX_DEPTH}.
+     *
+     * @param node  the {@link MessageContainer} to inspect at this level
+     * @param depth the current nesting depth, {@code 0} at the top level
+     * @param path  the dotted field path traversed to reach {@code node}
+     * @return the violation path when a nested secret is found, otherwise
+     *         {@link Optional#empty()}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageSecretLocationUtils", exports = "findMessageSecretViolation",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private Optional<String> findMessageSecretViolation(MessageContainer node, int depth, String path) {
+        if (depth >= MESSAGE_SECRET_MAX_DEPTH) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "messageSecret location check exceeded max depth: path: " + path);
+            return Optional.empty();
+        }
+
+        if (depth > 0 && node.messageContextInfo()
+                .flatMap(ChatMessageContextInfo::messageSecret)
+                .isPresent()) {
+            return Optional.of(path.isEmpty() ? "unknown" : path);
+        }
+
+        var quoted = node.contextualContent()
+                .flatMap(ContextualMessage::contextInfo)
+                .flatMap(ContextInfo::quotedMessageContent);
+        if (quoted.isPresent()) {
+            var childPath = path.isEmpty()
+                    ? "contextInfo.quotedMessage"
+                    : path + ".contextInfo.quotedMessage";
+            return findMessageSecretViolation(quoted.get(), depth + 1, childPath);
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * Commits the {@code ProtobufValidationError} that reports a stray
+     * {@code messageSecret} nested inside an outgoing message.
+     *
+     * <p>Populates the same fields WA Web's sender-side
+     * {@code verifyTopLevelMessageSecret} sets: the drop flags are both
+     * {@code false} (the message is still sent), the flow is
+     * {@link ProtobufValidationFlow#STANZA_MESSAGE_SEND}, the path is the
+     * offending location, and the rule id is
+     * {@link #MESSAGE_SECRET_RULE_ID_OUTGOING}.
+     *
+     * @param violationPath the dotted path of the nested {@code messageSecret}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageSecretLocationUtils", exports = "verifyTopLevelMessageSecret",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitProtobufValidationError(String violationPath) {
+        wamService.commit(new ProtobufValidationErrorEventBuilder()
+                .protobufValidationDropped(false)
+                .protobufLegacyValidationDropped(false)
+                .protobufValidationFlow(ProtobufValidationFlow.STANZA_MESSAGE_SEND)
+                .protobufValidationPath(violationPath)
+                .protobufValidationRuleId(MESSAGE_SECRET_RULE_ID_OUTGOING)
+                .build());
     }
 }

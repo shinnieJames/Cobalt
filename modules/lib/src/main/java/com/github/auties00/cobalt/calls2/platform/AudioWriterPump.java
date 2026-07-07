@@ -103,14 +103,14 @@ public final class AudioWriterPump {
      *
      * <p>Diagnostic mirror of the native {@code futex_wake} counter; never alters behaviour.
      */
-    private long demandWakeCount;
+    private volatile long demandWakeCount;
 
     /**
      * Count of demand waits that returned because the timeout elapsed without a fresh pulse.
      *
      * <p>Diagnostic mirror of the native {@code futex_timeout} counter.
      */
-    private long timeoutWakeCount;
+    private volatile long timeoutWakeCount;
 
     /**
      * Count of engine pulls that returned no decoded samples.
@@ -118,7 +118,7 @@ public final class AudioWriterPump {
      * <p>Diagnostic mirror of the native "No audio data available" counter; a high value indicates the
      * engine is not keeping the playback path fed.
      */
-    private long noDataCount;
+    private volatile long noDataCount;
 
     /**
      * The demand value the pump last serviced.
@@ -133,7 +133,7 @@ public final class AudioWriterPump {
      *
      * <p>Retained so {@link #stop()} can interrupt and unpark it.
      */
-    private Thread thread;
+    private volatile Thread thread;
 
     /**
      * A source of decoded PCM samples the playback pump pulls from the call engine.
@@ -207,10 +207,6 @@ public final class AudioWriterPump {
         this.waitTimeoutNanos = waitTimeoutNanos;
         this.block = new short[framesPerChunk];
         this.running = new AtomicBoolean();
-        this.demandWakeCount = 0;
-        this.timeoutWakeCount = 0;
-        this.noDataCount = 0;
-        this.lastServicedDemand = 0;
     }
 
     /**

@@ -262,6 +262,18 @@ public final class VideoJitterEstimator {
     private int frameIntervalIndex;
 
     /**
+     * The running sum, in milliseconds, of the {@link #frameIntervalCount} live inter-frame intervals in
+     * {@link #frameIntervalsMs}.
+     *
+     * <p>Maintained incrementally as each interval fills a new slot or evicts the oldest slot so
+     * {@link #frameRateFps()} need not re-sum the window on every call. It stays exactly equal to the
+     * sequential sum the loop would compute because the intervals are integer-valued millisecond gaps whose
+     * running total remains within the exact-integer range of a {@code double}, so the incremental total is
+     * bit-identical to the re-summed total.
+     */
+    private double frameIntervalSumMs;
+
+    /**
      * The time of the previous frame in milliseconds, or {@code -1} before the first frame.
      *
      * <p>The inter-frame interval folded into {@link #frameIntervalsMs} is the gap between the current
@@ -344,8 +356,9 @@ public final class VideoJitterEstimator {
         }
 
         kalmanPredict();
-        var noiseStdDev = Math.max(Math.sqrt(varNoiseMs), 1.0);
-        var maxTimeDeviationMs = NUM_STD_DEV_DELAY_CLAMP * Math.sqrt(varNoiseMs) + 0.5;
+        var noiseStdDevRaw = Math.sqrt(varNoiseMs);
+        var noiseStdDev = Math.max(noiseStdDevRaw, 1.0);
+        var maxTimeDeviationMs = NUM_STD_DEV_DELAY_CLAMP * noiseStdDevRaw + 0.5;
         var clampedFrameDelayMs = Math.clamp(frameDelayMs, -maxTimeDeviationMs, maxTimeDeviationMs);
         var residualMs = clampedFrameDelayMs - deviation(deltaFrameBytes);
         var delayIsNotOutlier = Math.abs(residualMs) < NUM_STD_DEV_DELAY_OUTLIER * noiseStdDev;
@@ -442,6 +455,7 @@ public final class VideoJitterEstimator {
         started = false;
         frameIntervalCount = 0;
         frameIntervalIndex = 0;
+        frameIntervalSumMs = 0.0;
         lastFrameTimeMs = -1;
         frameSizeFilter.reset();
     }
@@ -582,11 +596,15 @@ public final class VideoJitterEstimator {
      */
     private void updateFrameRate(long nowMs) {
         if (lastFrameTimeMs >= 0) {
-            frameIntervalsMs[frameIntervalIndex] = (double) (nowMs - lastFrameTimeMs);
-            frameIntervalIndex = (frameIntervalIndex + 1) % frameIntervalsMs.length;
+            var interval = (double) (nowMs - lastFrameTimeMs);
             if (frameIntervalCount < frameIntervalsMs.length) {
+                frameIntervalSumMs += interval;
                 frameIntervalCount++;
+            } else {
+                frameIntervalSumMs += interval - frameIntervalsMs[frameIntervalIndex];
             }
+            frameIntervalsMs[frameIntervalIndex] = interval;
+            frameIntervalIndex = (frameIntervalIndex + 1) % frameIntervalsMs.length;
         }
         lastFrameTimeMs = nowMs;
     }
@@ -602,11 +620,7 @@ public final class VideoJitterEstimator {
         if (frameIntervalCount == 0) {
             return 0.0;
         }
-        var sum = 0.0;
-        for (var i = 0; i < frameIntervalCount; i++) {
-            sum += frameIntervalsMs[i];
-        }
-        var meanFramePeriodMs = sum / frameIntervalCount;
+        var meanFramePeriodMs = frameIntervalSumMs / frameIntervalCount;
         if (meanFramePeriodMs <= 0.0) {
             return 0.0;
         }

@@ -1,7 +1,10 @@
 package com.github.auties00.cobalt.stanza.smax.message;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -159,17 +162,17 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         private final String stanzaId;
 
         /**
-         * Holds the optional pre-built msg-meta-origin marker child; {@code null} when the publish is
-         * not an origin-tagged broadcast.
+         * Holds the optional msg-meta-origin tag folded into the {@code <meta origin="..."/>} child;
+         * {@code null} when the publish is not an origin-tagged broadcast.
          */
-        private final Stanza msgMetaOrigin;
+        private final String originTag;
 
         /**
-         * Holds the optional pre-built sender content-type-media RCAT child carrying the
-         * {@code <plaintext mediatype="url"/>} plus {@code <rcat>...</rcat>} pair; {@code null} when
-         * the publish does not carry a media payload.
+         * Holds the optional media content id folded into the sender content-type-media RCAT
+         * {@code <plaintext mediatype="url" content_id="..."/>} child; {@code null} when the publish
+         * does not carry a URL media payload.
          */
-        private final Stanza senderContentTypeMediaRcat;
+        private final String mediaContentId;
 
         /**
          * Holds the pre-built inner client-id content payload.
@@ -180,19 +183,23 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
          * Constructs a brand-new-post payload for a text, media, poll-creation, edit, revoke, or
          * question message.
          *
-         * @param stanzaId                   the publish stanza id; never {@code null}
-         * @param msgMetaOrigin              the optional origin marker child; may be {@code null}
-         * @param senderContentTypeMediaRcat the optional media RCAT child; may be {@code null}
-         * @param clientIdContent            the inner client-id content stanza; never {@code null}
+         * <p>The {@code <meta origin>} and {@code <plaintext mediatype="url" content_id>} children are
+         * built from {@code originTag} and {@code mediaContentId} by this payload itself; the caller
+         * passes the raw values rather than pre-building the stanza children.
+         *
+         * @param stanzaId        the publish stanza id; never {@code null}
+         * @param originTag       the optional msg-meta-origin tag; may be {@code null}
+         * @param mediaContentId  the optional URL media content id; may be {@code null}
+         * @param clientIdContent the inner client-id content stanza; never {@code null}
          * @throws NullPointerException if {@code stanzaId} or {@code clientIdContent} is {@code null}
          */
         public WithClientIdOnly(String stanzaId,
-                                Stanza msgMetaOrigin,
-                                Stanza senderContentTypeMediaRcat,
+                                String originTag,
+                                String mediaContentId,
                                 Stanza clientIdContent) {
             this.stanzaId = Objects.requireNonNull(stanzaId, "stanzaId cannot be null");
-            this.msgMetaOrigin = msgMetaOrigin;
-            this.senderContentTypeMediaRcat = senderContentTypeMediaRcat;
+            this.originTag = originTag;
+            this.mediaContentId = mediaContentId;
             this.clientIdContent = Objects.requireNonNull(clientIdContent, "clientIdContent cannot be null");
         }
 
@@ -206,26 +213,59 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         }
 
         /**
-         * Returns the optional msg-meta-origin child read by
-         * {@link SmaxMessagePublishNewsletterRequest#toStanza()} when folding the marker into the message
-         * body.
+         * Returns the optional msg-meta-origin tag folded into the {@code <meta origin>} child.
          *
-         * @return an {@link Optional} carrying the stanza, or {@link Optional#empty()} when omitted
+         * @return an {@link Optional} carrying the tag, or {@link Optional#empty()} when omitted
          */
-        public Optional<Stanza> msgMetaOrigin() {
-            return Optional.ofNullable(msgMetaOrigin);
+        public Optional<String> originTag() {
+            return Optional.ofNullable(originTag);
         }
 
         /**
-         * Returns the optional sender content-type-media RCAT child read by
+         * Returns the optional media content id folded into the sender content-type-media RCAT
+         * {@code <plaintext mediatype="url" content_id>} child.
+         *
+         * @return an {@link Optional} carrying the content id, or {@link Optional#empty()} when omitted
+         */
+        public Optional<String> mediaContentId() {
+            return Optional.ofNullable(mediaContentId);
+        }
+
+        /**
+         * Returns the optional {@code <meta origin="..."/>} child read by
+         * {@link SmaxMessagePublishNewsletterRequest#toStanza()} when folding the marker into the message
+         * body, built on demand from {@link #originTag}.
+         *
+         * @return an {@link Optional} carrying the stanza, or {@link Optional#empty()} when omitted
+         */
+        @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishMsgMetaOriginMixin", exports = "applyMixin",
+                adaptation = WhatsAppAdaptation.DIRECT)
+        public Optional<Stanza> msgMetaOrigin() {
+            return Optional.ofNullable(originTag)
+                    .map(tag -> new StanzaBuilder()
+                            .description("meta")
+                            .attribute("origin", tag)
+                            .build());
+        }
+
+        /**
+         * Returns the optional sender content-type-media RCAT
+         * {@code <plaintext mediatype="url" content_id="..."/>} child read by
          * {@link SmaxMessagePublishNewsletterRequest#toStanza()} when folding the media payload into the
-         * message body.
+         * message body, built on demand from {@link #mediaContentId}.
          *
          * @return an {@link Optional} carrying the stanza, or {@link Optional#empty()} when no media
          *         payload is being sent
          */
+        @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishSenderContentTypeMediaRCATMixin", exports = "applyMixin",
+                adaptation = WhatsAppAdaptation.DIRECT)
         public Optional<Stanza> senderContentTypeMediaRcat() {
-            return Optional.ofNullable(senderContentTypeMediaRcat);
+            return Optional.ofNullable(mediaContentId)
+                    .map(id -> new StanzaBuilder()
+                            .description("plaintext")
+                            .attribute("mediatype", "url")
+                            .attribute("content_id", id)
+                            .build());
         }
 
         /**
@@ -253,8 +293,8 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
             }
             var that = (WithClientIdOnly) obj;
             return Objects.equals(this.stanzaId, that.stanzaId)
-                    && Objects.equals(this.msgMetaOrigin, that.msgMetaOrigin)
-                    && Objects.equals(this.senderContentTypeMediaRcat, that.senderContentTypeMediaRcat)
+                    && Objects.equals(this.originTag, that.originTag)
+                    && Objects.equals(this.mediaContentId, that.mediaContentId)
                     && Objects.equals(this.clientIdContent, that.clientIdContent);
         }
 
@@ -265,7 +305,7 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
          */
         @Override
         public int hashCode() {
-            return Objects.hash(stanzaId, msgMetaOrigin, senderContentTypeMediaRcat, clientIdContent);
+            return Objects.hash(stanzaId, originTag, mediaContentId, clientIdContent);
         }
 
         /**
@@ -278,8 +318,8 @@ public sealed interface SmaxMessagePublishNewsletterPayload permits SmaxMessageP
         @Override
         public String toString() {
             return "SmaxMessagePublishNewsletterPayload.WithClientIdOnly[stanzaId=" + stanzaId
-                    + ", msgMetaOrigin=" + msgMetaOrigin
-                    + ", senderContentTypeMediaRcat=" + senderContentTypeMediaRcat
+                    + ", originTag=" + originTag
+                    + ", mediaContentId=" + mediaContentId
                     + ", clientIdContent=" + clientIdContent + ']';
         }
     }

@@ -207,6 +207,10 @@ public record CallKeyDistribution(Jid deviceJid, int version, String type, int c
             return Optional.of(bare(deviceJid.get()));
         }
         var version = enc.get().getAttributeAsInt(VERSION_ATTRIBUTE, -1);
+        // FIXME: an <enc> carrying ciphertext but no type attribute yields a null Signal ciphertext
+        //  type here (the compact ctor only validates deviceJid), propagating a null type downstream;
+        //  whether WA rejects a type-less <enc> or defaults it is not capture-confirmed, so parsing
+        //  behavior is left unchanged until confirmed.
         var type = enc.get().getAttributeAsString(TYPE_ATTRIBUTE, null);
         var count = enc.get().getAttributeAsInt(COUNT_ATTRIBUTE, -1);
         return Optional.of(new CallKeyDistribution(deviceJid.get(), version, type, count, ciphertext.get()));

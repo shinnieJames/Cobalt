@@ -70,7 +70,7 @@ public final class SmaxClientNotificationRequest implements SmaxStanza.Request {
      * {@inheritDoc}
      *
      * <p>Emits a {@code <chatstate to="...">} envelope and delegates the
-     * inner child to {@link SmaxClientNotificationStateType#toNode()}.
+     * inner child to {@link SmaxClientNotificationStateType#toStanza()}.
      *
      * @implNote
      * This implementation does not emit the WA Web optional internal-test
@@ -84,7 +84,7 @@ public final class SmaxClientNotificationRequest implements SmaxStanza.Request {
     @WhatsAppWebExport(moduleName = "WASmaxOutChatstateClientNotificationRequest",
             exports = "makeClientNotificationRequest", adaptation = WhatsAppAdaptation.DIRECT)
     public StanzaBuilder toStanza() {
-        var stateChild = stateType.toNode().build();
+        var stateChild = stateType.toStanza().build();
         return new StanzaBuilder()
                 .description("chatstate")
                 .attribute("to", chatstateTo)

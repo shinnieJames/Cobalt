@@ -503,11 +503,18 @@ public final class CoreEncoder {
             int lpcbuf = xhpFrame + framelen + WINNEXT_WB_LONG_LEN - LPC_BUF_LEN;
 
             boolean longWindow = numframe < (framesPerPacket - 1);
+            // TODO: reuse the per-frame encode-tree scratch (windowed, percCorrs, spans, ltpSlice, wnrgs) as
+            //  single-owner instance fields with out-param handoffs (bit-identity item 3). Left as fresh
+            //  allocations for now: proving each buffer is fully overwritten before every read and never
+            //  aliased past the frame across CoreEncoder/CelpEncoder requires callsite-by-callsite
+            //  verification not completed here, and an unproven reuse would fail the MlowBitIdentity golden.
             float[] windowed = new float[LPC_BUF_LEN];
             lpc.window(xhpPacketBuf, lpcbuf, longWindow, windowed);
             LpcAnalysis.Result lpcResult = lpc.analyze(windowed, LPC_BUF_LEN);
             float[] aBuf = lpcResult.lpc();
-            float[] lpcbufF2 = lpc.powerSpectrum(windowed, LPC_BUF_LEN);
+            // The analysis already ran the single 512-point FFT; reuse its power-spectrum byproduct rather
+            // than re-transforming the identical windowed buffer (bit-identical to powerSpectrum(windowed, len)).
+            float[] lpcbufF2 = lpcResult.f2();
 
             // Perceptual model. The native smpl_core_encode branches on subfrlen: 5 ms subframes (high rate)
             // compute the model for every second subframe over a two-subframe span and interpolate the
@@ -580,8 +587,8 @@ public final class CoreEncoder {
 
             boolean condCoding = (voiced == prevVoiced) && (numframe > 0);
 
-            LbQuantParams params = baseEncode(xhpPacketBuf, xhpFrame, aBuf, framelen, numsubfrs, subfrlen,
-                    numframe, condCoding, voiced, voicingStrength, pitchResult, lags, wnrgs, percCorrs,
+            LbQuantParams params = baseEncode(xhpPacketBuf, xhpFrame, aBuf, lpcResult.lsf(), framelen, numsubfrs,
+                    subfrlen, numframe, condCoding, voiced, voicingStrength, pitchResult, lags, wnrgs, percCorrs,
                     spActProb, codedAsActiveVoice, prevVoiced);
 
             // Serialize this frame's parameters.
@@ -620,6 +627,8 @@ public final class CoreEncoder {
      * @param xhpPacketBuf       the high-passed packet buffer
      * @param xhpFrame           the offset of this frame within {@code xhpPacketBuf}
      * @param aBuf               the bandwidth-expanded LPC filter of this frame
+     * @param lsf                the analysis line spectral frequencies of {@code aBuf}, already computed by the
+     *                           analysis stage and threaded into the quantizer so the filter is converted once
      * @param framelen           the frame length in samples
      * @param numsubfrs          the number of fixed-codebook subframes
      * @param subfrlen           the fixed-codebook subframe length in samples
@@ -636,7 +645,7 @@ public final class CoreEncoder {
      * @param prevVoiced         the previous frame's voicing decision
      * @return the frame's quantized low-band parameters
      */
-    private LbQuantParams baseEncode(float[] xhpPacketBuf, int xhpFrame, float[] aBuf, int framelen,
+    private LbQuantParams baseEncode(float[] xhpPacketBuf, int xhpFrame, float[] aBuf, float[] lsf, int framelen,
                                      int numsubfrs, int subfrlen, int numframe, boolean condCoding, int voiced,
                                      float voicingStrength, OpenLoopPitch.Result pitchResult, float[] lags,
                                      float[] wnrgs, float[][] percCorrs, float spActProb,
@@ -651,8 +660,8 @@ public final class CoreEncoder {
         // interpolate calls (which the commit below advances), matching the native order where smpl_lsf_quant_cond
         // reads enc_state->prev_lsf before the first smpl_lpc_interpol.
         LsfQuantizer.QuantizedLsf quant = condCoding
-                ? lsfQuantizer.quantCond(LSF_SURV, aBuf, lsfInterp.peekCarry(), rdwAdj, voiced, lowRateIdx)
-                : lsfQuantizer.quant(LSF_SURV, aBuf, rdwAdj, voiced, lowRateIdx);
+                ? lsfQuantizer.quantCond(LSF_SURV, aBuf, lsfInterp.peekCarry(), lsf, rdwAdj, voiced, lowRateIdx)
+                : lsfQuantizer.quant(LSF_SURV, aBuf, lsf, rdwAdj, voiced, lowRateIdx);
         float[] qlsf = quant.lsf();
         float[] wlsf = quant.wlsf();
         int[] lsfIdx = quant.indices();
@@ -720,6 +729,11 @@ public final class CoreEncoder {
         int[] fcbgIdx = new int[numsubfrs];
         boolean voicedBool = voiced == 1;
 
+        // TODO: reuse the per-subframe Result holders and flatten the boxed param vectors into mutable
+        //  single-owner holders across CoreEncoder/CelpEncoder/FcbSearch/AcbSearch/OpenLoopPitch/ParamEncoder
+        //  (bit-identity item 2). Left as per-iteration allocations for now: proving no consumer retains a
+        //  Result alias across the next subframe/frame across these kernels was not completed here, and an
+        //  unproven mutable-holder reuse would fail the MlowBitIdentity golden.
         for (int numsubfr = 0; numsubfr < numsubfrs; numsubfr++) {
             float wnrgNext = (numsubfr < (numsubfrs - 1)) ? wnrgs[numsubfr + 1] : wnrgs[numsubfr];
             BitrateController.Allocation alloc = rateCtrl.control(false, codedAsActiveVoice, spActProb,

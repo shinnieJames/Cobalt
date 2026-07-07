@@ -55,6 +55,15 @@ public final class VideoCodecRegistry {
                     VideoDecoderCapability.VP9, VideoDecoderCapability.AV1);
 
     /**
+     * The shared stateless registry instance.
+     *
+     * <p>Because the registry holds no per-call state and its methods are pure factories, one instance is
+     * safe to share across every call and thread; callers use this rather than constructing a fresh
+     * registry per call.
+     */
+    public static final VideoCodecRegistry INSTANCE = new VideoCodecRegistry();
+
+    /**
      * Constructs a stateless registry.
      */
     public VideoCodecRegistry() {

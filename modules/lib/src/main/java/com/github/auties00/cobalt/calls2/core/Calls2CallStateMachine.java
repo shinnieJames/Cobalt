@@ -193,7 +193,7 @@ public final class Calls2CallStateMachine implements Calls2CallStateTransition {
             context.state(newState);
             return Transition.silent(current, newState);
         }
-        applyAccounting(context, current, newState, nowMillis);
+        applyAccounting(context, current, nowMillis);
         context.state(newState);
         applyEntryEffects(context, newState, nowMillis);
         LOGGER.log(System.Logger.Level.DEBUG, "change_call_state call id {0}: [{1} -> {2}]",
@@ -267,11 +267,9 @@ public final class Calls2CallStateMachine implements Calls2CallStateTransition {
      *
      * @param context   the call context being transitioned
      * @param current   the state being left
-     * @param newState  the state being entered
      * @param nowMillis the timestamp used to close the leaving segment
      */
-    private static void applyAccounting(Calls2CallContext context, Calls2CallState current,
-                                        Calls2CallState newState, long nowMillis) {
+    private static void applyAccounting(Calls2CallContext context, Calls2CallState current, long nowMillis) {
         if (current == Calls2CallState.CONNECTED_LONELY) {
             context.closeLonelySegment(nowMillis);
             context.fireCancelConnectedLonelyTimer();

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -182,7 +183,7 @@ class BotWelcomeRequestHandlerTest {
         @Test
         @DisplayName("emits a SET pending mutation with the requested chat JID and flag")
         void buildsPending() {
-            var pending = new BotWelcomeRequestMutationFactory().getBotWelcomeRequestSetMutation(BOT_JID, true);
+            var pending = new BotWelcomeRequestMutationFactory(TestWamService.create(client)).getBotWelcomeRequestSetMutation(BOT_JID, true);
 
             assertEquals(SyncdOperation.SET, pending.mutation().operation());
             assertEquals(BotWelcomeRequestAction.ACTION_VERSION, pending.mutation().actionVersion());

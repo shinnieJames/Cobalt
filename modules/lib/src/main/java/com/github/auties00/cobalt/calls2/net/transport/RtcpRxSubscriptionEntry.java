@@ -79,14 +79,6 @@ public record RtcpRxSubscriptionEntry(int peerSsrc, int mediaSsrc, int flags) {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return obj == this || (obj instanceof RtcpRxSubscriptionEntry that
-                && this.peerSsrc == that.peerSsrc
-                && this.mediaSsrc == that.mediaSsrc
-                && this.flags == that.flags);
-    }
-
-    @Override
     public int hashCode() {
         return Objects.hash(peerSsrc, mediaSsrc, flags);
     }

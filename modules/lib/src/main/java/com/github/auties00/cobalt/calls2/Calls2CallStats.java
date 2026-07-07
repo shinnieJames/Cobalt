@@ -81,6 +81,8 @@ public final class Calls2CallStats {
         this.side = Objects.requireNonNull(side, "side cannot be null");
         this.videoEnabled = videoEnabled;
         this.startedAt = Objects.requireNonNull(startedAt, "startedAt cannot be null");
+        // TODO: wire calls2 last-minute call telemetry - own per-metric LastMinuteBuffer instances, insert(nowMillis, amount) on each stats tick, and emit last_min_* WAM fields (avg_rtt, jb delay/lost, video render-freeze) via sum()/count(), gated like should_report_last_min_metrics.
+        //  Left as a TODO because the faithful per-second sampler this needs does not exist yet and cannot be built without guessing. In the wa-voip engine (module fBusb96-x4w) wa_last_min_buf_insert (fn10121) is driven from the engine's per-second field-stats collection loop (fn4790/fn11758), gated by should_report_last_min_metrics (fn12904); each last_min_* field is a distinct metric's 60s aggregate. Cobalt is deliberately tickerless (this class stamps only lifecycle instants) and has no 1Hz per-call stats sampler, so nothing produces the per-second amounts to insert. The metric sources are also not reachable as per-second snapshots: NetEqStatistics is a drain-at-end snapshot (LiveNetEq.statistics()) not a per-second delta, avg RTT lives in scattered per-unit RttEstimator instances (VideoTimingController/UnifiedAudioQualityControl/FastRampController) with no aggregated surface, and there is no video render-freeze source at all (VideoJitterBuffer tracks no freeze durations). Feeding fabricated numbers would reach the WAM wire, so this stays unwired until a faithful per-second field-stats sampler and a video render-freeze detector are ported.
     }
 
     /**

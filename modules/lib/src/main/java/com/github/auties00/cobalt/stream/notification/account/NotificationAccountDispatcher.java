@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.wam.WamService;
 
 /**
  * Routes inbound {@code <notification>} stanzas in the account category to the matching per-type handler.
@@ -74,11 +75,12 @@ public final class NotificationAccountDispatcher extends SocketStreamHandler.Con
      * @param whatsapp      the {@link LinkedWhatsAppClient} forwarded to every sub-handler for store and stanza access
      * @param deviceService the {@link DeviceService} consumed only by {@link NotificationAccountStreamHandler}
      * @param ackSender     the {@link AckSender} forwarded to every sub-handler for the per-notification {@code <ack>} stanza
+     * @param wamService    the {@link WamService}
      */
-    public NotificationAccountDispatcher(LinkedWhatsAppClient whatsapp, DeviceService deviceService, AckSender ackSender) {
+    public NotificationAccountDispatcher(LinkedWhatsAppClient whatsapp, DeviceService deviceService, AckSender ackSender, WamService wamService) {
         this.accountHandler = new NotificationAccountStreamHandler(whatsapp, deviceService, ackSender);
         this.contactHandler = new NotificationContactStreamHandler(whatsapp, ackSender);
-        this.disappearingModeHandler = new NotificationDisappearingModeStreamHandler(whatsapp, ackSender);
+        this.disappearingModeHandler = new NotificationDisappearingModeStreamHandler(whatsapp, wamService, ackSender);
         this.privacyHandler = new NotificationPrivacyStreamHandler(whatsapp, ackSender);
         this.profileHandler = new NotificationProfileStreamHandler(whatsapp, ackSender);
     }

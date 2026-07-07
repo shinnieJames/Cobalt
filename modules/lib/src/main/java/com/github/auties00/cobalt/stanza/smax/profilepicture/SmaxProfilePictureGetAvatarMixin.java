@@ -144,7 +144,7 @@ public final class SmaxProfilePictureGetAvatarMixin {
         @WhatsAppWebExport(moduleName = "WASmaxOutProfilePictureAvatarMixin",
                 exports = "makeAvatarAvatar",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             return new StanzaBuilder()
                     .description("avatar")
                     .attribute("pose_id", avatarPoseId)

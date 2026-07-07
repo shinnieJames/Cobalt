@@ -13,16 +13,16 @@ import java.util.Optional;
  *
  * <p>Reactions are transient UI overlays that travel over the call's application-data side-channel rather
  * than over signaling. {@link #sendReaction(String)} broadcasts the local user's reaction through the
- * attached {@link ReactionSender} (the application-data controller's reaction send), which retains it for
+ * attached {@link AppDataController#sendReaction(String)}, which retains it for
  * retransmission and clears it after a short window, and emits a {@link ReactionStateChanged} for the local
  * user so its own overlay shows. Inbound reactions, and their expiry, arrive on the
- * {@link AppDataController.ReactionObserver} this controller implements: an arrival emits a
- * {@link ReactionStateChanged} carrying the reaction and an expiry emits one carrying an empty reaction so
- * the host takes the overlay down.
+ * {@link #onReaction(Jid, Optional)} callback this controller registers with the {@link AppDataController}:
+ * an arrival emits a {@link ReactionStateChanged} carrying the reaction and an expiry emits one carrying an
+ * empty reaction so the host takes the overlay down.
  *
  * <p>This controller is the inbound reaction observer the {@link AppDataController} is constructed with, so
  * it must exist before that controller; the outbound send seam is therefore attached after the
- * application-data controller is built, through {@link #attach(ReactionSender)}, to break the construction
+ * application-data controller is built, through {@link #attach(AppDataController)}, to break the construction
  * cycle. The controller owns no timers of its own (the reaction lifetime and retransmission timers belong
  * to the {@link AppDataController}) and holds no mutable state beyond the one-time send-seam binding.
  *
@@ -32,11 +32,11 @@ import java.util.Optional;
  * ({@code ReactionStateChanged}) is emitted, with the reaction-clear timer owned by the app-data
  * controller; an inbound reaction updates the per-participant record and emits the same event, and the
  * rx-reaction-clear sweep emits it again with an empty reaction. Cobalt sources both arrival and expiry
- * from the {@link AppDataController.ReactionObserver} this controller implements, so it adds only the event
- * mapping. Reactions deliberately do NOT serialize a {@code CallInteraction}; the wire layer never carries
- * that facade.
+ * from the {@link #onReaction(Jid, Optional)} callback it registers with the {@link AppDataController}, so it
+ * adds only the event mapping. Reactions deliberately do NOT serialize a {@code CallInteraction}; the wire
+ * layer never carries that facade.
  */
-public final class ReactionController implements AppDataController.ReactionObserver {
+public final class ReactionController {
     /**
      * The local device JID stamped as the participant on the local user's own reaction events.
      */
@@ -48,17 +48,17 @@ public final class ReactionController implements AppDataController.ReactionObser
     private final CallEventSink events;
 
     /**
-     * The outbound reaction send seam, attached after the application-data controller is built.
+     * The application-data controller carrying the outbound reaction send, attached after it is built.
      *
-     * <p>Volatile because {@link #attach(ReactionSender)} runs on the wiring thread while
+     * <p>Volatile because {@link #attach(AppDataController)} runs on the wiring thread while
      * {@link #sendReaction(String)} may run on a control thread; the field is written once.
      */
-    private volatile ReactionSender sender;
+    private volatile AppDataController appData;
 
     /**
      * Constructs a reaction controller bound to the local identity and the event sink.
      *
-     * <p>The outbound send seam is attached separately through {@link #attach(ReactionSender)} once the
+     * <p>The outbound send seam is attached separately through {@link #attach(AppDataController)} once the
      * application-data controller this controller observes has been built.
      *
      * @param selfJid the local device JID for the local user's own reaction events; never {@code null}
@@ -74,23 +74,23 @@ public final class ReactionController implements AppDataController.ReactionObser
      * Attaches the outbound reaction send seam.
      *
      * <p>Called once, after the application-data controller this controller observes is built, to wire the
-     * outbound path (typically the application-data controller's reaction send). Breaking the binding into
+     * outbound path (the application-data controller's reaction send). Breaking the binding into
      * a separate step resolves the construction cycle between this observer and the application-data
      * controller it is passed to.
      *
-     * @param sender the outbound reaction send seam; never {@code null}
-     * @throws NullPointerException if {@code sender} is {@code null}
+     * @param appData the application-data controller carrying the reaction send; never {@code null}
+     * @throws NullPointerException if {@code appData} is {@code null}
      */
-    public void attach(ReactionSender sender) {
-        this.sender = Objects.requireNonNull(sender, "sender cannot be null");
+    public void attach(AppDataController appData) {
+        this.appData = Objects.requireNonNull(appData, "appData cannot be null");
     }
 
     /**
      * Broadcasts the local user's emoji reaction and emits its local state change.
      *
-     * <p>Sends the reaction through the attached {@link ReactionSender}, which assigns it a transaction id
-     * and retains it for retransmission, and emits a {@link ReactionStateChanged} for the local user
-     * carrying the sent reaction so its own overlay appears. Returns the assigned transaction id, or
+     * <p>Sends the reaction through the attached {@link AppDataController#sendReaction(String)}, which assigns
+     * it a transaction id and retains it for retransmission, and emits a {@link ReactionStateChanged} for the
+     * local user carrying the sent reaction so its own overlay appears. Returns the assigned transaction id, or
      * {@code -1} when no send seam is attached or the send was dropped.
      *
      * @param emoji the reaction emoji string to broadcast; never {@code null}
@@ -99,11 +99,16 @@ public final class ReactionController implements AppDataController.ReactionObser
      */
     public long sendReaction(String emoji) {
         Objects.requireNonNull(emoji, "emoji cannot be null");
-        var current = sender;
+        var current = appData;
         if (current == null) {
             return -1;
         }
-        var transactionId = current.send(emoji);
+        var transactionId = current.sendReaction(emoji);
+        // FIXME: when current.sendReaction(emoji) returns -1 the app-data controller dropped the reaction, yet this still
+        //  emits ReactionStateChanged(self=true) so the local overlay shows a reaction that was never sent;
+        //  the intended fix is to return -1 without emitting on the dropped-send path, but whether WA emits
+        //  the local 0x91 event regardless of send-drop is unconfirmed (the drop path differs from the
+        //  seam-absent path), so the emit is left in place until confirmed against WA.
         var reaction = new ReactionInfoBuilder()
                 .transactionId(transactionId)
                 .reaction(emoji)
@@ -123,25 +128,7 @@ public final class ReactionController implements AppDataController.ReactionObser
      * @param participant the device JID whose reaction changed; never {@code null}
      * @param reaction    the arrived reaction, or empty when the reaction expired
      */
-    @Override
     public void onReaction(Jid participant, Optional<ReactionInfo> reaction) {
         events.emit(new ReactionStateChanged(participant, reaction, participant.equals(selfJid)));
-    }
-
-    /**
-     * The outbound reaction send seam: broadcasts an emoji over the application-data channel.
-     *
-     * <p>Wired to the application-data controller's reaction send, which assigns a transaction id, ships
-     * the reaction on the AppData stream, and retains it for retransmission.
-     */
-    @FunctionalInterface
-    public interface ReactionSender {
-        /**
-         * Broadcasts an emoji reaction and returns its assigned transaction id.
-         *
-         * @param emoji the reaction emoji string to broadcast; never {@code null}
-         * @return the transaction id assigned to the reaction, or {@code -1} when dropped
-         */
-        long send(String emoji);
     }
 }

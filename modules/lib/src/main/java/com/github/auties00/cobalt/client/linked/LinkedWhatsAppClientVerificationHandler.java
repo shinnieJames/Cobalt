@@ -6,6 +6,8 @@ import com.google.zxing.MultiFormatWriter;
 import com.google.zxing.WriterException;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
+import com.github.auties00.cobalt.model.device.identity.LocalPasskeyCredential;
+import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import it.auties.qr.QrTerminal;
 
 import java.awt.*;
@@ -16,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static com.google.zxing.client.j2se.MatrixToImageWriter.writeToPath;
@@ -260,6 +263,125 @@ public sealed interface LinkedWhatsAppClientVerificationHandler {
              */
             static PairingCode toTerminal() {
                 return System.out::println;
+            }
+        }
+
+        /**
+         * A verification handler that links the companion through a passkey instead of a QR code or
+         * pairing code.
+         *
+         * @apiNote
+         * Passkey linking authenticates the companion with a WebAuthn assertion (driven by the
+         * {@link #authenticator(LinkedWhatsAppStore)} this handler carries) and then runs a key-agreement handshake with
+         * the primary device that yields a short verification code. The inherited
+         * {@link #handle(String)} surfaces that code for the user to compare against the one shown on
+         * the primary, and {@link #confirmVerificationCode(String)} reports whether the codes matched.
+         * The same {@link #authenticator(LinkedWhatsAppStore)} also answers a server-pushed integrity checkpoint on the
+         * connected session, so configuring this handler is how a web client opts into passkey
+         * checkpoint satisfaction; a client linked through {@link QrCode} or {@link PairingCode}
+         * carries no authenticator and logs out when challenged.
+         */
+        non-sealed interface Passkey extends Web {
+            /**
+             * Resolves the authenticator that asserts the account passkey, against the store the
+             * client is being built on.
+             *
+             * <p>Used both to produce the prologue assertion that begins passkey linking and to answer
+             * a server-pushed integrity checkpoint on the connected session. It is resolved once, at
+             * client construction.
+             *
+             * @param store the store the client is being built on
+             * @return the passkey authenticator; never {@code null}
+             */
+            LinkedWhatsAppClientPasskeyAuthenticator authenticator(LinkedWhatsAppStore store);
+
+            /**
+             * Reports whether the verification code the companion derived matches the one shown on
+             * the primary device, gating completion of the link.
+             *
+             * @apiNote
+             * Implementations typically block on user input to let the user compare the code against
+             * their primary device. The handshake completes only when this returns {@code true}; a
+             * {@code false} return aborts the link.
+             *
+             * @implSpec
+             * The default implementation returns {@code true}, auto-confirming the code. This is the
+             * right behaviour for an unattended session that trusts the handshake; implementations
+             * that want a human to compare the codes should override it.
+             *
+             * @param verificationCode the verification code the companion derived
+             * @return {@code true} to complete the link, {@code false} to abort it
+             */
+            default boolean confirmVerificationCode(String verificationCode) {
+                return true;
+            }
+
+            /**
+             * Returns a handler whose authenticator drives the host operating system's native
+             * WebAuthn API, mirroring {@link LinkedWhatsAppClientPasskeyAuthenticator#system()}.
+             *
+             * @return the system-backed handler
+             */
+            static Passkey fromSystem() {
+                return from(_ -> LinkedWhatsAppClientPasskeyAuthenticator.system());
+            }
+
+            /**
+             * Returns a handler that signs with the passkey credential already set on the
+             * client's store, mirroring {@link LinkedWhatsAppClientPasskeyAuthenticator#stored(LinkedWhatsAppStore)}.
+             *
+             * @return the stored-credential handler
+             * @throws IllegalStateException at client construction when no passkey credential has
+             *                               been set on the store; pass one to {@link #fromStored(LocalPasskeyCredential)}
+             *                               or set it through
+             *                               {@link com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore#setPasskeyCredential}
+             */
+            static Passkey fromStored() {
+                return from(store -> {
+                    if (store.signalStore().passkeyCredential().isEmpty()) {
+                        throw new IllegalStateException("No passkey credential is set on the store");
+                    }
+                    return LinkedWhatsAppClientPasskeyAuthenticator.stored(store);
+                });
+            }
+
+            /**
+             * Returns a handler that sets the given credential on the client's store and signs with it.
+             *
+             * <p>The credential is persisted into the store's Signal sub-store when the client is
+             * built, so it survives restarts and a later {@link #fromStored()} finds it.
+             *
+             * @param credential the imported credential to set on the store and sign with
+             * @return the stored-credential handler
+             * @throws NullPointerException if {@code credential} is {@code null}
+             */
+            static Passkey fromStored(LocalPasskeyCredential credential) {
+                Objects.requireNonNull(credential, "credential must not be null");
+                return from(store -> {
+                    store.signalStore().setPasskeyCredential(credential);
+                    return LinkedWhatsAppClientPasskeyAuthenticator.stored(store);
+                });
+            }
+
+            /**
+             * Wraps a store-to-authenticator resolver in an auto-confirming passkey handler that prints
+             * the verification code on standard output.
+             *
+             * @param resolver resolves the authenticator against the client's store
+             * @return the auto-confirming handler
+             */
+            private static Passkey from(Function<LinkedWhatsAppStore, LinkedWhatsAppClientPasskeyAuthenticator> resolver) {
+                return new Passkey() {
+                    @Override
+                    public LinkedWhatsAppClientPasskeyAuthenticator authenticator(LinkedWhatsAppStore store) {
+                        return resolver.apply(store);
+                    }
+
+                    @Override
+                    public void handle(String value) {
+                        System.out.println(value);
+                    }
+                };
             }
         }
     }

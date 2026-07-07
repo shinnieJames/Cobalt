@@ -1,7 +1,5 @@
 package com.github.auties00.cobalt.calls2.core.control;
 
-import java.util.Optional;
-
 /**
  * Enumerates the call tones the engine can play, each carrying a priority bit in a tone bitmask.
  *
@@ -15,8 +13,7 @@ import java.util.Optional;
  * higher-priority tone, so {@link #highestPriority(int)} selects the active tone by taking the
  * highest set bit of the mask. The bits are NOT a contiguous run; they skip values (there is no tone at
  * bits {@code 0x2}, {@code 0x4} is interruption, {@code 0x8} is offer-sent, and the incoming and group
- * tones jump to {@code 0x100} and {@code 0x200}), matching the native table, so {@link #ofBit(int)}
- * resolves only the defined bits and yields an empty result for an undefined one.
+ * tones jump to {@code 0x100} and {@code 0x200}), matching the native table.
  *
  * @implNote This implementation ports the {@code ToneType} bit constants the wa-voip WASM module
  * {@code ff-tScznZ8P} ORs into the tone bitmask in the tone-priority selector (the playback manager that
@@ -103,24 +100,6 @@ public enum ToneType {
      */
     public int bit() {
         return bit;
-    }
-
-    /**
-     * Looks up the tone whose {@linkplain #bit() priority bit} equals the given value.
-     *
-     * <p>Only a defined bit resolves; an undefined bit, including the unused {@code 0x80} slot, yields an
-     * empty result.
-     *
-     * @param bit the priority bit to resolve
-     * @return the matching tone, or an empty result when no tone carries the bit
-     */
-    public static Optional<ToneType> ofBit(int bit) {
-        for (var tone : values()) {
-            if (tone.bit == bit) {
-                return Optional.of(tone);
-            }
-        }
-        return Optional.empty();
     }
 
     /**

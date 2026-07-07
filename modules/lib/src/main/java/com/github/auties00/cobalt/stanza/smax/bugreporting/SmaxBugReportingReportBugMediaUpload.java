@@ -167,7 +167,7 @@ public final class SmaxBugReportingReportBugMediaUpload {
     @WhatsAppWebExport(moduleName = "WASmaxOutBugReportingReportBugRequest",
             exports = "makeReportBugRequestMedia",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Stanza toNode() {
+    public Stanza toStanza() {
         var builder = new StanzaBuilder()
                 .description("media")
                 .attribute("iv", mediaIv)

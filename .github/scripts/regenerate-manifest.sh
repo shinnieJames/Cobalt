@@ -17,8 +17,6 @@ VERSION=$(grep -m1 '<version>' "$ROOT/pom.xml" | sed 's/[<\/]*version[> ]*//g' |
 COMMIT_SHA=$(git -C "$ROOT" rev-parse HEAD)
 
 CLASSIFIERS=(linux-x86_64 linux-aarch64 windows-x86_64 windows-aarch64 darwin-x86_64 darwin-aarch64)
-# Every native dependency is linked into one combined library per classifier
-# (see build-natives.sh build_combined), keyed in the manifest as cobalt-native.
 KEY=cobalt-native
 
 ENTRIES=()

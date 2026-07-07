@@ -73,6 +73,15 @@ module com.github.auties00.cobalt {
     // Persistent message store (embedded H2 MVStore)
     requires com.h2database.mvstore;
 
+    // Event-driven network connectivity monitor (external library)
+    requires com.github.auties00.vigil;
+
+    // Native OS passkey (WebAuthn) assertion (external library)
+    requires com.github.auties00.warden;
+
+    // Pure-Java SRTP/SRTCP (external library)
+    requires com.github.auties00.srtp;
+
     // PDF rendering (document thumbnails in the upload transcoder)
     requires org.apache.pdfbox;
 
@@ -86,10 +95,6 @@ module com.github.auties00.cobalt {
     requires net.dongliu.apkparser;
     requires com.google.i18n.phonenumbers.libphonenumber;
 
-    // Calls, DTLS-SRTP handshake (BouncyCastle TLS)
-    requires org.bouncycastle.provider;
-    requires org.bouncycastle.tls;
-
     // Calls
     exports com.github.auties00.cobalt.calls2.stream;
 
@@ -97,7 +102,6 @@ module com.github.auties00.cobalt {
     exports com.github.auties00.cobalt.client;
     exports com.github.auties00.cobalt.client.linked;
     exports com.github.auties00.cobalt.client.cloud;
-    exports com.github.auties00.cobalt.export;
 
     // Emoji
     exports com.github.auties00.cobalt.emoji;

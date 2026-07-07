@@ -68,7 +68,7 @@ public final class SmaxGetSMBMeteredMessagingCheckoutPendingCampaign {
      *
      * @return the materialised {@link Stanza}
      */
-    public Stanza toNode() {
+    public Stanza toStanza() {
         var builder = new StanzaBuilder()
                 .description("campaign")
                 .attribute("free_reserved_msgs", freeReservedMsgs);

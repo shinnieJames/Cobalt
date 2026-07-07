@@ -25,6 +25,7 @@ import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -519,7 +520,7 @@ public final class Calls2EngineAssembler {
          * The empty payload emitted with a timer-driven lifecycle event, since the per-event payload byte
          * layout is not yet recovered (SPEC section 17.1).
          */
-        private static final byte[] EMPTY_PAYLOAD = new byte[0];
+        private static final byte[] EMPTY_PAYLOAD = DataUtils.EMPTY_BYTE_ARRAY;
 
         /**
          * Holds the live timer driver for each call id, created on first arm and removed on cancel-all.

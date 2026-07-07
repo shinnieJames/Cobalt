@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.client;
 import com.github.auties00.cobalt.client.cloud.CloudWhatsAppClient;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.emoji.WhatsAppEmoji;
 
 import com.github.auties00.cobalt.listener.DisconnectedListener;
 import com.github.auties00.cobalt.listener.LoggedInListener;
@@ -16,6 +17,7 @@ import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageKey;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -157,6 +159,23 @@ public sealed interface WhatsAppClient<SELF extends WhatsAppClient<SELF>> permit
      * @param emoji      the reaction emoji
      */
     void addReaction(MessageKey messageKey, String emoji);
+
+    /**
+     * Reacts to a message with a typed emoji.
+     *
+     * <p>Convenience overload of {@link #addReaction(MessageKey, String)} that sends the
+     * {@linkplain WhatsAppEmoji#value() canonical value} of {@code emoji}. Replacing an existing
+     * reaction is done by reacting again with a different emoji; clearing it is done with
+     * {@link #removeReaction(MessageKey)}.
+     *
+     * @param messageKey the key of the message to react to
+     * @param emoji      the reaction emoji
+     * @throws NullPointerException if {@code emoji} is {@code null}
+     */
+    default void addReaction(MessageKey messageKey, WhatsAppEmoji emoji) {
+        Objects.requireNonNull(emoji, "emoji cannot be null");
+        addReaction(messageKey, emoji.value());
+    }
 
     /**
      * Removes the reaction previously sent to a message.

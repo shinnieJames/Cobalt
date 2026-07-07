@@ -114,7 +114,7 @@ class MerchantPaymentPartnerHandlerTest {
             // TestWhatsAppClient (which throws on abPropsService) is safe here because the
             // platform gate trips first and short-circuits the AB-prop call.
             var client = TestWhatsAppClient.create().withStore(store);
-            store.accountStore().device().setPlatform(ClientPlatformType.WEB);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.WEB));
 
             var result = handler.applyMutation(client,
                     buildMutation(sampleAction(), SyncdOperation.SET, Instant.now()));
@@ -125,7 +125,7 @@ class MerchantPaymentPartnerHandlerTest {
         @Test
         @DisplayName("the ANDROID_BUSINESS platform passes the platform gate")
         void androidBusinessPlatformPasses() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
             var client = TestWhatsAppClient.create().withStore(store).withAbPropsService(props);
 
@@ -137,7 +137,7 @@ class MerchantPaymentPartnerHandlerTest {
         @Test
         @DisplayName("the IOS_BUSINESS platform passes the platform gate")
         void iosBusinessPlatformPasses() {
-            store.accountStore().device().setPlatform(ClientPlatformType.IOS_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.IOS_BUSINESS));
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
             var client = TestWhatsAppClient.create().withStore(store).withAbPropsService(props);
 
@@ -153,7 +153,7 @@ class MerchantPaymentPartnerHandlerTest {
         @Test
         @DisplayName("a business platform with the AB prop unset returns UNSUPPORTED")
         void propOffIsUnsupported() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             // The AB prop defaults to "false" - explicitly set to false to exercise the gate path.
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, false);
             var client = TestWhatsAppClient.create().withStore(store).withAbPropsService(props);
@@ -171,7 +171,7 @@ class MerchantPaymentPartnerHandlerTest {
         @Test
         @DisplayName("SET on SMB with AB prop on persists the merchant partner")
         void persistsMerchantPartner() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
             var client = TestWhatsAppClient.create().withStore(store).withAbPropsService(props);
             var action = sampleAction();
@@ -192,7 +192,7 @@ class MerchantPaymentPartnerHandlerTest {
         @Test
         @DisplayName("there is no orphan branch - the handler writes a singleton store slot")
         void orphanNotApplicable() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
             var client = TestWhatsAppClient.create()
                     .withStore(store)
@@ -210,7 +210,7 @@ class MerchantPaymentPartnerHandlerTest {
         @Test
         @DisplayName("a SET whose value carries the wrong action returns MALFORMED")
         void wrongActionType() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
             var client = TestWhatsAppClient.create()
                     .withStore(store)
@@ -238,7 +238,7 @@ class MerchantPaymentPartnerHandlerTest {
             // The index for this action is the singleton ["merchant_payment_partner"]; the handler
             // does not extract any positional argument. Confirm that arbitrary index payloads
             // still pass through the gates and reach the action-type check.
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
             var client = TestWhatsAppClient.create()
                     .withStore(store)
@@ -268,7 +268,7 @@ class MerchantPaymentPartnerHandlerTest {
         @Test
         @DisplayName("REMOVE on SMB with AB prop on returns UNSUPPORTED")
         void removeUnsupported() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
             var client = TestWhatsAppClient.create()
                     .withStore(store)

@@ -8,6 +8,7 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The recovered machine-learning bandwidth-estimation engine: maintains the per-model slide-window history
@@ -139,7 +140,7 @@ public final class LiveMlBweEngine implements MlBweEngine {
      * @throws UnsupportedOperationException if a model's path resolves, since the ExecuTorch backend is not
      *                                       bundled
      */
-    public LiveMlBweEngine(Map<MlBweModelType, ModelConfig> configs, ModelPathResolver resolver) {
+    public LiveMlBweEngine(Map<MlBweModelType, ModelConfig> configs, Function<MlBweModelType, String> resolver) {
         Objects.requireNonNull(configs, "configs cannot be null");
         Objects.requireNonNull(resolver, "resolver cannot be null");
         this.arena = Arena.ofShared();
@@ -182,8 +183,8 @@ public final class LiveMlBweEngine implements MlBweEngine {
      * @throws UnsupportedOperationException when a path is provisioned, since the ExecuTorch backend is not
      *                                       bundled
      */
-    private MemorySegment loadHandle(MlBweModelType type, ModelPathResolver resolver) {
-        var path = resolver.resolve(type);
+    private MemorySegment loadHandle(MlBweModelType type, Function<MlBweModelType, String> resolver) {
+        var path = resolver.apply(type);
         if (path == null || path.isEmpty()) {
             return MemorySegment.NULL;
         }
@@ -536,30 +537,6 @@ public final class LiveMlBweEngine implements MlBweEngine {
                 }
             }
         }
-    }
-
-    /**
-     * Resolves the {@code .pte} filesystem path for a model type, or {@code null} when none is provisioned.
-     *
-     * <p>This mirrors the wa-voip {@code ml_get_bwe_model_path_func} callback: the engine asks the host
-     * where the downloaded model file lives, keyed by the model type. A {@code null} or empty return means
-     * no model is provisioned and the model is held history-only.
-     *
-     * @implNote This is the Java analogue of the registered {@code ml_get_bwe_model_path_func} pointer the
-     * wa-voip loader {@code fn4361} calls per model name; the {@code _js} variant resolves through the JS
-     * download layer gated by {@code enable_ml_bwe_model_download} and keyed by the
-     * {@code wavoip_ml_bwe_*_model_download_versions} AB-prop (re/calls2-spec/ML-BWE-RE.md sec 2).
-     */
-    @FunctionalInterface
-    public interface ModelPathResolver {
-        /**
-         * Returns the {@code .pte} filesystem path for the given model type, or {@code null} when none is
-         * provisioned.
-         *
-         * @param type the model type to resolve a path for
-         * @return the filesystem path of the model's {@code .pte} file, or {@code null}
-         */
-        String resolve(MlBweModelType type);
     }
 
     /**

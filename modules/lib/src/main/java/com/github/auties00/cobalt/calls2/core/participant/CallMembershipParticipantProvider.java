@@ -60,4 +60,13 @@ final class CallMembershipParticipantProvider implements ParticipantProvider {
     public ParticipantView selfView() {
         return membership.participantSelfView();
     }
+
+    // TODO (item 8): override the ParticipantProvider first-active-peer accessor here with a
+    //  CallMembership.firstActivePeerView() that scans selfView + views under a single membership lock,
+    //  closing the consistency window where a reconcile lands between this provider's separate selfView()
+    //  and views() snapshots. Deferred: the accessor to override is a default on ParticipantProvider
+    //  (outside this owned set) and the single-lock scan primitive must be added to CallMembership, so the
+    //  two must be introduced together to keep the projection identical. The sibling half of item 8 (running
+    //  participant projection + control dispatch under one lock in Calls2LifecycleController.handlePeerVideoState
+    //  and handlePeerScreenShare) lives in the lifecycle controller and is deferred with it.
 }

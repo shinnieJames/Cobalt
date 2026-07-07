@@ -129,7 +129,7 @@ public final class LiveMessageService implements MessageService {
         this.lidMigrationService = lidMigrationService;
         var store = client.store();
         this.sendingService = new LiveMessageSendingService(client, encryption, deviceService, lidMigrationService, abPropsService, wamService, mediaTranscoderService);
-        this.receivingService = new LiveMessageReceivingService(store, decryption);
+        this.receivingService = new LiveMessageReceivingService(store, decryption, wamService);
     }
 
     @Override

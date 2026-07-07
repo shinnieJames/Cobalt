@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.stream.presence;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientListener;
 import com.github.auties00.cobalt.stanza.Stanza;
+import com.github.auties00.cobalt.stanza.smax.presence.SmaxServerUpdateResponse;
 import com.github.auties00.cobalt.store.linked.protobuf.ProtobufWhatsAppStore;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
@@ -23,17 +24,18 @@ import java.util.Set;
  *
  * <p>This handler drives the "online" and "last seen" surface shown next to a contact's name. It runs whenever the
  * server pushes a presence update for any subscribed contact; presence subscription itself is requested elsewhere. The
- * {@code type} attribute selects {@link ContactStatus#AVAILABLE} or {@link ContactStatus#UNAVAILABLE}, and the
- * {@code last} attribute carries the last-seen unix timestamp resolved by {@link #resolveLastSeen(String, ContactStatus)}.
- * The privacy sentinels {@code "deny"}, {@code "none"} and {@code "error"} in the {@code last} attribute mean the peer's
- * privacy settings hide their last-seen timestamp; in that case the existing timestamp is left untouched.
+ * inbound stanza is resolved into a {@link SmaxServerUpdateResponse} variant that classifies it as
+ * {@link ContactStatus#AVAILABLE} or {@link ContactStatus#UNAVAILABLE} and carries the last-seen value resolved by
+ * {@link #resolveLastSeen(String, ContactStatus)}. The privacy sentinels {@code "deny"}, {@code "none"} and
+ * {@code "error"} mean the peer's privacy settings hide their last-seen timestamp; in that case the existing timestamp
+ * is left untouched.
  *
  * @implNote
- * This implementation merges the WhatsApp Web per-stanza router with the action handler that mutates the presence
- * collection. WhatsApp Web distinguishes a group-available and group-unavailable presence variant that updates the
- * per-group viewer count; that path is not implemented here, so those variants flow through to the per-contact path.
- * WhatsApp Web also surfaces the {@code deny} sentinel as a {@code forceDisplay} UI hint on its presence model; Cobalt
- * is headless and has no such hint, so the {@code last="deny"} sentinel is consumed by
+ * This implementation delegates stanza classification to {@link SmaxServerUpdateResponse} and then mutates the presence
+ * collection from the resolved variant. WhatsApp Web distinguishes a group-available and group-unavailable presence
+ * variant that updates the per-group viewer count; that surface is not implemented here, so those variants flow through
+ * to the per-contact path. WhatsApp Web also surfaces the {@code deny} sentinel as a {@code forceDisplay} UI hint on its
+ * presence model; Cobalt is headless and has no such hint, so the {@code deny} sentinel is consumed by
  * {@link #resolveLastSeen(String, ContactStatus)} and discarded.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandlePresence")
@@ -79,11 +81,12 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
     /**
      * {@inheritDoc}
      *
-     * <p>Consumes one {@code <presence>} stanza for a non-self contact, sets {@link ContactStatus#AVAILABLE} or
+     * <p>Consumes one {@code <presence>} stanza for a non-self contact by resolving it into a
+     * {@link SmaxServerUpdateResponse} variant, sets {@link ContactStatus#AVAILABLE} or
      * {@link ContactStatus#UNAVAILABLE} on the matching {@link Contact}, updates {@link Contact#lastSeen()} via
      * {@link #resolveLastSeen(String, ContactStatus)}, persists the contact and dispatches the presence notification to
-     * every registered listener on a fresh virtual thread. Stanzas without a {@code from} attribute, and stanzas whose
-     * {@code from} resolves to the client's own account, are dropped.
+     * every registered listener on a fresh virtual thread. Stanzas that do not resolve to a documented presence variant,
+     * and stanzas whose {@code from} resolves to the client's own account, are dropped.
      *
      * @implNote
      * This implementation diverges from WhatsApp Web in three places.
@@ -92,8 +95,8 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
      * handler; Cobalt does not implement that group-viewer-count surface, so those variants flow through to the
      * per-contact path here.</li>
      * <li>WhatsApp Web gates the entire path behind a LID-migration check and logs an error if a migrated client
-     * receives a phone-number presence; Cobalt does not maintain that gate and accepts both phone-number and LID
-     * {@code from} attributes.</li>
+     * receives a phone-number presence; Cobalt does not maintain that gate and accepts both LID and phone-number
+     * {@code from} attributes through the {@link SmaxServerUpdateResponse} admit-set.</li>
      * <li>The {@code deny} flag that WhatsApp Web propagates as a {@code forceDisplay} UI hint is dropped, because
      * Cobalt is headless and has no equivalent display state.</li>
      * </ul>
@@ -106,10 +109,41 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
     public void handle(Stanza stanza) {
-        var from = stanza.getAttributeAsJid("from", null);
-        if (from == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring presence stanza without from: {0}", stanza);
+        SmaxServerUpdateResponse presence = SmaxServerUpdateResponse.of(stanza).orElse(null);
+        if (presence == null) {
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring unparsable presence stanza: {0}", stanza);
             return;
+        }
+
+        Jid from;
+        ContactStatus status;
+        String lastValue;
+        switch (presence) {
+            case SmaxServerUpdateResponse.GroupAvailable groupAvailable -> {
+                from = groupAvailable.from();
+                status = ContactStatus.AVAILABLE;
+                lastValue = null;
+            }
+            case SmaxServerUpdateResponse.GroupUnavailable groupUnavailable -> {
+                from = groupUnavailable.from();
+                status = ContactStatus.UNAVAILABLE;
+                lastValue = null;
+            }
+            case SmaxServerUpdateResponse.LastSeenWithOtherValue withOtherValue -> {
+                from = withOtherValue.from();
+                status = ContactStatus.UNAVAILABLE;
+                lastValue = withOtherValue.last().orElse(null);
+            }
+            case SmaxServerUpdateResponse.UserUnavailable userUnavailable -> {
+                from = userUnavailable.from();
+                status = ContactStatus.UNAVAILABLE;
+                lastValue = userUnavailable.last().orElse(null);
+            }
+            case SmaxServerUpdateResponse.Available available -> {
+                from = available.from();
+                status = ContactStatus.AVAILABLE;
+                lastValue = available.last().orElse(null);
+            }
         }
 
         var meJid = whatsapp.store().accountStore().jid().orElse(null);
@@ -122,11 +156,8 @@ public final class PresenceStreamHandler extends SocketStreamHandler.Concurrent 
             return;
         }
 
-        var type = stanza.getAttributeAsString("type", "available");
-        var status = "unavailable".equals(type) ? ContactStatus.UNAVAILABLE : ContactStatus.AVAILABLE;
         contact.setLastKnownPresence(status);
 
-        var lastValue = stanza.getAttributeAsString("last", null);
         var lastSeen = resolveLastSeen(lastValue, status);
         if (lastSeen != null) {
             contact.setLastSeen(lastSeen);

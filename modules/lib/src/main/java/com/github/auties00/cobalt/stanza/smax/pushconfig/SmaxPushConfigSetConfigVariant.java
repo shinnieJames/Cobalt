@@ -20,7 +20,7 @@ import java.util.Optional;
  * ({@link AndroidConfig}), APNs/iOS ({@link AppleConfig}), Windows Notification Service
  * ({@link WnsConfig}), enterprise deployments ({@link EnterpriseConfig}), and W3C Web Push
  * ({@link WebConfig}). The caller picks the variant matching its notification backend and passes
- * it to {@link SmaxPushConfigSetSetVariant.Config}, which materialises it via {@link #toNode()}.
+ * it to {@link SmaxPushConfigSetSetVariant.Config}, which materialises it via {@link #toStanza()}.
  */
 public sealed interface SmaxPushConfigSetConfigVariant
         permits SmaxPushConfigSetConfigVariant.FbConfig, SmaxPushConfigSetConfigVariant.AndroidConfig,
@@ -30,14 +30,14 @@ public sealed interface SmaxPushConfigSetConfigVariant
     /**
      * Builds the {@code <config platform=...>} child stanza for this variant.
      *
-     * <p>{@link SmaxPushConfigSetSetVariant.Config#toNode()} calls this method to materialise the
+     * <p>{@link SmaxPushConfigSetSetVariant.Config#toStanza()} calls this method to materialise the
      * variant into the outbound stanza.
      *
      * @implSpec Implementations must return a single {@link Stanza} whose description is
      * {@code config} and whose {@code platform} attribute identifies the push backend.
      * @return the {@link Stanza} for this variant
      */
-    Stanza toNode();
+    Stanza toStanza();
 
     /**
      * Represents the Facebook-client {@code <config platform="fb">} variant.
@@ -116,7 +116,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigFBClientMixin",
                 exports = "mergeFBClientMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var builder = new StanzaBuilder()
                     .description("config")
                     .attribute("platform", "fb")
@@ -218,10 +218,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAndroidClientMixin",
                 exports = "mergeAndroidClientMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var children = new ArrayList<Stanza>(itemArgs.size());
             for (var item : itemArgs) {
-                children.add(item.toNode());
+                children.add(item.toStanza());
             }
             return new StanzaBuilder()
                     .description("config")
@@ -325,7 +325,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
             @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAndroidClientMixin",
                     exports = "makeAndroidClientItem",
                     adaptation = WhatsAppAdaptation.DIRECT)
-            public Stanza toNode() {
+            public Stanza toStanza() {
                 return new StanzaBuilder()
                         .description("item")
                         .attribute("jid", itemJid)
@@ -820,10 +820,10 @@ public sealed interface SmaxPushConfigSetConfigVariant
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAppleClientMixin",
                 exports = "mergeAppleClientMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var children = new ArrayList<Stanza>(itemArgs.size());
             for (var item : itemArgs) {
-                children.add(item.toNode());
+                children.add(item.toStanza());
             }
             var builder = new StanzaBuilder()
                     .description("config")
@@ -1070,7 +1070,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
             @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigAppleClientMixin",
                     exports = "makeAppleClientItem",
                     adaptation = WhatsAppAdaptation.DIRECT)
-            public Stanza toNode() {
+            public Stanza toStanza() {
                 var builder = new StanzaBuilder()
                         .description("item")
                         .attribute("jid", itemJid);
@@ -1193,7 +1193,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigWNSClientMixin",
                 exports = "mergeWNSClientMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var builder = new StanzaBuilder()
                     .description("config")
                     .attribute("platform", "wns")
@@ -1287,7 +1287,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigEnterpriseClientMixin",
                 exports = "mergeEnterpriseClientMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             return new StanzaBuilder()
                     .description("config")
                     .attribute("platform", "ent")
@@ -1452,7 +1452,7 @@ public sealed interface SmaxPushConfigSetConfigVariant
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigWebClientMixin",
                 exports = "mergeWebClientMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var builder = new StanzaBuilder()
                     .description("config")
                     .attribute("platform", "web")

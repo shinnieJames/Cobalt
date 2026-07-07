@@ -37,14 +37,15 @@ import java.util.regex.Pattern;
  * (no facebook.com browser login), so an embedder must acquire it through that channel and pass it
  * here.
  *
- * @implNote This implementation models the {@code access_token}-bearing graph flavor used by
+ * @implNote This implementation models the {@code access_token}-bearing graph flavor (Path A) used by
  * {@code WAWebRelayEnvironment} for the facebook environment type, which sends an
- * {@code access_token}+{@code doc_id}+{@code variables}+{@code locale} body. WhatsApp Web's
- * Comet ad-creation flows additionally route through a separate relay-fb network layer that adds FB
- * Comet parameters ({@code fb_dtsg}, {@code fb_api_caller_class}, {@code fb_api_req_friendly_name},
- * {@code server_timestamps}); that layer is loaded on demand and is not present in the analysed
- * static bundle, so those parameters are not emitted here. Capture a live {@code graph.facebook.com}
- * request to recover them if an operation is rejected without them.
+ * {@code access_token}+{@code doc_id}+{@code variables}+{@code locale} body plus the optional
+ * {@code X-WA-Device-ID} header. The Comet Path-B parameters WhatsApp Web's ad-creation flows add
+ * through the relay-fb network layer ({@code fb_dtsg}, {@code fb_api_caller_class},
+ * {@code fb_api_req_friendly_name}, {@code server_timestamps}) are intentionally omitted: they
+ * require a {@code facebook.com} Comet web session that a linked WhatsApp client never establishes.
+ * The Relay {@code actorID}/{@code bp_id} is likewise not sent on Path A; WhatsApp Web uses it only as
+ * a client-side Relay store-scoping option, not as a wire field.
  */
 @WhatsAppWebModule(moduleName = "CometRelay")
 @WhatsAppWebModule(moduleName = "WAWebAdsRelayEnvironment")
@@ -58,6 +59,16 @@ public final class FacebookGraphQlClient {
      * Matches the leading {@code for(;;);} anti-JSON-hijack prefix Meta prepends to graph responses.
      */
     private static final Pattern XSSI_PREFIX = Pattern.compile("^for\\s*\\(\\s*;;\\s*\\)\\s*;\\s*");
+
+    /**
+     * The graph error code for an expired or invalid access token ({@code OAuthException}).
+     */
+    private static final int FB_ERROR_INVALID_ACCESS_TOKEN = 190;
+
+    /**
+     * The graph error code for an unauthorized ad-account request.
+     */
+    private static final int FB_ERROR_UNAUTHORIZED = 1675002;
 
     /**
      * The HTTP client used for the {@code POST}, reused across dispatches for connection pooling.
@@ -75,14 +86,21 @@ public final class FacebookGraphQlClient {
     private final String locale;
 
     /**
-     * Constructs a Facebook GraphQL client backed by a default-configured {@link HttpClient}.
+     * The linked device id sent as the optional {@code X-WA-Device-ID} header, or {@code null} when no
+     * device id is available and the header is suppressed.
+     */
+    private final String deviceId;
+
+    /**
+     * Constructs a Facebook GraphQL client backed by a default-configured {@link HttpClient} with no
+     * device-id header.
      *
      * @param accessToken the Facebook access token minted over the WhatsApp socket
      * @param locale      the remapped locale, for example {@code en_US}
-     * @throws NullPointerException if any argument is {@code null}
+     * @throws NullPointerException if {@code accessToken} or {@code locale} is {@code null}
      */
     public FacebookGraphQlClient(String accessToken, String locale) {
-        this(HttpClient.newHttpClient(), accessToken, locale);
+        this(HttpClient.newHttpClient(), accessToken, locale, null);
     }
 
     /**
@@ -94,35 +112,46 @@ public final class FacebookGraphQlClient {
      * @param httpClient  the HTTP client to use
      * @param accessToken the Facebook access token minted over the WhatsApp socket
      * @param locale      the remapped locale, for example {@code en_US}
-     * @throws NullPointerException if any argument is {@code null}
+     * @param deviceId    the linked device id sent as the {@code X-WA-Device-ID} header, or
+     *                    {@code null} to suppress the header
+     * @throws NullPointerException if {@code httpClient}, {@code accessToken}, or {@code locale} is
+     *                              {@code null}
      */
-    public FacebookGraphQlClient(HttpClient httpClient, String accessToken, String locale) {
+    public FacebookGraphQlClient(HttpClient httpClient, String accessToken, String locale, String deviceId) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
         this.accessToken = Objects.requireNonNull(accessToken, "accessToken must not be null");
         this.locale = Objects.requireNonNull(locale, "locale must not be null");
+        this.deviceId = deviceId;
     }
 
     /**
      * Dispatches the given Facebook GraphQL operation and returns the unwrapped GraphQL {@code data} object.
      *
-     * <p>Encodes the url-encoded request body, POSTs it to {@link #ENDPOINT}, strips the
-     * {@code for(;;);} prefix from the response, and returns the GraphQL {@code data} object. A
-     * non-2xx status, an unparsable body, or a non-empty {@code errors} array each raise
+     * <p>Encodes the url-encoded request body, adds the optional {@code X-WA-Device-ID} header, POSTs it
+     * to {@link #ENDPOINT}, strips the {@code for(;;);} prefix from the response, and returns the
+     * GraphQL {@code data} object. An authentication error raises {@link AuthException}; any other
+     * non-2xx status, an unparsable body, or a non-empty {@code errors} array raises
      * {@link WhatsAppServerRuntimeException}.
      *
      * @param request the Facebook GraphQL operation to dispatch
      * @return the unwrapped GraphQL {@code data} object, never {@code null}
      * @throws NullPointerException           if {@code request} is {@code null}
+     * @throws AuthException                  if the graph endpoint reports an authentication error
+     *                                        (an expired or invalid access token)
      * @throws WhatsAppServerRuntimeException if the transport fails, the body cannot be parsed, or the
-     *                                        graph endpoint reports GraphQL errors
+     *                                        graph endpoint reports a non-authentication GraphQL error
      */
     @WhatsAppWebExport(moduleName = "WAWebAdsRelayEnvironment", exports = "getEnvironment",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public JSONObject send(FacebookGraphQlOperation.Request request) {
         Objects.requireNonNull(request, "request must not be null");
 
-        var httpRequest = HttpRequest.newBuilder(ENDPOINT)
-                .header("Content-Type", "application/x-www-form-urlencoded")
+        var httpRequestBuilder = HttpRequest.newBuilder(ENDPOINT)
+                .header("Content-Type", "application/x-www-form-urlencoded");
+        if (deviceId != null) {
+            httpRequestBuilder.header("X-WA-Device-ID", deviceId);
+        }
+        var httpRequest = httpRequestBuilder
                 .POST(HttpRequest.BodyPublishers.ofString(encodeBody(request)))
                 .build();
 
@@ -170,8 +199,10 @@ public final class FacebookGraphQlClient {
      * @param request  the Facebook GraphQL operation that produced the response, used for error messages
      * @param response the HTTP response
      * @return the unwrapped GraphQL {@code data} object, never {@code null}
-     * @throws WhatsAppServerRuntimeException if the body is unparsable, the status is non-2xx, or the
-     *                                        graph endpoint reports GraphQL errors
+     * @throws AuthException                  if the graph endpoint reports an authentication error
+     * @throws WhatsAppServerRuntimeException if the body is unparsable, the status is non-2xx for a
+     *                                        non-authentication reason, or the graph endpoint reports a
+     *                                        non-authentication GraphQL error
      */
     private JSONObject parse(FacebookGraphQlOperation.Request request, HttpResponse<String> response) {
         var text = XSSI_PREFIX.matcher(response.body()).replaceFirst("");
@@ -188,17 +219,60 @@ public final class FacebookGraphQlClient {
         var status = response.statusCode();
         if (status < 200 || status >= 300) {
             var error = json.getJSONObject("error");
+            if (isAuthError(error)) {
+                throw new AuthException("Facebook GraphQL request for " + request.name() + " failed authentication: " + error.getString("message"), errorCode(error));
+            }
             var detail = error != null ? error.getString("message") : status + " " + response.body();
             throw new WhatsAppServerRuntimeException("Facebook GraphQL request for " + request.name() + " failed: " + detail);
         }
 
         var errors = json.getJSONArray("errors");
         if (errors != null && !errors.isEmpty()) {
+            for (var i = 0; i < errors.size(); i++) {
+                var error = errors.getJSONObject(i);
+                if (isAuthError(error)) {
+                    throw new AuthException("Facebook GraphQL request for " + request.name() + " returned an authentication error: " + describeErrors(errors), errorCode(error));
+                }
+            }
             throw new WhatsAppServerRuntimeException("Facebook GraphQL request for " + request.name() + " returned errors: " + describeErrors(errors));
         }
 
         var data = json.getJSONObject("data");
         return data != null ? data : json;
+    }
+
+    /**
+     * Reports whether the given graph error object classifies as an authentication failure.
+     *
+     * <p>Matches on the graph error code (an expired or invalid access token is {@code 190}; an
+     * unauthorized ad-account request is {@code 1675002}) or, when the code is absent, on the error
+     * message ({@code INVALID_ACCESS_TOKEN} or {@code REASON_GENERIC_FAILURE}).
+     *
+     * @param error the graph error object, may be {@code null}
+     * @return {@code true} when the error is authentication-related, {@code false} otherwise
+     */
+    private static boolean isAuthError(JSONObject error) {
+        if (error == null) {
+            return false;
+        }
+        var code = error.getInteger("code");
+        if (code != null && (code == FB_ERROR_INVALID_ACCESS_TOKEN || code == FB_ERROR_UNAUTHORIZED)) {
+            return true;
+        }
+        var message = error.getString("message");
+        return message != null
+                && (message.contains("INVALID_ACCESS_TOKEN") || message.contains("REASON_GENERIC_FAILURE"));
+    }
+
+    /**
+     * Returns the numeric {@code code} of a graph error object, or {@code 0} when it is absent.
+     *
+     * @param error the graph error object; never {@code null}
+     * @return the graph error code, or {@code 0} when the object carries none
+     */
+    private static int errorCode(JSONObject error) {
+        var code = error.getInteger("code");
+        return code != null ? code : 0;
     }
 
     /**
@@ -220,5 +294,43 @@ public final class FacebookGraphQlClient {
             summary.append('[').append(error.getInteger("code")).append("] ").append(error.getString("message"));
         }
         return summary.toString();
+    }
+
+    /**
+     * Signals that the graph endpoint rejected a Facebook GraphQL operation with an authentication
+     * error (an expired or invalid access token).
+     *
+     * <p>Raised by {@link #send(FacebookGraphQlOperation.Request)} when the graph response carries an
+     * authentication error code ({@link #FB_ERROR_INVALID_ACCESS_TOKEN} or
+     * {@link #FB_ERROR_UNAUTHORIZED}) or an authentication error message. It is kept distinct from
+     * {@link WhatsAppServerRuntimeException} so the caller can invalidate the cached access token,
+     * re-mint it, and retry the operation once before surfacing the failure.
+     */
+    public static final class AuthException extends RuntimeException {
+        /**
+         * The graph error code that classified the failure as authentication-related, or {@code 0}
+         * when the response carried no code.
+         */
+        private final int code;
+
+        /**
+         * Constructs a new authentication exception.
+         *
+         * @param message the detail message describing the authentication failure
+         * @param code    the graph error code, or {@code 0} when absent
+         */
+        AuthException(String message, int code) {
+            super(message);
+            this.code = code;
+        }
+
+        /**
+         * Returns the graph error code that classified the failure as authentication-related.
+         *
+         * @return the graph error code, or {@code 0} when the response carried none
+         */
+        public int code() {
+            return code;
+        }
     }
 }

@@ -352,9 +352,12 @@ final class PersistentMessageStore implements AutoCloseable {
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @param info          the message to persist
+     * @return {@code true} when a new {@code serverId} key was inserted, {@code false} when an existing entry was
+     *         overwritten in place, so callers can maintain a cached count without double-counting re-puts
      */
-    void putNewsletterMessage(Jid newsletterJid, NewsletterMessageInfo info) {
-        newsletterMessages.put(encodePrefixedKey(newsletterJid, encodeServerId(info.serverId())), encodeNewsletter(info));
+    boolean putNewsletterMessage(Jid newsletterJid, NewsletterMessageInfo info) {
+        var previous = newsletterMessages.put(encodePrefixedKey(newsletterJid, encodeServerId(info.serverId())), encodeNewsletter(info));
+        return previous == null;
     }
 
     /**

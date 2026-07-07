@@ -87,6 +87,12 @@ public enum CallTransportSubType {
     private static final int RESERVED_SENTINEL = 0xe;
 
     /**
+     * Caches the constant array so the per-message {@link #ofWireValue(int)} decode scan does not pay
+     * the defensive-clone cost of {@link #values()} on every Transport message parsed.
+     */
+    private static final CallTransportSubType[] VALUES = values();
+
+    /**
      * The integer value the wa-voip engine stamps into the Transport message for this
      * sub-type.
      */
@@ -125,7 +131,7 @@ public enum CallTransportSubType {
         if (wireValue == RESERVED_SENTINEL) {
             return Optional.empty();
         }
-        for (var subType : values()) {
+        for (var subType : VALUES) {
             if (subType.wireValue == wireValue) {
                 return Optional.of(subType);
             }

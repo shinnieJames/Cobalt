@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
+import com.github.auties00.cobalt.calls2.core.control.CallLinkQueryAction;
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.stanza.Stanza;
@@ -136,6 +137,11 @@ public record LinkQueryStanza(String token,
     /**
      * Decodes a {@code <link_query>} action stanza into a {@link LinkQueryStanza}.
      *
+     * <p>The {@code action} attribute is decoded through {@link CallLinkQueryAction#ofWire(String)} and
+     * re-serialized to its {@linkplain CallLinkQueryAction#wireValue() canonical wire literal}, so only
+     * the {@code preview} and {@code link_edit} verbs the taxonomy names survive the round trip; an
+     * absent or unrecognized {@code action} decodes to an absent action rather than an opaque string.
+     *
      * @param stanza the {@code <link_query>} stanza
      * @return the decoded link-query signal
      * @throws NullPointerException   if {@code stanza} is {@code null}
@@ -147,7 +153,8 @@ public record LinkQueryStanza(String token,
         var token = stanza.getRequiredAttributeAsString(TOKEN_ATTRIBUTE);
         var media = CallLinkMedia.ofWire(stanza.getAttributeAsString(MEDIA_ATTRIBUTE).orElse(null))
                 .orElseThrow(() -> new NoSuchElementException("link_query is missing a recognized media attribute"));
-        var action = stanza.getAttributeAsString(ACTION_ATTRIBUTE);
+        var action = CallLinkQueryAction.ofWire(stanza.getAttributeAsString(ACTION_ATTRIBUTE).orElse(null))
+                .map(CallLinkQueryAction::wireValue);
         var linkCreator = stanza.getAttributeAsJid(LINK_CREATOR_ATTRIBUTE);
         var linkCreatorPn = stanza.getAttributeAsJid(LINK_CREATOR_PN_ATTRIBUTE);
         return new LinkQueryStanza(token, media, action, linkCreator, linkCreatorPn);

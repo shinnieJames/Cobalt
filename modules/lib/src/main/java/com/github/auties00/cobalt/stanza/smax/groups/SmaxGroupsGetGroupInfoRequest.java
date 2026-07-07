@@ -38,6 +38,12 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
     private final String queryPhash;
 
     /**
+     * Holds the optional query request-type stamped on the inner {@code <query request="...">} child; when
+     * supplied, the relay returns the matching projection variant (for example {@code "interactive"}).
+     */
+    private final String queryRequestType;
+
+    /**
      * Holds the optional V4-invite-link {@code <add_request expiration="...">} attribute; non-null switches the
      * request on the invite-landing probe.
      */
@@ -65,14 +71,15 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
      * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxGroupsGetGroupInfoRequest(Jid groupJid) {
-        this(groupJid, null, null, null, null);
+        this(groupJid, null, null, null, null, null);
     }
 
     /**
-     * Constructs a fully-parametrised request.
+     * Constructs a request carrying the optional dehydration hint and the V4 invite-landing probe.
      *
      * <p>When {@code addRequestExpiration} is supplied, callers pass either {@code addRequestAdmin} or
-     * {@code addRequestCode} (not both); the relay rejects requests carrying both target attributes.
+     * {@code addRequestCode} (not both); the relay rejects requests carrying both target attributes. Delegates to
+     * {@link #SmaxGroupsGetGroupInfoRequest(Jid, String, String, Long, Jid, String)} with no query request-type.
      *
      * @param groupJid             the group {@link Jid}; never {@code null}
      * @param queryPhash           the optional dehydration hash hint; may be {@code null}
@@ -83,8 +90,30 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
      */
     public SmaxGroupsGetGroupInfoRequest(Jid groupJid, String queryPhash, Long addRequestExpiration,
                    Jid addRequestAdmin, String addRequestCode) {
+        this(groupJid, queryPhash, null, addRequestExpiration, addRequestAdmin, addRequestCode);
+    }
+
+    /**
+     * Constructs a fully-parametrised request.
+     *
+     * <p>When {@code addRequestExpiration} is supplied, callers pass either {@code addRequestAdmin} or
+     * {@code addRequestCode} (not both); the relay rejects requests carrying both target attributes. The
+     * {@code queryRequestType} selects the projection variant (for example {@code "interactive"}) and is mutually
+     * usable with {@code queryPhash}.
+     *
+     * @param groupJid             the group {@link Jid}; never {@code null}
+     * @param queryPhash           the optional dehydration hash hint; may be {@code null}
+     * @param queryRequestType     the optional query request-type; may be {@code null}
+     * @param addRequestExpiration the optional add-request expiration timestamp; may be {@code null}
+     * @param addRequestAdmin      the optional add-request admin target; may be {@code null}
+     * @param addRequestCode       the optional add-request code target; may be {@code null}
+     * @throws NullPointerException if {@code groupJid} is {@code null}
+     */
+    public SmaxGroupsGetGroupInfoRequest(Jid groupJid, String queryPhash, String queryRequestType,
+                   Long addRequestExpiration, Jid addRequestAdmin, String addRequestCode) {
         this.groupJid = Objects.requireNonNull(groupJid, "groupJid cannot be null");
         this.queryPhash = queryPhash;
+        this.queryRequestType = queryRequestType;
         this.addRequestExpiration = addRequestExpiration;
         this.addRequestAdmin = addRequestAdmin;
         this.addRequestCode = addRequestCode;
@@ -109,6 +138,18 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
      */
     public Optional<String> queryPhash() {
         return Optional.ofNullable(queryPhash);
+    }
+
+    /**
+     * Returns the optional query request-type.
+     *
+     * <p>Empty means the request carries no {@code <query request="...">} attribute; a non-empty value selects the
+     * matching projection variant.
+     *
+     * @return an {@link Optional} carrying the request-type, or empty when the caller did not supply one
+     */
+    public Optional<String> queryRequestType() {
+        return Optional.ofNullable(queryRequestType);
     }
 
     /**
@@ -143,9 +184,10 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
      *
      * @implNote
      * This implementation stamps {@code phash} on the {@code <query/>} child when {@link #queryPhash()} is
-     * non-empty, nests an {@code <add_request/>} child carrying the supplied expiration, admin, and code
-     * attributes when {@link #addRequestExpiration()} is non-empty, then wraps the result in the
-     * {@code <iq xmlns="w:g2" type="get">} envelope addressed to {@link #groupJid()}.
+     * non-empty and {@code request} when {@link #queryRequestType()} is non-empty, nests an {@code <add_request/>}
+     * child carrying the supplied expiration, admin, and code attributes when {@link #addRequestExpiration()} is
+     * non-empty, then wraps the result in the {@code <iq xmlns="w:g2" type="get">} envelope addressed to
+     * {@link #groupJid()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetGroupInfoRequest",
@@ -155,6 +197,9 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
                 .description("query");
         if (queryPhash != null) {
             queryBuilder.attribute("phash", queryPhash);
+        }
+        if (queryRequestType != null) {
+            queryBuilder.attribute("request", queryRequestType);
         }
         if (addRequestExpiration != null) {
             var addRequestBuilder = new StanzaBuilder()
@@ -193,6 +238,7 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
         var that = (SmaxGroupsGetGroupInfoRequest) obj;
         return Objects.equals(this.groupJid, that.groupJid)
                 && Objects.equals(this.queryPhash, that.queryPhash)
+                && Objects.equals(this.queryRequestType, that.queryRequestType)
                 && Objects.equals(this.addRequestExpiration, that.addRequestExpiration)
                 && Objects.equals(this.addRequestAdmin, that.addRequestAdmin)
                 && Objects.equals(this.addRequestCode, that.addRequestCode);
@@ -205,7 +251,7 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
      */
     @Override
     public int hashCode() {
-        return Objects.hash(groupJid, queryPhash, addRequestExpiration, addRequestAdmin, addRequestCode);
+        return Objects.hash(groupJid, queryPhash, queryRequestType, addRequestExpiration, addRequestAdmin, addRequestCode);
     }
 
     /**
@@ -217,6 +263,7 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxStanza.Request {
     public String toString() {
         return "SmaxGroupsGetGroupInfoRequest[groupJid=" + groupJid
                 + ", queryPhash=" + queryPhash
+                + ", queryRequestType=" + queryRequestType
                 + ", addRequestExpiration=" + addRequestExpiration
                 + ", addRequestAdmin=" + addRequestAdmin
                 + ", addRequestCode=" + addRequestCode + ']';

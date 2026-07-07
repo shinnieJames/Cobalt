@@ -280,7 +280,7 @@ public final class SmaxProfilePictureGetRequest implements SmaxStanza.Request {
         if (avatarMixinArgs != null) {
             pictureBuilder.attribute("type", "avatar");
             for (var avatarArg : avatarMixinArgs.avatarArgs()) {
-                pictureChildren.add(avatarArg.toNode());
+                pictureChildren.add(avatarArg.toStanza());
             }
         } else if (pictureType != null) {
             pictureBuilder.attribute("type", pictureType);
@@ -301,10 +301,10 @@ public final class SmaxProfilePictureGetRequest implements SmaxStanza.Request {
             pictureBuilder.attribute("common_gid", pictureCommonGid);
         }
         if (tcTokenMixinArgs != null) {
-            pictureChildren.add(tcTokenMixinArgs.toNode());
+            pictureChildren.add(tcTokenMixinArgs.toStanza());
         }
         if (addRequestMixinArgs != null) {
-            pictureChildren.add(addRequestMixinArgs.toNode());
+            pictureChildren.add(addRequestMixinArgs.toStanza());
         }
         if (!pictureChildren.isEmpty()) {
             pictureBuilder.content(pictureChildren);

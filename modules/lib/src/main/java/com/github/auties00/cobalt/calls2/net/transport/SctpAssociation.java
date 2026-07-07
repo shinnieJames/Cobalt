@@ -211,6 +211,15 @@ public final class SctpAssociation implements AutoCloseable {
     private final AtomicBoolean connected = new AtomicBoolean();
 
     /**
+     * Guards {@link #close()} so the deregister, native-close, and arena-close teardown runs at most once.
+     *
+     * <p>Flipped from {@code false} to {@code true} by a single {@link AtomicBoolean#compareAndSet} in
+     * {@link #close()}; only the winning caller runs the teardown, so two concurrent closes cannot both
+     * invoke {@link Arena#close()} and make the second throw on an already-closed arena.
+     */
+    private final AtomicBoolean closed = new AtomicBoolean();
+
+    /**
      * Constructs and configures a new association.
      *
      * <p>The constructor allocates a per-association shared arena, allocates a unique one-byte segment to
@@ -702,7 +711,7 @@ public final class SctpAssociation implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (socket == null || socket.equals(MemorySegment.NULL)) {
+        if (!closed.compareAndSet(false, true)) {
             return;
         }
         engine.unregister(connId);

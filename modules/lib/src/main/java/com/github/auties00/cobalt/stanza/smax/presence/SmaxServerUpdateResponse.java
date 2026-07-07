@@ -370,7 +370,7 @@ public sealed interface SmaxServerUpdateResponse extends SmaxStanza.Response
          * Tries to parse a {@link LastSeenWithOtherValue} variant from an inbound presence stanza.
          *
          * <p>The result is empty when the {@code from} attribute is not a user {@link Jid} (either
-         * {@code s.whatsapp.net} or {@code c.us}), when {@code type} is not {@code "unavailable"},
+         * {@code lid} or {@code s.whatsapp.net}), when {@code type} is not {@code "unavailable"},
          * or when {@code last} carries a value outside the {@code deny}/{@code error}/{@code none}
          * enum.
          *
@@ -389,7 +389,7 @@ public sealed interface SmaxServerUpdateResponse extends SmaxStanza.Response
                 return Optional.empty();
             }
             var server = from.server().toString();
-            if (!"s.whatsapp.net".equals(server) && !"c.us".equals(server)) {
+            if (!"lid".equals(server) && !"s.whatsapp.net".equals(server)) {
                 return Optional.empty();
             }
             if (!stanza.hasAttribute("type", "unavailable")) {
@@ -521,7 +521,7 @@ public sealed interface SmaxServerUpdateResponse extends SmaxStanza.Response
                 return Optional.empty();
             }
             var server = from.server().toString();
-            if (!"s.whatsapp.net".equals(server) && !"c.us".equals(server)) {
+            if (!"lid".equals(server) && !"s.whatsapp.net".equals(server)) {
                 return Optional.empty();
             }
             if (!stanza.hasAttribute("type", "unavailable")) {
@@ -669,8 +669,8 @@ public sealed interface SmaxServerUpdateResponse extends SmaxStanza.Response
             }
             var server = from.server().toString();
             if (!"g.us".equals(server)
-                    && !"s.whatsapp.net".equals(server)
-                    && !"c.us".equals(server)) {
+                    && !"lid".equals(server)
+                    && !"s.whatsapp.net".equals(server)) {
                 return Optional.empty();
             }
             var type = stanza.getAttributeAsString("type").orElse(null);

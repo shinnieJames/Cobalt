@@ -1,11 +1,13 @@
 package com.github.auties00.cobalt.message.send;
 
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.wam.TestWamService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,7 +43,7 @@ class MessagePreparerTest {
     @DisplayName("prepareChat: returns a ChatMessageInfo populated with key, status, secret, and self JID")
     void prepareChatBasic() {
         var store = store();
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         var prepared = preparer.prepareChat(CHAT_PN, MessageContainer.of("hi"));
 
         assertNotNull(prepared);
@@ -58,7 +60,7 @@ class MessagePreparerTest {
     @DisplayName("prepareChat: messageSecret is exactly 32 bytes and stamped on the container's messageContextInfo")
     void prepareChatStampsSecret() {
         var store = store();
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         var prepared = preparer.prepareChat(CHAT_PN, MessageContainer.of("hi"));
 
         var secret = prepared.messageSecret().orElseThrow();
@@ -77,7 +79,7 @@ class MessagePreparerTest {
     @DisplayName("prepareChat: each call generates a distinct id and secret")
     void prepareChatFreshIdAndSecret() {
         var store = store();
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         var first = preparer.prepareChat(CHAT_PN, MessageContainer.of("hi"));
         var second = preparer.prepareChat(CHAT_PN, MessageContainer.of("hi"));
 
@@ -96,7 +98,7 @@ class MessagePreparerTest {
     @DisplayName("prepareChat: groups receive the group JID on the key")
     void prepareChatToGroup() {
         var store = store();
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         var prepared = preparer.prepareChat(GROUP_JID, MessageContainer.of("group"));
         assertEquals(GROUP_JID, prepared.key().parentJid().orElseThrow());
     }
@@ -105,7 +107,7 @@ class MessagePreparerTest {
     @DisplayName("prepareChat: broadcast flag is set when chatJid is the status broadcast account")
     void prepareChatBroadcastFlag() {
         var store = store();
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         var prepared = preparer.prepareChat(Jid.statusBroadcastAccount(), MessageContainer.of("status"));
         assertTrue(prepared.broadcast(),
                 "broadcast flag must be true when targeting the status broadcast account");
@@ -116,7 +118,7 @@ class MessagePreparerTest {
     void prepareChatNotLoggedIn() {
         var store = MessageFixtures.temporaryStore(SELF_PN, null);
         store.accountStore().setJid(null);
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         assertThrows(IllegalStateException.class,
                 () -> preparer.prepareChat(CHAT_PN, MessageContainer.of("hi")));
     }
@@ -125,7 +127,7 @@ class MessagePreparerTest {
     @DisplayName("prepareChat: null arguments throw NullPointerException")
     void prepareChatNullArgs() {
         var store = store();
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         assertThrows(NullPointerException.class,
                 () -> preparer.prepareChat(null, MessageContainer.of("hi")));
         assertThrows(NullPointerException.class,
@@ -136,7 +138,7 @@ class MessagePreparerTest {
     @DisplayName("prepareNewsletter: throws IllegalArgumentException when the user has not joined the newsletter")
     void prepareNewsletterNotJoined() {
         var store = store();
-        var preparer = new MessagePreparer(store);
+        var preparer = new MessagePreparer(store, TestWamService.create(TestWhatsAppClient.create().withStore(store)));
         var newsletter = Jid.of("120363402045452944@newsletter");
         assertThrows(IllegalArgumentException.class,
                 () -> preparer.prepareNewsletter(newsletter, MessageContainer.of("hi")));
@@ -145,7 +147,7 @@ class MessagePreparerTest {
     @Test
     @DisplayName("constructor: null store throws NullPointerException")
     void constructorNullStore() {
-        assertThrows(NullPointerException.class, () -> new MessagePreparer(null));
+        assertThrows(NullPointerException.class, () -> new MessagePreparer(null, TestWamService.create(TestWhatsAppClient.create())));
     }
 
     private static LinkedWhatsAppStore store() {

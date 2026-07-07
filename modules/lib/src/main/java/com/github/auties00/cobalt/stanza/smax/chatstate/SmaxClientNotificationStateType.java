@@ -33,5 +33,5 @@ public sealed interface SmaxClientNotificationStateType permits SmaxClientNotifi
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutChatstateStateTypes",
             exports = "mergeStateTypes", adaptation = WhatsAppAdaptation.ADAPTED)
-    StanzaBuilder toNode();
+    StanzaBuilder toStanza();
 }

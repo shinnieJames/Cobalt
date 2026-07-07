@@ -59,11 +59,6 @@ public final class LiveAudioCaptureDriver implements AudioCaptureDriver {
     private TargetDataLine line;
 
     /**
-     * Holds the recorded capture sample rate in hertz.
-     */
-    private int sampleRate;
-
-    /**
      * Holds the recorded number of samples consumed per read.
      */
     private int framesPerBuffer;
@@ -161,7 +156,6 @@ public final class LiveAudioCaptureDriver implements AudioCaptureDriver {
                 throw new IllegalStateException("cannot open capture device", e);
             }
             this.line = opened;
-            this.sampleRate = sampleRate;
             this.framesPerBuffer = framesPerBuffer;
             this.channelCount = channelCount;
             this.deviceType = deviceType;
@@ -286,6 +280,7 @@ public final class LiveAudioCaptureDriver implements AudioCaptureDriver {
         var blockSamples = framesPerBuffer * channelCount;
         var readBuffer = new byte[blockSamples * bytesPerSample];
         var pcm = new short[blockSamples];
+        var shortView = ByteBuffer.wrap(readBuffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
         while (state == AudioDriverState.ACTIVE) {
             var total = 0;
             var ended = false;
@@ -310,7 +305,8 @@ public final class LiveAudioCaptureDriver implements AudioCaptureDriver {
             if (ended || total < readBuffer.length) {
                 break;
             }
-            ByteBuffer.wrap(readBuffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm);
+            shortView.rewind();
+            shortView.get(pcm);
             var s = sink;
             if (s != null) {
                 try {

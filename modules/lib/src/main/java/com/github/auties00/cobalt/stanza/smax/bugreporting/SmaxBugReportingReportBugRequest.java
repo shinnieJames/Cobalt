@@ -300,7 +300,7 @@ public final class SmaxBugReportingReportBugRequest implements SmaxStanza.Reques
             children.add(deviceLogNode);
         }
         for (var media : mediaUploads) {
-            children.add(media.toNode());
+            children.add(media.toStanza());
         }
         if (titleElementValue != null) {
             var titleNode = new StanzaBuilder()

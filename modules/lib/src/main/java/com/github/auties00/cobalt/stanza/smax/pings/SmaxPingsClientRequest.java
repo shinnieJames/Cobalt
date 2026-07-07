@@ -11,7 +11,7 @@ import com.github.auties00.cobalt.stanza.smax.SmaxStanza;
  * Models the outbound {@code <iq xmlns="w:p" type="get" to="s.whatsapp.net"/>} keep-alive ping.
  *
  * <p>This request backs the relay-reachability probe dispatched on the keep-alive cadence. The
- * reply is parsed by {@link SmaxPingsClientResponseServerResponse}; a missing or malformed reply
+ * reply is correlated by the keep-alive pinger; a missing or malformed reply
  * lets the stream-stall detector flag the active ping as lost and surface a recovery path. Every
  * ping carries the same envelope, so the type holds no state and the only varying wire attribute is
  * the {@code id} stamped at dispatch time.

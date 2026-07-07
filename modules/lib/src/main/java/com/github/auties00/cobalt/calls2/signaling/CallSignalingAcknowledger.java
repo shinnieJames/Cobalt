@@ -133,23 +133,25 @@ public final class CallSignalingAcknowledger {
      * the {@code call-id} and the {@code call-creator} are present, since a receipt child requires
      * both; every other signal, and a receipt-tag payload that failed header validation, is
      * acknowledged with an {@code <ack class="call" type="...">} echoing the payload tag. The
-     * {@code call-id} is supplied separately rather than re-read from the payload so a caller that has
-     * already validated it (for example through a classification step) can pass the validated value.
+     * {@code call-id}, the envelope {@code from}, and the {@code call-creator} are supplied by the
+     * caller rather than re-read from the stanza, so a caller that has already parsed them (for example
+     * through a classification step) passes the resolved values instead of forcing a second parse.
      *
-     * @param envelope   the inbound {@code <call>} stanza, used for the inbound identifier and ack
-     *                   correlation
-     * @param payload    the {@code <call>} child element being acknowledged
-     * @param callId     the validated call identifier, or {@code null} when the payload carried none
+     * @param envelope    the inbound {@code <call>} stanza, used for the inbound identifier and ack
+     *                    correlation
+     * @param payload     the {@code <call>} child element being acknowledged
+     * @param callId      the validated call identifier, or {@code null} when the payload carried none
+     * @param from        the envelope {@code from} sender, or {@code null} when absent
+     * @param callCreator the {@code call-creator} device JID from the payload, or {@code null} when
+     *                    absent
      * @return {@code true} when an acknowledgement was dispatched, {@code false} when it was dropped
      *         for a missing required attribute
      * @throws NullPointerException if {@code envelope} or {@code payload} is {@code null}
      */
-    public boolean acknowledge(Stanza envelope, Stanza payload, String callId) {
+    public boolean acknowledge(Stanza envelope, Stanza payload, String callId, Jid from, Jid callCreator) {
         Objects.requireNonNull(envelope, "envelope cannot be null");
         Objects.requireNonNull(payload, "payload cannot be null");
         var tag = payload.description();
-        var callCreator = payload.getAttributeAsJid(CALL_CREATOR_ATTRIBUTE, null);
-        var from = envelope.getAttributeAsJid(FROM_ATTRIBUTE, null);
         if (usesReceipt(tag) && callId != null && callCreator != null && from != null) {
             return sendReceipt(envelope, from, callId, callCreator, tag);
         }

@@ -171,6 +171,11 @@ public final class RelayCandidateList implements Iterable<RelayCandidate> {
      * @return the candidates; never {@code null}, possibly empty
      */
     public List<RelayCandidate> candidates() {
+        // FIXME: this returns a detached snapshot while the javadoc promises an unmodifiable view, so a
+        //  caller holding the result sees stale data after addOrUpdate; the faithful fix is
+        //  Collections.unmodifiableList(candidates) (live view), but a live view over the mutable
+        //  backing ArrayList is a concurrency hazard (CME during addOrUpdate) and WA's intended
+        //  snapshot-vs-view semantics are unconfirmed, so behavior is left unchanged until confirmed.
         return List.copyOf(candidates);
     }
 

@@ -169,6 +169,22 @@ public final class WebRtcAudioProcessor implements AutoCloseable {
         public static Config captured() {
             return new Config(CobaltWebRtcApm.COBALT_APM_AEC_AEC3(), true, true, 0.55f, true);
         }
+
+        /**
+         * Returns the echo-cancellation-and-noise-suppression-only configuration: AEC3 and noise suppression
+         * through the ML denoiser at intensity {@code 0.55}, with the gain controller disabled.
+         *
+         * <p>This is {@link #captured()} with automatic gain control turned off, so the conditioner cancels
+         * the far-end echo and suppresses ambient noise but leaves the captured level untouched. It is the
+         * conditioning the live microphone capture path plugs in: the codec and the peer receive the cleaned
+         * signal at its natural level, so an embedder or the remote side that already applies its own gain
+         * staging is not fighting a second, engine-side gain controller.
+         *
+         * @return the AEC-plus-noise-suppression conditioning configuration with gain control disabled
+         */
+        public static Config aecAndNoiseSuppression() {
+            return new Config(CobaltWebRtcApm.COBALT_APM_AEC_AEC3(), true, true, 0.55f, false);
+        }
     }
 
     /**
@@ -218,6 +234,7 @@ public final class WebRtcAudioProcessor implements AutoCloseable {
         }
         this.arena = Arena.ofShared();
         try {
+            // TODO: wire SplittingFilter - feed capture/render frames through SplittingFilter.analysis() before the band-limited APM stages and synthesis() after, once a pure-Java APM / 48kHz super-wideband path is brought up
             this.apm = CobaltWebRtcApm.cobalt_webrtc_apm_create(config.aecMode(), config.noiseSuppression() ? 1 : 0,
                     config.useDenoiser() ? 1 : 0, config.denoiserIntensity(),
                     config.automaticGainControl() ? 1 : 0);
@@ -323,7 +340,7 @@ public final class WebRtcAudioProcessor implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (apm == null || apm.equals(MemorySegment.NULL)) {
+        if (apm.equals(MemorySegment.NULL)) {
             return;
         }
         destroyApm();
@@ -397,7 +414,7 @@ public final class WebRtcAudioProcessor implements AutoCloseable {
      *
      * @return {@code true} when the WebRTC APM shim is callable in {@code cobalt-native}
      */
-    private static boolean nativeApmAvailable() {
+    public static boolean nativeApmAvailable() {
         try {
             return NativeLibLoader.load("cobalt-native", Arena.global())
                     .find("cobalt_webrtc_apm_create")

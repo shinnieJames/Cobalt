@@ -554,8 +554,8 @@ final class NetEqSignalProcessing {
      * @return the signed extreme value, sign-extended to a sixteen-bit range
      */
     static int minMax(short[] in, int offset, int length) {
-        int min = -32768;
-        int max = 32767;
+        int min = 32767;
+        int max = -32768;
         for (int i = 0; i < length; i++) {
             int v = in[offset + i];
             min = Math.min((short) min, v);

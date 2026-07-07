@@ -309,9 +309,8 @@ public final class MuteController implements AutoCloseable {
      * has passed the request is cancelled and a {@link MuteRequestFailed} is emitted, mirroring the engine
      * watchdog that expires an unanswered mute request once its five-second timeout passes. The deadline
      * coincides with the {@linkplain #PEER_MUTE_RETRY_INTERVAL scheduling period}, so the first tick
-     * already finds the deadline reached and fails without resending; the resend branch is a defensive
-     * fallback that the coinciding deadline never exercises. A check whose target no longer matches the
-     * live request, or that fires after close, is dropped.
+     * already finds the deadline reached and fails without resending. A check whose target no longer
+     * matches the live request, or that fires after close, is dropped.
      *
      * @param target the device JID this request was armed for
      */
@@ -319,24 +318,19 @@ public final class MuteController implements AutoCloseable {
         if (closed) {
             return;
         }
-        var failed = false;
         lock.lock();
         try {
             if (peerMuteRetry == null || !peerMuteRetry.target.equals(target)) {
                 return;
             }
-            if (System.nanoTime() - peerMuteRetry.deadlineNanos >= 0) {
-                cancelPeerMuteRetry();
-                failed = true;
+            if (System.nanoTime() - peerMuteRetry.deadlineNanos < 0) {
+                return;
             }
+            cancelPeerMuteRetry();
         } finally {
             lock.unlock();
         }
-        if (failed) {
-            events.emit(new MuteRequestFailed(target));
-        } else {
-            sender.send(MuteV2Stanza.ofPeerRequest(context.callId(), context.callCreator(), context.group()));
-        }
+        events.emit(new MuteRequestFailed(target));
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.store.linked.protobuf;
 
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
+import com.github.auties00.cobalt.model.device.identity.LocalPasskeyCredential;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
@@ -151,6 +152,13 @@ public final class ProtobufLinkedWhatsAppSignalStore implements LinkedWhatsAppSi
     private final ConcurrentMap<String, byte[]> baseKeysMap;
 
     /**
+     * The resident WebAuthn credential a local passkey authenticator signs with, or {@code null}
+     * when no local passkey has been provisioned for this session.
+     */
+    @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
+    private LocalPasskeyCredential passkeyCredential;
+
+    /**
      * The per-remote-device counter tracking the last Signal-encrypted message sequence number
      * observed in flight; not persisted because it is reconstructed from session state on reload.
      */
@@ -210,8 +218,10 @@ public final class ProtobufLinkedWhatsAppSignalStore implements LinkedWhatsAppSi
      * @param remoteIdentitiesMap the remote-identity map, or {@code null} for an empty map
      * @param advSecretKey        the ADV secret key bytes, or {@code null}
      * @param baseKeysMap         the base-key dedup map, or {@code null} for an empty map
+     * @param passkeyCredential   the local passkey credential, or {@code null} when none is
+     *                            provisioned
      */
-    ProtobufLinkedWhatsAppSignalStore(Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeysMap, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeysMap, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessionsMap, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentitiesMap, byte[] advSecretKey, ConcurrentMap<String, byte[]> baseKeysMap) {
+    ProtobufLinkedWhatsAppSignalStore(Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeysMap, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeysMap, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessionsMap, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentitiesMap, byte[] advSecretKey, ConcurrentMap<String, byte[]> baseKeysMap, LocalPasskeyCredential passkeyCredential) {
         this.registrationId = requireNonNullElseGet(registrationId, () -> DataUtils.randomInt(16380) + 1);
         this.noiseKeyPair = requireNonNullElseGet(noiseKeyPair, SignalIdentityKeyPair::random);
         this.identityKeyPair = requireNonNullElseGet(identityKeyPair, SignalIdentityKeyPair::random);
@@ -228,6 +238,7 @@ public final class ProtobufLinkedWhatsAppSignalStore implements LinkedWhatsAppSi
         this.remoteIdentitiesMap = requireNonNullElseGet(remoteIdentitiesMap, ConcurrentHashMap::new);
         this.advSecretKey = advSecretKey;
         this.baseKeysMap = requireNonNullElseGet(baseKeysMap, ConcurrentHashMap::new);
+        this.passkeyCredential = passkeyCredential;
         this.identityEncryptionRange = new ConcurrentHashMap<>();
         this.encryptionSequence = new AtomicLong();
         this.usersNeedingSenderKeyRotation = ConcurrentHashMap.newKeySet();
@@ -396,6 +407,17 @@ public final class ProtobufLinkedWhatsAppSignalStore implements LinkedWhatsAppSi
     @Override
     public LinkedWhatsAppSignalStore setAdvSecretKey(byte[] advSecretKey) {
         this.advSecretKey = advSecretKey;
+        return this;
+    }
+
+    @Override
+    public Optional<LocalPasskeyCredential> passkeyCredential() {
+        return Optional.ofNullable(passkeyCredential);
+    }
+
+    @Override
+    public LinkedWhatsAppSignalStore setPasskeyCredential(LocalPasskeyCredential passkeyCredential) {
+        this.passkeyCredential = passkeyCredential;
         return this;
     }
 
@@ -761,6 +783,7 @@ public final class ProtobufLinkedWhatsAppSignalStore implements LinkedWhatsAppSi
                && Objects.equals(remoteIdentitiesMap, that.remoteIdentitiesMap)
                && Objects.deepEquals(advSecretKey, that.advSecretKey)
                && Objects.equals(baseKeysMap, that.baseKeysMap)
+               && Objects.equals(passkeyCredential, that.passkeyCredential)
                && Objects.equals(identityEncryptionRange, that.identityEncryptionRange)
                && encryptionSequence.get() == that.encryptionSequence.get()
                && Objects.equals(usersNeedingSenderKeyRotation, that.usersNeedingSenderKeyRotation)
@@ -773,7 +796,8 @@ public final class ProtobufLinkedWhatsAppSignalStore implements LinkedWhatsAppSi
         return Objects.hash(registrationId, noiseKeyPair, identityKeyPair, signedDeviceIdentity, signedKeyPair,
                 preKeysMap, fdid, Arrays.hashCode(deviceId), advertisingId, Arrays.hashCode(identityId),
                 Arrays.hashCode(backupToken), senderKeysMap, sessionsMap, remoteIdentitiesMap,
-                Arrays.hashCode(advSecretKey), baseKeysMap, identityEncryptionRange, encryptionSequence.get(),
-                usersNeedingSenderKeyRotation, unconfirmedIdentityChanges, groupSenderKeyDistribution);
+                Arrays.hashCode(advSecretKey), baseKeysMap, passkeyCredential, identityEncryptionRange,
+                encryptionSequence.get(), usersNeedingSenderKeyRotation, unconfirmedIdentityChanges,
+                groupSenderKeyDistribution);
     }
 }

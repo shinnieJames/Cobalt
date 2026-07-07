@@ -153,6 +153,10 @@ public final class RelayElection {
                     continue;
                 }
             }
+            // FIXME: this updates bestMaxLatency unconditionally, before the election branch below, so
+            //  Result.maxLatencyMillis (the electing party's own max latency) can report a relay that did not
+            //  win. Whether the native fn updates bestMaxLatency only on election is not WASM-confirmed;
+            //  maxLatencyMillis is telemetry, so do not change the reported value until confirmed.
             if (entryMaxLatency < bestMaxLatency) {
                 bestMaxLatency = entryMaxLatency;
             }

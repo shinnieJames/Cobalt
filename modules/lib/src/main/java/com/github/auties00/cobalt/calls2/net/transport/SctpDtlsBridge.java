@@ -1,7 +1,6 @@
 package com.github.auties00.cobalt.calls2.net.transport;
 
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
-import org.bouncycastle.tls.DTLSTransport;
 
 import java.io.IOException;
 import java.util.Objects;
@@ -22,7 +21,7 @@ import java.util.function.Consumer;
  * {@link #feedInbound(byte[])} turns an inbound datagram back into the SCTP packet fed to
  * {@link SctpAssociation#feedInboundPacket(byte[])}.
  *
- * <p>It permits exactly two implementations. {@link WebP2p} wraps a BouncyCastle {@link DTLSTransport}:
+ * <p>It permits exactly two implementations. {@link WebP2p} wraps a {@link VoipDtlsTransport}:
  * outbound packets are sent as DTLS records and a receive pump drains inbound DTLS application-data records
  * into the SCTP layer; this is the bridge {@link RelayDataChannel} uses for the live DTLS-over-SCTP relay
  * leg, so the relay path runs DTLS through it. {@link Relay} is the complementary no-DTLS passthrough that
@@ -152,33 +151,33 @@ public sealed interface SctpDtlsBridge extends AutoCloseable permits SctpDtlsBri
     }
 
     /**
-     * Wraps SCTP packets in DTLS application-data records over a BouncyCastle {@link DTLSTransport}, for
-     * the Web-P2P interop path.
+     * Wraps SCTP packets in DTLS application-data records over a {@link VoipDtlsTransport}, for the Web-P2P
+     * interop path.
      *
      * <p>This bridge owns both directions. Outbound: {@link #wrapOutbound(byte[])} sends the SCTP packet
-     * through {@link DTLSTransport#send(byte[], int, int)}, which encrypts it into a DTLS record;
-     * BouncyCastle then writes that record to the {@code org.bouncycastle.tls.DatagramTransport} the caller
-     * gave the handshake, which is wired to the relay datagram sink, so the enveloped bytes leave through
-     * the sink. Inbound: a receive pump on a dedicated daemon virtual thread blocks in
-     * {@link DTLSTransport#receive(byte[], int, int, int)} until a record arrives, then hands the decrypted
-     * SCTP packet to {@link SctpAssociation#feedInboundPacket(byte[])}. {@link #feedInbound(byte[])} pushes
-     * raw inbound DTLS bytes into the DTLS transport's datagram side so the pump can decrypt them.
+     * through {@link VoipDtlsTransport#send(byte[], int, int)}, which encrypts it into a DTLS record and writes
+     * it to the {@link VoipDtlsTransport.Datagrams} seam the caller gave the handshake, wired to the relay
+     * datagram sink, so the enveloped bytes leave through the sink. Inbound: a receive pump on a dedicated
+     * daemon virtual thread blocks in {@link VoipDtlsTransport#receive(byte[], int, int, int)} until a record
+     * arrives, then hands the decrypted SCTP packet to {@link SctpAssociation#feedInboundPacket(byte[])}.
+     * {@link #feedInbound(byte[])} pushes raw inbound DTLS bytes into the DTLS transport's datagram side so the
+     * pump can decrypt them.
      *
      * @implNote This implementation runs the receive pump with a short {@value #RECEIVE_TIMEOUT_MILLIS}-ms
      * per-call receive timeout so {@link #close()} takes effect promptly rather than waiting for the next
      * inbound record. A {@link RuntimeException} from a single malformed SCTP packet is swallowed so it
      * cannot kill the pump, matching Cobalt's receive-path invariant. The receive buffer is sized at
      * {@value #MAX_RECORD_BYTES} bytes, comfortably above the SCTP-over-DTLS path MTU, so one receive can
-     * never overflow it. The DTLS record layer is BouncyCastle rather than a native binding because the
-     * call's SCTP data channel is low-volume relative to media; the relay leg uses this same bridge to wrap
-     * its SCTP association in DTLS (re/calls2-spec/captures/webrtc-datachannel-transport-2026-06-21.md).
+     * never overflow it. The DTLS record layer is the JDK's own {@code DTLSv1.2} engine rather than a native
+     * binding because the call's SCTP data channel is low-volume relative to media; the relay leg uses this
+     * same bridge to wrap its SCTP association in DTLS (re/calls2-spec/captures/webrtc-datachannel-transport-2026-06-21.md).
      */
     final class WebP2p implements SctpDtlsBridge {
         /**
          * Holds the maximum DTLS record size, in bytes, the receive buffer is sized for.
          *
          * @implNote This implementation uses 16 KiB, comfortably above the SCTP-over-DTLS path MTU, so a
-         * single {@link DTLSTransport} receive can never overflow the buffer.
+         * single {@link VoipDtlsTransport} receive can never overflow the buffer.
          */
         private static final int MAX_RECORD_BYTES = 16 * 1024;
 
@@ -193,7 +192,7 @@ public sealed interface SctpDtlsBridge extends AutoCloseable permits SctpDtlsBri
         /**
          * Holds the established DTLS application-data transport this bridge sends and receives records on.
          */
-        private final DTLSTransport dtls;
+        private final VoipDtlsTransport dtls;
 
         /**
          * Holds the SCTP association decrypted inbound packets are fed into.
@@ -204,9 +203,9 @@ public sealed interface SctpDtlsBridge extends AutoCloseable permits SctpDtlsBri
          * Holds the sink raw inbound DTLS bytes are queued into so the DTLS transport's datagram side can
          * read them, or {@code null} when inbound bytes reach the DTLS transport by another route.
          *
-         * <p>The Web-P2P path layers BouncyCastle's DTLS over a {@code DatagramTransport} the caller wires
-         * to the UDP flow; {@link #feedInbound(byte[])} forwards inbound bytes to this sink, which the
-         * caller has connected to that {@code DatagramTransport}'s receive queue.
+         * <p>The Web-P2P path layers the JDK DTLS engine over a {@link VoipDtlsTransport.Datagrams} seam the
+         * caller wires to the UDP flow; {@link #feedInbound(byte[])} forwards inbound bytes to this sink, which
+         * the caller has connected to that seam's receive queue.
          */
         private final Consumer<byte[]> inboundDatagramSink;
 
@@ -231,7 +230,7 @@ public sealed interface SctpDtlsBridge extends AutoCloseable permits SctpDtlsBri
          *                            bytes reach the DTLS transport by another route
          * @throws NullPointerException if {@code dtls} or {@code association} is {@code null}
          */
-        public WebP2p(DTLSTransport dtls, SctpAssociation association, Consumer<byte[]> inboundDatagramSink) {
+        public WebP2p(VoipDtlsTransport dtls, SctpAssociation association, Consumer<byte[]> inboundDatagramSink) {
             this.dtls = Objects.requireNonNull(dtls, "dtls cannot be null");
             this.association = Objects.requireNonNull(association, "association cannot be null");
             this.inboundDatagramSink = inboundDatagramSink;
@@ -262,6 +261,8 @@ public sealed interface SctpDtlsBridge extends AutoCloseable permits SctpDtlsBri
                 throw new WhatsAppCallException.DataChannel("DTLS bridge is closed");
             }
             try {
+                // TODO: wire Web-P2P DtlsPacketEnvelope - in WebP2p.wrapOutbound, route the outbound record through DtlsPacketEnvelope.of(sctpPacket).relayPacket() (validating the sockaddr_conn family==2/addr_len==0x10 discriminator) before dtls.send()
+                // TODO: wire SctpRingBuffer egress - route outbound SCTP DATA through SctpRingBuffer.write + a drain loop (FrameSink) instead of synchronous per-datagram send, matching initSctpRingBuffer/shutdownSctpRingBuffer lifecycle
                 dtls.send(sctpPacket, 0, sctpPacket.length);
             } catch (IOException e) {
                 throw new WhatsAppCallException.DataChannel("DTLS send failed", e);
@@ -320,19 +321,15 @@ public sealed interface SctpDtlsBridge extends AutoCloseable permits SctpDtlsBri
         /**
          * {@inheritDoc}
          *
-         * <p>The method is idempotent: a second call returns immediately. It closes the {@link DTLSTransport}
-         * (any {@link IOException} is swallowed) and interrupts the receive thread so it observes the closed
-         * state and exits.
+         * <p>The method is idempotent: a second call returns immediately. It closes the
+         * {@link VoipDtlsTransport} and interrupts the receive thread so it observes the closed state and exits.
          */
         @Override
         public void close() {
             if (!closed.compareAndSet(false, true)) {
                 return;
             }
-            try {
-                dtls.close();
-            } catch (IOException _) {
-            }
+            dtls.close();
             receiver.interrupt();
         }
     }

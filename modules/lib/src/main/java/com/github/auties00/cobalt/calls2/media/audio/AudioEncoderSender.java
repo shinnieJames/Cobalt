@@ -334,6 +334,7 @@ public final class AudioEncoderSender implements AudioReaderPump.AudioBlockSink 
         var payload = sframe == null ? combined : sframe.seal(combined);
         var sequence = nextExtendedSequence++;
         packetCache.store(sequence, payload, true);
+        // TODO: wire MLowRedPacker - when enable_mlow_red is set, instantiate MLowRedPacker (from server-pushed mlow_red_redundancy_level/stream_mtu/samplesPerFrame) and call pack(packetCache, payload, sequence) here in the group-seal/send path, using its output as the RTP payload passed to sink.send
         sink.send(payload, sequence, level);
         pending.clear();
     }

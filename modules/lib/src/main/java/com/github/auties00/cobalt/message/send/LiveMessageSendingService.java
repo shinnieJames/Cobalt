@@ -14,13 +14,25 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
+import com.github.auties00.cobalt.model.chat.group.GroupParticipantLabel;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
+import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.FutureProofMessageType;
+import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.message.contact.ContactMessage;
+import com.github.auties00.cobalt.model.message.contact.ContactsArrayMessage;
+import com.github.auties00.cobalt.model.message.location.LocationMessage;
+import com.github.auties00.cobalt.model.message.media.AudioMessage;
 import com.github.auties00.cobalt.model.message.media.DocumentMessage;
+import com.github.auties00.cobalt.model.message.media.ImageMessage;
+import com.github.auties00.cobalt.model.message.media.StickerMessage;
+import com.github.auties00.cobalt.model.message.media.VideoMessage;
+import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
@@ -29,13 +41,30 @@ import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamMsgUtils;
 import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.GroupMemberTagUpdateEventBuilder;
+import com.github.auties00.cobalt.wam.event.MessageSendEventBuilder;
 import com.github.auties00.cobalt.wam.event.SendDocumentEventBuilder;
+import com.github.auties00.cobalt.wam.event.StatusReplyEventBuilder;
 import com.github.auties00.cobalt.wam.event.WebcMessageSendEventBuilder;
+import com.github.auties00.cobalt.wam.type.ChatOriginsType;
 import com.github.auties00.cobalt.wam.type.DocumentType;
+import com.github.auties00.cobalt.wam.type.GroupMemberTagEntryPointType;
+import com.github.auties00.cobalt.wam.type.GroupMemberTagUpdateActionType;
+import com.github.auties00.cobalt.wam.type.MessageDistributionEnumType;
+import com.github.auties00.cobalt.wam.type.MessageSendResultType;
+import com.github.auties00.cobalt.wam.type.ReplyEntryMethod;
+import com.github.auties00.cobalt.wam.type.RevokeType;
+import com.github.auties00.cobalt.wam.type.StatusCategory;
+import com.github.auties00.cobalt.wam.type.StatusContentType;
+import com.github.auties00.cobalt.wam.type.StatusPosterContactType;
+import com.github.auties00.cobalt.wam.type.StatusReplyMessageType;
+import com.github.auties00.cobalt.wam.type.StatusReplyResult;
+import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Live implementation of {@link MessageSendingService} that orchestrates every outgoing-message
@@ -72,6 +101,8 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WAWebNewsletterSendMessageQueryJob")
 @WhatsAppWebModule(moduleName = "WAWebSendAppStateSyncMsgJob")
 @WhatsAppWebModule(moduleName = "WAWebSendMsgRecordAction")
+@WhatsAppWebModule(moduleName = "WAWebMessageSendReporter")
+@WhatsAppWebModule(moduleName = "WAWebLogStatusReply")
 public final class LiveMessageSendingService implements MessageSendingService {
     /**
      * Holds the fixed mapping from lower-case file extensions (without the
@@ -222,6 +253,23 @@ public final class LiveMessageSendingService implements MessageSendingService {
     private final MediaTranscoderService mediaTranscoderService;
 
     /**
+     * Holds the opaque unified-session identifier stamped onto the
+     * {@code StatusReply} WAM event for the lifetime of this service.
+     *
+     * <p>WA Web sources this from {@code UnifiedSessionManager.getSessionId()},
+     * a value that is stable for a whole app session and shared across every
+     * telemetry event. A headless client has no such UI session manager, so a
+     * random 64-bit token is minted once at construction and reused, matching
+     * the upstream stability contract without inventing per-event churn.
+     *
+     * @implNote
+     * This implementation renders the token as lower-case hexadecimal so it is
+     * indistinguishable from the compact identifiers the WAM backend already
+     * receives from web sessions.
+     */
+    private final String unifiedSessionId = Long.toHexString(ThreadLocalRandom.current().nextLong());
+
+    /**
      * Constructs a {@link LiveMessageSendingService} and wires up every sub-sender.
      *
      * <p>Embedders construct exactly one of these per client; the constructor
@@ -271,7 +319,7 @@ public final class LiveMessageSendingService implements MessageSendingService {
         this.wamService = wamService;
         this.mediaTranscoderService = mediaTranscoderService;
         var store = client.store();
-        this.preparer = new MessagePreparer(store);
+        this.preparer = new MessagePreparer(store, wamService);
         this.messageDedup = new MessageDedup();
         var skDistribution = new SenderKeyDistribution(encryption, deviceService, store);
         var botTransform = new BotProtobufTransform(store);
@@ -341,6 +389,7 @@ public final class LiveMessageSendingService implements MessageSendingService {
         messageDedup.add(messageId);
         try {
             var sendEvent = buildWebcMessageSendEvent(messageInfo);
+            var messageSendEvent = buildMessageSendEvent(messageInfo);
             var result = switch (messageInfo) {
                 case ChatMessageInfo chatMessage when parentJid.hasUserServer() || parentJid.hasLidServer() ->
                     userSender.send(parentJid, chatMessage);
@@ -368,6 +417,17 @@ public final class LiveMessageSendingService implements MessageSendingService {
             }
             if (sendEvent != null) {
                 wamService.commit(sendEvent.stopMessageSendT().build());
+            }
+            if (messageSendEvent != null) {
+                wamService.commit(messageSendEvent
+                        .messageSendResult(MessageSendResultType.OK)
+                        .messageSendResultIsTerminal(false)
+                        .stopMessageSendT()
+                        .build());
+            }
+            if (messageInfo instanceof ChatMessageInfo chatMessage) {
+                emitStatusReplyEvent(chatMessage);
+                emitGroupMemberTagUpdateEvent(parentJid, chatMessage);
             }
             return result;
         } finally {
@@ -455,6 +515,394 @@ public final class LiveMessageSendingService implements MessageSendingService {
                 .messageMediaType(WamMsgUtils.getWamMediaType(chatMessage))
                 .messageIsForward(isForwarded)
                 .startMessageSendT();
+    }
+
+    /**
+     * Builds the pre-configured base {@code MessageSend} WAM event
+     * ({@link MessageSendEventBuilder}) for the given outgoing message, or
+     * returns {@code null} when the event must be suppressed.
+     *
+     * <p>This is Cobalt's port of WA Web's {@code MessageSendReporter}
+     * constructor: it is the central per-message send beacon committed for
+     * every chat send, alongside the {@code WebcMessageSend} and
+     * {@code E2eMessageSend} variants. It is suppressed for non-chat sends
+     * (newsletter publishes carry their own logger). The builder is populated
+     * from data available at the trigger:
+     *
+     * <ul>
+     *   <li>{@code messageType} and {@code messageMediaType} from
+     *       {@link WamMsgUtils};</li>
+     *   <li>{@code mediaCaptionPresent} from {@link #hasCaption(Message)};</li>
+     *   <li>{@code messageIsFanout} and {@code fastForwardEnabled} pinned to
+     *       {@code true}, and {@code messageDistributionType} to
+     *       {@link MessageDistributionEnumType#REGULAR_MESSAGE}, matching the
+     *       constants the upstream reporter hard-codes for a regular send;</li>
+     *   <li>{@code messageIsForward}, {@code isAReply}, {@code isViewOnce}, and
+     *       {@code messageIsRevoke} from the resolved content and its optional
+     *       {@link ContextInfo};</li>
+     *   <li>{@code isLid} and {@code chatOrigins} from the destination JID's
+     *       server kind ({@link ChatOriginsType#LID_CTWA} for LID recipients,
+     *       {@link ChatOriginsType#OTHERS} otherwise);</li>
+     *   <li>{@code hasUsername} and {@code hasUsernamePin} from the bound
+     *       account's own username state.</li>
+     * </ul>
+     *
+     * <p>The {@code messageSendT} latency timer is started here so it can be
+     * stopped on the success-branch commit; the terminal
+     * {@code messageSendResult}/{@code messageSendResultIsTerminal} are stamped
+     * by the caller once the dispatch completes.
+     *
+     * @implNote
+     * This implementation pins {@code e2eBackfill} to {@code false} and
+     * {@code isAComment} to {@code false} because Cobalt's send path has no
+     * resend-backfill or comment-thread surface; a revoke send additionally
+     * records {@link RevokeType#SENDER}, since Cobalt only ever revokes on
+     * behalf of the local sender, never as a group admin.
+     *
+     * @param messageInfo the message about to be sent
+     * @return the prepared builder with the send timer running, or
+     *         {@code null} when no base send event should be emitted
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageSendReporter", exports = "MessageSendReporter",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private MessageSendEventBuilder buildMessageSendEvent(MessageInfo messageInfo) {
+        if (!(messageInfo instanceof ChatMessageInfo chatMessage)) {
+            return null;
+        }
+        var parentJid = chatMessage.key().parentJid().orElse(null);
+        var container = chatMessage.message();
+        var content = container == null ? null : container.content();
+        var isRevoke = content instanceof ProtocolMessage protocol
+                && protocol.type().orElse(null) == ProtocolMessage.Type.REVOKE;
+        var contextInfo = content instanceof ContextualMessage contextual
+                ? contextual.contextInfo().orElse(null)
+                : null;
+        var isForwarded = contextInfo != null && contextInfo.isForwarded();
+        var isReply = contextInfo != null && contextInfo.quotedMessageId().isPresent();
+        var isViewOnce = container != null
+                && container.futureProofContentType() == FutureProofMessageType.VIEW_ONCE;
+        var isLid = parentJid != null
+                && (parentJid.hasLidServer() || parentJid.isStatusBroadcastAccount());
+        var chatOrigins = parentJid != null && parentJid.hasLidServer()
+                ? ChatOriginsType.LID_CTWA
+                : ChatOriginsType.OTHERS;
+        var account = client.store().accountStore();
+        var builder = new MessageSendEventBuilder()
+                .messageType(WamMsgUtils.getWamMessageType(chatMessage))
+                .messageMediaType(WamMsgUtils.getWamMediaType(chatMessage))
+                .mediaCaptionPresent(hasCaption(content))
+                .fastForwardEnabled(true)
+                .messageIsFanout(true)
+                .messageIsForward(isForwarded)
+                .messageIsRevoke(isRevoke)
+                .isViewOnce(isViewOnce)
+                .isAReply(isReply)
+                .isAComment(false)
+                .e2eBackfill(false)
+                .messageDistributionType(MessageDistributionEnumType.REGULAR_MESSAGE)
+                .chatOrigins(chatOrigins)
+                .isLid(isLid)
+                .hasUsername(account.username().isPresent())
+                .hasUsernamePin(account.usernameHasRecoveryPin().orElse(false))
+                .startMessageSendT();
+        if (isRevoke) {
+            builder.revokeType(RevokeType.SENDER);
+        }
+        return builder;
+    }
+
+    /**
+     * Commits a {@code StatusReply} WAM event when the just-sent message is a
+     * reply to someone's status update.
+     *
+     * <p>This ports WA Web's {@code logStatusReply}. A status reply is an
+     * ordinary contextual message addressed to the poster whose quoted
+     * {@link ContextInfo} points back at the {@code status@broadcast} account;
+     * the event is skipped for every send that does not carry that quoted
+     * parent. When it applies, the builder is populated with the reply's own
+     * {@link #statusReplyMessageType(Message) message type}, the replied-to
+     * status {@link #statusContentType(Message) content type}, the quoted
+     * status id, the reply media dimensions when present, and the
+     * {@link #statusPosterContactType(Jid) poster contact classification};
+     * {@code replyEntryMethod} is fixed to
+     * {@link ReplyEntryMethod#TAP_REPLY_BAR} as WA Web does at this call site.
+     *
+     * @implNote
+     * This implementation mints fresh 53-bit {@code statusSessionId} /
+     * {@code statusViewerSessionId} tokens (with {@code updatesTabSessionId}
+     * mirroring {@code statusSessionId}, exactly as the upstream call passes
+     * the same {@code sessionId} to both) because a headless client has no
+     * status-viewer UI to originate them; the upstream code likewise refuses
+     * to commit until a session id is known, and Cobalt always supplies one.
+     * {@code statusCategory} is pinned to
+     * {@link StatusCategory#REGULAR_STATUS} and {@code isMentioned} to
+     * {@code false} as Cobalt does not model group-status membership or
+     * status @-mentions on the reply path.
+     *
+     * @param chatMessage the chat message that was just sent successfully
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusReply", exports = "logStatusReply",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStatusReplyEvent(ChatMessageInfo chatMessage) {
+        var container = chatMessage.message();
+        var content = container == null ? null : container.content();
+        if (!(content instanceof ContextualMessage contextual)) {
+            return;
+        }
+        var contextInfo = contextual.contextInfo().orElse(null);
+        if (contextInfo == null) {
+            return;
+        }
+        var quotedParent = contextInfo.quotedMessageParentJid().orElse(null);
+        if (quotedParent == null || !quotedParent.isStatusBroadcastAccount()) {
+            return;
+        }
+        var poster = contextInfo.quotedMessageSenderJid().orElse(null);
+        var quotedContent = contextInfo.quotedMessageContent()
+                .map(MessageContainer::content)
+                .orElse(null);
+        var sessionId = ThreadLocalRandom.current().nextLong(1, 1L << 53);
+        var viewerSessionId = ThreadLocalRandom.current().nextLong(1, 1L << 53);
+        var builder = new StatusReplyEventBuilder()
+                .statusReplyResult(StatusReplyResult.OK)
+                .statusReplyMessageType(statusReplyMessageType(content))
+                .statusContentType(statusContentType(quotedContent))
+                .statusCategory(StatusCategory.REGULAR_STATUS)
+                .statusPosterContactType(statusPosterContactType(poster))
+                .replyEntryMethod(ReplyEntryMethod.TAP_REPLY_BAR)
+                .isMentioned(false)
+                .statusSessionId(sessionId)
+                .statusViewerSessionId(viewerSessionId)
+                .updatesTabSessionId(sessionId)
+                .unifiedSessionId(unifiedSessionId);
+        contextInfo.quotedMessageId().ifPresent(builder::statusId);
+        applyStatusReplyMediaDimensions(builder, content);
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@code GroupMemberTagUpdate} WAM event when the just-sent
+     * message applies a member-tag (participant-label) change to a group.
+     *
+     * <p>This ports WA Web's {@code WAWebGroupMemberTagUpdateLogger}. A
+     * member-tag change rides on a {@link ProtocolMessage} of type
+     * {@link ProtocolMessage.Type#GROUP_MEMBER_LABEL_CHANGE} addressed to a
+     * group or community; the event is skipped for every other send. The
+     * {@code groupMemberTagUpdateAction} mirrors the {@code tag_reason} the
+     * {@link MetaStanza} writes onto the outgoing {@code <meta>}: a non-empty
+     * {@link GroupParticipantLabel#label()} records
+     * {@link GroupMemberTagUpdateActionType#UPDATE} (the upstream
+     * {@code logUpdateClick} branch), and an empty or absent label records
+     * {@link GroupMemberTagUpdateActionType#DELETE_CONFIRM} (the upstream
+     * {@code logDeleteConfirm} branch). {@code groupId} carries the destination
+     * group JID, {@code userJourneyEventMs} the wall-clock millisecond stamp WA
+     * Web sources from {@code WATimeUtils.unixTimeMs()}, and
+     * {@code unifiedSessionId} reuses the service-wide session token; the
+     * upstream logger refuses to commit when that token is {@code null}, and
+     * Cobalt always supplies one.
+     *
+     * @implNote
+     * This implementation pins {@code memberTagEntryPoint} to
+     * {@link GroupMemberTagEntryPointType#OTHER} and {@code uiSurface} to
+     * {@link TsSurface#GROUP_CHAT} because the headless send path has no
+     * member-tag UI entry point to originate them; {@code hasMemberTagAtStart}
+     * is derived as {@code true} for a deletion (a tag must have existed to be
+     * removed) and {@code false} for an update, since Cobalt does not retain the
+     * participant's prior label to tell an addition from an edit. The upstream
+     * {@code logError} branch is not reproduced: this call site runs only after
+     * the dispatch succeeds, so the action is always a confirmed update or
+     * delete.
+     *
+     * @param parentJid   the destination chat {@link Jid}
+     * @param chatMessage the chat message that was just sent successfully
+     */
+    @WhatsAppWebExport(moduleName = "WAWebGroupMemberTagUpdateLogger", exports = "logUpdateClick",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebGroupMemberTagUpdateLogger", exports = "logDeleteConfirm",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitGroupMemberTagUpdateEvent(Jid parentJid, ChatMessageInfo chatMessage) {
+        if (!parentJid.hasGroupOrCommunityServer()) {
+            return;
+        }
+        var container = chatMessage.message();
+        var content = container == null ? null : container.content();
+        if (!(content instanceof ProtocolMessage protocol)
+                || protocol.type().orElse(null) != ProtocolMessage.Type.GROUP_MEMBER_LABEL_CHANGE) {
+            return;
+        }
+        var label = protocol.memberLabel()
+                .flatMap(GroupParticipantLabel::label)
+                .orElse(null);
+        var isDelete = label == null || label.isEmpty();
+        var action = isDelete
+                ? GroupMemberTagUpdateActionType.DELETE_CONFIRM
+                : GroupMemberTagUpdateActionType.UPDATE;
+        wamService.commit(new GroupMemberTagUpdateEventBuilder()
+                .groupId(parentJid.toString())
+                .groupMemberTagUpdateAction(action)
+                .hasMemberTagAtStart(isDelete)
+                .memberTagEntryPoint(GroupMemberTagEntryPointType.OTHER)
+                .uiSurface(TsSurface.GROUP_CHAT)
+                .unifiedSessionId(unifiedSessionId)
+                .userJourneyEventMs(System.currentTimeMillis())
+                .build());
+    }
+
+    /**
+     * Returns whether the given outgoing content carries a user-visible
+     * caption, populating the {@code mediaCaptionPresent} property of the
+     * {@code MessageSend} event.
+     *
+     * <p>Only the media kinds that expose a caption field
+     * ({@link ImageMessage}, {@link VideoMessage}, {@link DocumentMessage})
+     * can be captioned; every other content type, including {@code null},
+     * yields {@code false}.
+     *
+     * @param content the resolved message content; may be {@code null}
+     * @return {@code true} when the content has a non-empty caption
+     */
+    private static boolean hasCaption(Message content) {
+        return switch (content) {
+            case ImageMessage image -> image.caption().isPresent();
+            case VideoMessage video -> video.caption().isPresent();
+            case DocumentMessage document -> document.caption().isPresent();
+            case null, default -> false;
+        };
+    }
+
+    /**
+     * Classifies the reply content into the WAM
+     * {@link StatusReplyMessageType} recorded on the {@code StatusReply} event.
+     *
+     * <p>This mirrors the {@code replyType} argument WA Web passes to
+     * {@code logStatusReply}, collapsing the reply's payload onto the status
+     * reply enumeration.
+     *
+     * @implNote
+     * This implementation maps {@link VideoMessage} to
+     * {@link StatusReplyMessageType#GIF_VIDEO}, the only video-bearing
+     * constant the enumeration exposes, and returns
+     * {@link StatusReplyMessageType#UNKNOWN} for content types Cobalt does not
+     * bucket (including {@code null}).
+     *
+     * @param content the reply content being classified; may be {@code null}
+     * @return the status-reply message-type classification
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusReply", exports = "logStatusReply",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static StatusReplyMessageType statusReplyMessageType(Message content) {
+        return switch (content) {
+            case ImageMessage ignored -> StatusReplyMessageType.IMAGE;
+            case VideoMessage ignored -> StatusReplyMessageType.GIF_VIDEO;
+            case AudioMessage audio -> audio.ptt()
+                    ? StatusReplyMessageType.VOICE
+                    : StatusReplyMessageType.AUDIO;
+            case StickerMessage ignored -> StatusReplyMessageType.STICKER;
+            case DocumentMessage ignored -> StatusReplyMessageType.DOCUMENT;
+            case LocationMessage ignored -> StatusReplyMessageType.LOCATION;
+            case ContactMessage ignored -> StatusReplyMessageType.CONTACT;
+            case ContactsArrayMessage ignored -> StatusReplyMessageType.CONTACT_ARRAY;
+            case PollCreationMessage ignored -> StatusReplyMessageType.POLL;
+            case ExtendedTextMessage ignored -> StatusReplyMessageType.TEXT;
+            case null, default -> StatusReplyMessageType.UNKNOWN;
+        };
+    }
+
+    /**
+     * Classifies the replied-to status content into the WAM
+     * {@link StatusContentType} recorded on the {@code StatusReply} event.
+     *
+     * <p>This mirrors the {@code statusContentType} argument WA Web passes to
+     * {@code logStatusReply}, derived from the quoted status payload; a
+     * {@link VideoMessage} split into {@link StatusContentType#GIF} versus
+     * {@link StatusContentType#VIDEO} on its GIF-playback flag.
+     *
+     * @param quoted the quoted status content; {@code null} when the quoted
+     *               payload was not preserved
+     * @return the status content-type classification, defaulting to
+     *         {@link StatusContentType#PLACEHOLDER} for a missing quote and
+     *         {@link StatusContentType#FUTURE} for an unrecognised type
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusReply", exports = "logStatusReply",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static StatusContentType statusContentType(Message quoted) {
+        return switch (quoted) {
+            case ImageMessage ignored -> StatusContentType.PHOTO;
+            case VideoMessage video -> video.gifPlayback()
+                    ? StatusContentType.GIF
+                    : StatusContentType.VIDEO;
+            case AudioMessage ignored -> StatusContentType.VOICE;
+            case ExtendedTextMessage ignored -> StatusContentType.TEXT;
+            case null -> StatusContentType.PLACEHOLDER;
+            default -> StatusContentType.FUTURE;
+        };
+    }
+
+    /**
+     * Classifies the status poster relative to the bound account into the WAM
+     * {@link StatusPosterContactType} recorded on the {@code StatusReply}
+     * event.
+     *
+     * <p>This mirrors the {@code statusPosterContactType} WA Web derives from
+     * the poster contact: the local user maps to
+     * {@link StatusPosterContactType#SELF}, a poster present in the local
+     * contact roster to {@link StatusPosterContactType#CONTACT}, and everyone
+     * else to {@link StatusPosterContactType#UNKNOWN}.
+     *
+     * @implNote
+     * This implementation does not surface
+     * {@link StatusPosterContactType#TRUSTED_GROUP_MEMBER} or
+     * {@link StatusPosterContactType#CHANNEL}, which depend on group-status and
+     * channel-status surfaces Cobalt's reply path does not model.
+     *
+     * @param poster the JID that posted the replied-to status;
+     *               {@code null} yields {@link StatusPosterContactType#UNKNOWN}
+     * @return the poster contact-type classification
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusReply", exports = "logStatusReply",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private StatusPosterContactType statusPosterContactType(Jid poster) {
+        if (poster == null) {
+            return StatusPosterContactType.UNKNOWN;
+        }
+        var account = client.store().accountStore();
+        var self = account.jid().map(Jid::toUserJid).orElse(null);
+        var selfLid = account.lid().map(Jid::toUserJid).orElse(null);
+        var posterUser = poster.toUserJid();
+        if (posterUser.equals(self) || posterUser.equals(selfLid)) {
+            return StatusPosterContactType.SELF;
+        }
+        if (client.store().contactStore().findContactByJid(poster).isPresent()) {
+            return StatusPosterContactType.CONTACT;
+        }
+        return StatusPosterContactType.UNKNOWN;
+    }
+
+    /**
+     * Copies the reply media's pixel dimensions onto the {@code StatusReply}
+     * event builder when the reply is an image or video.
+     *
+     * <p>WA Web fills {@code mediaHeight} and {@code mediaWidth} from the reply
+     * attachment; content types without intrinsic dimensions leave both
+     * properties unset.
+     *
+     * @param builder the event builder being populated
+     * @param content the reply content whose dimensions are being copied
+     */
+    private static void applyStatusReplyMediaDimensions(StatusReplyEventBuilder builder, Message content) {
+        switch (content) {
+            case ImageMessage image -> {
+                image.height().ifPresent(builder::mediaHeight);
+                image.width().ifPresent(builder::mediaWidth);
+            }
+            case VideoMessage video -> {
+                video.height().ifPresent(builder::mediaHeight);
+                video.width().ifPresent(builder::mediaWidth);
+            }
+            case null, default -> {
+                // no intrinsic media dimensions to report
+            }
+        }
     }
 
     @WhatsAppWebExport(moduleName = "WAWebSendMsgJob", exports = "encryptAndSendKeyDistributionMsg",

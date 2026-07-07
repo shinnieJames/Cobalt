@@ -46,11 +46,13 @@ public sealed interface VideoCodec extends AutoCloseable
      * Encodes one raw 4:2:0 picture into a compressed access unit, optionally forcing it to be a key
      * frame.
      *
-     * @implSpec Implementations must accept a {@link VideoFrame} whose
+     * @implSpec Implementations must accept a planar
+     * {@link com.github.auties00.cobalt.calls2.stream.VideoPixelFormat#I420 I420} {@link VideoFrame} whose
      * {@linkplain VideoFrame#width() width} and {@linkplain VideoFrame#height() height} match the
-     * configured encoder geometry and whose pixels are planar 4:2:0, converting an
-     * {@link com.github.auties00.cobalt.calls2.stream.VideoPixelFormat#NV12 NV12} frame to the planar
-     * form the native encoder requires. When {@code forceKeyFrame} is {@code true}, or when an earlier
+     * configured encoder geometry; the caller normalizes any capture to that layout and geometry (repacking
+     * an {@link com.github.auties00.cobalt.calls2.stream.VideoPixelFormat#NV12 NV12} source and resampling
+     * an off-geometry one) before the encode hand-off, so implementations feed the frame's pixels straight
+     * to the native encoder. When {@code forceKeyFrame} is {@code true}, or when an earlier
      * {@linkplain #requestKeyFrame() key-frame request} is pending, the output must be an intra picture
      * and the {@linkplain EncodedVideoFrame#keyFrame() key-frame flag} must be set. When the rate
      * controller drops the frame, the result must be an {@linkplain EncodedVideoFrame#isEmpty() empty}
@@ -89,6 +91,43 @@ public sealed interface VideoCodec extends AutoCloseable
      * @throws WhatsAppCallException.Vpx  if a libvpx decode call fails
      */
     VideoFrame decode(byte[] payload, long ptsMicros);
+
+    /**
+     * Decodes one compressed access unit into a raw 4:2:0 picture, packing the result into {@code reuse}
+     * when that buffer exactly fits the decoded geometry.
+     *
+     * <p>This is the pooled decode path the media plane drives so a steady-resolution stream produces no
+     * per-frame pixel allocation: the caller passes a buffer it owns from a small ring, and the codec
+     * writes the decoded planes into it instead of minting a fresh array. The decoded picture size is
+     * known only after the access unit is parsed, so {@code reuse} is a hint rather than a guarantee: the
+     * codec adopts it only when {@code reuse.length} equals the decoded picture's packed 4:2:0 byte
+     * count, and otherwise allocates a correctly sized buffer, so the caller inspects the returned
+     * frame's {@linkplain VideoFrame#pixels() buffer} to learn which array was used and to re-seed its
+     * ring slot after a geometry change.
+     *
+     * @implSpec The default implementation ignores {@code reuse} and delegates to
+     * {@link #decode(byte[], long)}, always returning a freshly allocated buffer. An implementation that
+     * packs its output into a caller buffer overrides this to write into {@code reuse} when
+     * {@code reuse != null} and {@code reuse.length} equals the decoded picture's packed byte count,
+     * returning a frame that wraps {@code reuse}; when {@code reuse} does not fit, when it is
+     * {@code null}, or when the access unit yields no displayable picture, the implementation must not
+     * write into {@code reuse} and must behave exactly as {@link #decode(byte[], long)}. The returned
+     * frame and the {@code null} end-of-stream contract are identical to {@link #decode(byte[], long)}.
+     *
+     * @param payload   the compressed access-unit bytes
+     * @param ptsMicros the presentation timestamp in microseconds to stamp the decoded frame with
+     * @param reuse     a caller-owned buffer to pack the decoded picture into when it fits, or
+     *                  {@code null} to always allocate
+     * @return the decoded picture, wrapping {@code reuse} when it was adopted, or {@code null} when the
+     *         access unit produced no displayable frame
+     * @throws NullPointerException       if {@code payload} is {@code null}
+     * @throws IllegalStateException      if the codec is closed
+     * @throws WhatsAppCallException.H264 if an OpenH264 decode call fails
+     * @throws WhatsAppCallException.Vpx  if a libvpx decode call fails
+     */
+    default VideoFrame decode(byte[] payload, long ptsMicros, byte[] reuse) {
+        return decode(payload, ptsMicros);
+    }
 
     /**
      * Arms the encoder so that its next {@linkplain #encode(VideoFrame, boolean) encode} produces a key

@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreferenceBuilder;
@@ -72,21 +73,21 @@ class CtwaPerCustomerDataSharingHandlerTest {
         @Test
         @DisplayName("actionName() returns 'ctwaPerCustomerDataSharing'")
         void actionName() {
-            assertEquals(CtwaPerCustomerDataSharingAction.ACTION_NAME, new CtwaPerCustomerDataSharingHandler().actionName());
-            assertEquals("ctwaPerCustomerDataSharing", new CtwaPerCustomerDataSharingHandler().actionName());
+            assertEquals(CtwaPerCustomerDataSharingAction.ACTION_NAME, new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).actionName());
+            assertEquals("ctwaPerCustomerDataSharing", new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).actionName());
         }
 
         @Test
         @DisplayName("collectionName() is SyncPatchType.REGULAR_HIGH")
         void collectionName() {
-            assertEquals(SyncPatchType.REGULAR_HIGH, new CtwaPerCustomerDataSharingHandler().collectionName());
+            assertEquals(SyncPatchType.REGULAR_HIGH, new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).collectionName());
         }
 
         @Test
         @DisplayName("version() returns the declared action version (1)")
         void version() {
-            assertEquals(CtwaPerCustomerDataSharingAction.ACTION_VERSION, new CtwaPerCustomerDataSharingHandler().version());
-            assertEquals(1, new CtwaPerCustomerDataSharingHandler().version());
+            assertEquals(CtwaPerCustomerDataSharingAction.ACTION_VERSION, new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).version());
+            assertEquals(1, new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).version());
         }
     }
 
@@ -96,7 +97,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
         @Test
         @DisplayName("isEnabled=true writes a CtwaDataSharingPreference into the store")
         void writesEnabled() {
-            var result = new CtwaPerCustomerDataSharingHandler().applyMutation(
+            var result = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutation(
                     client, ctwaMutation(CUSTOMER_LID, Boolean.TRUE, SyncdOperation.SET, Instant.now()));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
@@ -108,7 +109,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
         @Test
         @DisplayName("isEnabled=false also writes a record (with enabled=false)")
         void writesDisabled() {
-            var result = new CtwaPerCustomerDataSharingHandler().applyMutation(
+            var result = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutation(
                     client, ctwaMutation(CUSTOMER_LID, Boolean.FALSE, SyncdOperation.SET, Instant.now()));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
@@ -127,7 +128,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
                     new CtwaDataSharingPreferenceBuilder().accountLid(CUSTOMER_LID).enabled(true).build());
             assertTrue(client.store().businessStore().findCtwaDataSharing(CUSTOMER_LID).isPresent());
 
-            var result = new CtwaPerCustomerDataSharingHandler().applyMutation(
+            var result = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutation(
                     client, ctwaMutation(CUSTOMER_LID, null, SyncdOperation.REMOVE, Instant.now()));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
@@ -138,7 +139,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
         @Test
         @DisplayName("REMOVE with no entry is still SUCCESS (no-op on the store)")
         void removeNoOp() {
-            var result = new CtwaPerCustomerDataSharingHandler().applyMutation(
+            var result = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutation(
                     client, ctwaMutation(CUSTOMER_LID, null, SyncdOperation.REMOVE, Instant.now()));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
@@ -147,7 +148,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
         @Test
         @DisplayName("REMOVE with a null accountLid is SUCCESS (store treats null as no-op)")
         void removeNullAccount() {
-            var result = new CtwaPerCustomerDataSharingHandler().applyMutation(
+            var result = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutation(
                     client, ctwaMutation(null, null, SyncdOperation.REMOVE, Instant.now()));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
@@ -160,7 +161,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
         @Test
         @DisplayName("SET with a missing accountLid in the index is MALFORMED")
         void setMissingAccount() {
-            var result = new CtwaPerCustomerDataSharingHandler().applyMutation(
+            var result = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutation(
                     client, ctwaMutation(null, Boolean.TRUE, SyncdOperation.SET, Instant.now()));
 
             assertEquals(SyncActionState.MALFORMED, result.actionState());
@@ -177,7 +178,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
                     "[\"ctwaPerCustomerDataSharing\",\"" + CUSTOMER_LID + "\"]",
                     wrongValue, SyncdOperation.SET, Instant.now(), 1);
 
-            var result = new CtwaPerCustomerDataSharingHandler().applyMutation(client, mutation);
+            var result = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutation(client, mutation);
 
             assertEquals(SyncActionState.MALFORMED, result.actionState());
         }
@@ -210,7 +211,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
             var local  = ctwaMutation(CUSTOMER_LID, Boolean.FALSE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L));
             var remote = ctwaMutation(CUSTOMER_LID, Boolean.TRUE,  SyncdOperation.SET, Instant.ofEpochSecond(1700000010L));
 
-            var resolution = new CtwaPerCustomerDataSharingHandler().resolveConflicts(local, remote);
+            var resolution = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).resolveConflicts(local, remote);
 
             assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
@@ -226,7 +227,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
                     ctwaMutation(CUSTOMER_LID,            Boolean.TRUE, SyncdOperation.SET,    Instant.now()),
                     ctwaMutation("12025550101@lid",       null,         SyncdOperation.REMOVE, Instant.now()));
 
-            var results = new CtwaPerCustomerDataSharingHandler().applyMutationBatch(client, batch);
+            var results = new CtwaPerCustomerDataSharingHandler(TestWamService.create(client)).applyMutationBatch(client, batch);
 
             assertEquals(2, results.size());
             assertEquals(SyncActionState.SUCCESS, results.get(0).actionState());

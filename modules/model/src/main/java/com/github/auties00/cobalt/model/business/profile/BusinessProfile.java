@@ -104,6 +104,15 @@ public final class BusinessProfile {
     BusinessAutomatedType automatedType;
 
     /**
+     * The single cover photo (banner) attached to this profile, or {@code null} if none is set.
+     *
+     * <p>A business profile carries at most one cover photo; {@link BusinessCoverPhoto#id()} keys
+     * its replace and delete lifecycle.
+     */
+    @ProtobufProperty(index = 10, type = ProtobufType.MESSAGE)
+    BusinessCoverPhoto coverPhoto;
+
+    /**
      * Constructs a new business profile with the specified properties.
      *
      * @param jid           the JID of the business account
@@ -115,8 +124,9 @@ public final class BusinessProfile {
      * @param websites      the list of website URLs, or {@code null} for an empty list
      * @param categories    the list of business categories, or {@code null} for an empty list
      * @param automatedType the bot automation type, or {@code null} if not set
+     * @param coverPhoto    the cover photo, or {@code null} if none is set
      */
-    BusinessProfile(Jid jid, String description, String address, String email, BusinessHours hours, boolean cartEnabled, List<URI> websites, List<BusinessCategory> categories, BusinessAutomatedType automatedType) {
+    BusinessProfile(Jid jid, String description, String address, String email, BusinessHours hours, boolean cartEnabled, List<URI> websites, List<BusinessCategory> categories, BusinessAutomatedType automatedType, BusinessCoverPhoto coverPhoto) {
         this.jid = jid;
         this.description = description;
         this.address = address;
@@ -126,6 +136,7 @@ public final class BusinessProfile {
         this.websites = websites;
         this.categories = categories;
         this.automatedType = automatedType;
+        this.coverPhoto = coverPhoto;
     }
 
     /**
@@ -316,5 +327,26 @@ public final class BusinessProfile {
      */
     public void setAutomatedType(BusinessAutomatedType automatedType) {
         this.automatedType = automatedType;
+    }
+
+    /**
+     * Returns the cover photo attached to this profile, if set.
+     *
+     * <p>A business profile carries at most one cover photo.
+     *
+     * @return an {@link Optional} containing the {@link BusinessCoverPhoto}, or an empty
+     *         {@code Optional} if none is set
+     */
+    public Optional<BusinessCoverPhoto> coverPhoto() {
+        return Optional.ofNullable(coverPhoto);
+    }
+
+    /**
+     * Sets the cover photo attached to this profile.
+     *
+     * @param coverPhoto the cover photo, or {@code null} to clear
+     */
+    public void setCoverPhoto(BusinessCoverPhoto coverPhoto) {
+        this.coverPhoto = coverPhoto;
     }
 }

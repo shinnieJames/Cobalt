@@ -85,6 +85,9 @@
         <bouncycastle.version>1.80</bouncycastle.version>
         <pdfbox.version>3.0.5</pdfbox.version>
         <h2.mvstore.version>2.3.232</h2.mvstore.version>
+        <vigil.version>1.0.0</vigil.version>
+        <warden.version>1.0.0</warden.version>
+        <srtp.version>1.0.0</srtp.version>
     </properties>
 
     <profiles>

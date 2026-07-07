@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.calls2.media.audio;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -142,7 +143,6 @@ public final class StreamPacketCache {
      * @throws NullPointerException if {@code payload} is {@code null}
      */
     public void store(long extendedSequence, byte[] payload, boolean sent) {
-        Objects.requireNonNull(payload, "payload cannot be null");
         var slot = (int) (stored % capacity);
         slots[slot] = new CachedPacket(extendedSequence, payload, sent);
         stored++;
@@ -205,10 +205,15 @@ public final class StreamPacketCache {
         if (maxPackets <= 0) {
             return List.of();
         }
-        var live = liveSlots();
-        live.sort((a, b) -> Long.compareUnsigned(b.extendedSequence(), a.extendedSequence()));
+        var size = size();
+        var newest = (int) ((stored - 1) % capacity);
         var selected = new ArrayList<CachedPacket>();
-        for (var packet : live) {
+        for (var step = 0; step < size; step++) {
+            var index = newest - step;
+            if (index < 0) {
+                index += capacity;
+            }
+            var packet = slots[index];
             if (Long.compareUnsigned(packet.extendedSequence(), throughExtendedSequence) <= 0) {
                 selected.add(packet);
                 if (selected.size() == maxPackets) {
@@ -216,7 +221,7 @@ public final class StreamPacketCache {
                 }
             }
         }
-        selected.sort((a, b) -> Long.compareUnsigned(a.extendedSequence(), b.extendedSequence()));
+        Collections.reverse(selected);
         return selected;
     }
 
@@ -240,10 +245,15 @@ public final class StreamPacketCache {
         if (maxPackets <= 0) {
             return List.of();
         }
-        var live = liveSlots();
-        live.sort((a, b) -> Long.compareUnsigned(b.extendedSequence(), a.extendedSequence()));
+        var size = size();
+        var newest = (int) ((stored - 1) % capacity);
         var selected = new ArrayList<CachedPacket>();
-        for (var packet : live) {
+        for (var step = 0; step < size; step++) {
+            var index = newest - step;
+            if (index < 0) {
+                index += capacity;
+            }
+            var packet = slots[index];
             if (Long.compareUnsigned(packet.extendedSequence(), beforeExtendedSequence) < 0) {
                 selected.add(packet);
                 if (selected.size() == maxPackets) {

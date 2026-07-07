@@ -174,7 +174,7 @@ public final class AudioCaptureRing {
         if (length == 0) {
             return 0;
         }
-        var write = writeCursor.getAcquire();
+        var write = writeCursor.get();
         var read = readCursor.getAcquire();
         if (capacity - (write - read) < length) {
             return 0;
@@ -212,7 +212,7 @@ public final class AudioCaptureRing {
         if (length == 0) {
             return 0;
         }
-        var read = readCursor.getAcquire();
+        var read = readCursor.get();
         var write = writeCursor.getAcquire();
         if (write - read < length) {
             return 0;

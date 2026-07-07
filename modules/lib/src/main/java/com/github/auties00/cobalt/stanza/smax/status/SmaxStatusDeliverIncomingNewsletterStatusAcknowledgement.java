@@ -22,7 +22,10 @@ import java.util.Objects;
  * shape stays symmetric with the sibling
  * {@link com.github.auties00.cobalt.stanza.smax.message.SmaxMessageDeliverNewsletterAcknowledgement}
  * even though no negative-ack variant exists yet.
+ *
+ * @deprecated superseded by the general newsletter-status path ({@code NewsletterStatusStreamHandler}).
  */
+@Deprecated
 public sealed interface SmaxStatusDeliverIncomingNewsletterStatusAcknowledgement extends SmaxStanza.Request
         permits SmaxStatusDeliverIncomingNewsletterStatusAcknowledgement.SuccessAck {
 

@@ -94,10 +94,19 @@ public record CallDeviceJid(Jid jid, CallJidDomainType domainType) {
      * Returns a {@code CallDeviceJid} wrapping the given {@link Jid}, deriving its
      * domain-type from the JID's server domain.
      *
-     * <p>The domain-type is resolved from the {@linkplain Jid#server() server}'s
-     * {@link JidServer#type() type} via {@link CallJid#domainOf(JidServer.Type)} and must
-     * be device-callable.
+     * <p>The address is first adapted into a {@link CallJid} carrying the
+     * {@link CallJidUseCase#DEVICE device} use-case, which both resolves the domain-type
+     * from the {@linkplain Jid#server() server}'s {@link JidServer#type() type} and
+     * attaches the structural use-case the native engine's
+     * {@code wa_call_device_jid_create} unconditionally assigns to a device JID; the
+     * resolved domain-type must be device-callable.
      *
+     * @implNote This implementation routes through {@link CallJid#of(Jid, CallJidUseCase)}
+     *           with {@link CallJidUseCase#DEVICE} rather than resolving only the
+     *           domain-type, so the engine device use-case ({@code 5}) is classified for
+     *           every live device address exactly as {@code wa_call_device_jid_create}
+     *           stamps it, regardless of whether the wrapped JID carries an explicit
+     *           device component.
      * @param jid the device-bearing JID to wrap; never {@code null}
      * @return a {@code CallDeviceJid} for the given JID
      * @throws NullPointerException     if {@code jid} is {@code null}
@@ -106,8 +115,8 @@ public record CallDeviceJid(Jid jid, CallJidDomainType domainType) {
      */
     public static CallDeviceJid of(Jid jid) {
         Objects.requireNonNull(jid, "jid cannot be null");
-        var domainType = CallJid.domainOf(jid.server().type());
-        return new CallDeviceJid(jid, domainType);
+        var callJid = CallJid.of(jid, CallJidUseCase.DEVICE);
+        return new CallDeviceJid(callJid.jid(), callJid.domainType());
     }
 
     /**

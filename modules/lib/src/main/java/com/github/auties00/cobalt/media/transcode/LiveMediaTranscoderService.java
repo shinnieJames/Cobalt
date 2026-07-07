@@ -2,6 +2,8 @@ package com.github.auties00.cobalt.media.transcode;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppMediaException;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.media.MediaPayload;
 import com.github.auties00.cobalt.media.transcode.audio.AudioPipeline;
@@ -25,6 +27,13 @@ import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.sync.action.media.StickerAction;
 import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncAction;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.VideoTranscoderEvent;
+import com.github.auties00.cobalt.wam.event.VideoTranscoderEventBuilder;
+import com.github.auties00.cobalt.wam.type.VideoTranscoderAlgorithmType;
+import com.github.auties00.cobalt.wam.type.VideoTranscoderResultType;
+import com.github.auties00.cobalt.wam.type.VideoTranscoderSourceFormatType;
+import com.github.auties00.cobalt.wam.type.VideoTranscoderTargetFormatType;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -33,6 +42,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -67,11 +77,56 @@ public final class LiveMediaTranscoderService implements MediaTranscoderService 
     private static final String SOURCE_SPILL_SUFFIX = ".tmp";
 
     /**
+     * Holds the target H.264 bitrate in bits per second reported as
+     * {@code targetVideoBitRate} for the
+     * {@link SettingsSyncAction.MediaQualitySetting#STANDARD} preset.
+     *
+     * <p>Mirrors the constant {@link VideoPipeline} encodes with so the committed
+     * {@link VideoTranscoderEvent} reflects the actual output bitrate.
+     */
+    private static final long VIDEO_BITRATE_STANDARD = 1_000_000;
+
+    /**
+     * Holds the target H.264 bitrate in bits per second reported as
+     * {@code targetVideoBitRate} for the
+     * {@link SettingsSyncAction.MediaQualitySetting#HD} preset.
+     */
+    private static final long VIDEO_BITRATE_HD = 3_000_000;
+
+    /**
+     * Holds the target AAC bitrate in bits per second reported as
+     * {@code targetAudioBitRate} for the
+     * {@link SettingsSyncAction.MediaQualitySetting#STANDARD} preset.
+     */
+    private static final long AUDIO_BITRATE_STANDARD = 128_000;
+
+    /**
+     * Holds the target AAC bitrate in bits per second reported as
+     * {@code targetAudioBitRate} for the
+     * {@link SettingsSyncAction.MediaQualitySetting#HD} preset.
+     */
+    private static final long AUDIO_BITRATE_HD = 192_000;
+
+    /**
+     * Holds the number of milliseconds in one second, used to encode the
+     * playback-duration seconds carried by a {@link VideoMessage} as the
+     * millisecond-domain {@code sourceDuration} and {@code targetDuration}
+     * {@link Instant} timers of the committed {@link VideoTranscoderEvent}.
+     */
+    private static final long MILLIS_PER_SECOND = 1_000L;
+
+    /**
      * The owning client, consulted for the media-upload quality preference on
      * every channel dispatch and threaded into the pipelines that need
      * session-level state.
      */
     private final LinkedWhatsAppClient client;
+
+    /**
+     * The WAM telemetry sink that the video branch commits a
+     * {@link VideoTranscoderEvent} to after every transcode attempt.
+     */
+    private final WamService wamService;
 
     /**
      * The image transcoder.
@@ -123,20 +178,23 @@ public final class LiveMediaTranscoderService implements MediaTranscoderService 
      * @param mediaConnectionService the CDN credentials service threaded into the
      *                               text pipeline for link-preview thumbnail
      *                               uploads; must not be {@code null}
+     * @param wamService             the WAM telemetry sink the video branch commits a
+     *                               {@link VideoTranscoderEvent} to; must not be {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public LiveMediaTranscoderService(LinkedWhatsAppClient client, ABPropsService abPropsService,
-                                      MediaConnectionService mediaConnectionService) {
+                                      MediaConnectionService mediaConnectionService, WamService wamService) {
         this.client = Objects.requireNonNull(client, "client");
         Objects.requireNonNull(abPropsService, "abPropsService");
         Objects.requireNonNull(mediaConnectionService, "mediaConnectionService");
+        this.wamService = Objects.requireNonNull(wamService, "wamService");
         this.imagePipeline = new ImagePipeline();
         this.videoPipeline = new VideoPipeline();
         this.audioPipeline = new AudioPipeline();
         this.pttPipeline = new PttPipeline();
         this.stickerPipeline = new StickerPipeline();
         this.documentPipeline = new DocumentPipeline();
-        this.textPipeline = new TextPipeline(client, abPropsService, mediaConnectionService);
+        this.textPipeline = new TextPipeline(client, abPropsService, mediaConnectionService, wamService);
     }
 
     /**
@@ -305,11 +363,12 @@ public final class LiveMediaTranscoderService implements MediaTranscoderService 
      * <p>Resolves the media-upload quality preference from the store, defaulting
      * to {@link SettingsSyncAction.MediaQualitySetting#STANDARD} when unset, and
      * passes it to the image, video, and non-voice audio pipelines that honour it.
-     * Voice notes route to {@link PttPipeline} and stickers to
-     * {@link StickerPipeline}, neither of which takes a quality argument. The
-     * {@code channel} is not closed by this method. The {@link DocumentMessage}
-     * and pass-through branches never reach this dispatch and fail fast with an
-     * {@link IllegalStateException}.
+     * The video branch routes through {@link #transcodeVideo} so a
+     * {@link VideoTranscoderEvent} is committed for the transcode. Voice notes route
+     * to {@link PttPipeline} and stickers to {@link StickerPipeline}, neither of which
+     * takes a quality argument. The {@code channel} is not closed by this method. The
+     * {@link DocumentMessage} and pass-through branches never reach this dispatch and
+     * fail fast with an {@link IllegalStateException}.
      *
      * @param provider the upload target
      * @param channel  the source channel; not closed by this method
@@ -322,7 +381,7 @@ public final class LiveMediaTranscoderService implements MediaTranscoderService 
                 .orElse(SettingsSyncAction.MediaQualitySetting.STANDARD);
         return switch (provider) {
             case ImageMessage _ -> imagePipeline.run(provider, channel, quality);
-            case VideoMessage _ -> videoPipeline.run(provider, channel, quality);
+            case VideoMessage video -> transcodeVideo(video, channel, quality);
             case AudioMessage audio when audio.ptt() -> pttPipeline.run(provider, channel);
             case AudioMessage _ -> audioPipeline.run(provider, channel, quality);
             case StickerMessage _, StickerAction _, Sticker _ ->
@@ -334,6 +393,131 @@ public final class LiveMediaTranscoderService implements MediaTranscoderService 
                     throw new IllegalStateException(
                             "channel dispatch does not apply to " + provider.getClass());
         };
+    }
+
+    /**
+     * Transcodes a video through {@link VideoPipeline} and commits a
+     * {@link VideoTranscoderEvent} describing the source and the encoded output.
+     *
+     * <p>Source metadata is snapshotted before the pipeline mutates {@code video}: the
+     * raw byte count of {@code channel} as {@code sourceFileSize}, the declared source
+     * mimetype, whether the send is a looping GIF as the {@code sourceFormat}
+     * ({@link VideoTranscoderSourceFormatType#GIF} versus
+     * {@link VideoTranscoderSourceFormatType#VIDEO}), and the caller-supplied
+     * pre-transcode dimensions and duration when present. After a successful run the
+     * pipeline has overwritten {@code video}'s dimensions, duration, and media size with
+     * the encoded values, which are read back as the {@code target} metadata; the encoded
+     * dimensions and duration also stand in for the {@code source} equivalents when the
+     * caller did not supply them, since the transcode preserves duration and the encoded
+     * frame matches the source unless the {@link SettingsSyncAction.MediaQualitySetting}
+     * cap rescales it. The target video and audio bitrates are the same quality-preset
+     * constants {@link VideoPipeline} encodes with. The transcode wall time is measured
+     * across the {@link VideoPipeline#run} call as {@code transcoderT}. A failed transcode
+     * commits the event with {@link VideoTranscoderResultType#FAILED} before the failure
+     * propagates so the metric accounts for every attempt.
+     *
+     * @implNote This implementation reports {@code transcoderAlgorithm} as
+     * {@link VideoTranscoderAlgorithmType#WEB_MEDIA_WORKER}, the WA Web value for the
+     * off-main-thread software transcode path, because Cobalt's libav pipeline is the
+     * functional analogue and never runs the passthrough, edit, or video-composition
+     * paths whose flags are therefore always {@code false}.
+     *
+     * @param video   the video upload target, mutated in place by the pipeline
+     * @param channel the source channel, read but not closed by this method
+     * @param quality the quality preset selecting the target bitrates
+     * @return the encoded MP4 payload
+     * @throws WhatsAppMediaException.Processing if the pipeline fails
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaDataUtils", exports = "processRawAudioVideo", adaptation = WhatsAppAdaptation.ADAPTED)
+    private MediaPayload transcodeVideo(VideoMessage video, FileChannel channel,
+                                        SettingsSyncAction.MediaQualitySetting quality)
+            throws WhatsAppMediaException.Processing {
+        var hd = quality == SettingsSyncAction.MediaQualitySetting.HD;
+        var builder = new VideoTranscoderEventBuilder()
+                .transcoderAlgorithm(VideoTranscoderAlgorithmType.WEB_MEDIA_WORKER)
+                .transcoderIsPassthrough(false)
+                .transcoderHasEdits(false)
+                .transcoderContainsVideocomposition(false)
+                .sourceFormat(video.gifPlayback()
+                        ? VideoTranscoderSourceFormatType.GIF
+                        : VideoTranscoderSourceFormatType.VIDEO)
+                .targetFormat(VideoTranscoderTargetFormatType.VIDEO)
+                .targetVideoBitRate((double) (hd ? VIDEO_BITRATE_HD : VIDEO_BITRATE_STANDARD))
+                .targetAudioBitRate((double) (hd ? AUDIO_BITRATE_HD : AUDIO_BITRATE_STANDARD));
+        var sourceFileSize = channelSize(channel);
+        if (sourceFileSize >= 0L) {
+            builder.sourceFileSize((double) sourceFileSize);
+        }
+        video.mimetype().ifPresent(builder::sourceMimeType);
+        var preWidth = video.width();
+        var preHeight = video.height();
+        var preSeconds = video.seconds();
+        builder.startTranscoderT();
+        MediaPayload payload;
+        try {
+            payload = videoPipeline.run(video, channel, quality);
+        } catch (WhatsAppMediaException.Processing failure) {
+            builder.stopTranscoderT();
+            preWidth.ifPresent(w -> builder.sourceWidth((double) w));
+            preHeight.ifPresent(h -> builder.sourceHeight((double) h));
+            preSeconds.ifPresent(s -> builder.sourceDuration(durationInstant(s)));
+            builder.transcoderResult(VideoTranscoderResultType.FAILED);
+            wamService.commit(builder.build());
+            throw failure;
+        }
+        builder.stopTranscoderT();
+        var targetWidth = video.width();
+        var targetHeight = video.height();
+        var targetSeconds = video.seconds();
+        targetWidth.ifPresent(w -> builder.targetWidth((double) w));
+        targetHeight.ifPresent(h -> builder.targetHeight((double) h));
+        targetSeconds.ifPresent(s -> builder.targetDuration(durationInstant(s)));
+        builder.targetFileSize((double) payload.length());
+        (preWidth.isPresent() ? preWidth : targetWidth)
+                .ifPresent(w -> builder.sourceWidth((double) w));
+        (preHeight.isPresent() ? preHeight : targetHeight)
+                .ifPresent(h -> builder.sourceHeight((double) h));
+        (preSeconds.isPresent() ? preSeconds : targetSeconds)
+                .ifPresent(s -> builder.sourceDuration(durationInstant(s)));
+        builder.transcoderResult(VideoTranscoderResultType.SUCCEEDED);
+        wamService.commit(builder.build());
+        return payload;
+    }
+
+    /**
+     * Returns the size in bytes of {@code channel}, or {@code -1} when the size cannot be
+     * read.
+     *
+     * <p>The size feeds the {@code sourceFileSize} field of the committed
+     * {@link VideoTranscoderEvent}; a read failure yields {@code -1} so the caller omits
+     * the field rather than reporting a fabricated size, and never fails the transcode
+     * over a telemetry read.
+     *
+     * @param channel the source channel to size
+     * @return the channel size in bytes, or {@code -1} when it cannot be read
+     */
+    private static long channelSize(FileChannel channel) {
+        try {
+            return channel.size();
+        } catch (IOException e) {
+            return -1L;
+        }
+    }
+
+    /**
+     * Encodes a playback duration in seconds as the millisecond-domain {@link Instant}
+     * timer expected by the {@code sourceDuration} and {@code targetDuration} fields of
+     * {@link VideoTranscoderEvent}.
+     *
+     * <p>The WAM timer wire encoding treats the {@link Instant}'s epoch-millisecond value
+     * as the elapsed duration, so a duration of {@code seconds} seconds maps to
+     * {@link Instant#ofEpochMilli(long)} of {@code seconds * }{@value #MILLIS_PER_SECOND}.
+     *
+     * @param seconds the playback duration in seconds
+     * @return the duration encoded as a millisecond-domain instant
+     */
+    private static Instant durationInstant(int seconds) {
+        return Instant.ofEpochMilli(seconds * MILLIS_PER_SECOND);
     }
 
     /**

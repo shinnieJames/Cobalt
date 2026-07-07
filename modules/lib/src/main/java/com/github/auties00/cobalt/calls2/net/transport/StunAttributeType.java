@@ -193,6 +193,12 @@ public enum StunAttributeType {
     WA_XOR_MAPPED_ADDRESS(0x0016);
 
     /**
+     * Caches the constant array so the per-attribute {@link #ofValue(int)} decode scan does not pay the
+     * defensive-clone cost of {@link #values()} on every STUN attribute parsed.
+     */
+    private static final StunAttributeType[] VALUES = values();
+
+    /**
      * Holds the sixteen-bit STUN attribute type value as it appears on the wire.
      */
     private final int value;
@@ -244,7 +250,7 @@ public enum StunAttributeType {
      */
     public static StunAttributeType ofValue(int value) {
         var masked = value & 0xFFFF;
-        for (var type : values()) {
+        for (var type : VALUES) {
             if (type.value == masked) {
                 return type;
             }

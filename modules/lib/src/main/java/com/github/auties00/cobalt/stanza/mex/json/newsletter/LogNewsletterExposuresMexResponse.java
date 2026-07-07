@@ -14,7 +14,14 @@ import java.util.Optional;
  * <p>Acts as a presence marker: the relay's reply carries no field of interest, so this type
  * exposes no getters and a marker instance signals only that the
  * {@code data.xwa2_newsletter_log_exposures} root was present in the reply.
+ *
+ * @deprecated Intentionally not wired: exposure logging is genuinely fire-and-forget. WhatsApp Web
+ * awaits the mutation internally but discards its result and swallows any error, so
+ * {@code LiveLinkedWhatsAppClient.logNewsletterExposures} dispatches the request with
+ * {@code sendNodeWithNoResponse} and never parses this response. It is retained only to document the
+ * reply shape.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WAWebMexLogNewsletterExposuresJob")
 public final class LogNewsletterExposuresMexResponse implements MexStanza.Response.Json {
 

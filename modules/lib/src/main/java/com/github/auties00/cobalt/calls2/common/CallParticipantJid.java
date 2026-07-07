@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.calls2.common;
 
+import com.github.auties00.cobalt.calls2.core.control.PrivacyToken;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.util.ArrayList;
@@ -23,11 +24,11 @@ import java.util.Optional;
  * {@link #devices()} is therefore always the primary device and is also returned by
  * {@link #primaryDevice()}.
  *
- * <p>The privacy token and bot options are opaque binary payloads the engine forwards
- * uninterpreted; their internal layout is owned by the privacy-token and bot
- * subsystems and is not modeled here. They are defensively copied on construction and
- * on access so this value object stays immutable. Instances compare by user JID, device
- * list, and the byte contents of both payloads.
+ * <p>The privacy token is carried as an immutable {@link PrivacyToken}; the bot options are
+ * an opaque binary payload the engine forwards uninterpreted, whose internal layout is owned
+ * by the bot subsystem and is not modeled here. The bot options are defensively copied on
+ * construction and on access so this value object stays immutable. Instances compare by user
+ * JID, device list, the privacy token, and the byte contents of the bot options.
  *
  * @implNote This implementation composes the {@code wa_call_participant_jid} aggregate
  *           (0xa0 bytes) from {@code call_participant_jid.cc}: the user JID (+0), the
@@ -39,12 +40,12 @@ import java.util.Optional;
  * @param userJid      the participant's user JID; never {@code null}
  * @param devices      the participant's devices, primary first; never {@code null} and
  *                     never empty
- * @param privacyToken the opaque privacy-token blob, or {@code null} if absent
+ * @param privacyToken the opaque {@link PrivacyToken}, or {@code null} if absent
  * @param botOptions   the opaque bot-options blob, or {@code null} if absent
  * @see CallJid
  * @see CallDeviceJid
  */
-public record CallParticipantJid(Jid userJid, List<CallDeviceJid> devices, byte[] privacyToken, byte[] botOptions) {
+public record CallParticipantJid(Jid userJid, List<CallDeviceJid> devices, PrivacyToken privacyToken, byte[] botOptions) {
     /**
      * Canonicalizes the record components, normalizing the device list and defensively
      * copying the opaque payloads.
@@ -62,7 +63,6 @@ public record CallParticipantJid(Jid userJid, List<CallDeviceJid> devices, byte[
         Objects.requireNonNull(userJid, "userJid cannot be null");
         Objects.requireNonNull(devices, "devices cannot be null");
         devices = normalizeDevices(userJid, devices);
-        privacyToken = privacyToken == null ? null : privacyToken.clone();
         botOptions = botOptions == null ? null : botOptions.clone();
     }
 
@@ -124,15 +124,15 @@ public record CallParticipantJid(Jid userJid, List<CallDeviceJid> devices, byte[
     /**
      * Returns the opaque privacy-token blob, if present.
      *
-     * <p>The returned array, when present, is a defensive copy; mutating it does not
-     * affect this participant.
+     * <p>The returned array, when present, is a defensive copy extracted from the
+     * {@link PrivacyToken}; mutating it does not affect this participant.
      *
      * @return an {@code Optional} holding a copy of the privacy-token bytes, or empty if
      *         no privacy token is set
      */
     public Optional<byte[]> privacyTokenBytes() {
         return Optional.ofNullable(privacyToken)
-                .map(byte[]::clone);
+                .map(PrivacyToken::value);
     }
 
     /**
@@ -147,19 +147,6 @@ public record CallParticipantJid(Jid userJid, List<CallDeviceJid> devices, byte[
     public Optional<byte[]> botOptionsBytes() {
         return Optional.ofNullable(botOptions)
                 .map(byte[]::clone);
-    }
-
-    /**
-     * Returns the raw privacy-token blob backing this participant.
-     *
-     * <p>This accessor overrides the implicit record accessor to return a defensive copy
-     * so the stored array cannot be mutated through the returned reference.
-     *
-     * @return a copy of the privacy-token bytes, or {@code null} if no privacy token is
-     *         set
-     */
-    public byte[] privacyToken() {
-        return privacyToken == null ? null : privacyToken.clone();
     }
 
     /**
@@ -213,20 +200,20 @@ public record CallParticipantJid(Jid userJid, List<CallDeviceJid> devices, byte[
         return obj == this || (obj instanceof CallParticipantJid that
                 && this.userJid.equals(that.userJid)
                 && this.devices.equals(that.devices)
-                && Arrays.equals(this.privacyToken, that.privacyToken)
+                && Objects.equals(this.privacyToken, that.privacyToken)
                 && Arrays.equals(this.botOptions, that.botOptions));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(userJid, devices, Arrays.hashCode(privacyToken), Arrays.hashCode(botOptions));
+        return Objects.hash(userJid, devices, privacyToken, Arrays.hashCode(botOptions));
     }
 
     @Override
     public String toString() {
         return "CallParticipantJid[userJid=" + userJid
                 + ", devices=" + devices
-                + ", privacyTokenLen=" + (privacyToken == null ? -1 : privacyToken.length)
+                + ", privacyTokenLen=" + (privacyToken == null ? -1 : privacyToken.length())
                 + ", botOptionsLen=" + (botOptions == null ? -1 : botOptions.length)
                 + ']';
     }

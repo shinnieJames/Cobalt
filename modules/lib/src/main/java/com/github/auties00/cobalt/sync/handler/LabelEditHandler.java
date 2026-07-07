@@ -2,9 +2,11 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientType;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.device.pairing.LinkedPrimaryPlatform;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.LabelBuilder;
 import com.github.auties00.cobalt.model.sync.mutation.MutationApplicationResult;
@@ -13,6 +15,18 @@ import com.github.auties00.cobalt.model.sync.action.contact.LabelEditAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSettingsStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.MdLabelSyncTrackingEventBuilder;
+import com.github.auties00.cobalt.wam.type.LabelSyncDeviceRoleType;
+import com.github.auties00.cobalt.wam.type.LabelSyncDirectionType;
+import com.github.auties00.cobalt.wam.type.LabelSyncResultType;
+import com.github.auties00.cobalt.wam.type.LabelSyncTypeEnum;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * Applies the {@code label_edit} app-state sync action that creates, edits or
@@ -37,11 +51,56 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 public final class LabelEditHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs a new singleton {@link LabelEditHandler}.
+     * Holds the fixed HMAC key WA Web salts every label-sync hash with.
+     *
+     * <p>Matches the {@code WAWebWamLabelSyncTrackingReporter} module
+     * constant {@code "whatsapp_label_sync_tracking_v1"}; the value is the
+     * raw UTF-8 key material for the {@code HmacSHA256} computed in
+     * {@link #labelSyncHash(String)}.
+     */
+    private static final String LABEL_SYNC_HASH_KEY = "whatsapp_label_sync_tracking_v1";
+
+    /**
+     * Holds the WAM telemetry service used to commit the multi-device
+     * {@code MdLabelSyncTracking} event, or {@code null} when the handler is
+     * constructed without a telemetry sink.
+     *
+     * <p>The registry-wired instance is built with a live {@link WamService};
+     * the no-argument constructor leaves this {@code null} so unit tests can
+     * exercise the mutation logic without a telemetry backend, in which case
+     * {@link #emitLabelSyncTracking(LinkedWhatsAppClient, String, LabelSyncResultType, boolean, Integer)}
+     * is a no-op.
+     */
+    private final WamService wamService;
+
+    /**
+     * Constructs a new {@link LabelEditHandler} without a telemetry sink.
+     *
+     * <p>Equivalent to {@link #LabelEditHandler(WamService)} with a
+     * {@code null} argument; the {@code MdLabelSyncTracking} WAM event is not
+     * emitted for handlers built this way.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public LabelEditHandler() {
+        this(null);
+    }
 
+    /**
+     * Constructs a new {@link LabelEditHandler} bound to the given WAM
+     * telemetry service.
+     *
+     * @implNote
+     * This implementation injects {@link WamService} so the
+     * {@code MdLabelSyncTracking} emission that WA Web performs through the
+     * global {@code WAWebWamLabelSyncTrackingReporter} singleton is testable
+     * and can be suppressed by passing {@code null}.
+     *
+     * @param wamService the WAM telemetry service used to commit the
+     *                   label-sync tracking event, or {@code null} to
+     *                   suppress the emission
+     */
+    public LabelEditHandler(WamService wamService) {
+        this.wamService = wamService;
     }
 
     /**
@@ -82,6 +141,14 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
      * otherwise the row is upserted, merging into an existing {@link Label} in
      * place when one is found or building a new one via {@link LabelBuilder}.
      *
+     * <p>Every terminal outcome that reaches a valid label id commits an
+     * {@code MdLabelSyncTracking} telemetry event through
+     * {@link #emitLabelSyncTracking(LinkedWhatsAppClient, String, LabelSyncResultType, boolean, Integer)}:
+     * the missing-action-payload arm reports
+     * {@link LabelSyncResultType#FAILED_MISSING_ACTION}, and the delete,
+     * server-assigned and upsert arms report
+     * {@link LabelSyncResultType#SUCCESS}.
+     *
      * @implNote
      * This implementation classifies a missing label-id slot as
      * {@link MutationApplicationResult#malformed()} before parsing to avoid an
@@ -109,11 +176,13 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
         }
 
         if (!(mutation.value().flatMap(sav -> sav.action()).orElse(null) instanceof LabelEditAction action)) {
+            emitLabelSyncTracking(client, labelId, LabelSyncResultType.FAILED_MISSING_ACTION, false, null);
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
         if (action.deleted()) {
             client.store().settingsStore().removeLabel(labelId);
+            emitLabelSyncTracking(client, labelId, LabelSyncResultType.SUCCESS, false, predefinedId(action));
             return MutationApplicationResult.success();
         }
 
@@ -124,6 +193,7 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
         if (type == LabelEditAction.ListType.SERVER_ASSIGNED) {
             // TODO: persist the server-assigned label id to predefined id mapping; Cobalt has
             //       no equivalent store field yet, so the predefinedId association is dropped.
+            emitLabelSyncTracking(client, labelId, LabelSyncResultType.SUCCESS, true, predefinedId(action));
             return MutationApplicationResult.success();
         }
 
@@ -158,7 +228,137 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
             client.store().settingsStore().addLabel(label);
         }
 
+        emitLabelSyncTracking(client, labelId, LabelSyncResultType.SUCCESS, true, predefinedId(action));
         return MutationApplicationResult.success();
+    }
+
+    /**
+     * Extracts the optional predefined-label id carried by the action as a
+     * boxed {@link Integer}.
+     *
+     * @param action the label-edit action
+     * @return the predefined id, or {@code null} when the action carries none
+     */
+    private static Integer predefinedId(LabelEditAction action) {
+        return action.predefinedId().isPresent() ? action.predefinedId().getAsInt() : null;
+    }
+
+    /**
+     * Commits the {@code MdLabelSyncTracking} telemetry event for one applied
+     * {@code label_edit} mutation.
+     *
+     * <p>The emission mirrors the receiver arm of WA Web's
+     * {@code WAWebWamLabelSyncTrackingReporter.logLabelSyncEvent}: it is gated
+     * on the linked primary being a WhatsApp Business (SMB) client, tags the
+     * event as a {@link LabelSyncTypeEnum#LABEL_EDIT} sync in the
+     * {@link LabelSyncDirectionType#RECEIVER} direction, records the
+     * device-derived {@link #deviceRole(LinkedWhatsAppClient) device role},
+     * the current wall-clock millisecond timestamp, and the salted
+     * {@link #labelSyncHash(String) label hash}. The predefined id is written
+     * only when the action carries one. It is a no-op when no
+     * {@link WamService} is bound.
+     *
+     * @param client       the client whose store supplies the SMB and
+     *                     device-role signals
+     * @param labelId      the server-assigned label id being synced
+     * @param result       the classified outcome of the mutation
+     * @param isLabeled    whether the mutation left the label present
+     *                     ({@code true}) or absent ({@code false})
+     * @param predefinedId the predefined-label id, or {@code null} when absent
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamLabelSyncTrackingReporter", exports = "logLabelSyncEvent", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitLabelSyncTracking(LinkedWhatsAppClient client, String labelId, LabelSyncResultType result, boolean isLabeled, Integer predefinedId) {
+        if (wamService == null || !isSmb(client)) {
+            return;
+        }
+
+        var builder = new MdLabelSyncTrackingEventBuilder()
+                .labelSyncHash(labelSyncHash(labelId))
+                .labelSyncType(LabelSyncTypeEnum.LABEL_EDIT)
+                .labelSyncDirection(LabelSyncDirectionType.RECEIVER)
+                .labelSyncResult(result)
+                .labelSyncIsLabeled(isLabeled)
+                .labelSyncTimestamp(Instant.now().toEpochMilli())
+                .labelSyncDeviceRole(deviceRole(client));
+        if (predefinedId != null) {
+            builder.labelSyncPredefinedId(predefinedId);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Computes the salted label hash WA Web reports for the given label id.
+     *
+     * <p>The digest is the lowercase hex {@code HmacSHA256} of the JSON array
+     * {@snippet :
+     *     ["label_edit", labelId]
+     * } keyed by the fixed secret {@value #LABEL_SYNC_HASH_KEY}, mirroring WA
+     * Web's {@code generateLabelEditHash}. A failure to compute the MAC yields
+     * the {@code "hash_generation_failed"} sentinel WA Web falls back to.
+     *
+     * @param labelId the server-assigned label id
+     * @return the lowercase hex-encoded HMAC-SHA256 digest, or
+     *         {@code "hash_generation_failed"} on error
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamLabelSyncTrackingReporter", exports = "generateLabelEditHash", adaptation = WhatsAppAdaptation.DIRECT)
+    private static String labelSyncHash(String labelId) {
+        try {
+            var mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(LABEL_SYNC_HASH_KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            var payload = "[\"" + LabelEditAction.ACTION_NAME + "\",\"" + labelId + "\"]";
+            var digest = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            var hex = new StringBuilder(digest.length * 2);
+            for (var b : digest) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            return "hash_generation_failed";
+        }
+    }
+
+    /**
+     * Derives the reported label-sync device role from the bound client type.
+     *
+     * <p>A {@link LinkedWhatsAppClientType#WEB} companion reports
+     * {@link LabelSyncDeviceRoleType#COMPANION} (the value WA Web hardcodes),
+     * while a mobile primary reports {@link LabelSyncDeviceRoleType#PRIMARY}.
+     *
+     * @implNote
+     * This implementation derives the role from
+     * {@link LinkedWhatsAppClientType} rather than hardcoding
+     * {@link LabelSyncDeviceRoleType#COMPANION} as WA Web's reporter does,
+     * because Cobalt can drive the {@code label_edit} receiver arm as either a
+     * companion (web) or the primary (mobile) reimplementation.
+     *
+     * @param client the client whose type selects the role
+     * @return the label-sync device role
+     */
+    private static LabelSyncDeviceRoleType deviceRole(LinkedWhatsAppClient client) {
+        return client.store().accountStore().clientType() == LinkedWhatsAppClientType.WEB
+                ? LabelSyncDeviceRoleType.COMPANION
+                : LabelSyncDeviceRoleType.PRIMARY;
+    }
+
+    /**
+     * Returns whether the linked primary device runs a WhatsApp Business
+     * (SMB) client.
+     *
+     * <p>The {@code MdLabelSyncTracking} event is reported only for SMB
+     * clients, mirroring the {@code WAWebMobilePlatforms.isSMB} gate WA Web's
+     * reporter applies before committing.
+     *
+     * @param client the client whose account store carries the primary
+     *               platform
+     * @return {@code true} when the primary platform is a Business variant,
+     *         {@code false} otherwise or when no primary platform is recorded
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMobilePlatforms", exports = "isSMB", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static boolean isSmb(LinkedWhatsAppClient client) {
+        return client.store().accountStore().primaryPlatform()
+                .map(LinkedPrimaryPlatform::isBusiness)
+                .orElse(false);
     }
 
 }

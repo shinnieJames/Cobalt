@@ -264,8 +264,7 @@ public record AcceptStanza(String callId, Jid callCreator, int netMedium, List<C
         var videoCodecs = stanza.streamChildren(VIDEO_ELEMENT)
                 .flatMap(video -> CallCodecDescriptor.of(video).stream())
                 .toList();
-        var encKeys = stanza.getChildren(ENC_ELEMENT)
-                .stream()
+        var encKeys = stanza.streamChildren(ENC_ELEMENT)
                 .toList();
         var media = stanza.getChild(CallMediaDescriptor.ELEMENT).flatMap(CallMediaDescriptor::of).orElse(null);
         var encOptions = stanza.getChild(CallEncOptions.ELEMENT).flatMap(CallEncOptions::of).orElse(null);

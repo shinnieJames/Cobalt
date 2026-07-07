@@ -80,6 +80,15 @@ public final class LastMinuteBuffer {
     private int count;
 
     /**
+     * Running sum of the amounts held across the live slots.
+     *
+     * <p>Maintained incrementally as samples fold into a slot, a slot opens, or the oldest slot is
+     * overwritten, so {@link #sum()} reads it directly rather than re-scanning the ring; it always equals
+     * the total the per-slot scan would compute.
+     */
+    private long runningTotal;
+
+    /**
      * Constructs an empty last-minute buffer with no live slots.
      *
      * <p>The first {@link #insert(long, long)} opens the first slot at its sample's
@@ -115,6 +124,7 @@ public final class LastMinuteBuffer {
         var current = (head + count - 1) % SLOT_COUNT;
         if (nowMillis - timestamps[current] < BUCKET_MILLIS) {
             samples[current] += amount;
+            runningTotal += amount;
         } else {
             open(nowMillis, amount);
         }
@@ -126,11 +136,7 @@ public final class LastMinuteBuffer {
      * @return the total accumulated over the trailing window
      */
     public long sum() {
-        var total = 0L;
-        for (var i = 0; i < count; i++) {
-            total += samples[(head + i) % SLOT_COUNT];
-        }
-        return total;
+        return runningTotal;
     }
 
     /**
@@ -156,12 +162,14 @@ public final class LastMinuteBuffer {
      */
     private void open(long nowMillis, long amount) {
         var slot = (head + count) % SLOT_COUNT;
-        samples[slot] = amount;
-        timestamps[slot] = nowMillis;
         if (count < SLOT_COUNT) {
+            runningTotal += amount;
             count++;
         } else {
+            runningTotal += amount - samples[slot];
             head = (head + 1) % SLOT_COUNT;
         }
+        samples[slot] = amount;
+        timestamps[slot] = nowMillis;
     }
 }

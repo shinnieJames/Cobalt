@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.calls2.dsp;
 
+import java.util.NavigableMap;
 import java.util.Objects;
-import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
@@ -54,7 +54,7 @@ public final class PacketBuffer {
      * within a non-wrapping run and reconciled across a rollover by the playout cursor discarding past
      * packets on insert.
      */
-    private final SortedMap<Integer, RtpAudioPacket> packets;
+    private final NavigableMap<Integer, RtpAudioPacket> packets;
 
     /**
      * The sequence number last extracted for playout, or {@code -1} before the first extract.
@@ -122,15 +122,14 @@ public final class PacketBuffer {
     public boolean insert(RtpAudioPacket packet) {
         Objects.requireNonNull(packet, "packet cannot be null");
         var seq = packet.sequenceNumber();
-        if (packets.containsKey(seq)) {
-            packetsDiscarded++;
-            return false;
-        }
         if (playoutCursor >= 0 && !NackTracker.isNewerSequenceNumber(seq, playoutCursor)) {
             packetsDiscarded++;
             return false;
         }
-        packets.put(seq, packet);
+        if (packets.putIfAbsent(seq, packet) != null) {
+            packetsDiscarded++;
+            return false;
+        }
         observeSpacing(packet);
         if (packets.size() > config.maxPacketsInBuffer()) {
             flushKeepingNewest();
@@ -172,10 +171,8 @@ public final class PacketBuffer {
      * @return the lowest-sequence buffered packet, or {@code null} if the buffer is empty
      */
     public RtpAudioPacket peekNext() {
-        if (packets.isEmpty()) {
-            return null;
-        }
-        return packets.get(packets.firstKey());
+        var entry = packets.firstEntry();
+        return entry == null ? null : entry.getValue();
     }
 
     /**
@@ -184,13 +181,12 @@ public final class PacketBuffer {
      * @return the lowest-sequence buffered packet, or {@code null} if the buffer is empty
      */
     public RtpAudioPacket extractNext() {
-        if (packets.isEmpty()) {
+        var entry = packets.pollFirstEntry();
+        if (entry == null) {
             return null;
         }
-        var seq = packets.firstKey();
-        var packet = packets.remove(seq);
-        playoutCursor = seq;
-        return packet;
+        playoutCursor = entry.getKey();
+        return entry.getValue();
     }
 
     /**

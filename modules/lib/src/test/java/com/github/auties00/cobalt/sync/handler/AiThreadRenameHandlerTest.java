@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.bot.AiThreadTitleBuilder;
 import com.github.auties00.cobalt.model.device.capabilities.DeviceCapabilities;
@@ -267,7 +268,7 @@ class AiThreadRenameHandlerTest {
         @DisplayName("builder emits a SET pending mutation at the canonical index with the new title")
         void buildsCorrect() {
             var botJid = Jid.of(BOT_JID_STRING);
-            var pending = new AiThreadRenameMutationFactory().getAiThreadRenameMutation(botJid, THREAD_ID, "My Title");
+            var pending = new AiThreadRenameMutationFactory(client, TestWamService.create(client)).getAiThreadRenameMutation(botJid, THREAD_ID, "My Title");
             var mutation = pending.mutation();
             assertEquals(SyncdOperation.SET, mutation.operation());
             assertEquals(AiThreadRenameAction.ACTION_VERSION, mutation.actionVersion());
@@ -281,7 +282,7 @@ class AiThreadRenameHandlerTest {
         void freshAttemptCount() {
             var botJid = Jid.of(BOT_JID_STRING);
             assertEquals(0,
-                    new AiThreadRenameMutationFactory().getAiThreadRenameMutation(botJid, THREAD_ID, "X").attemptCount());
+                    new AiThreadRenameMutationFactory(client, TestWamService.create(client)).getAiThreadRenameMutation(botJid, THREAD_ID, "X").attemptCount());
         }
     }
 

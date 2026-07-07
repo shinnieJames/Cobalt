@@ -212,7 +212,7 @@ public final class SmaxGetSMBMeteredMessagingCheckoutRequest implements SmaxStan
         if (!pendingCampaigns.isEmpty()) {
             var campaignChildren = new ArrayList<Stanza>();
             for (var entry : pendingCampaigns) {
-                campaignChildren.add(entry.toNode());
+                campaignChildren.add(entry.toStanza());
             }
             var pendingNode = new StanzaBuilder()
                     .description("pending_campaigns")

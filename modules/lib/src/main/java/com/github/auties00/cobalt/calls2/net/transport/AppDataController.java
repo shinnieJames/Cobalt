@@ -12,6 +12,8 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.util.ScheduledTask;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,7 +31,7 @@ import java.util.function.Consumer;
  * controller keeps a single outbound reaction live for a short window so it can be retransmitted against
  * packet loss, then clears it; it tracks one inbound reaction per participant and expires each after its
  * lifetime so a displayed overlay is taken down. The three housekeeping actions run as the
- * {@link AppDataTimerType} timers, each on its own virtual-thread {@link ScheduledTask}: a one-shot clear
+ * three self-clearing timers, each on its own virtual-thread {@link ScheduledTask}: a one-shot clear
  * of the outbound reaction, a periodic sweep of aged inbound reactions, and an optional periodic
  * retransmission of the live outbound reaction.
  *
@@ -45,7 +47,7 @@ import java.util.function.Consumer;
  * {@link #close()}, which cancels every timer.
  *
  * <p>The inbound observers may be supplied at construction (the fully wired constructor) or left as no-ops
- * and attached afterwards through {@link #attachReactionObserver(ReactionObserver)} and its siblings (the
+ * and attached afterwards through {@link #attachReactionObserver(BiConsumer)} and its siblings (the
  * channel-only constructor). The latter breaks the construction cycle between this controller, which is
  * built during the media-plane bring-up, and the in-call control units that observe it, which are built
  * later in the call lifecycle; it mirrors how the reaction control unit attaches its outbound send seam
@@ -56,7 +58,7 @@ import java.util.function.Consumer;
  * (fn11749), and {@code wa_app_data_controller_rx_reaction_clear_callback} (fn11750) of the wa-voip WASM
  * module {@code ff-tScznZ8P} ({@code system/src/transport/app_data_controller.cc}, a {@code 0x130}-byte
  * pool-allocated controller). The native create wires three call timers with type tags {@code 1}/{@code 2}/{@code 3}
- * ({@link AppDataTimerType}) and schedules the retransmission timer when reaction retransmission is
+ * and schedules the retransmission timer when reaction retransmission is
  * enabled ({@code call+0x22f62}, interval {@code call+0x22f5c}); {@code tx_reaction_clear} zeroes the
  * outbound reaction state at {@code controller+0x108}; {@code rx_reaction_clear} sweeps the participant
  * collection, clears each reaction older than a threshold, optionally notifies the app, and re-arms
@@ -162,14 +164,14 @@ public final class AppDataController implements AutoCloseable {
      *
      * <p>Receives the originating participant and the reaction; an expiry delivers an empty reaction so
      * the UI can take the overlay down. Defaults to a no-op and may be replaced once, after construction,
-     * through {@link #attachReactionObserver(ReactionObserver)} so a controller can be brought up before
+     * through {@link #attachReactionObserver(BiConsumer)} so a controller can be brought up before
      * the in-call control unit that observes it exists.
      *
      * <p>Volatile because the attach runs on the media-plane wiring thread while the inbound demux and the
      * rx-reaction-clear sweep read it on their own threads; the field is written at most once after
      * construction.
      */
-    private volatile ReactionObserver reactionObserver;
+    private volatile BiConsumer<Jid, Optional<ReactionInfo>> reactionObserver;
 
     /**
      * Observer notified, with the sending device, when an inbound live-transcription fragment arrives.
@@ -265,7 +267,7 @@ public final class AppDataController implements AutoCloseable {
      * @throws NullPointerException if any handler or the channel is {@code null}
      */
     public AppDataController(AppDataChannel channel,
-                            ReactionObserver reactionObserver,
+                            BiConsumer<Jid, Optional<ReactionInfo>> reactionObserver,
                             BiConsumer<Jid, LiveTranscriptionInfo> transcriptionObserver,
                             Consumer<E2eRekeyPayload> rekeyHandler,
                             Consumer<PeerFeedback> feedbackHandler,
@@ -284,7 +286,7 @@ public final class AppDataController implements AutoCloseable {
      *
      * <p>Every inbound observer defaults to a no-op, so a received reaction, transcription fragment, rekey
      * bundle, or peer feedback is decoded and demultiplexed but delivered nowhere until the matching
-     * observer is attached through {@link #attachReactionObserver(ReactionObserver)},
+     * observer is attached through {@link #attachReactionObserver(BiConsumer)},
      * {@link #attachTranscriptionObserver(BiConsumer)}, {@link #attachRekeyHandler(Consumer)}, or
      * {@link #attachFeedbackHandler(Consumer)}. This breaks the construction cycle between this controller
      * and the in-call control units that observe it: the controller is built during the media-plane
@@ -319,7 +321,7 @@ public final class AppDataController implements AutoCloseable {
      * @param reactionObserver the inbound reaction observer; never {@code null}
      * @throws NullPointerException if {@code reactionObserver} is {@code null}
      */
-    public void attachReactionObserver(ReactionObserver reactionObserver) {
+    public void attachReactionObserver(BiConsumer<Jid, Optional<ReactionInfo>> reactionObserver) {
         this.reactionObserver = Objects.requireNonNull(reactionObserver, "reactionObserver cannot be null");
     }
 
@@ -583,7 +585,7 @@ public final class AppDataController implements AutoCloseable {
     }
 
     /**
-     * Clears the outbound reaction state, the {@link AppDataTimerType#TX_REACTION_CLEAR} callback.
+     * Clears the outbound reaction state, the outbound-reaction clear timer callback.
      *
      * <p>Drops the live outbound reaction under the lock so it stops being retransmitted, matching the
      * native callback that zeroes the outbound reaction state at {@code controller+0x108}.
@@ -598,12 +600,12 @@ public final class AppDataController implements AutoCloseable {
     }
 
     /**
-     * Expires aged inbound reactions, the self-rearming {@link AppDataTimerType#RX_REACTION_CLEAR}
+     * Expires aged inbound reactions, the self-rearming inbound-reaction clear timer
      * callback.
      *
-     * <p>Removes every per-participant reaction older than its lifetime under the lock and notifies the
-     * reaction observer with an empty reaction for each so the overlay is taken down, matching the native
-     * sweep that clears aged reactions and re-arms itself.
+     * <p>Removes every per-participant reaction older than its lifetime under the lock, then notifies the
+     * reaction observer with an empty reaction for each outside the lock so the overlay is taken down,
+     * matching the native sweep that clears aged reactions and re-arms itself.
      */
     private void rxReactionClear() {
         if (closed) {
@@ -611,6 +613,7 @@ public final class AppDataController implements AutoCloseable {
         }
         var now = System.nanoTime();
         var lifetimeNanos = DEFAULT_RX_REACTION_LIFETIME.toNanos();
+        List<Jid> expired = null;
         reactionLock.lock();
         try {
             var iterator = rxReactions.entrySet().iterator();
@@ -618,24 +621,32 @@ public final class AppDataController implements AutoCloseable {
                 var entry = iterator.next();
                 if (now - entry.getValue().arrivalNanos() >= lifetimeNanos) {
                     iterator.remove();
-                    // TODO: the native rx_reaction_clear sweep (fn11750) clears each aged reaction and only
-                    //  OPTIONALLY notifies the app on expiry; the condition gating that notify is not isolable
-                    //  from the static decompile (the function's expiry branch is too dense in the Ghidra
-                    //  output to attribute the notify call to a specific predicate). This fires the expiry
-                    //  notify unconditionally for every cleared reaction, which over-notifies relative to the
-                    //  native gate. Recovering the exact condition needs a successful targeted decompile of
-                    //  fn11750's expiry branch; until then the unconditional notify is the safe over-set
-                    //  (the UI takes an already-hidden overlay down again, never the reverse).
-                    reactionObserver.onReaction(entry.getKey(), Optional.empty());
+                    if (expired == null) {
+                        expired = new ArrayList<>();
+                    }
+                    expired.add(entry.getKey());
                 }
             }
         } finally {
             reactionLock.unlock();
         }
+        if (expired != null) {
+            for (var participant : expired) {
+                // TODO: the native rx_reaction_clear sweep (fn11750) clears each aged reaction and only
+                //  OPTIONALLY notifies the app on expiry; the condition gating that notify is not isolable
+                //  from the static decompile (the function's expiry branch is too dense in the Ghidra
+                //  output to attribute the notify call to a specific predicate). This fires the expiry
+                //  notify unconditionally for every cleared reaction, which over-notifies relative to the
+                //  native gate. Recovering the exact condition needs a successful targeted decompile of
+                //  fn11750's expiry branch; until then the unconditional notify is the safe over-set
+                //  (the UI takes an already-hidden overlay down again, never the reverse).
+                reactionObserver.accept(participant, Optional.empty());
+            }
+        }
     }
 
     /**
-     * Retransmits the live outbound reaction, the {@link AppDataTimerType#REACTION_RETRANSMISSION}
+     * Retransmits the live outbound reaction, the reaction-retransmission timer
      * callback.
      *
      * <p>Resends the retained outbound reaction over the channel under the lock so a lost packet does not
@@ -672,7 +683,7 @@ public final class AppDataController implements AutoCloseable {
         } finally {
             reactionLock.unlock();
         }
-        reactionObserver.onReaction(sender, Optional.of(reaction));
+        reactionObserver.accept(sender, Optional.of(reaction));
     }
 
     /**
@@ -699,23 +710,5 @@ public final class AppDataController implements AutoCloseable {
      * @param arrivalNanos the {@link System#nanoTime()} reading when the reaction arrived
      */
     private record RxReaction(ReactionInfo reaction, long arrivalNanos) {
-    }
-
-    /**
-     * Observer of inbound reaction arrival and expiry.
-     *
-     * <p>Notified with a present reaction when one arrives from a participant and with an empty reaction
-     * when that participant's reaction is expired by the sweep, so a UI can show and later hide the
-     * overlay.
-     */
-    @FunctionalInterface
-    public interface ReactionObserver {
-        /**
-         * Notifies that a participant's inbound reaction has arrived or been expired.
-         *
-         * @param participant the device JID whose reaction changed; never {@code null}
-         * @param reaction    the arrived reaction, or empty when the reaction was expired
-         */
-        void onReaction(Jid participant, Optional<ReactionInfo> reaction);
     }
 }

@@ -3,10 +3,10 @@ package com.github.auties00.cobalt.calls2.signaling;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.stanza.Stanza;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -128,19 +128,14 @@ public final class CallMessageBuffer {
 
     /**
      * Holds the per-call-id ring slots keyed by call identifier, ordered by insertion so the oldest
-     * key can be evicted when the ring reaches {@link #RING_SLOTS}.
+     * key is evicted when the ring reaches {@link #RING_SLOTS}.
      *
-     * <p>A {@link java.util.LinkedHashMap} would also express insertion order, but the eviction here
-     * removes the eldest only on overflow rather than on every access, so a plain map plus an explicit
-     * insertion-order queue keeps the eviction policy obvious.
+     * <p>This is an insertion-ordered {@link LinkedHashMap} whose {@code removeEldestEntry} override
+     * evicts the eldest key only when a new key pushes the size past {@link #RING_SLOTS}; because the
+     * map is not in access order, a lookup or an in-place slot update never reorders or evicts, matching
+     * the native fixed-ring write cursor that overwrites by slot rather than by recency.
      */
     private final Map<String, RingSlot> ring;
-
-    /**
-     * Tracks call-identifier insertion order so the oldest slot is evicted first when the ring is
-     * full.
-     */
-    private final Deque<String> ringOrder;
 
     /**
      * Holds the buffered, not-yet-routable message payloads per call identifier in arrival order.
@@ -151,8 +146,12 @@ public final class CallMessageBuffer {
      * Constructs an empty buffer with no recorded ring slots and no buffered messages.
      */
     public CallMessageBuffer() {
-        this.ring = new HashMap<>();
-        this.ringOrder = new ArrayDeque<>();
+        this.ring = new LinkedHashMap<>() {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, RingSlot> eldest) {
+                return size() > RING_SLOTS;
+            }
+        };
         this.bufferedMessages = new HashMap<>();
     }
 
@@ -304,7 +303,8 @@ public final class CallMessageBuffer {
      *
      * <p>The caller replays the returned payloads through the normal dispatch path once the call
      * object exists; subsequent calls for the same identifier return an empty list until new payloads
-     * are buffered. The returned list is a fresh copy the caller owns.
+     * are buffered. The returned list is the drained list the caller owns exclusively, wrapped
+     * unmodifiable; it is no longer referenced by this buffer.
      *
      * @param callId the call identifier whose buffered payloads to drain
      * @return the buffered payloads in arrival order, or an empty list when none are buffered
@@ -313,7 +313,7 @@ public final class CallMessageBuffer {
     public synchronized List<Stanza> drainBufferedMessages(String callId) {
         Objects.requireNonNull(callId, "callId cannot be null");
         var messages = bufferedMessages.remove(callId);
-        return messages == null ? List.of() : List.copyOf(messages);
+        return messages == null ? List.of() : Collections.unmodifiableList(messages);
     }
 
     /**
@@ -338,7 +338,6 @@ public final class CallMessageBuffer {
      */
     public synchronized void reset() {
         ring.clear();
-        ringOrder.clear();
         bufferedMessages.clear();
     }
 
@@ -346,11 +345,11 @@ public final class CallMessageBuffer {
      * Returns the ring slot for a call identifier, inserting an empty slot and evicting the oldest
      * identifier when the ring is at capacity.
      *
-     * <p>A newly inserted identifier is appended to the insertion-order queue; when the ring already
-     * holds {@link #RING_SLOTS} identifiers, the eldest identifier and its slot are removed first so
-     * the ring never exceeds its bound. An identifier already present is returned unchanged and does
-     * not refresh its insertion position, matching the native fixed-ring write cursor that overwrites
-     * by slot rather than by recency.
+     * <p>A newly inserted identifier is appended in insertion order; when the ring already holds
+     * {@link #RING_SLOTS} identifiers, the map's {@code removeEldestEntry} override removes the eldest
+     * identifier and its slot as the new one is inserted so the ring never exceeds its bound. An
+     * identifier already present is returned unchanged and does not refresh its insertion position,
+     * matching the native fixed-ring write cursor that overwrites by slot rather than by recency.
      *
      * @param callId the call identifier
      * @return the existing or newly inserted ring slot for the identifier
@@ -360,13 +359,6 @@ public final class CallMessageBuffer {
         if (existing != null) {
             return existing;
         }
-        if (ringOrder.size() >= RING_SLOTS) {
-            var evicted = ringOrder.pollFirst();
-            if (evicted != null) {
-                ring.remove(evicted);
-            }
-        }
-        ringOrder.addLast(callId);
         ring.put(callId, RingSlot.EMPTY);
         return RingSlot.EMPTY;
     }

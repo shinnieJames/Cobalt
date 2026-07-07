@@ -1,9 +1,6 @@
 package com.github.auties00.cobalt.calls2.dsp;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
+import java.util.Arrays;
 
 /**
  * Reports a chosen percentile of the most recent samples within a fixed-size sliding window.
@@ -29,7 +26,7 @@ import java.util.List;
  * constructor (fn10317) allocates for its frame-size percentile. The native filter keeps an ordered
  * multiset plus an insertion-order queue and answers the percentile in logarithmic time by walking the
  * ordered set to the target rank; this port keeps the same two structures (an insertion-order
- * {@link Deque} for eviction and a per-query ascending sort for the rank read) but recomputes the sort
+ * ring buffer for eviction and a per-query ascending sort for the rank read) but recomputes the sort
  * on read rather than maintaining an incremental ordered set, because the window the estimator uses is
  * small (a few tens of frames) and the read cadence is one per inserted frame, so the simpler structure
  * is not a hot path. The native rank formula {@code floor(percentile * (n - 1))} clamped to the live
@@ -53,12 +50,28 @@ public final class MovingMedianFilter {
     private final double percentile;
 
     /**
-     * Holds the live samples in insertion order, oldest at the head.
+     * Fixed-capacity ring buffer holding the live samples in insertion order.
      *
-     * <p>A new sample is appended at the tail; when the window is full the head is removed so the deque
-     * never exceeds {@link #windowSize} entries.
+     * <p>The oldest live sample sits at index {@link #head}; a new sample is written at the logical tail
+     * and, when the window is full, overwrites the oldest so the buffer never exceeds {@link #windowSize}
+     * live entries.
      */
-    private final Deque<Long> window;
+    private final long[] ring;
+
+    /**
+     * Index into {@link #ring} of the oldest live sample.
+     */
+    private int head;
+
+    /**
+     * Number of live samples currently in {@link #ring}, capped at {@link #windowSize}.
+     */
+    private int count;
+
+    /**
+     * Reusable scratch the live samples are copied into and sorted for each {@link #filteredValue()} read.
+     */
+    private final long[] sortBuf;
 
     /**
      * Constructs a filter over a window of the given size reporting the given percentile.
@@ -77,7 +90,8 @@ public final class MovingMedianFilter {
         }
         this.windowSize = windowSize;
         this.percentile = percentile;
-        this.window = new ArrayDeque<>(windowSize);
+        this.ring = new long[windowSize];
+        this.sortBuf = new long[windowSize];
     }
 
     /**
@@ -101,10 +115,13 @@ public final class MovingMedianFilter {
      * @param sample the value to insert into the window
      */
     public void insert(long sample) {
-        if (window.size() == windowSize) {
-            window.removeFirst();
+        if (count == windowSize) {
+            ring[head] = sample;
+            head = (head + 1) % windowSize;
+        } else {
+            ring[(head + count) % windowSize] = sample;
+            count++;
         }
-        window.addLast(sample);
     }
 
     /**
@@ -118,14 +135,17 @@ public final class MovingMedianFilter {
      *         inserted
      */
     public long filteredValue() {
-        var count = window.size();
         if (count == 0) {
             return 0;
         }
-        List<Long> sorted = new ArrayList<>(window);
-        sorted.sort(null);
-        var rank = (int) Math.floor(percentile * (count - 1));
-        return sorted.get(rank);
+        var firstLen = Math.min(count, windowSize - head);
+        System.arraycopy(ring, head, sortBuf, 0, firstLen);
+        if (count > firstLen) {
+            System.arraycopy(ring, 0, sortBuf, firstLen, count - firstLen);
+        }
+        Arrays.sort(sortBuf, 0, count);
+        var rank = (int) (percentile * (count - 1));
+        return sortBuf[rank];
     }
 
     /**
@@ -134,7 +154,7 @@ public final class MovingMedianFilter {
      * @return the live sample count, in {@code [0, }{@link #windowSize}{@code ]}
      */
     public int size() {
-        return window.size();
+        return count;
     }
 
     /**
@@ -143,6 +163,7 @@ public final class MovingMedianFilter {
      * <p>After this call {@link #filteredValue()} reports {@code 0} until a new sample is inserted.
      */
     public void reset() {
-        window.clear();
+        head = 0;
+        count = 0;
     }
 }

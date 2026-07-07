@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
+import com.github.auties00.cobalt.pairing.ShortcakePairingService;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -68,7 +69,8 @@ public final class NotificationDeviceDispatcher extends SocketStreamHandler.Conc
      *
      * @param whatsapp                     the {@link LinkedWhatsAppClient} forwarded to every sub-handler for store and stanza access
      * @param deviceLinkingService         the {@link CompanionPairingService} consumed by the linking handler for the pairing-code handshake
-     * @param abPropsService               the {@link ABPropsService} consumed by the server-crypto handler for {@code server/abprops} resync
+     * @param shortcakePairingService      the {@link ShortcakePairingService} consumed by the linking handler for the passkey handshake
+     * @param abPropsService               the {@link ABPropsService} consumed by the server-crypto handler for {@code server/abprops} resync and by the linking handler to gate the newsletter {@code live_updates} apply
      * @param deviceService                the {@link DeviceService} consumed by the device-list handler for {@code add}/{@code remove}/{@code update} dispatch
      * @param offlineNotificationsReporter the {@link OfflineNotificationsReporter} consumed by the sync handler for the {@code MdAppStateOfflineNotifications} WAM event
      * @param wamService                   the {@link WamService} consumed by the linking and server-crypto handlers for the {@code GroupJoinC}, {@code WaOldCode}, and {@code ChatMessageCounts} events
@@ -77,6 +79,7 @@ public final class NotificationDeviceDispatcher extends SocketStreamHandler.Conc
     public NotificationDeviceDispatcher(
             LinkedWhatsAppClient whatsapp,
             CompanionPairingService deviceLinkingService,
+            ShortcakePairingService shortcakePairingService,
             ABPropsService abPropsService,
             DeviceService deviceService,
             OfflineNotificationsReporter offlineNotificationsReporter,
@@ -84,7 +87,7 @@ public final class NotificationDeviceDispatcher extends SocketStreamHandler.Conc
             AckSender ackSender
     ) {
         this.notificationDeviceHandler = new NotificationDeviceStreamHandler(whatsapp, deviceService, ackSender);
-        this.notificationLinkingHandler = new NotificationLinkingStreamHandler(whatsapp, deviceLinkingService, wamService, ackSender);
+        this.notificationLinkingHandler = new NotificationLinkingStreamHandler(whatsapp, deviceLinkingService, shortcakePairingService, wamService, abPropsService, ackSender);
         this.notificationServerCryptoHandler = new NotificationServerCryptoStreamHandler(whatsapp, abPropsService, wamService, ackSender);
         this.notificationSyncHandler = new NotificationSyncStreamHandler(whatsapp, offlineNotificationsReporter, ackSender);
     }
@@ -111,7 +114,7 @@ public final class NotificationDeviceDispatcher extends SocketStreamHandler.Conc
 
         switch (type) {
             case "devices" -> notificationDeviceHandler.handle(stanza);
-            case "companion_reg_refresh", "hosted", "link_code_companion_reg", "newsletter", "psa", "w:growth", "waffle" ->
+            case "companion_reg_refresh", "crsc_continuation", "hosted", "link_code_companion_reg", "newsletter", "passkey_prologue_request", "psa", "w:growth", "waffle" ->
                     notificationLinkingHandler.handle(stanza);
             case "encrypt", "mediaretry", "registration", "server" ->
                     notificationServerCryptoHandler.handle(stanza);

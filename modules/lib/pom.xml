@@ -142,6 +142,11 @@
                             <artifactId>cobalt-source-meta</artifactId>
                             <version>${project.version}</version>
                         </annotationProcessorPath>
+                        <annotationProcessorPath>
+                            <groupId>org.openjdk.jmh</groupId>
+                            <artifactId>jmh-generator-annprocess</artifactId>
+                            <version>${jmh.version}</version>
+                        </annotationProcessorPath>
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
@@ -221,16 +226,18 @@
             <version>${curve25519.version}</version>
         </dependency>
 
-        <!-- BouncyCastle -->
+        <!-- BouncyCastle (test only: cross-checks the pure-JDK crypto/cert/DTLS against a second provider) -->
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bctls-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <!-- Protobuf serialization (used by Whatsapp) -->
@@ -292,6 +299,27 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
+        </dependency>
+
+        <!-- Event-driven network connectivity monitor (FFM, jextract bindings) -->
+        <dependency>
+            <groupId>com.github.auties00</groupId>
+            <artifactId>vigil</artifactId>
+            <version>${vigil.version}</version>
+        </dependency>
+
+        <!-- Native OS passkey (WebAuthn) assertion (FFM, jextract bindings) -->
+        <dependency>
+            <groupId>com.github.auties00</groupId>
+            <artifactId>warden</artifactId>
+            <version>${warden.version}</version>
+        </dependency>
+
+        <!-- Pure-Java SRTP/SRTCP (replaces the native libsrtp shim) -->
+        <dependency>
+            <groupId>com.github.auties00</groupId>
+            <artifactId>srtp</artifactId>
+            <version>${srtp.version}</version>
         </dependency>
 
         <!-- Testing framework -->

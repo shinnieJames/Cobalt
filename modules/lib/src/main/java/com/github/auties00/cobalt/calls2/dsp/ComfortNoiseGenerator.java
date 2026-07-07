@@ -127,6 +127,15 @@ public final class ComfortNoiseGenerator {
     private final int[] lpcQ12;
 
     /**
+     * The per-frame synthesis coefficients, {@link #lpcQ12} converted to {@code double} in Q0.
+     *
+     * <p>Recomputed once per frame in {@link #updateParametersAndScale()} as
+     * {@code lpcQ12[i + 1] * (1.0 / 4096.0)} and read by {@link #synthesize(double)} so the Q12-to-double
+     * reciprocal is hoisted out of the per-sample loop; sized to {@link #LPC_ORDER}.
+     */
+    private final double[] lpcCoeff;
+
+    /**
      * The synthesis-filter memory, the recent filtered output samples.
      *
      * <p>Carried across frames so the noise is continuous; sized to {@link #LPC_ORDER} and cleared on
@@ -174,6 +183,7 @@ public final class ComfortNoiseGenerator {
         this.targetReflectionQ15 = new int[LPC_ORDER];
         this.usedReflectionQ15 = new int[LPC_ORDER];
         this.lpcQ12 = new int[LPC_ORDER + 1];
+        this.lpcCoeff = new double[LPC_ORDER];
         this.filterMemory = new double[LPC_ORDER];
         this.targetEnergy = 0;
         this.usedEnergy = 0;
@@ -281,6 +291,9 @@ public final class ComfortNoiseGenerator {
         }
 
         reflectionToLpcQ12();
+        for (var i = 0; i < LPC_ORDER; i++) {
+            lpcCoeff[i] = lpcQ12[i + 1] * (1.0 / 4096.0);
+        }
 
         var enQ13 = 8192;
         for (var i = 0; i < LPC_ORDER; i++) {
@@ -331,7 +344,7 @@ public final class ComfortNoiseGenerator {
     private double synthesize(double excitation) {
         var output = excitation;
         for (var i = 0; i < LPC_ORDER; i++) {
-            output -= (lpcQ12[i + 1] / 4096.0) * filterMemory[i];
+            output -= lpcCoeff[i] * filterMemory[i];
         }
         for (var i = filterMemory.length - 1; i > 0; i--) {
             filterMemory[i] = filterMemory[i - 1];

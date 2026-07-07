@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Objects;
@@ -309,6 +310,33 @@ public record RelayEndpoint(String element,
             case IPV6_ADDRESS_LENGTH, IPV6_SOCKADDR_LENGTH -> OptionalInt.of(readPort(addressBytes, IPV6_ADDRESS_OCTETS));
             default -> OptionalInt.empty();
         };
+    }
+
+    /**
+     * Returns the {@link InetSocketAddress} decoded from the packed socket-address content.
+     *
+     * <p>This fuses {@link #address()} and {@link #port()} into a single decode: it is present exactly
+     * when both would be present, that is when the content length is a recognized packed-address length
+     * and the address octets form a valid {@link InetAddress}. The {@link InetAddress} is allocated once
+     * rather than twice.
+     *
+     * @return an {@link Optional} holding the decoded socket address, or empty when the content is absent,
+     *         of an unrecognized length, or not a valid address
+     */
+    public Optional<InetSocketAddress> toSocketAddress() {
+        if (addressBytes == null) {
+            return Optional.empty();
+        }
+        var octets = switch (addressBytes.length) {
+            case IPV4_ADDRESS_LENGTH -> IPV4_ADDRESS_OCTETS;
+            case IPV6_ADDRESS_LENGTH, IPV6_SOCKADDR_LENGTH -> IPV6_ADDRESS_OCTETS;
+            default -> -1;
+        };
+        if (octets < 0) {
+            return Optional.empty();
+        }
+        return toInetAddress(addressBytes, octets)
+                .map(inet -> new InetSocketAddress(inet, readPort(addressBytes, octets)));
     }
 
     /**

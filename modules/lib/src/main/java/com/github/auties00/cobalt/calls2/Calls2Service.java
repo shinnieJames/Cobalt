@@ -12,6 +12,7 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.model.call.Call;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.call.CallInteraction;
+import com.github.auties00.cobalt.model.call.CallLink;
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
 import com.github.auties00.cobalt.model.call.CallState;
 import com.github.auties00.cobalt.model.call.IncomingCall;
@@ -348,6 +349,77 @@ public sealed interface Calls2Service permits LiveCalls2Service {
      * @throws NullPointerException if {@code callId} or {@code interaction} is {@code null}
      */
     void sendInteraction(Jid peer, Jid creator, String callId, CallInteraction interaction);
+
+    /**
+     * Mints a fresh shareable call link and returns its resolved metadata.
+     *
+     * <p>The link is created through a blocking {@code link_create} request to the {@code call} service; the
+     * relay answers with the minted token, which is composed into the returned {@link CallLink}. The link is
+     * standalone: it allocates no call and can be shared for others to join through
+     * {@link #joinCallLink(String, CallLinkMedia, AudioOutput, AudioInput, VideoOutput, VideoInput)}. The
+     * request is gated on the server call-link feature flag; a build whose flags disable call links refuses
+     * the create.
+     *
+     * @implSpec
+     * Implementations must delegate the create to the engine lifecycle controller and surface a disabled
+     * call-link feature flag as a refusal rather than running the request.
+     *
+     * @param media              the media kind the link is created with
+     * @param waitingRoomEnabled {@code true} to request the link's waiting-room gate at creation time
+     * @return the minted call link
+     * @throws NullPointerException  if {@code media} is {@code null}
+     * @throws IllegalStateException if the client is not logged in, or call links are disabled for this
+     *                               account by the server feature gate
+     */
+    CallLink createCallLink(CallLinkMedia media, boolean waitingRoomEnabled);
+
+    /**
+     * Enables or disables a call's waiting-room gate as the call host.
+     *
+     * <p>A no-op when the call is not tracked or was not joined through a call link, so it carries no
+     * waiting-room controller. The applied gate state is surfaced to listeners through the waiting-room
+     * toggle acknowledgement event.
+     *
+     * @param callId  the identifier of the call whose waiting-room gate is toggled
+     * @param enabled {@code true} to enable the waiting room, {@code false} to disable it
+     * @throws NullPointerException if {@code callId} is {@code null}
+     */
+    void setWaitingRoomEnabled(String callId, boolean enabled);
+
+    /**
+     * Admits a single queued participant into a call from its waiting-room lobby as the call host.
+     *
+     * <p>A no-op when the call is not tracked or was not joined through a call link. The admitted
+     * participants are surfaced to listeners through the waiting-room admit acknowledgement event.
+     *
+     * @param callId  the identifier of the call the participant is admitted into
+     * @param userJid the device JID of the participant to admit
+     * @throws NullPointerException if {@code callId} or {@code userJid} is {@code null}
+     */
+    void admitWaitingRoomParticipant(String callId, Jid userJid);
+
+    /**
+     * Admits every queued participant into a call from its waiting-room lobby at once as the call host.
+     *
+     * <p>A no-op when the call is not tracked or was not joined through a call link. The admitted
+     * participants are surfaced to listeners through the waiting-room admit acknowledgement event.
+     *
+     * @param callId the identifier of the call whose lobby is drained
+     * @throws NullPointerException if {@code callId} is {@code null}
+     */
+    void admitAllWaitingRoomParticipants(String callId);
+
+    /**
+     * Denies a single queued participant admission to a call from its waiting-room lobby as the call host.
+     *
+     * <p>A no-op when the call is not tracked or was not joined through a call link. The denied participants
+     * are surfaced to listeners through the waiting-room deny acknowledgement event.
+     *
+     * @param callId  the identifier of the call the participant is denied from
+     * @param userJid the device JID of the participant to deny
+     * @throws NullPointerException if {@code callId} or {@code userJid} is {@code null}
+     */
+    void denyWaitingRoomParticipant(String callId, Jid userJid);
 
     /**
      * Returns the {@link Calls2Runtime} tracked under the given identifier, or {@code null} if none is

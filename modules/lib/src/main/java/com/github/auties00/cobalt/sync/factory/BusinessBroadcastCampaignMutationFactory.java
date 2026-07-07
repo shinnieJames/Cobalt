@@ -9,9 +9,18 @@ import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCa
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.AudienceManagementEventBuilder;
+import com.github.auties00.cobalt.wam.type.AudienceEventSurfaceType;
+import com.github.auties00.cobalt.wam.type.AudienceManagementActionType;
+import com.github.auties00.cobalt.wam.type.AudiencePredicateTypeEnum;
+import com.github.auties00.cobalt.wam.type.AudienceResolutionTriggerType;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Builds outgoing app-state mutations that create, update, or delete a Business Broadcast campaign.
@@ -24,6 +33,15 @@ import java.util.List;
  * inbound counterpart is
  * {@link com.github.auties00.cobalt.sync.handler.BusinessBroadcastCampaignHandler}.
  *
+ * <p>Every campaign mutation this factory builds manages the campaign's
+ * audience (the targeted broadcast list), so each build commits an
+ * {@link com.github.auties00.cobalt.wam.event.AudienceManagementEvent} (WAM id
+ * {@code 7900}) describing the audience action, predicate, resolution trigger,
+ * and a JSON descriptor of the affected campaign. WA Web only emits this beacon
+ * from its {@code WAWebBizBroadcastAudienceRefreshJob} periodic resolver;
+ * Cobalt has no such background job, so the equivalent telemetry is committed at
+ * the point each campaign audience is set or removed.
+ *
  * @implNote
  * This implementation does not gate on
  * {@code WAWebBizGatingUtils.isBizBroadcastSendWebEnabledNoExposure()}; WA Web
@@ -32,12 +50,23 @@ import java.util.List;
  */
 public final class BusinessBroadcastCampaignMutationFactory {
     /**
-     * Creates a stateless factory with no collaborators.
+     * Holds the WAM telemetry service used to commit the
+     * {@link com.github.auties00.cobalt.wam.event.AudienceManagementEvent}
+     * emitted whenever a campaign audience is set or removed.
+     */
+    private final WamService wamService;
+
+    /**
+     * Creates a factory bound to the WAM telemetry service.
      *
      * <p>A single instance may be shared across the lifetime of the client.
+     *
+     * @param wamService the WAM telemetry service that receives the
+     *                   audience-management beacon, must not be {@code null}
+     * @throws NullPointerException if {@code wamService} is {@code null}
      */
-    public BusinessBroadcastCampaignMutationFactory() {
-
+    public BusinessBroadcastCampaignMutationFactory(WamService wamService) {
+        this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
     }
 
     /**
@@ -81,6 +110,19 @@ public final class BusinessBroadcastCampaignMutationFactory {
                 timestamp,
                 BusinessBroadcastCampaignAction.ACTION_VERSION
         );
+        var dynamic = action.adId().isPresent();
+        var extraData = new LinkedHashMap<String, Object>();
+        extraData.put("campaign_id", campaignId);
+        action.broadcastJid().ifPresent(jid -> extraData.put("broadcast_jid", jid));
+        action.reservedQuota().ifPresent(quota -> extraData.put("reserved_count", quota));
+        action.status().ifPresent(status -> extraData.put("campaign_status", status.name().toLowerCase(Locale.ROOT)));
+        emitAudienceManagement(
+                dynamic ? AudienceManagementActionType.SET_DYNAMIC : AudienceManagementActionType.SET_EXPLICIT,
+                dynamic ? AudiencePredicateTypeEnum.CHATTED_RECENTLY : AudiencePredicateTypeEnum.EXPLICIT,
+                AudienceResolutionTriggerType.USER_VIEW,
+                AudienceEventSurfaceType.MANUAL_PICK,
+                JSON.toJSONString(extraData)
+        );
         return new SyncPendingMutation(mutation, 0);
     }
 
@@ -117,6 +159,59 @@ public final class BusinessBroadcastCampaignMutationFactory {
                 timestamp,
                 BusinessBroadcastCampaignAction.ACTION_VERSION
         );
+        var extraData = new LinkedHashMap<String, Object>();
+        extraData.put("campaign_id", campaignId);
+        emitAudienceManagement(
+                AudienceManagementActionType.DELETED,
+                AudiencePredicateTypeEnum.UNKNOWN,
+                AudienceResolutionTriggerType.USER_VIEW,
+                null,
+                JSON.toJSONString(extraData)
+        );
         return new SyncPendingMutation(mutation, 0);
+    }
+
+    /**
+     * Commits the {@link com.github.auties00.cobalt.wam.event.AudienceManagementEvent}
+     * (WAM id {@code 7900}) describing a change to a campaign's audience.
+     *
+     * <p>Both campaign mutations funnel through this helper: the SET path
+     * reports the audience being set (explicit broadcast list or ad-driven
+     * dynamic audience) and the REMOVE path reports the audience being deleted.
+     * The {@code surface} argument records where the audience selection
+     * originated and is omitted (left absent on the wire) when {@code null},
+     * mirroring WA Web's resolver which sets it only when the origin is known.
+     *
+     * @implNote
+     * This implementation reports {@link AudienceResolutionTriggerType#USER_VIEW}
+     * because Cobalt commits from the user-driven campaign mutation rather than
+     * from WA Web's {@code WAWebBizBroadcastAudienceRefreshJob} background job,
+     * which is the only upstream call site and always reports
+     * {@link AudienceResolutionTriggerType#PERIODIC_REFRESH}.
+     *
+     * @param action    the audience-management action being performed
+     * @param predicate the predicate that classifies the campaign's audience
+     * @param trigger   the resolution trigger that produced this beacon
+     * @param surface   the surface the audience selection came from, or
+     *                  {@code null} to leave it unset
+     * @param extraData the JSON descriptor of the affected campaign
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBizBroadcastAudienceRefreshJob", exports = "refreshTimeBasedAudiences", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitAudienceManagement(
+            AudienceManagementActionType action,
+            AudiencePredicateTypeEnum predicate,
+            AudienceResolutionTriggerType trigger,
+            AudienceEventSurfaceType surface,
+            String extraData
+    ) {
+        var builder = new AudienceManagementEventBuilder()
+                .audienceManagementAction(action)
+                .audiencePredicateType(predicate)
+                .audienceResolutionTrigger(trigger)
+                .audienceExtraData(extraData);
+        if (surface != null) {
+            builder.audienceEventSurface(surface);
+        }
+        wamService.commit(builder.build());
     }
 }

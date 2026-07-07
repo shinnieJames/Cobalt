@@ -18,7 +18,7 @@ import java.util.List;
  * the RTCP-feedback writer.
  *
  * <p>This table is not thread-safe: a single owner thread, the call transport thread
- * that also drives the {@link SubscriptionPublisher}, performs all subscribe,
+ * that also drives the {@link LiveSubscriptionPublisher}, performs all subscribe,
  * unsubscribe, and snapshot operations.
  *
  * @implNote This implementation reproduces the fixed 96-slot feedback table populated by

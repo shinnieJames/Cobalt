@@ -9,10 +9,12 @@ import com.github.auties00.cobalt.calls2.signaling.Calls2CallAckReceiver;
 import com.github.auties00.cobalt.calls2.signaling.Calls2CallReceiver;
 import com.github.auties00.cobalt.calls2.signaling.Calls2TerminateReceiver;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientPasskeyAuthenticator;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
+import com.github.auties00.cobalt.pairing.ShortcakePairingService;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -158,6 +160,7 @@ public final class LiveNodeStreamService implements NodeStreamService {
      *                                         managing web app-state sync
      *                                         patches
      * @param companionPairingService          the {@link CompanionPairingService}
+     * @param shortcakePairingService          the {@link ShortcakePairingService}
      *                                         consulted by the IQ
      *                                         pair-device flow
      * @param ackSender                        the {@link AckSender} that
@@ -177,13 +180,17 @@ public final class LiveNodeStreamService implements NodeStreamService {
      * @param quarantineService                the {@link QuarantineService} consulted
      *                                         by the message handler's Defense Mode
      *                                         quarantine check
+     * @param passkeyAuthenticator             the {@link LinkedWhatsAppClientPasskeyAuthenticator}
+     *                                         forwarded to the notification handler
+     *                                         for answering integrity checkpoints,
+     *                                         or {@code null} when none is configured
      */
-    public LiveNodeStreamService(LinkedWhatsAppClient whatsapp, Calls2Service calls2Service, LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService, AckSender ackSender, MediaConnectionService mediaConnectionService, TosService tosService, QuarantineService quarantineService) {
+    public LiveNodeStreamService(LinkedWhatsAppClient whatsapp, Calls2Service calls2Service, LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService, ShortcakePairingService shortcakePairingService, AckSender ackSender, MediaConnectionService mediaConnectionService, TosService tosService, QuarantineService quarantineService, LinkedWhatsAppClientPasskeyAuthenticator passkeyAuthenticator) {
         var offlineNotificationsReporter = new OfflineNotificationsReporter(whatsapp, wamService);
         var callSignalingRouter = new CallSignalingRouter();
         var callMessageBuffer = new CallMessageBuffer();
         var result = new HashMap<String, SocketStreamHandler>();
-        addHandler(result, "iq", new IqStreamHandler(whatsapp, webVerificationHandler, deviceService, snapshotRecoveryService, lidMigrationService, companionPairingService, wamService));
+        addHandler(result, "iq", new IqStreamHandler(whatsapp, webVerificationHandler, deviceService, snapshotRecoveryService, lidMigrationService, companionPairingService, shortcakePairingService, wamService));
         addHandler(result, "message", new MessageStreamHandler(
                 whatsapp,
                 messageService,
@@ -206,12 +213,14 @@ public final class LiveNodeStreamService implements NodeStreamService {
         addHandler(result, "notification", new NotificationStreamHandler(
                 whatsapp,
                 companionPairingService,
+                shortcakePairingService,
                 lidMigrationService,
                 abPropsService,
                 deviceService,
                 offlineNotificationsReporter,
                 wamService,
-                ackSender
+                ackSender,
+                passkeyAuthenticator
         ));
         addHandler(result, "ib", new InfoBulletinStreamHandler(whatsapp, webAppStateService, offlineNotificationsReporter, wamService, deviceService));
         addHandler(result, "success", new SuccessStreamHandler(

@@ -445,6 +445,10 @@ public final class LiveRelayTransport implements MediaTransport {
      * <p>It is concurrent because the bring-up thread starts and paces checks while the socket reader thread
      * completes them from inbound binding responses.
      */
+    // TODO: the check paths (driveConnectivityChecks, startNextCheck, onStun) touch this map only under
+    //  iceLock, so it could drop to a plain HashMap; the blocker is close(), which calls
+    //  pendingChecks.clear() outside iceLock concurrently with those iceLock-held iterations. Move that
+    //  clear() under iceLock first, then this can become a HashMap.
     private final Map<TransactionKey, PendingCheck> pendingChecks = new ConcurrentHashMap<>();
 
     /**
@@ -831,6 +835,7 @@ public final class LiveRelayTransport implements MediaTransport {
         var protectedLength = e2eSend != null
                 ? e2eSend.protectRtp(packet, length)
                 : hbhSrtp.protectRtp(packet, length);
+        // TODO: wire SendAttrPolicy - own a SendAttrPolicy on this outbound-RTP send path; build Inputs from live transport state, call choose(...), and append the encoded WarpMessage.Piggybacked (encode + WarpMessageIntegrity.appendTag) to the RTP datagram tail (adjust_piggyback_warp_packet fn5409)
         var accepted = dataChannel.send(slice(packet, protectedLength));
         if (isRtp && !firstOutboundRtpLogged) {
             firstOutboundRtpLogged = true;

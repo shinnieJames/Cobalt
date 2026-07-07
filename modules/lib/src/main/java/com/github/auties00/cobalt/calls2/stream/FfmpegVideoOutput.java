@@ -498,6 +498,9 @@ public sealed class FfmpegVideoOutput extends BufferedVideoOutput
         FFmpegLoader.ensureLoaded();
         var arena = Arena.ofShared();
         var watchdog = new FfmpegIoWatchdog(arena);
+        var codecCtx = MemorySegment.NULL;
+        var packet = MemorySegment.NULL;
+        var frame = MemorySegment.NULL;
         try {
             var formatCtx = opener.open(arena, watchdog);
             var streamIndex = pickVideoStream(formatCtx);
@@ -515,19 +518,40 @@ public sealed class FfmpegVideoOutput extends BufferedVideoOutput
             var codec = FFmpegError.requireNonNull(
                     "avcodec_find_decoder(" + codecId + ")",
                     Ffmpeg.avcodec_find_decoder(codecId));
-            var codecCtx = FFmpegError.requireNonNull(
+            codecCtx = FFmpegError.requireNonNull(
                     "avcodec_alloc_context3",
                     Ffmpeg.avcodec_alloc_context3(codec));
             FFmpegError.check("avcodec_parameters_to_context",
                     Ffmpeg.avcodec_parameters_to_context(codecCtx, params));
             FFmpegError.check("avcodec_open2",
                     Ffmpeg.avcodec_open2(codecCtx, codec, MemorySegment.NULL));
-            var packet = FFmpegError.requireNonNull("av_packet_alloc", Ffmpeg.av_packet_alloc());
-            var frame = FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
+            packet = FFmpegError.requireNonNull("av_packet_alloc", Ffmpeg.av_packet_alloc());
+            frame = FFmpegError.requireNonNull("av_frame_alloc", Ffmpeg.av_frame_alloc());
             var capped = capGeometry(nativeWidth, nativeHeight);
             return new OpenedInput(capped[0], capped[1], readTimeout, watchdog, arena, formatCtx,
                     codecCtx, packet, frame, streamIndex, timeBaseNum, timeBaseDen);
         } catch (RuntimeException e) {
+            if (frame.address() != 0L) {
+                try (var local = Arena.ofConfined()) {
+                    var pp = local.allocate(ValueLayout.ADDRESS);
+                    pp.set(ValueLayout.ADDRESS, 0L, frame);
+                    Ffmpeg.av_frame_free(pp);
+                }
+            }
+            if (packet.address() != 0L) {
+                try (var local = Arena.ofConfined()) {
+                    var pp = local.allocate(ValueLayout.ADDRESS);
+                    pp.set(ValueLayout.ADDRESS, 0L, packet);
+                    Ffmpeg.av_packet_free(pp);
+                }
+            }
+            if (codecCtx.address() != 0L) {
+                try (var local = Arena.ofConfined()) {
+                    var pp = local.allocate(ValueLayout.ADDRESS);
+                    pp.set(ValueLayout.ADDRESS, 0L, codecCtx);
+                    Ffmpeg.avcodec_free_context(pp);
+                }
+            }
             arena.close();
             throw e;
         }

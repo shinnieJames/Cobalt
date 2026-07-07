@@ -3,12 +3,14 @@ package com.github.auties00.cobalt.stream.notification.business;
 import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientPasskeyAuthenticator;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stream.NodeStreamService;
+import com.github.auties00.cobalt.wam.WamService;
 
 /**
  * Routes inbound {@code <notification>} stanzas whose category covers WhatsApp Business to the matching per-type handler.
@@ -49,13 +51,16 @@ public final class NotificationBusinessDispatcher extends SocketStreamHandler.Co
      * and {@link AckSender} are forwarded to every sub-handler for store and stanza access and for emitting the
      * per-notification outbound {@code <ack>} stanza.
      *
-     * @param whatsapp            the client forwarded to every sub-handler
-     * @param lidMigrationService the LID migration service forwarded to the Meta Exchange handler
-     * @param ackSender           the ack sender forwarded to every sub-handler
+     * @param whatsapp             the client forwarded to every sub-handler
+     * @param lidMigrationService  the LID migration service forwarded to the Meta Exchange handler
+     * @param ackSender            the ack sender forwarded to every sub-handler
+     * @param passkeyAuthenticator the passkey authenticator forwarded to the Meta Exchange handler for
+     *                             answering integrity checkpoints, or {@code null} when none is configured
+     * @param wamService           the wam service
      */
-    public NotificationBusinessDispatcher(LinkedWhatsAppClient whatsapp, LidMigrationService lidMigrationService, AckSender ackSender) {
-        this.businessHandler = new NotificationBusinessStreamHandler(whatsapp, ackSender);
-        this.mexHandler = new NotificationMexStreamHandler(whatsapp, lidMigrationService, ackSender);
+    public NotificationBusinessDispatcher(LinkedWhatsAppClient whatsapp, LidMigrationService lidMigrationService, AckSender ackSender, LinkedWhatsAppClientPasskeyAuthenticator passkeyAuthenticator, WamService wamService) {
+        this.businessHandler = new NotificationBusinessStreamHandler(whatsapp, ackSender, wamService);
+        this.mexHandler = new NotificationMexStreamHandler(whatsapp, lidMigrationService, ackSender, passkeyAuthenticator, wamService);
         this.paymentHandler = new NotificationPaymentStreamHandler(whatsapp, ackSender);
     }
 

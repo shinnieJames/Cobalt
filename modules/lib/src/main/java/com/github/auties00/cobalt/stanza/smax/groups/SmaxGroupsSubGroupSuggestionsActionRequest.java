@@ -150,7 +150,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxSta
         if (!approve.isEmpty()) {
             var entries = new ArrayList<Stanza>();
             for (var entry : approve) {
-                entries.add(entry.toNode());
+                entries.add(entry.toStanza());
             }
             var approveNode = new StanzaBuilder()
                     .description("approve")
@@ -161,7 +161,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxSta
         if (!reject.isEmpty()) {
             var entries = new ArrayList<Stanza>();
             for (var entry : reject) {
-                entries.add(entry.toNode());
+                entries.add(entry.toStanza());
             }
             var rejectNode = new StanzaBuilder()
                     .description("reject")
@@ -172,7 +172,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxSta
         if (!cancel.isEmpty()) {
             var entries = new ArrayList<Stanza>();
             for (var entry : cancel) {
-                entries.add(entry.toNode());
+                entries.add(entry.toStanza());
             }
             var cancelNode = new StanzaBuilder()
                     .description("cancel")
@@ -308,7 +308,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxSta
          *
          * @return the materialised {@link Stanza}
          */
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var builder = new StanzaBuilder()
                     .description("sub_group_suggestion")
                     .attribute("creator", creator)
@@ -399,7 +399,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxSta
          *
          * @return the materialised {@link Stanza}
          */
-        public Stanza toNode() {
+        public Stanza toStanza() {
             return new StanzaBuilder()
                     .description("sub_group_suggestion")
                     .attribute("jid", jid)

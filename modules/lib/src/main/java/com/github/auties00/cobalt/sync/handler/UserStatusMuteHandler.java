@@ -18,9 +18,18 @@ import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteAction;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.StatusMuteEvent;
+import com.github.auties00.cobalt.wam.event.StatusMuteEventBuilder;
+import com.github.auties00.cobalt.wam.type.MuteAction;
+import com.github.auties00.cobalt.wam.type.MuteOrigin;
+import com.github.auties00.cobalt.wam.type.StatusCategory;
+import com.github.auties00.cobalt.wam.type.StatusPosterContactType;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Mirrors the per-contact or per-group "mute status updates" preference across linked devices.
@@ -38,13 +47,27 @@ import java.util.List;
 public final class UserStatusMuteHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs the handler.
+     * Holds the WAM telemetry service used to commit the {@link StatusMuteEvent} when a
+     * status-mute mutation is successfully applied.
+     */
+    private final WamService wamService;
+
+    /**
+     * Constructs the handler bound to the given WAM telemetry service.
      *
-     * <p>The handler is stateless; Cobalt's sync registry holds a single instance per client.
+     * <p>The handler holds no per-mutation state beyond the injected {@link WamService};
+     * Cobalt's sync registry holds a single instance per client.
+     *
+     * @implNote
+     * WA Web reaches the {@code WAWebStatusMuteWamEvent} singleton directly from the
+     * status-mute UI action; this implementation injects {@link WamService} so the
+     * {@link StatusMuteEvent} emission on the mutation-apply path is testable.
+     *
+     * @param wamService the WAM telemetry service used to commit the status-mute event
      */
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public UserStatusMuteHandler() {
-
+    public UserStatusMuteHandler(WamService wamService) {
+        this.wamService = wamService;
     }
 
     /**
@@ -91,7 +114,10 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
      * @implNote
      * This implementation drops WA Web's newsletter-status branch because Cobalt has no newsletter
      * status surface, and omits WA Web's warning counters and the {@code updateContactsStatusMute}
-     * frontend hop as telemetry and UI concerns. The {@link UserStatusMuteAction#muted()} accessor
+     * frontend hop as UI concerns, while committing the {@link StatusMuteEvent} telemetry on each
+     * successful apply through
+     * {@link #emitStatusMuteEvent(LinkedWhatsAppClient, Jid, boolean, Contact)}. The
+     * {@link UserStatusMuteAction#muted()} accessor
      * coalesces a missing nullable boolean to {@code false}, so a mutation carrying {@code muted}
      * unset is applied as an unmute rather than reported as malformed, relaxing WA Web's explicit
      * value-present check.
@@ -129,9 +155,11 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
                     .statusMuted(action.muted())
                     .build();
             var updated = client.store().chatStore().applyGroupMetadataEdit(wid, edit);
-            return updated.isPresent()
-                    ? MutationApplicationResult.success()
-                    : MutationApplicationResult.orphan(widString, "UserStatusMute");
+            if (updated.isEmpty()) {
+                return MutationApplicationResult.orphan(widString, "UserStatusMute");
+            }
+            emitStatusMuteEvent(client, wid, action.muted(), null);
+            return MutationApplicationResult.success();
         }
 
         var contact = client.store().contactStore().findContactByJid(wid);
@@ -140,6 +168,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
         }
 
         contact.get().setStatusMuted(action.muted());
+        emitStatusMuteEvent(client, wid, action.muted(), contact.get());
         return MutationApplicationResult.success();
     }
 
@@ -181,5 +210,86 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
                 version()
         );
         return new SyncPendingMutation(mutation, 0);
+    }
+
+    /**
+     * Commits the {@link StatusMuteEvent} (WAM id 2978) for a status-mute mutation that
+     * was just applied to the store.
+     *
+     * <p>Populates the event from the mutation subject: {@link MuteAction#MUTE} or
+     * {@link MuteAction#UNMUTE} from {@code muted}, {@link StatusCategory#GROUP_STATUS}
+     * or {@link StatusCategory#REGULAR_STATUS} from the JID server, and the
+     * {@link StatusPosterContactType} resolved from the poster contact. The status,
+     * viewer, and updates-tab session identifiers are ephemeral UI-session values a
+     * headless client cannot observe, so they are fabricated as random positive
+     * identifiers; WA Web derives {@code updatesTabSessionId} from the same value as
+     * {@code statusSessionId}, which this method preserves. The SMB-only
+     * {@code isPosterBiz} and {@code isPosterInAddressBook} fields are set only when the
+     * running account is a verified business account, mirroring WA Web's
+     * {@code Conn.isSMB} gate.
+     *
+     * @implNote
+     * WA Web emits {@code WAWebStatusMuteWamEvent} from the status-mute UI action
+     * ({@code WAWebLogStatusMute.logStatusMute}) on the acting device; Cobalt has no such
+     * UI layer, so this implementation emits at the point the mute state flips in the
+     * store, which is the single live chokepoint for the feature. The
+     * {@link MuteOrigin#STATUS_LIST} origin is assumed because the Updates-tab status
+     * list is the canonical place a poster is muted; the exact origin is not recoverable
+     * from the app-state mutation. The unified session identifier is rendered as a
+     * decimal string of a random positive value, matching the numeric shape WA Web's
+     * {@code UnifiedSessionManager} produces.
+     *
+     * @param client the client whose store supplies the account business flag
+     * @param wid    the muted contact or group JID
+     * @param muted  {@code true} for a mute, {@code false} for an unmute
+     * @param poster the resolved poster contact, or {@code null} for a group subject
+     */
+    private void emitStatusMuteEvent(LinkedWhatsAppClient client, Jid wid, boolean muted, Contact poster) {
+        var random = ThreadLocalRandom.current();
+        var statusSessionId = random.nextLong(1L, 1L << 53);
+        var statusViewerSessionId = random.nextLong(1L, 1L << 53);
+        var unifiedSessionId = Long.toUnsignedString(random.nextLong(1L, 1L << 53));
+        var isGroup = wid.hasServer(JidServer.groupOrCommunity());
+        var builder = new StatusMuteEventBuilder()
+                .muteAction(muted ? MuteAction.MUTE : MuteAction.UNMUTE)
+                .muteOrigin(MuteOrigin.STATUS_LIST)
+                .statusCategory(isGroup ? StatusCategory.GROUP_STATUS : StatusCategory.REGULAR_STATUS)
+                .statusPosterContactType(resolvePosterContactType(isGroup, poster))
+                .statusSessionId(statusSessionId)
+                .statusViewerSessionId(statusViewerSessionId)
+                .updatesTabSessionId(statusSessionId)
+                .unifiedSessionId(unifiedSessionId);
+        if (client.store().accountStore().verifiedName().isPresent()) {
+            builder.isPosterInAddressBook(poster != null && poster.fullName().isPresent())
+                    .isPosterBiz(poster != null && poster.hostedOnFacebook());
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Resolves the {@link StatusPosterContactType} for a muted status poster.
+     *
+     * <p>Returns {@link StatusPosterContactType#CONTACT} when the poster is a saved
+     * address-book contact (evidenced by a resolved full name) and
+     * {@link StatusPosterContactType#UNKNOWN} for a group subject or an unsaved poster.
+     *
+     * @implNote
+     * This implementation collapses WA Web's {@code TRUSTED_GROUP_MEMBER} branch to
+     * {@link StatusPosterContactType#UNKNOWN} because Cobalt's
+     * {@link com.github.auties00.cobalt.model.chat.group.GroupMetadata} carries no
+     * group-trust flag, and reads address-book membership from {@link Contact#fullName()}
+     * presence in place of WA Web's {@code getIsMyContact} check.
+     *
+     * @param isGroup whether the muted subject is a group
+     * @param poster  the resolved poster contact, or {@code null} for a group subject
+     * @return the poster contact-type classification
+     */
+    private static StatusPosterContactType resolvePosterContactType(boolean isGroup, Contact poster) {
+        if (isGroup) {
+            return StatusPosterContactType.UNKNOWN;
+        }
+        return poster != null && poster.fullName().isPresent()
+                ? StatusPosterContactType.CONTACT
+                : StatusPosterContactType.UNKNOWN;
     }
 }

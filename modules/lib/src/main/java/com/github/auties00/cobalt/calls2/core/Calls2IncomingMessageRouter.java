@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.stanza.Stanza;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Validates, de-duplicates, and classifies a decoded inbound call signaling message, then resolves the
@@ -21,8 +22,10 @@ import java.util.function.Function;
  * {@code (type, call-id, transaction-id)} key, distinguishes an offer that re-rings an existing call from
  * a fresh offer, suppresses signaling that arrives for a call the local user already rejected, and routes
  * an accept onto the accept-handling path; every other well-formed message is routed for normal
- * processing. The verdict is one of six {@link RoutingClass} values matching the engine's routing-class
- * return code, paired with the resolved call context the receiver dispatches the message against.
+ * processing. The verdict is one of the {@link RoutingClass} values, six of them matching the engine's
+ * routing-class return codes one-to-one and a seventh ({@link RoutingClass#BUFFER_PENDING}) folding in the
+ * native pending-call message-queue capture, paired with the resolved call context the receiver dispatches
+ * the message against.
  *
  * <p>The router is parameterised on the call-context handle type {@code <C>} and resolves a context from
  * a call identifier through a caller-supplied {@link Function locator}, so it depends on no concrete
@@ -49,7 +52,9 @@ import java.util.function.Function;
  * This port reads the universal {@code call-id} and {@code call-creator} header and the optional
  * {@code transaction-id} attribute off the decoded message's rendered {@link Stanza} rather than off a flat
  * C struct, because every {@link CallMessage} stamps the universal header through its serializer; the
- * six {@link RoutingClass} values are the native routing-class return codes one-to-one.
+ * first six {@link RoutingClass} values are the native routing-class return codes one-to-one, and the
+ * added {@link RoutingClass#BUFFER_PENDING} routes the busy/lobby pending-call capture (native
+ * {@code fn10961}) the native engine performs off the drop-unknown path rather than as a router return.
  */
 public final class Calls2IncomingMessageRouter<C> {
     /**
@@ -124,7 +129,24 @@ public final class Calls2IncomingMessageRouter<C> {
          *
          * @implNote This implementation binds native routing class {@code 5} ({@code accept-handle}).
          */
-        ACCEPT_HANDLE
+        ACCEPT_HANDLE,
+
+        /**
+         * Buffers a non-offer message that names the busy/lobby pending call held out of the active-calls
+         * map, so it is queued for replay when the local user joins rather than dropped as unknown.
+         *
+         * <p>This class is reached only for a message whose {@code call-id} matches the buffered pending
+         * call and that would otherwise be a {@link #DROP} (no active call context resolves for it). The
+         * caller appends the message to the pending call's queue instead of dispatching it.
+         *
+         * @implNote This implementation has no native {@code message_router} (fn11497) return code of its
+         * own: the native router still classifies the message as {@code 1} ({@code drop-unknown}) against
+         * the active-calls map, and it is the pending-call message-queue fill ({@code fn10961}, the queue
+         * filled by {@code handle_pending_call_offer}, fn10959) that captures the message off the busy path
+         * instead. Cobalt folds that pending-queue capture into a distinct routing class so the single
+         * inbound seam consults the pending holder before honouring the {@link #DROP}.
+         */
+        BUFFER_PENDING
     }
 
     /**
@@ -133,10 +155,10 @@ public final class Calls2IncomingMessageRouter<C> {
      *
      * <p>A {@link RoutingClass#PROCESS}, {@link RoutingClass#OFFER_RERING}, or
      * {@link RoutingClass#ACCEPT_HANDLE} verdict carries the resolved context the receiver dispatches the
-     * message against; a {@link RoutingClass#DROP}, {@link RoutingClass#IGNORE}, or
-     * {@link RoutingClass#IGNORE_REJECTED} verdict carries an empty context because the message is not
-     * dispatched. Callers branch on {@link #routingClass()} first and read {@link #context()} only for the
-     * dispatched classes.
+     * message against; a {@link RoutingClass#DROP}, {@link RoutingClass#IGNORE},
+     * {@link RoutingClass#IGNORE_REJECTED}, or {@link RoutingClass#BUFFER_PENDING} verdict carries an empty
+     * context because the message is not dispatched against an active call. Callers branch on
+     * {@link #routingClass()} first and read {@link #context()} only for the dispatched classes.
      *
      * @param <C>          the call-context handle type
      * @param routingClass the routing decision; never {@code null}
@@ -212,7 +234,10 @@ public final class Calls2IncomingMessageRouter<C> {
      *       LID-addressed, yields {@link RoutingClass#DROP} with no context;</li>
      *   <li>a message whose call context the locator does not resolve yields {@link RoutingClass#DROP}
      *       with no context, except an {@link Calls2SignalingType#OFFER offer}, which is allowed through
-     *       as {@link RoutingClass#PROCESS} so the lifecycle layer can create the call;</li>
+     *       as {@link RoutingClass#PROCESS} so the lifecycle layer can create the call, and a non-offer
+     *       message whose {@code call-id} names the buffered busy/lobby pending call, which yields
+     *       {@link RoutingClass#BUFFER_PENDING} with no context so the caller queues it for join-time
+     *       replay instead of dropping it;</li>
      *   <li>a message for a call the local user has rejected yields {@link RoutingClass#IGNORE_REJECTED}
      *       with no context;</li>
      *   <li>a message whose transaction id is stale (strictly less than the latest processed for the
@@ -237,10 +262,53 @@ public final class Calls2IncomingMessageRouter<C> {
      * @throws NullPointerException if {@code message}, {@code dedup}, or {@code locator} is {@code null}
      */
     public Verdict<C> route(CallMessage message, Jid senderLid, DedupState dedup, Function<String, C> locator) {
+        return route(message, senderLid, dedup, locator, callId -> false);
+    }
+
+    /**
+     * Routes a decoded inbound call message against live call state and a buffered pending call to a
+     * routing class and call context.
+     *
+     * <p>Behaves exactly like {@link #route(CallMessage, Jid, DedupState, Function)}, with one added
+     * decision: before dropping a non-offer message that resolves no active call context, the router
+     * consults {@code pendingCall} to learn whether the message's {@code call-id} names the buffered
+     * busy/lobby pending call. When it does, the router returns {@link RoutingClass#BUFFER_PENDING} with no
+     * context so the caller queues the message for join-time replay instead of dropping it as unknown; when
+     * it does not, the message is dropped as before. An offer, a message for an existing call, a rejected
+     * call, and a stale transaction id are all decided before this consult and are unaffected by it.
+     *
+     * @param message     the decoded inbound call message; must not be {@code null}
+     * @param senderLid   the {@code sender_lid} attribute from the {@code <call>} envelope, or {@code null}
+     *                    when the stanza is not LID-addressed
+     * @param dedup       the per-call de-duplication state; must not be {@code null}
+     * @param locator     resolves a call identifier to its call context, returning {@code null} when no
+     *                    context exists; must not be {@code null}
+     * @param pendingCall reports whether a call identifier names the buffered busy/lobby pending call; must
+     *                    not be {@code null}
+     * @return the routing verdict; never {@code null}
+     * @throws NullPointerException if {@code message}, {@code dedup}, {@code locator}, or {@code pendingCall}
+     *                              is {@code null}
+     */
+    public Verdict<C> route(CallMessage message, Jid senderLid, DedupState dedup, Function<String, C> locator,
+                            Predicate<String> pendingCall) {
         Objects.requireNonNull(message, "message cannot be null");
         Objects.requireNonNull(dedup, "dedup cannot be null");
         Objects.requireNonNull(locator, "locator cannot be null");
+        Objects.requireNonNull(pendingCall, "pendingCall cannot be null");
 
+        // TODO: read the header fields off the decoded record instead of rebuilding toStanza() here (and
+        //  again in Calls2LifecycleController.handleIncomingMessage/advanceDedup). This would add a
+        //  transactionId() default (returning -1) on CallMessage overridden by Rekey/RelayLatency/Terminate/
+        //  FlowControl, and use message.callId()/callCreator()/transactionId() record accessors, dropping the
+        //  OfferStanza codec/capability subtree rebuild per inbound packet. Blocked here because callId() and
+        //  callCreator() are not on the sealed CallMessage interface, and adding them would force every
+        //  permitted type outside this owned set (Destination/GroupInfo/Heartbeat/InCallAction/Link*/Reject/
+        //  Ringing/Transport/WaitingRoom*) to implement them, so toStanza() stays the only header source.
+        // TODO (item 3): thread this route()'s Verdict.context() orchestrated handle through dispatchInbound
+        //  and the per-type handlers so they stop re-running calls.get(callId), and resolve+lock once in
+        //  transition()/tearDown() via the context-taking Calls2CallStateMachine.transition(context, state)
+        //  overload. Cross-cuts Calls2LifecycleController's dispatch/transition/teardown seams (outside this
+        //  file); deferred until those seams are widened together so the dispatch/emit decisions stay identical.
         var node = message.toStanza();
         var callId = node.getAttributeAsString(CALL_ID_ATTRIBUTE, null);
         var callCreator = node.getAttributeAsJid(CALL_CREATOR_ATTRIBUTE, null);
@@ -252,7 +320,12 @@ public final class Calls2IncomingMessageRouter<C> {
         var isOffer = type == Calls2SignalingType.OFFER;
         var context = locator.apply(callId);
         if (context == null) {
-            return isOffer ? new Verdict<>(RoutingClass.PROCESS, Optional.empty()) : drop();
+            if (isOffer) {
+                return new Verdict<>(RoutingClass.PROCESS, Optional.empty());
+            }
+            return pendingCall.test(callId)
+                    ? new Verdict<>(RoutingClass.BUFFER_PENDING, Optional.empty())
+                    : drop();
         }
 
         if (dedup.rejected()) {

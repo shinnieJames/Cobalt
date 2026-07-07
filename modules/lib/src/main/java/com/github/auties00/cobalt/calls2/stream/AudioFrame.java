@@ -15,8 +15,11 @@ import java.util.Objects;
  * <p>A producer that captures at a different rate, such as the 48 kHz an operating system microphone
  * commonly delivers, downsamples to 16 kHz mono before publishing a frame to an {@link AudioOutput};
  * likewise a sink draining an {@link AudioInput} that renders at another rate resamples on its side.
- * The sample buffer is referenced as supplied and never copied, so a caller transfers ownership and
- * must not mutate the array after constructing the frame.
+ * The sample buffer is referenced as supplied and never copied. A frame the call engine delivers to a
+ * consumer through {@link AudioInput#read()} borrows a pooled buffer owned by the producing input: the
+ * buffer is valid only until the consumer reads the next frame from that same input, at which point the
+ * producer may refill and re-offer it, so the consumer must neither retain a reference to it past that
+ * point nor mutate it.
  *
  * @apiNote The call API does not negotiate alternate audio formats; a source or sink operating at a
  * native rate other than 16 kHz mono is responsible for resampling, and a mismatched rate is
@@ -35,9 +38,11 @@ public record AudioFrame(short[] pcm, long ptsMicros) {
      * Validates the frame, rejecting a {@code null} sample buffer.
      *
      * <p>The buffer reference is retained as supplied; the array is neither copied nor defensively
-     * cloned, so the caller must not mutate it after construction. No constraint is placed on the
-     * sample count: an empty buffer is a legal zero-length frame, and any positive length is accepted
-     * because the engine rechunks to its fixed block size.
+     * cloned. When the engine produces the frame from its pooled playback path the buffer is borrowed
+     * and reused for a later frame, so a consumer must neither retain nor mutate it past the next
+     * {@link AudioInput#read()}. No constraint is placed on the sample count: an empty buffer is a legal
+     * zero-length frame, and any positive length is accepted because the engine rechunks to its fixed
+     * block size.
      *
      * @throws NullPointerException if {@code pcm} is {@code null}
      */

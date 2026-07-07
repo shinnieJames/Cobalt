@@ -15,18 +15,19 @@ import java.util.stream.Stream;
  *
  * @apiNote
  * Cobalt embedders never construct this directly; {@link TemporaryLinkedWhatsAppChatStore#addNewNewsletter(Jid)}
- * returns one as a {@link Newsletter}. Mirrors {@link TemporaryChat} but the underlying map is
- * keyed by the {@link NewsletterMessageInfo} message-key id rather than the numeric server id,
- * because the abstract API hands messages around as id strings.
+ * returns one as a {@link Newsletter}. Mirrors {@link TemporaryChat} and keys the underlying map by the
+ * {@link NewsletterMessageInfo} server id rendered as a string, the same server-id-string identifier the
+ * abstract message API hands around; the persistent variant accepts the identical string but re-encodes it to a
+ * fixed-width big-endian key for memcmp-ordered range scans.
  *
  * @implNote
- * This implementation keys by the message-key id string and preserves insertion order via the
+ * This implementation keys by the server-id string and preserves insertion order via the
  * sequenced-map contract, so {@link #oldestMessage()} and {@link #newestMessage()} reduce to
  * sequenced-map first/last lookups.
  */
 final class TemporaryNewsletter extends Newsletter {
     /**
-     * The in-memory message store, keyed by message-key id and preserving insertion order.
+     * The in-memory message store, keyed by the server id rendered as a string and preserving insertion order.
      */
     private final ConcurrentLinkedHashMap<String, NewsletterMessageInfo> messages;
 
@@ -50,21 +51,23 @@ final class TemporaryNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation silently drops messages with no key id because the underlying map
-     * requires a non-null key; production code paths always populate the id before insertion.
+     * This implementation keys by the {@code serverId} rendered as a string, so a re-put under the same server
+     * id (an edit or add-on update) overwrites in place and {@link #messageCount()} counts distinct server ids
+     * without inflation, matching the persistent variant.
      */
     @Override
     public void addMessage(NewsletterMessageInfo info) {
         Objects.requireNonNull(info, "info cannot be null");
-        info.key().id().ifPresent(id -> messages.put(id, info));
+        messages.put(String.valueOf(info.serverId()), info);
     }
 
     /**
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation accepts the raw message-key id and returns {@code false} on a
-     * {@code null} input; unlike the persistent variant, no server-id parsing is required.
+     * This implementation removes by the server-id string key and returns {@code false} on a {@code null}
+     * input; unlike the persistent variant no numeric parsing is required, because the in-memory map is keyed
+     * by the same server-id string the abstract API passes rather than a fixed-width numeric key.
      */
     @Override
     public boolean removeMessage(String messageId) {
@@ -109,16 +112,15 @@ final class TemporaryNewsletter extends Newsletter {
      * {@inheritDoc}
      *
      * @implNote
-     * This implementation returns {@link Optional#empty()} on a {@code null} id; the underlying
-     * map lookup is a direct hash and does not iterate the value set.
+     * This implementation returns {@link Optional#empty()} on a {@code null} id and otherwise does a direct
+     * hash lookup on the server-id string key; unlike the persistent variant no numeric parsing is required.
      */
     @Override
     public Optional<NewsletterMessageInfo> getMessageById(String messageId) {
         if (messageId == null) {
             return Optional.empty();
         }
-        var byId = messages.get(messageId);
-        return Optional.ofNullable(byId);
+        return Optional.ofNullable(messages.get(messageId));
     }
 
     /**

@@ -21,7 +21,12 @@ import java.util.Optional;
  * This implementation collapses WA Web's split parse-and-throw flow into a single sealed
  * hierarchy: WA Web parses the success payload and separately throws a status-code error on a
  * {@code 4xx}/{@code 5xx} reply, whereas Cobalt models both outcomes as permitted subtypes.
+ *
+ * @deprecated paired with the deprecated {@link IqSetReadReceiptRequest}; read-receipt toggling flows
+ * through the multi-row privacy path ({@code editPrivacySetting} via {@link IqSetPrivacyRequest}), so
+ * this single-row reply is retained only for source-mapping completeness.
  */
+@Deprecated
 public sealed interface IqSetReadReceiptResponse extends IqStanza.Response
         permits IqSetReadReceiptResponse.Success, IqSetReadReceiptResponse.ClientError, IqSetReadReceiptResponse.ServerError {
 

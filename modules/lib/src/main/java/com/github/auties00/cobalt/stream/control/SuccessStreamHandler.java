@@ -35,11 +35,22 @@ import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.ClockSkewDifferenceTEventBuilder;
+import com.github.auties00.cobalt.wam.event.LoginEventBuilder;
+import com.github.auties00.cobalt.wam.event.WebcRawPlatformsEventBuilder;
+import com.github.auties00.cobalt.wam.type.ConnectionOriginType;
+import com.github.auties00.cobalt.wam.type.ConnectionSequenceStepType;
+import com.github.auties00.cobalt.wam.type.DnsResolutionMethodType;
+import com.github.auties00.cobalt.wam.type.LoginDnsResolverType;
+import com.github.auties00.cobalt.wam.type.LoginHostType;
+import com.github.auties00.cobalt.wam.type.LoginPortNumber;
+import com.github.auties00.cobalt.wam.type.LoginResultType;
+import com.github.auties00.cobalt.wam.type.StreamSocketProviderType;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
@@ -271,6 +282,10 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
         }
 
         wamService.initialize();
+
+        emitLoginEvent();
+
+        emitWebcRawPlatform();
 
         // Pull the interoperability Terms-of-Service acceptance state so the inbound-message gating
         // check has it; gated on the fetch flag and run off-thread so it does not delay bootstrap
@@ -700,5 +715,112 @@ public final class SuccessStreamHandler extends SocketStreamHandler.Concurrent {
                         throwable.getMessage());
             }
         }
+    }
+
+    /**
+     * The Noise handshake version advertised by the web (companion) handshake shape.
+     *
+     * @implNote This value is the leading byte of Cobalt's web handshake version footer
+     * ({@code {6, DICTIONARY_VERSION}} in {@code WhatsAppSocketClient}); it is reported in the
+     * {@code Login} event's {@code noiseProtocolVersion} field for web clients.
+     */
+    private static final long WEB_NOISE_PROTOCOL_VERSION = 6;
+
+    /**
+     * The Noise handshake version advertised by the mobile (primary) handshake shape.
+     *
+     * @implNote This value is the leading byte of Cobalt's mobile handshake version footer
+     * ({@code {5, DICTIONARY_VERSION}} in {@code WhatsAppSocketClient}); it is reported in the
+     * {@code Login} event's {@code noiseProtocolVersion} field for mobile clients.
+     */
+    private static final long MOBILE_NOISE_PROTOCOL_VERSION = 5;
+
+    /**
+     * Commits the once-per-connection {@code Login} connection-diagnostics event that WhatsApp Web logs from its
+     * connection worker after a successful authentication handshake.
+     *
+     * <p>Fires from {@link #bootstrap(Stanza)} at the point the {@code <success>} stanza confirms the login succeeded, so
+     * {@link LoginResultType#OK} is the only result this path can report. The fields describe how Cobalt actually reached
+     * the relay: a user-activated ({@link ConnectionOriginType#PERSON}) direct connection to the primary host
+     * ({@link ConnectionSequenceStepType#PRIMARY}, {@link LoginHostType#G_WHATSAPP_NET}) over TCP 443
+     * ({@link LoginPortNumber#P443}) using the JVM's system DNS resolver ({@link DnsResolutionMethodType#SYSTEM},
+     * {@link LoginDnsResolverType#SYSTEM}) and a plain platform socket ({@link StreamSocketProviderType#PLATFORM_SOCKET});
+     * {@code passive} mirrors the login client-payload flag (a web companion that already holds a JID logs in passively,
+     * then this handler transitions it to active), and {@code noiseProtocolVersion} is the handshake-shape version footer
+     * (web {@value #WEB_NOISE_PROTOCOL_VERSION}, mobile {@value #MOBILE_NOISE_PROTOCOL_VERSION}). The queue counters are
+     * zero because a freshly-authenticated connection has neither pending acks nor unprocessed messages, and
+     * {@code retryCount} is zero because the {@code <success>} arrived on the current attempt.
+     *
+     * @implNote The connection and login timers and the resolved-address counts are not tracked by Cobalt's socket layer
+     * and are not reachable from this handler, so they are fabricated within the plausible bands a real browser session
+     * reports (a sub-second connect, a login a few hundred milliseconds longer, a handful of A and AAAA records) with
+     * per-connection jitter drawn from {@link ThreadLocalRandom} so the beacon does not fingerprint every Cobalt session
+     * identically; {@code traceIdInt} is a fresh random per-connection correlation id, matching WA's randomly-generated
+     * connection trace id. Fields WhatsApp only populates on Android, on error, or after an explicit logout
+     * ({@code androidKeystoreState}, {@code serverErrorCode}, {@code logoutSessionId}) and the opaque server-assigned
+     * point-of-presence string ({@code loginResolvedPop}) are left unset, exactly as a successful web login omits them.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLoginWamEvent", exports = "LoginWamEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitLoginEvent() {
+        var account = whatsapp.store().accountStore();
+        var web = account.clientType() == LinkedWhatsAppClientType.WEB;
+        var passive = web && account.jid().isPresent();
+        var random = ThreadLocalRandom.current();
+        var connectionMillis = random.nextLong(220L, 680L);
+        var loginMillis = connectionMillis + random.nextLong(280L, 820L);
+        wamService.commit(new LoginEventBuilder()
+                .loginResult(LoginResultType.OK)
+                .connectionOrigin(ConnectionOriginType.PERSON)
+                .connectionSequenceStep(ConnectionSequenceStepType.PRIMARY)
+                .sequenceStep(2)
+                .dnsResolutionMethod(DnsResolutionMethodType.SYSTEM)
+                .loginDnsResolver(LoginDnsResolverType.SYSTEM)
+                .loginIpSource(LoginHostType.G_WHATSAPP_NET)
+                .loginPort(LoginPortNumber.P443)
+                .loginSocketProvider(StreamSocketProviderType.PLATFORM_SOCKET)
+                .noiseProtocolVersion(web ? WEB_NOISE_PROTOCOL_VERSION : MOBILE_NOISE_PROTOCOL_VERSION)
+                .passive(passive)
+                .longConnect(false)
+                .networkIsVpn(false)
+                .loginHistoryStepResult(true)
+                .retryCount(0)
+                .pendingAcksCount(0)
+                .unprocessedMessageCount(0)
+                .numIpv4Addresses(random.nextLong(3L, 7L))
+                .numIpv6Addresses(random.nextLong(2L, 5L))
+                .connectionT(Instant.ofEpochMilli(connectionMillis))
+                .loginT(Instant.ofEpochMilli(loginMillis))
+                .traceIdInt(random.nextLong(1L, Long.MAX_VALUE))
+                .build());
+    }
+
+    /**
+     * Commits the {@code WebcRawPlatforms} diagnostic that records the raw platform token of the linked primary phone as
+     * observed by a web companion.
+     *
+     * <p>WhatsApp Web commits this event from the connection model's {@code change:platform} handler the moment the
+     * companion learns (or relearns) the primary device's platform. Cobalt learns the same token during the pairing
+     * handshake and stores it as {@link com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore#primaryPlatform()};
+     * this method surfaces it once per bootstrap. The event is web-companion-only, so it is skipped for mobile
+     * (primary) clients and when the primary platform has not been recorded, and the committed value is the wire token
+     * ({@code "android"}, {@code "iphone"}, {@code "ipad"}, {@code "smba"}, {@code "smbi"}) rather than the enum name.
+     *
+     * @implNote WhatsApp gates this commit behind the {@code gkx} rollout flag {@code 26259}, which Cobalt does not
+     * model; the event is therefore emitted whenever the primary platform is known, which is the faithful headless
+     * equivalent of the feature being enabled.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebConnModel", exports = "$ConnImpl$p_1",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitWebcRawPlatform() {
+        var account = whatsapp.store().accountStore();
+        if (account.clientType() != LinkedWhatsAppClientType.WEB) {
+            return;
+        }
+        account.primaryPlatform()
+                .map(LinkedPrimaryPlatform::wireValue)
+                .ifPresent(platform -> wamService.commit(new WebcRawPlatformsEventBuilder()
+                        .webcRawPlatform(platform)
+                        .build()));
     }
 }

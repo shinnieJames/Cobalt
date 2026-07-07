@@ -104,6 +104,12 @@ public enum CallJidDomainType {
     HOSTED_LID(11, "hosted.lid", JidServer.Type.HOSTED_LID);
 
     /**
+     * Caches the constant array so the {@link #ofCode(int)} decode scan does not pay the
+     * defensive-clone cost of {@link #values()} on every domain-code lookup.
+     */
+    private static final CallJidDomainType[] VALUES = values();
+
+    /**
      * The integer domain-type code the wa-voip engine stores for this domain.
      */
     private final int code;
@@ -222,7 +228,7 @@ public enum CallJidDomainType {
      * @return the matching domain, or {@link Optional#empty()} if no domain matches
      */
     public static Optional<CallJidDomainType> ofCode(int code) {
-        for (var domain : values()) {
+        for (var domain : VALUES) {
             if (domain.code == code) {
                 return Optional.of(domain);
             }

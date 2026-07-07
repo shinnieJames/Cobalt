@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -66,7 +67,7 @@ class LidContactHandlerTest {
                 .with(ABProp.USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE, true)
                 .build();
         client = TestWhatsAppClient.create().withStore(store).withAbPropsService(props);
-        handler = new LidContactHandler(props, new UserStatusMuteHandler());
+        handler = new LidContactHandler(props, new UserStatusMuteHandler(TestWamService.create(client)));
     }
 
     private DecryptedMutation.Trusted build(Jid lidJid, LidContactAction action, SyncdOperation op, Instant ts) {

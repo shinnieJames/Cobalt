@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.wam.privatestats;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import org.junit.jupiter.api.DisplayName;
@@ -159,7 +160,7 @@ class WamPrivateStatsUploaderTest {
                         .build());
         var issuer = new WamPrivateStatsTokenIssuer(client, scriptedRandom(new byte[32], new byte[32]));
         var http = new RecordingHttpClient(200, _ -> hitHttp.set(true));
-        var uploader = new WamPrivateStatsUploader(issuer, http);
+        var uploader = new WamPrivateStatsUploader(issuer, http, TestWamService.create(client));
 
         var result = uploader.upload(new byte[]{1, 2, 3});
         assertEquals(WamPrivateStatsUploadResult.Type.ERROR_CREDENTIAL, result.result());
@@ -183,7 +184,7 @@ class WamPrivateStatsUploaderTest {
             capturedReq.set(request);
             capturedBody.set(extractBody(request));
         });
-        var uploader = new WamPrivateStatsUploader(issuer, http);
+        var uploader = new WamPrivateStatsUploader(issuer, http, TestWamService.create(client));
         var result = uploader.upload(buffer);
         return new CapturedUpload(capturedReq.get(), capturedBody.get(), result);
     }

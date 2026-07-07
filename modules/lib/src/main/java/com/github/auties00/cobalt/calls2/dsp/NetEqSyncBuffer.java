@@ -133,6 +133,23 @@ final class NetEqSyncBuffer {
     }
 
     /**
+     * Copies a contiguous run of samples out of the window into a destination array.
+     *
+     * <p>Copies {@code len} samples starting at absolute window index {@code fromIndex} into {@code dest}
+     * beginning at {@code destOff}, the bulk equivalent of a run of {@link #at(int)} reads the operations use
+     * to gather a recent span for a lag search or an overlap-add. The copied sample values are identical to
+     * reading {@code fromIndex + i} through {@link #at(int)} for each {@code i} in {@code [0, len)}.
+     *
+     * @param fromIndex the first window index to copy, in {@code [0, capacity)}
+     * @param dest      the destination array; never {@code null}
+     * @param destOff   the offset into {@code dest} at which the first copied sample lands
+     * @param len       the number of samples to copy
+     */
+    void copyRange(int fromIndex, short[] dest, int destOff, int len) {
+        System.arraycopy(samples, fromIndex, dest, destOff, len);
+    }
+
+    /**
      * Appends a decoded frame at the back of the window, shifting the window left to stay within capacity.
      *
      * <p>Drops the oldest samples so the inserted frame fits at the high end, shifts the surviving samples

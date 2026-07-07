@@ -87,6 +87,35 @@ public final class E2eMediaSrtp {
     private final byte[] salt;
 
     /**
+     * Holds the immutable AES-128 session key specification, shared safely across threads.
+     */
+    private final SecretKeySpec cipherKeySpec;
+
+    /**
+     * Holds the immutable HMAC-SHA1 session key specification, shared safely across threads.
+     */
+    private final SecretKeySpec authKeySpec;
+
+    /**
+     * Holds the per-thread AES counter-mode engine reused across packets.
+     *
+     * <p>The outbound {@link #protectRtp(byte[], int)} path is driven by both the audio capture-pump
+     * thread and the video-encode thread and {@link #cryptPayload} is shared with the inbound path, so
+     * the mutable JCA engine is thread-confined rather than a shared field to avoid a data race.
+     */
+    private final ThreadLocal<Cipher> ctrCipher;
+
+    /**
+     * Holds the per-thread HMAC-SHA1 engine reused across packets for the outbound WARP-MI tag.
+     */
+    private final ThreadLocal<Mac> warpMac;
+
+    /**
+     * Holds the per-thread sixteen-byte counter-nonce scratch reused across packets.
+     */
+    private final ThreadLocal<byte[]> nonceScratch;
+
+    /**
      * Holds the per-synchronization-source inbound rollover-counter state used to estimate the
      * forty-eight-bit packet index of an unprotected packet.
      */
@@ -117,6 +146,23 @@ public final class E2eMediaSrtp {
         this.cipherKey = deriveSessionBytes(masterKey, masterSalt, LABEL_CIPHER, 16);
         this.authKey = deriveSessionBytes(masterKey, masterSalt, LABEL_AUTH, 20);
         this.salt = deriveSessionBytes(masterKey, masterSalt, LABEL_SALT, 14);
+        this.cipherKeySpec = new SecretKeySpec(cipherKey, "AES");
+        this.authKeySpec = new SecretKeySpec(authKey, "HmacSHA1");
+        this.ctrCipher = ThreadLocal.withInitial(() -> {
+            try {
+                return Cipher.getInstance("AES/CTR/NoPadding");
+            } catch (Exception exception) {
+                throw new WhatsAppCallException.Srtp("end-to-end SRTP AES-CTR unavailable", exception);
+            }
+        });
+        this.warpMac = ThreadLocal.withInitial(() -> {
+            try {
+                return Mac.getInstance("HmacSHA1");
+            } catch (Exception exception) {
+                throw new WhatsAppCallException.Srtp("end-to-end SRTP WARP-MI HMAC unavailable", exception);
+            }
+        });
+        this.nonceScratch = ThreadLocal.withInitial(() -> new byte[16]);
     }
 
     /**
@@ -199,9 +245,12 @@ public final class E2eMediaSrtp {
             return;
         }
         try {
-            var cipher = Cipher.getInstance("AES/CTR/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(cipherKey, "AES"),
+            var cipher = ctrCipher.get();
+            cipher.init(Cipher.ENCRYPT_MODE, cipherKeySpec,
                     new IvParameterSpec(buildNonce(ssrc, roc, sequence)));
+            // TODO: the doFinal output array is still allocated per packet; reusing it in place would need
+            //  a five-argument doFinal into the same buffer, whose overlap behaviour is not proven safe
+            //  across JCA providers, so it is left allocating to stay strictly behaviour-preserving.
             var transformed = cipher.doFinal(packet, offset, payloadLen);
             System.arraycopy(transformed, 0, packet, offset, transformed.length);
         } catch (Exception exception) {
@@ -222,7 +271,7 @@ public final class E2eMediaSrtp {
      * @return the sixteen-byte counter nonce
      */
     private byte[] buildNonce(int ssrc, int roc, int sequence) {
-        var nonce = new byte[16];
+        var nonce = nonceScratch.get();
         System.arraycopy(salt, 0, nonce, 0, 14);
         nonce[4] ^= (byte) (ssrc >>> 24);
         nonce[5] ^= (byte) (ssrc >>> 16);
@@ -252,8 +301,8 @@ public final class E2eMediaSrtp {
      */
     private byte[] warpMiTag(byte[] packet, int length, int roc) {
         try {
-            var mac = Mac.getInstance("HmacSHA1");
-            mac.init(new SecretKeySpec(authKey, "HmacSHA1"));
+            var mac = warpMac.get();
+            mac.init(authKeySpec);
             mac.update(packet, 0, length);
             mac.update(new byte[]{(byte) (roc >>> 24), (byte) (roc >>> 16), (byte) (roc >>> 8), (byte) roc});
             return Arrays.copyOf(mac.doFinal(), WARP_MI_TAG_LENGTH);

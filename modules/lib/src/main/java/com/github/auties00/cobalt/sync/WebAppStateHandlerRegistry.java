@@ -75,7 +75,7 @@ public final class WebAppStateHandlerRegistry {
      *                            handlers that emit per-mutation events
      */
     private void registerDefaultHandlers(ABPropsService abPropsService, LidMigrationService lidMigrationService, WamService wamService) {
-        var userStatusMuteHandler = new UserStatusMuteHandler();
+        var userStatusMuteHandler = new UserStatusMuteHandler(wamService);
 
         registerHandler(new ArchiveChatHandler());
         registerHandler(new PinChatHandler(wamService));
@@ -135,7 +135,7 @@ public final class WebAppStateHandlerRegistry {
         registerHandler(new BotWelcomeRequestHandler());
         registerHandler(new DetectedOutcomesStatusHandler());
         registerHandler(new WaffleAccountLinkStateHandler(abPropsService, wamService));
-        registerHandler(new CtwaPerCustomerDataSharingHandler());
+        registerHandler(new CtwaPerCustomerDataSharingHandler(wamService));
 
         registerHandler(new PushNameSettingHandler(wamService));
         registerHandler(new LocaleSettingHandler());

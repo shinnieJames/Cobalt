@@ -129,6 +129,9 @@ module com.github.auties00.cobalt.model {
     exports com.github.auties00.cobalt.model.props;
     exports com.github.auties00.cobalt.model.tos;
 
+    // Server-pushed account integrity challenge payload (listener-facing)
+    exports com.github.auties00.cobalt.model.integrity;
+
     // Payments
     exports com.github.auties00.cobalt.model.payment;
 

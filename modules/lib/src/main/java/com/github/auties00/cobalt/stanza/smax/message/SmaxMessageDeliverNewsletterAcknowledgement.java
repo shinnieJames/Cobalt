@@ -19,7 +19,11 @@ import java.util.Objects;
  * The error variant stamps the fixed {@code error="406"} marker so the relay treats the reply as a
  * definitive not-acknowledged signal. Both variants carry the same correlation triplet copied from
  * the inbound stanza: its id, its sender JID (which becomes the ack's {@code to}), and its type.
+ *
+ * @deprecated superseded by the general newsletter-message decode ({@code MessageStreamHandler}/{@code messageService});
+ * too narrow (media-only).
  */
+@Deprecated
 public sealed interface SmaxMessageDeliverNewsletterAcknowledgement extends SmaxStanza.Request
         permits SmaxMessageDeliverNewsletterAcknowledgement.SuccessAck, SmaxMessageDeliverNewsletterAcknowledgement.ErrorAck {
 

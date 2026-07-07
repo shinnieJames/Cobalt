@@ -77,8 +77,14 @@ public final class ProtobufLinkedWhatsAppAccountStore implements LinkedWhatsAppA
 
     /**
      * The device descriptor advertised during pairing and bundled into every client payload.
+     *
+     * @implNote
+     * The sealed {@link LinkedWhatsAppClientDevice} hierarchy cannot itself be a protobuf
+     * {@code MESSAGE} field, so it is persisted through the custom
+     * {@link LinkedWhatsAppClientDevice#serialize()}/{@link LinkedWhatsAppClientDevice#deserialize(byte[])}
+     * converter as a discriminated {@code BYTES} payload.
      */
-    @ProtobufProperty(index = 5, type = ProtobufType.MESSAGE)
+    @ProtobufProperty(index = 5, type = ProtobufType.BYTES)
     private LinkedWhatsAppClientDevice device;
 
     /**

@@ -12,6 +12,8 @@ import com.github.auties00.cobalt.message.send.icdc.IcdcEnricher;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.chat.Chat;
+import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
 import com.github.auties00.cobalt.model.chat.ChatKeepType;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -22,6 +24,8 @@ import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.contact.ContactMessage;
 import com.github.auties00.cobalt.model.message.contact.ContactsArrayMessage;
+import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
 import com.github.auties00.cobalt.model.message.event.EventMessage;
 import com.github.auties00.cobalt.model.message.group.GroupInviteMessage;
@@ -50,17 +54,40 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppSignalStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.AndroidMessageSendPerfEventBuilder;
+import com.github.auties00.cobalt.wam.event.DisappearingMessageKeepInChatEventBuilder;
 import com.github.auties00.cobalt.wam.event.E2eMessageSendEventBuilder;
+import com.github.auties00.cobalt.wam.event.KeepInChatErrorsEventBuilder;
+import com.github.auties00.cobalt.wam.event.KeepInChatPerfEventBuilder;
+import com.github.auties00.cobalt.wam.event.PnhRequestRevealActionEventBuilder;
+import com.github.auties00.cobalt.wam.event.StickerSendEventBuilder;
+import com.github.auties00.cobalt.wam.threadlogging.LiveThreadLoggingService;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
 import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
+import com.github.auties00.cobalt.wam.type.ClientMessageSendStage;
 import com.github.auties00.cobalt.wam.type.E2eCiphertextType;
 import com.github.auties00.cobalt.wam.type.E2eDestination;
 import com.github.auties00.cobalt.wam.type.EditType;
 import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
+import com.github.auties00.cobalt.wam.type.KicActionNameType;
+import com.github.auties00.cobalt.wam.type.KicActionType;
+import com.github.auties00.cobalt.wam.type.KicActorType;
+import com.github.auties00.cobalt.wam.type.KicEntryPointType;
+import com.github.auties00.cobalt.wam.type.KicErrorCodeType;
+import com.github.auties00.cobalt.wam.type.KicRequestTypeType;
 import com.github.auties00.cobalt.wam.type.MediaType;
+import com.github.auties00.cobalt.wam.type.MessageSendResultType;
+import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.PlaceholderReasonType;
+import com.github.auties00.cobalt.wam.type.PnhActionType;
+import com.github.auties00.cobalt.wam.type.PnhEntryPointType;
+import com.github.auties00.cobalt.wam.type.PnhMessageChatParty;
+import com.github.auties00.cobalt.wam.type.ResponseType;
+import com.github.auties00.cobalt.wam.type.StickerSendMessageType;
+import com.github.auties00.cobalt.wam.type.StickerSendOriginType;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -161,6 +188,14 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * dispatch from {@link MessageSendingService#send(MessageInfo)} routes by JID
      * server.
      *
+     * <p>The whole dispatch is timed so that, once the server ack has been
+     * parsed, the base class commits the per-send WAM telemetry: the
+     * {@code AndroidMessageSendPerfEvent} stage/result/duration beacon for every
+     * send, plus the content-specific {@code StickerSendEvent},
+     * keep-in-chat family, and {@code PnhRequestRevealActionEvent} when the
+     * payload warrants them (see {@link #emitMessageSendPerfEvent} and
+     * {@link #emitContentSendTelemetry}).
+     *
      * @param chatJid     the target chat, group, status, newsletter, or
      *                    peer-device JID
      * @param messageInfo the prepared message info
@@ -168,7 +203,14 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      */
     final AckResult send(Jid chatJid, T messageInfo) {
         waitForOfflineDelivery();
-        return enqueue(chatJid.toString(), () -> doSend(chatJid, messageInfo));
+        var perf = new AndroidMessageSendPerfEventBuilder()
+                .startDurationT()
+                .startDurationRelative();
+        var ack = enqueue(chatJid.toString(), () -> doSend(chatJid, messageInfo));
+        var container = messageInfo.message();
+        emitMessageSendPerfEvent(chatJid, container, perf, ack);
+        emitContentSendTelemetry(chatJid, container, ack);
+        return ack;
     }
 
     /**
@@ -743,6 +785,338 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             }
         }
         wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits the {@code AndroidMessageSendPerfEvent} (event id 1994) that
+     * records the just-completed send's stage timing and terminal result.
+     *
+     * <p>Every send routed through {@link #send(Jid, MessageInfo)} emits one of
+     * these regardless of chat kind. The {@code builder} is created and its
+     * {@code durationT}/{@code durationRelative} timers started by
+     * {@link #send(Jid, MessageInfo)} immediately before the dispatch, so this
+     * method stops those timers to record the real wall-clock cost, stamps the
+     * terminal {@link ClientMessageSendStage#CLIENT_WRITTEN_WIRE} stage, and
+     * folds the parsed {@link AckResult} into the {@link MessageSendResultType}
+     * ({@link MessageSendResultType#OK} on accept, {@link MessageSendResultType#SERVER_ERROR}
+     * on a NACK). The remaining slots mirror WA Web's {@code MessageSendPerfReporter}
+     * finalisation: media type, message type, edit type, revoke/forward/LID
+     * flags, and the host processor count.
+     *
+     * @implNote
+     * This implementation fabricates the values WA Web derives from runtime
+     * state Cobalt does not track at the wire boundary ({@code fetchPrekeys},
+     * {@code isE2eBackfill}, {@code sendRetryCount}, {@code sendCount}) using the
+     * common-case constants a fresh single-attempt send would report, and reads
+     * {@code phoneCores} from {@link Runtime#availableProcessors()}.
+     *
+     * @param chatJid   the send destination JID
+     * @param container the outbound {@link MessageContainer}
+     * @param builder   the perf builder whose timers were started before the
+     *                  dispatch
+     * @param ack       the parsed server {@link AckResult}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageSendPerfReporter", exports = "MessageSendPerfReporter",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    void emitMessageSendPerfEvent(Jid chatJid, MessageContainer container,
+                                  AndroidMessageSendPerfEventBuilder builder, AckResult ack) {
+        var editType = mapEditType(container);
+        builder.stopDurationT()
+                .stopDurationRelative()
+                .sendStage(ClientMessageSendStage.CLIENT_WRITTEN_WIRE)
+                .messageSendResult(ack.isSuccess() ? MessageSendResultType.OK : MessageSendResultType.SERVER_ERROR)
+                .messageType(mapMessageType(chatJid))
+                .editType(editType)
+                .isRevokeMessage(editType == EditType.SENDER_REVOKE)
+                .isMessageForward(isForwarded(container))
+                .isLid(chatJid.hasLidServer())
+                .isE2eBackfill(false)
+                .fetchPrekeys(false)
+                .sendRetryCount(0)
+                .sendCount(1)
+                .phoneCores(Runtime.getRuntime().availableProcessors());
+        var mediaType = mapMediaType(container);
+        if (mediaType != null) {
+            builder.mediaType(mediaType);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Dispatches the content-specific per-send WAM beacons for the payload just
+     * written to the wire.
+     *
+     * <p>A {@link StickerMessage} commits the {@code StickerSendEvent}; a
+     * {@link KeepInChatMessage} commits the keep-in-chat family
+     * ({@code DisappearingMessageKeepInChatEvent}, {@code KeepInChatPerfEvent},
+     * and on a NACK {@code KeepInChatErrorsEvent}); a
+     * {@link RequestPhoneNumberMessage} commits the
+     * {@code PnhRequestRevealActionEvent}. Every other payload emits nothing
+     * here (the perf beacon in {@link #emitMessageSendPerfEvent} already covered
+     * the generic send).
+     *
+     * @param chatJid   the send destination JID
+     * @param container the outbound {@link MessageContainer}
+     * @param ack       the parsed server {@link AckResult}
+     */
+    void emitContentSendTelemetry(Jid chatJid, MessageContainer container, AckResult ack) {
+        switch (container.content()) {
+            case StickerMessage sticker -> emitStickerSendEvent(sticker);
+            case KeepInChatMessage keep -> emitKeepInChatEvents(chatJid, keep, ack);
+            case RequestPhoneNumberMessage _ -> emitPnhRequestRevealEvent(chatJid);
+            default -> {
+            }
+        }
+    }
+
+    /**
+     * Commits the {@code StickerSendEvent} (event id 1840) describing the
+     * sticker just dispatched.
+     *
+     * <p>The animated, avatar, AI, and Lottie flags are read straight off the
+     * {@link StickerMessage} proto; the send origin is
+     * {@link StickerSendOriginType#FORWARD} when the sticker carries a forwarded
+     * context and {@link StickerSendOriginType#STICKER_PICKER_TAB_RECENTS}
+     * otherwise.
+     *
+     * @implNote
+     * This implementation fabricates the fields WA Web reads from its runtime
+     * {@code mediaData} rather than the wire proto: the first-party flag is
+     * inferred from the avatar/AI markers (both are WhatsApp-authored sticker
+     * families), the message type is the common {@link StickerSendMessageType#REGULAR}
+     * variant, and the sticker-maker, premium, and third-party-source flags
+     * default to {@code false} for a proto-sourced send.
+     *
+     * @param sticker the sticker payload being sent
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSendStickerAction", exports = "sendStickerToChat",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    void emitStickerSendEvent(StickerMessage sticker) {
+        var forwarded = sticker.contextInfo()
+                .map(ContextInfo::isForwarded)
+                .orElse(false);
+        var firstParty = sticker.isAvatar() || sticker.isAiSticker();
+        var event = new StickerSendEventBuilder()
+                .stickerSendOrigin(forwarded
+                        ? StickerSendOriginType.FORWARD
+                        : StickerSendOriginType.STICKER_PICKER_TAB_RECENTS)
+                .stickerSendMessageType(StickerSendMessageType.REGULAR)
+                .stickerIsAnimated(sticker.isAnimated())
+                .stickerIsAvatar(sticker.isAvatar())
+                .stickerIsAi(sticker.isAiSticker())
+                .stickerIsLottie(sticker.isLottie())
+                .stickerIsFirstParty(firstParty)
+                .stickerIsFromStickerMaker(false)
+                .stickerIsFromUserCreatedPack(false)
+                .stickerIsGiphy(false)
+                .stickerIsTenor(false)
+                .stickerIsKlipy(false)
+                .stickerIsText(false)
+                .stickerIsPremium(false)
+                .build();
+        wamService.commit(event);
+    }
+
+    /**
+     * Commits the keep-in-chat WAM family for a keep or unkeep action being
+     * dispatched.
+     *
+     * <p>Always emits the {@code DisappearingMessageKeepInChatEvent} (event id
+     * 3482) user-action beacon and the {@code KeepInChatPerfEvent} (event id
+     * 3488) request/response beacon; on a server NACK it additionally emits the
+     * {@code KeepInChatErrorsEvent} (event id 3698). The keep type selects the
+     * {@link KicActionNameType}/{@link KicRequestTypeType}/{@link KicActionType}
+     * triple, the actor is the sender when the kept message is {@code fromMe},
+     * and the chat ephemeral timer and thread id are resolved from the store.
+     *
+     * @implNote
+     * This implementation fabricates the group-membership fields WA Web resolves
+     * from live group metadata that Cobalt does not carry at the send boundary:
+     * the self admin flag defaults to {@code false} and {@code canEditDmSettings}
+     * to {@code true} only outside groups, matching a non-admin participant. The
+     * kept message's own ephemeral duration is reported as {@code 0} (WA Web's
+     * own {@code ||0} fallback) because the referenced message is not resolved
+     * here, and the NACK error code collapses to {@link KicErrorCodeType#UNKNOWN}.
+     *
+     * @param chatJid the send destination JID
+     * @param keep    the keep-in-chat payload being sent
+     * @param ack     the parsed server {@link AckResult}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebKeepInChatMsgAction", exports = "logKeepInChatAction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebEphemeralKeepInChatWamUtils",
+            exports = {"getBaseErrorLog", "parseKeepTypeToMetric"},
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    void emitKeepInChatEvents(Jid chatJid, KeepInChatMessage keep, AckResult ack) {
+        var keepType = keep.keepType().orElse(ChatKeepType.UNKNOWN);
+        var isGroup = chatJid.hasGroupOrCommunityServer();
+        var ephemeralSeconds = chatEphemeralityDurationSeconds(chatJid);
+        var thread = threadId(chatJid);
+        var actor = keep.key().isPresent() && keep.key().get().fromMe()
+                ? KicActorType.SENDER
+                : KicActorType.RECIPIENT;
+
+        var action = new DisappearingMessageKeepInChatEventBuilder()
+                .isAGroup(isGroup)
+                .isAdmin(false)
+                .canEditDmSettings(!isGroup)
+                .messagesSelected(1)
+                .keptCount(1)
+                .chatEphemeralityDuration(ephemeralSeconds)
+                .kicActor(actor)
+                .kicEntryPoint(KicEntryPointType.CHAT);
+        if (keepType == ChatKeepType.UNDO_KEEP_FOR_ALL) {
+            action.kicActionName(KicActionNameType.UNKEEP_MESSAGE)
+                    .keptDelta(0)
+                    .messageExpiryTimer(0)
+                    .messageExpiredOnUnkeep(false);
+        } else {
+            action.kicActionName(KicActionNameType.KEEP_MESSAGE);
+        }
+        if (!thread.isEmpty()) {
+            action.threadId(thread);
+        }
+        wamService.commit(action.build());
+
+        var perf = new KeepInChatPerfEventBuilder()
+                .response(ack.isSuccess() ? ResponseType.SUCCESS : ResponseType.ERROR)
+                .requestSendTime(Instant.now().getEpochSecond())
+                .chatEphemeralityDuration(ephemeralSeconds)
+                .kicMessageEphemeralityDuration(0)
+                .kicRequestType(keepType == ChatKeepType.UNDO_KEEP_FOR_ALL
+                        ? KicRequestTypeType.UNKEEP
+                        : KicRequestTypeType.KEEP);
+        if (!thread.isEmpty()) {
+            perf.threadId(thread);
+        }
+        wamService.commit(perf.build());
+
+        if (!ack.isSuccess()) {
+            var errors = new KeepInChatErrorsEventBuilder()
+                    .kicAction(keepType == ChatKeepType.UNDO_KEEP_FOR_ALL
+                            ? KicActionType.UNKEEP_MESSAGE
+                            : KicActionType.KEEP_MESSAGE)
+                    .isAGroup(isGroup)
+                    .isAdmin(false)
+                    .canEditDmSettings(!isGroup)
+                    .kicErrorCode(KicErrorCodeType.UNKNOWN)
+                    .kicMessageEphemeralityDuration(0)
+                    .build();
+            wamService.commit(errors);
+        }
+    }
+
+    /**
+     * Commits the {@code PnhRequestRevealActionEvent} (event id 3808) for a
+     * phone-number-reveal request being sent into a LID chat.
+     *
+     * <p>The action is fixed to {@link PnhActionType#SEND_REQUEST} from the
+     * {@link PnhEntryPointType#PN_REQUEST} entry point; the thread id is the
+     * store-derived HMAC when a thread-logging secret has been provisioned.
+     *
+     * @implNote
+     * This implementation reports {@link PnhMessageChatParty#CONSUMER} and omits
+     * the optional {@code pnhChatType} because Cobalt does not resolve the
+     * counterpart's business classification or the CTWA origin at the send
+     * boundary; WA Web reads both from the active chat's UI model.
+     *
+     * @param chatJid the send destination JID
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogRequestPhoneNumber", exports = "logPnhRequestRevealActionHelper",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    void emitPnhRequestRevealEvent(Jid chatJid) {
+        var event = new PnhRequestRevealActionEventBuilder()
+                .pnhAction(PnhActionType.SEND_REQUEST)
+                .pnhChatParty(PnhMessageChatParty.CONSUMER)
+                .pnhEntryPoint(PnhEntryPointType.PN_REQUEST);
+        var thread = threadId(chatJid);
+        if (!thread.isEmpty()) {
+            event.threadId(thread);
+        }
+        wamService.commit(event.build());
+    }
+
+    /**
+     * Classifies the destination {@link Jid} into the WAM {@link MessageType}
+     * used on outbound perf events.
+     *
+     * <p>Status broadcasts, newsletters, groups/communities, broadcast lists,
+     * and interop bridges map to their dedicated constants; every other
+     * destination is an {@link MessageType#INDIVIDUAL} chat.
+     *
+     * @param chatJid the send destination JID
+     * @return the matching {@link MessageType}; never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "getWamMessageType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static MessageType mapMessageType(Jid chatJid) {
+        if (chatJid.isStatusBroadcastAccount()) {
+            return MessageType.STATUS;
+        }
+        if (chatJid.hasNewsletterServer()) {
+            return MessageType.CHANNEL;
+        }
+        if (chatJid.hasGroupOrCommunityServer()) {
+            return MessageType.GROUP;
+        }
+        if (chatJid.hasBroadcastServer()) {
+            return MessageType.BROADCAST;
+        }
+        if (chatJid.hasInteropServer()) {
+            return MessageType.INTEROP;
+        }
+        return MessageType.INDIVIDUAL;
+    }
+
+    /**
+     * Returns whether the container's payload carries a forwarded context.
+     *
+     * <p>Only {@link ContextualMessage} payloads expose the forwarding flag;
+     * control payloads report {@code false}.
+     *
+     * @param container the outbound {@link MessageContainer}
+     * @return {@code true} when the payload is a forward
+     */
+    private static boolean isForwarded(MessageContainer container) {
+        return container.content() instanceof ContextualMessage contextual
+                && contextual.contextInfo()
+                .map(ContextInfo::isForwarded)
+                .orElse(false);
+    }
+
+    /**
+     * Returns the chat's ephemeral-timer duration in seconds, or {@code 0} when
+     * disappearing messages are off or the chat is unknown.
+     *
+     * @param chatJid the chat JID
+     * @return the ephemeral duration in seconds
+     */
+    @WhatsAppWebExport(moduleName = "WAWebChatEphemerality", exports = "getEphemeralSetting",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private long chatEphemeralityDurationSeconds(Jid chatJid) {
+        return store.chatStore()
+                .findChatByJid(chatJid)
+                .flatMap(Chat::ephemeralExpiration)
+                .map(ChatEphemeralTimer::periodSeconds)
+                .orElse(0);
+    }
+
+    /**
+     * Returns the per-thread HMAC thread id for the given chat, or the empty
+     * string when no thread-logging secret has been provisioned.
+     *
+     * <p>Delegates to {@link LiveThreadLoggingService#chatThreadIdHmac(LinkedWhatsAppClient, String)}
+     * so the {@code threadId} slot stamped on keep-in-chat and PNH events
+     * matches the value the {@code ThreadInteractionData} uploader reports for
+     * the same conversation.
+     *
+     * @param chatJid the chat JID
+     * @return the Base64 HMAC thread id, or the empty string
+     */
+    @WhatsAppWebExport(moduleName = "WAWebChatThreadLogging", exports = "getChatThreadID",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private String threadId(Jid chatJid) {
+        return LiveThreadLoggingService.chatThreadIdHmac(client, chatJid.toString());
     }
 
     /**

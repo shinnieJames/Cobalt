@@ -84,7 +84,7 @@ public record CallCapability(int version, byte[] mask) {
         return new StanzaBuilder()
                 .description(ELEMENT)
                 .attribute(VERSION_ATTRIBUTE, version)
-                .content(mask)
+                .content(mask.clone())
                 .build();
     }
 

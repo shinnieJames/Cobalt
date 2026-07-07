@@ -99,10 +99,11 @@ public final class GroupStoreInviteSmsMexRequest implements MexStanza.Request.Js
      * @implNote This implementation streams the GraphQL variables through fastjson2's
      * {@link JSONWriter}, nesting the {@code group_jid} scalar and the {@code partcipants} array
      * under a single {@code input} object and emitting each field only when its corresponding
-     * constructor argument is non-null. The participant array field is spelled {@code partcipants}
-     * to match the WhatsApp Web dispatcher's misspelled key, which the relay expects verbatim. The
-     * wrapped envelope is built through
-     * {@link MexStanza.Request.Json#createMexNode(String, String)}.
+     * constructor argument is non-null. Each participant is emitted as an object of the shape
+     * {@code {"user_jid": "<jid>"}} rather than a bare string, matching the WhatsApp Web dispatcher.
+     * The participant array field is spelled {@code partcipants} to match the WhatsApp Web
+     * dispatcher's misspelled key, which the relay expects verbatim. The wrapped envelope is built
+     * through {@link MexStanza.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGroupStoreInviteSmsJob", exports = "mexGroupStoreInviteSms",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -125,7 +126,11 @@ public final class GroupStoreInviteSmsMexRequest implements MexStanza.Request.Js
                     if (i > 0) {
                         writer.writeComma();
                     }
+                    writer.startObject();
+                    writer.writeName("user_jid");
+                    writer.writeColon();
                     writer.writeString(participants.get(i));
+                    writer.endObject();
                 }
                 writer.endArray();
             }

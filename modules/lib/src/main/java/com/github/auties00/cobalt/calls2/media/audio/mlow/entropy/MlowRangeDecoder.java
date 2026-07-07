@@ -111,13 +111,16 @@ public final class MlowRangeDecoder {
 
     /**
      * The encoded byte buffer holding both the front range-coded bytes and the back raw bits.
+     *
+     * <p>Not {@code final} so a single decoder instance can be re-pointed at successive packets through
+     * {@link #reset(byte[], int, int)}; each reset fully re-primes the interval.
      */
-    private final byte[] buf;
+    private byte[] buf;
 
     /**
      * Base index in {@link #buf} of logical byte 0, supporting decode over a sub-window of a larger array.
      */
-    private final int bufBase;
+    private int bufBase;
 
     /**
      * Number of valid bytes in {@link #buf} starting at index 0, mirroring {@code ec_ctx.storage}.
@@ -126,7 +129,7 @@ public final class MlowRangeDecoder {
      * lets the front range-coded stream and the back raw-bit stream share one buffer without explicit
      * bounds management.
      */
-    private final int storage;
+    private int storage;
 
     /**
      * Offset of the next range-coded byte to read from the front of the buffer, {@code ec_ctx.offs}.
@@ -231,6 +234,26 @@ public final class MlowRangeDecoder {
      * @throws IndexOutOfBoundsException if {@code [offset, offset + length)} is not within {@code data}
      */
     public MlowRangeDecoder(byte[] data, int offset, int length) {
+        reset(data, offset, length);
+    }
+
+    /**
+     * Re-points this decoder at a fresh window and re-primes the interval, the state-reuse form of
+     * {@link #MlowRangeDecoder(byte[], int, int)}.
+     *
+     * <p>Overwrites every register with the same seed sequence the constructor computes (bounds check,
+     * buffer window, {@code rng = 1 << EC_CODE_EXTRA}, first-byte {@code rem}/{@code val} priming, then one
+     * {@link #normalize()}), so a decoder driven with {@code reset} is in the identical state a fresh
+     * decoder over the same window would be. It lets one decoder instance serve every packet of a stream
+     * without reallocating.
+     *
+     * @param data   the backing byte array
+     * @param offset the index in {@code data} of the first logical byte
+     * @param length the number of logical bytes available to the decoder
+     * @throws NullPointerException      if {@code data} is {@code null}
+     * @throws IndexOutOfBoundsException if {@code [offset, offset + length)} is not within {@code data}
+     */
+    public void reset(byte[] data, int offset, int length) {
         if (offset < 0 || length < 0 || offset + length > data.length) {
             throw new IndexOutOfBoundsException(
                     "window [" + offset + ", " + (offset + length) + ") out of bounds for length " + data.length);
@@ -568,8 +591,13 @@ public final class MlowRangeDecoder {
     /**
      * Threshold table used by {@link #tellFrac()} to recover the exact fractional-bit transition points,
      * the {@code correction} array of {@code ec_tell_frac}.
+     *
+     * <p>Every entry fits in an unsigned 16-bit value ({@code <= 0xFFFF}), so it is stored as {@code int};
+     * the sole read widens it to {@code long} for {@link Long#compareUnsigned(long, long)} against a value
+     * that is itself in {@code [2^15, 2^16)}, and since each stored value is non-negative the widening
+     * preserves the exact magnitude the {@code long} table produced.
      */
-    private static final long[] TELL_FRAC_CORRECTION = {
+    private static final int[] TELL_FRAC_CORRECTION = {
             35733, 38967, 42495, 46340,
             50535, 55109, 60097, 65535
     };

@@ -322,7 +322,8 @@ public final class SmaxGroupReportRequest implements SmaxStanza.Request {
         private Stanza frxChild;
 
         /**
-         * Accumulates the {@code <message>} children appended via {@link #addMessageChild(Stanza)}.
+         * Accumulates the {@code <message>} children built from the ids passed to
+         * {@link #reportedMessageIds(List)}.
          */
         private final List<Stanza> messageChildren = new ArrayList<>();
 
@@ -416,19 +417,28 @@ public final class SmaxGroupReportRequest implements SmaxStanza.Request {
         }
 
         /**
-         * Appends a pre-built {@code <message>} child to the spam-list payload.
+         * Appends one {@code <message id="..."/>} child per reported message id to the spam-list
+         * payload, building the stanza children internally so callers pass the raw ids captured from
+         * the offending chat rather than pre-built stanzas.
          *
          * @implNote
          * WA Web caps the count at 210; this implementation does not enforce the cap and lets the
          * relay reject oversize lists.
          *
-         * @param messageStanza the stanza; never {@code null}
+         * @param messageIds the reported message ids in report order; never {@code null}, entries
+         *                   never {@code null}
          * @return this builder
-         * @throws NullPointerException if {@code messageStanza} is {@code null}
+         * @throws NullPointerException if {@code messageIds} or any entry is {@code null}
          */
-        public Builder addMessageChild(Stanza messageStanza) {
-            Objects.requireNonNull(messageStanza, "messageStanza cannot be null");
-            messageChildren.add(messageStanza);
+        public Builder reportedMessageIds(List<String> messageIds) {
+            Objects.requireNonNull(messageIds, "messageIds cannot be null");
+            for (var messageId : messageIds) {
+                Objects.requireNonNull(messageId, "messageIds entries cannot be null");
+                messageChildren.add(new StanzaBuilder()
+                        .description("message")
+                        .attribute("id", messageId)
+                        .build());
+            }
             return this;
         }
 

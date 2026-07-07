@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.calls2.signaling;
 import com.github.auties00.cobalt.model.call.CallEndReason;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
+import com.github.auties00.cobalt.calls2.core.control.PrivacyToken;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.stanza.Stanza;
 import org.junit.jupiter.api.DisplayName;
@@ -56,7 +57,7 @@ class Calls2SignalingRoundTripTest {
                 Jid.of("44444444", JidServer.user()), null, "alice", null, "sched-1", "phone",
                 true, false, null, 1700000000L, 3,
                 capabilities, audio, video, fanout, media, null, groupInfo,
-                HexFormat.of().parseHex("ad00ad00"), HexFormat.of().parseHex("70697670"),
+                HexFormat.of().parseHex("ad00ad00"), new PrivacyToken(HexFormat.of().parseHex("70697670")),
                 null, null, voipSettings, null);
 
         var reparsed = Calls2CallStanza.parse(original.toStanza()).orElseThrow();

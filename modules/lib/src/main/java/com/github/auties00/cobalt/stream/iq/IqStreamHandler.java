@@ -11,7 +11,10 @@ import com.github.auties00.cobalt.graphql.whatsapp.auth.WhatsAppWebGraphQlBootst
 import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSessionBuilder;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
+import com.github.auties00.cobalt.pairing.ShortcakePairingService;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.identity.ADVDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentityBuilder;
@@ -26,6 +29,7 @@ import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.util.ScheduledTask;
 import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.CanonicalEntRecoveryCriticalEventEventBuilder;
 import com.github.auties00.cobalt.wam.event.Lid11MigrationLifecycleEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdLinkDeviceCompanionEventBuilder;
 import com.github.auties00.cobalt.wam.type.MdLinkDeviceCompanionStage;
@@ -42,6 +46,7 @@ import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Handles server-initiated {@code <iq>} (info/query) stanzas, covering the
@@ -70,6 +75,8 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WAWebHandleStanzaCommon")
 @WhatsAppWebModule(moduleName = "WAWebHandlePairDevice")
 @WhatsAppWebModule(moduleName = "WAWebHandlePairSuccess")
+@WhatsAppWebModule(moduleName = "WAWebHandleCanonicalRegistration")
+@WhatsAppWebModule(moduleName = "WAWebCanonicalEntRecoveryWam")
 public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
 
     /**
@@ -143,6 +150,13 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
     private final CompanionPairingService deviceLinkingService;
 
     /**
+     * The service consulted when a passkey verification handler is configured: if its
+     * {@link ShortcakePairingService#isEnabled()} returns {@code true} the QR ref rotation and the
+     * pairing-code flow are skipped and the Shortcake passkey ceremony is started instead.
+     */
+    private final ShortcakePairingService shortcakePairingService;
+
+    /**
      * The lock protecting {@link #rotationTask} so the rotation can be
      * cancelled atomically from both the executor thread and the handler
      * thread.
@@ -160,6 +174,26 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * transitions and the {@code Lid11MigrationLifecycle} event.
      */
     private final WamService wamService;
+
+    /**
+     * The lazily-created canonical-registration trace id that ties every
+     * {@code CanonicalEntRecoveryCriticalEvent} of a single pairing session
+     * together.
+     *
+     * <p>The id is a random UUID minted on the first canonical-recovery critical
+     * commit and reused for every subsequent commit on the same handler, so the
+     * trace id threaded through the canonical-entity recovery funnel is stable
+     * within one linking attempt. It stays {@code null} until the first failure
+     * is reported.
+     *
+     * @implNote
+     * This implementation mints the id on demand rather than eagerly at pairing
+     * start because the id is only ever consumed by a critical-event commit,
+     * which is the exception path; the common successful pairing never needs one.
+     * WA persists this id in {@code WAWebUserPrefsCanonical}; Cobalt keeps it in
+     * a per-handler field because it is only read by the telemetry commit.
+     */
+    private String canonicalRegistrationTraceId;
 
     /**
      * Constructs an IQ stream handler bound to the given services.
@@ -182,6 +216,9 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * @param deviceLinkingService    the service used to gate
      *                                {@code pair-device} handling; must not be
      *                                {@code null}
+     * @param shortcakePairingService the service used to gate Shortcake passkey
+     *                                {@code pair-device} handling; must not be
+     *                                {@code null}
      * @param wamService              the service used for pairing-funnel
      *                                telemetry; must not be {@code null}
      * @throws NullPointerException if any service is {@code null}
@@ -193,6 +230,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
             SnapshotRecoveryService snapshotRecoveryService,
             LidMigrationService lidMigrationService,
             CompanionPairingService deviceLinkingService,
+            ShortcakePairingService shortcakePairingService,
             WamService wamService
     ) {
         this.whatsapp = whatsapp;
@@ -201,6 +239,7 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
         this.snapshotRecoveryService = Objects.requireNonNull(snapshotRecoveryService, "snapshotRecoveryService cannot be null");
         this.lidMigrationService = Objects.requireNonNull(lidMigrationService, "lidMigrationService cannot be null");
         this.deviceLinkingService = Objects.requireNonNull(deviceLinkingService, "altDeviceLinkingService cannot be null");
+        this.shortcakePairingService = Objects.requireNonNull(shortcakePairingService, "shortcakePairingService cannot be null");
         this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
         this.rotationLock = new Object();
     }
@@ -297,6 +336,15 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
 
         whatsapp.store().signalStore().setAdvSecretKey(DataUtils.randomByteArray(32));
         sendPairDeviceAck(iqStanza);
+
+        if (shortcakePairingService.isEnabled()) {
+            try {
+                shortcakePairingService.start();
+            } catch (Throwable throwable) {
+                LOGGER.log(System.Logger.Level.WARNING, "Cannot start Shortcake passkey linking: {0}", throwable.getMessage());
+            }
+            return;
+        }
 
         if (deviceLinkingService.isEnabled()) {
             try {
@@ -633,7 +681,13 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
      * <p>The whole step is guarded: any missing input, decryption failure, HTTP
      * failure, or unsuccessful exchange is logged at {@code DEBUG} and swallowed
      * so a credential-acquisition problem never aborts an otherwise successful
-     * pairing, matching WA Web's own try/catch around the canonical step.
+     * pairing, matching WA Web's own try/catch around the canonical step. Each
+     * critical failure of the recovery flow (absent encryption metadata, absent
+     * paired JID, an undecryptable nonce blob, or an unexpected throwable) also
+     * commits a {@code CanonicalEntRecoveryCriticalEvent} through
+     * {@link #emitCanonicalRecoveryCriticalEvent(String, String, String)} so the
+     * canonical-entity recovery funnel reported to the WhatsApp dashboards
+     * matches the official client; the successful exchange emits none.
      *
      * @implNote This implementation instantiates a fresh
      * {@link WhatsAppWebGraphQlBootstrapClient} per pairing so the bootstrap {@code GET} and
@@ -651,6 +705,14 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
                     .flatMap(SmaxMdSetRegEncryptionMetadata::of)
                     .orElse(null);
             if (metadata == null) {
+                emitCanonicalRecoveryCriticalEvent("registration_missing_metadata", "registration", null);
+                return;
+            }
+
+            var pairedJid = store.accountStore().jid().orElse(null);
+            if (pairedJid == null) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Canonical registration missing paired jid; skipping WhatsApp Web GraphQL bootstrap");
+                emitCanonicalRecoveryCriticalEvent("registration_missing_jid", "registration", null);
                 return;
             }
 
@@ -660,16 +722,13 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
                     .orElse(null);
             if (credentials == null) {
                 LOGGER.log(System.Logger.Level.DEBUG, "Canonical nonce blob absent or undecryptable; skipping WhatsApp Web GraphQL bootstrap");
+                emitCanonicalRecoveryCriticalEvent("nonce_decryption_failed", "registration", null);
                 return;
             }
 
-            var deviceId = store.accountStore().jid()
-                    .map(Jid::device)
-                    .orElse(0);
-
             var bootstrap = new WhatsAppWebGraphQlBootstrapClient();
             var lsd = bootstrap.fetchLsd();
-            if (bootstrap.exchange(credentials.withDeviceId(deviceId), lsd)) {
+            if (bootstrap.exchange(credentials.withDeviceId(pairedJid.device()), lsd)) {
                 store.webSessionStore().setWhatsAppWebGraphQlSession(new WhatsAppWebGraphQlSessionBuilder()
                         .sessionCookie(bootstrap.cookieHeader())
                         .lsdToken(lsd)
@@ -683,7 +742,118 @@ public final class IqStreamHandler extends SocketStreamHandler.Concurrent {
             }
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.DEBUG, "WhatsApp Web GraphQL credential acquisition failed: {0}", throwable.getMessage());
+            emitCanonicalRecoveryCriticalEvent("registration_unexpected_error", "registration", String.valueOf(throwable));
         }
+    }
+
+    /**
+     * Commits one {@code CanonicalEntRecoveryCriticalEvent} recording a critical
+     * failure of the canonical-entity (account credential) recovery flow.
+     *
+     * <p>The commit carries the failure name, the stable
+     * {@link #canonicalRegistrationTraceId() registration trace id}, the local
+     * device id (the paired JID's device index rendered as a decimal string, or
+     * the empty string when no JID is available), the always-empty family device
+     * id, and a JSON metadata blob of the form {@code {"purpose":"..."}} or, when
+     * an error string is supplied, {@code {"purpose":"...","error":"..."}}. The
+     * sequence-number, {@code traceIdInt}, and request-id properties are left
+     * unset because the upstream {@code logCriticalRecoveryEvent} caller does not
+     * populate them for the registration flow.
+     *
+     * @implNote
+     * This implementation assembles the metadata JSON by hand via
+     * {@link #jsonString(String)} rather than pulling in a JSON serializer,
+     * because the shape is a fixed one- or two-key object; it derives the device
+     * id from the paired JID because Cobalt has no {@code getMaybeMeDeviceId}
+     * user-prefs accessor. A {@link RuntimeException} raised by the commit is
+     * caught and logged so a telemetry failure cannot disrupt pairing.
+     *
+     * @param eventName the failure name recorded as the critical-event name
+     *                  (for example {@code "nonce_decryption_failed"})
+     * @param purpose   the recovery purpose recorded in the metadata blob
+     *                  (always {@code "registration"} for the pair-success flow)
+     * @param error     the error detail folded into the metadata blob, or
+     *                  {@code null} to omit the {@code "error"} key
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCanonicalEntRecoveryWam", exports = "logCriticalRecoveryEvent", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitCanonicalRecoveryCriticalEvent(String eventName, String purpose, String error) {
+        try {
+            var deviceId = whatsapp.store().accountStore().jid()
+                    .map(jid -> String.valueOf(jid.device()))
+                    .orElse("");
+            var metadata = error == null
+                    ? "{\"purpose\":" + jsonString(purpose) + "}"
+                    : "{\"purpose\":" + jsonString(purpose) + ",\"error\":" + jsonString(error) + "}";
+            wamService.commit(new CanonicalEntRecoveryCriticalEventEventBuilder()
+                    .canonicalEntRecoveryCriticalEventName(eventName)
+                    .canonicalEntRegistrationTraceId(canonicalRegistrationTraceId())
+                    .canonicalEntRecoveryCriticalEventMetadata(metadata)
+                    .deviceId(deviceId)
+                    .familyDeviceId("")
+                    .build());
+        } catch (RuntimeException wamException) {
+            LOGGER.log(System.Logger.Level.WARNING, "Cannot commit CanonicalEntRecoveryCriticalEvent event: {0}", wamException.getMessage());
+        }
+    }
+
+    /**
+     * Returns the canonical-registration trace id, minting one on first use.
+     *
+     * <p>The id is a random UUID that stays constant for the lifetime of this
+     * handler once created, so every critical-event commit of a single pairing
+     * attempt shares the same trace id.
+     *
+     * @implNote
+     * This implementation tolerates the benign race of two concurrent callers
+     * each minting a UUID because the canonical-recovery critical path runs on a
+     * single pairing thread; the last write wins and the funnel still correlates.
+     *
+     * @return the stable registration trace id; never {@code null}
+     */
+    private String canonicalRegistrationTraceId() {
+        var traceId = canonicalRegistrationTraceId;
+        if (traceId == null) {
+            traceId = UUID.randomUUID().toString();
+            canonicalRegistrationTraceId = traceId;
+        }
+        return traceId;
+    }
+
+    /**
+     * Encodes the given value as a JSON string literal, quotes included.
+     *
+     * <p>The result wraps {@code value} in double quotes and escapes the
+     * characters JSON requires: the quote, the backslash, the tab, and the
+     * carriage-return and newline control characters, with any remaining control
+     * character below {@code 0x20} emitted as a {@code \\u00xx} escape. This
+     * mirrors {@code JSON.stringify} closely enough for the fixed metadata blobs
+     * built by {@link #emitCanonicalRecoveryCriticalEvent(String, String, String)}.
+     *
+     * @param value the raw string to encode
+     * @return the JSON string literal, including the surrounding quotes
+     */
+    private static String jsonString(String value) {
+        var builder = new StringBuilder(value.length() + 2);
+        builder.append('"');
+        for (var index = 0; index < value.length(); index++) {
+            var character = value.charAt(index);
+            switch (character) {
+                case '"' -> builder.append("\\\"");
+                case '\\' -> builder.append("\\\\");
+                case '\n' -> builder.append("\\n");
+                case '\r' -> builder.append("\\r");
+                case '\t' -> builder.append("\\t");
+                default -> {
+                    if (character < 0x20) {
+                        builder.append(String.format("\\u%04x", (int) character));
+                    } else {
+                        builder.append(character);
+                    }
+                }
+            }
+        }
+        builder.append('"');
+        return builder.toString();
     }
 
     /**

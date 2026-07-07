@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.util;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
@@ -182,6 +184,81 @@ public final class DataUtils {
      * {@link ByteOrder#LITTLE_ENDIAN} order.
      */
     private static final VarHandle DOUBLE_BUFFER_LE = MethodHandles.byteBufferViewVarHandle(double[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * Reads and writes {@code short} values from a {@link MemorySegment} in
+     * {@link ByteOrder#BIG_ENDIAN} order at an arbitrary, possibly unaligned byte
+     * offset.
+     *
+     * <p>Backs {@link #getShort(MemorySegment, long, ByteOrder)} and
+     * {@link #putShort(MemorySegment, long, short, ByteOrder)}. Its coordinate
+     * types are {@code (MemorySegment, long)}, so it accepts both heap- and
+     * native-backed segments and the full {@code long} offset range.
+     */
+    private static final VarHandle SHORT_SEGMENT_BE = ValueLayout.JAVA_SHORT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code short} values from a {@link MemorySegment} in
+     * {@link ByteOrder#LITTLE_ENDIAN} order at an arbitrary, possibly unaligned
+     * byte offset.
+     */
+    private static final VarHandle SHORT_SEGMENT_LE = ValueLayout.JAVA_SHORT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code int} values from a {@link MemorySegment} in
+     * {@link ByteOrder#BIG_ENDIAN} order at an arbitrary, possibly unaligned byte
+     * offset.
+     */
+    private static final VarHandle INT_SEGMENT_BE = ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code int} values from a {@link MemorySegment} in
+     * {@link ByteOrder#LITTLE_ENDIAN} order at an arbitrary, possibly unaligned
+     * byte offset.
+     */
+    private static final VarHandle INT_SEGMENT_LE = ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code long} values from a {@link MemorySegment} in
+     * {@link ByteOrder#BIG_ENDIAN} order at an arbitrary, possibly unaligned byte
+     * offset.
+     */
+    private static final VarHandle LONG_SEGMENT_BE = ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code long} values from a {@link MemorySegment} in
+     * {@link ByteOrder#LITTLE_ENDIAN} order at an arbitrary, possibly unaligned
+     * byte offset.
+     */
+    private static final VarHandle LONG_SEGMENT_LE = ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code float} values from a {@link MemorySegment} in
+     * {@link ByteOrder#BIG_ENDIAN} order at an arbitrary, possibly unaligned byte
+     * offset.
+     */
+    private static final VarHandle FLOAT_SEGMENT_BE = ValueLayout.JAVA_FLOAT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code float} values from a {@link MemorySegment} in
+     * {@link ByteOrder#LITTLE_ENDIAN} order at an arbitrary, possibly unaligned
+     * byte offset.
+     */
+    private static final VarHandle FLOAT_SEGMENT_LE = ValueLayout.JAVA_FLOAT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code double} values from a {@link MemorySegment} in
+     * {@link ByteOrder#BIG_ENDIAN} order at an arbitrary, possibly unaligned byte
+     * offset.
+     */
+    private static final VarHandle DOUBLE_SEGMENT_BE = ValueLayout.JAVA_DOUBLE_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN).varHandle();
+
+    /**
+     * Reads and writes {@code double} values from a {@link MemorySegment} in
+     * {@link ByteOrder#LITTLE_ENDIAN} order at an arbitrary, possibly unaligned
+     * byte offset.
+     */
+    private static final VarHandle DOUBLE_SEGMENT_LE = ValueLayout.JAVA_DOUBLE_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN).varHandle();
 
     static {
         try {
@@ -849,6 +926,272 @@ public final class DataUtils {
             DOUBLE_BUFFER_BE.set(buffer, offset, value);
         } else {
             DOUBLE_BUFFER_LE.set(buffer, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code short} from {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Decodes a two-byte field from a heap- or native-backed
+     * {@link MemorySegment} at an arbitrary, possibly unaligned byte offset,
+     * producing the same value as {@link #getShort(byte[], int, ByteOrder)} for
+     * the same bytes.
+     *
+     * @implNote
+     * This implementation uses Strategy A (a per-order {@link VarHandle} built
+     * from an unaligned {@link ValueLayout}), chosen from a JMH benchmark
+     * ({@code DataUtilsSegmentAccessBenchmark}) comparing five approaches; it
+     * tied for fastest and was the most consistent across heap- and
+     * native-backed segments and both byte orders, whereas a
+     * native-order-plus-{@code reverseBytes} variant had a heap-read penalty and
+     * byte-by-byte / copy-to-heap were far slower.
+     *
+     * @param segment the source segment
+     * @param offset  the byte offset at which to start reading
+     * @param order   the byte order to interpret the two bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 2 > segment.byteSize()}
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static short getShort(MemorySegment segment, long offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (short) SHORT_SEGMENT_BE.get(segment, offset);
+        }
+        return (short) SHORT_SEGMENT_LE.get(segment, offset);
+    }
+
+    /**
+     * Writes {@code value} to {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Encodes a two-byte field into a heap- or native-backed
+     * {@link MemorySegment} at an arbitrary, possibly unaligned byte offset,
+     * writing the same bytes as {@link #putShort(byte[], int, short, ByteOrder)}.
+     *
+     * @param segment the destination segment
+     * @param offset  the byte offset at which to start writing
+     * @param value   the value to encode
+     * @param order   the byte order to encode the two bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 2 > segment.byteSize()}
+     * @throws IllegalArgumentException  if {@code segment} is read-only
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static void putShort(MemorySegment segment, long offset, short value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            SHORT_SEGMENT_BE.set(segment, offset, value);
+        } else {
+            SHORT_SEGMENT_LE.set(segment, offset, value);
+        }
+    }
+
+    /**
+     * Reads an {@code int} from {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Decodes a four-byte field from a heap- or native-backed
+     * {@link MemorySegment} at an arbitrary, possibly unaligned byte offset,
+     * producing the same value as {@link #getInt(byte[], int, ByteOrder)} for the
+     * same bytes.
+     *
+     * @param segment the source segment
+     * @param offset  the byte offset at which to start reading
+     * @param order   the byte order to interpret the four bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > segment.byteSize()}
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static int getInt(MemorySegment segment, long offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (int) INT_SEGMENT_BE.get(segment, offset);
+        }
+        return (int) INT_SEGMENT_LE.get(segment, offset);
+    }
+
+    /**
+     * Writes {@code value} to {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Encodes a four-byte field into a heap- or native-backed
+     * {@link MemorySegment} at an arbitrary, possibly unaligned byte offset,
+     * writing the same bytes as {@link #putInt(byte[], int, int, ByteOrder)}.
+     *
+     * @param segment the destination segment
+     * @param offset  the byte offset at which to start writing
+     * @param value   the value to encode
+     * @param order   the byte order to encode the four bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > segment.byteSize()}
+     * @throws IllegalArgumentException  if {@code segment} is read-only
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static void putInt(MemorySegment segment, long offset, int value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            INT_SEGMENT_BE.set(segment, offset, value);
+        } else {
+            INT_SEGMENT_LE.set(segment, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code long} from {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Decodes an eight-byte field from a heap- or native-backed
+     * {@link MemorySegment} at an arbitrary, possibly unaligned byte offset,
+     * producing the same value as {@link #getLong(byte[], int, ByteOrder)} for
+     * the same bytes.
+     *
+     * @param segment the source segment
+     * @param offset  the byte offset at which to start reading
+     * @param order   the byte order to interpret the eight bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > segment.byteSize()}
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static long getLong(MemorySegment segment, long offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (long) LONG_SEGMENT_BE.get(segment, offset);
+        }
+        return (long) LONG_SEGMENT_LE.get(segment, offset);
+    }
+
+    /**
+     * Writes {@code value} to {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Encodes an eight-byte field into a heap- or native-backed
+     * {@link MemorySegment} at an arbitrary, possibly unaligned byte offset,
+     * writing the same bytes as {@link #putLong(byte[], int, long, ByteOrder)}.
+     *
+     * @param segment the destination segment
+     * @param offset  the byte offset at which to start writing
+     * @param value   the value to encode
+     * @param order   the byte order to encode the eight bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > segment.byteSize()}
+     * @throws IllegalArgumentException  if {@code segment} is read-only
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static void putLong(MemorySegment segment, long offset, long value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            LONG_SEGMENT_BE.set(segment, offset, value);
+        } else {
+            LONG_SEGMENT_LE.set(segment, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code float} from {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Decodes an IEEE-754 single-precision field from a heap- or
+     * native-backed {@link MemorySegment} at an arbitrary, possibly unaligned
+     * byte offset, producing the same value as
+     * {@link #getFloat(byte[], int, ByteOrder)} for the same bytes.
+     *
+     * @param segment the source segment
+     * @param offset  the byte offset at which to start reading
+     * @param order   the byte order to interpret the four bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > segment.byteSize()}
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static float getFloat(MemorySegment segment, long offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (float) FLOAT_SEGMENT_BE.get(segment, offset);
+        }
+        return (float) FLOAT_SEGMENT_LE.get(segment, offset);
+    }
+
+    /**
+     * Writes {@code value} to {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Encodes an IEEE-754 single-precision field into a heap- or
+     * native-backed {@link MemorySegment} at an arbitrary, possibly unaligned
+     * byte offset, writing the same bytes as
+     * {@link #putFloat(byte[], int, float, ByteOrder)}.
+     *
+     * @param segment the destination segment
+     * @param offset  the byte offset at which to start writing
+     * @param value   the value to encode
+     * @param order   the byte order to encode the four bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > segment.byteSize()}
+     * @throws IllegalArgumentException  if {@code segment} is read-only
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static void putFloat(MemorySegment segment, long offset, float value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            FLOAT_SEGMENT_BE.set(segment, offset, value);
+        } else {
+            FLOAT_SEGMENT_LE.set(segment, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code double} from {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Decodes an IEEE-754 double-precision field from a heap- or
+     * native-backed {@link MemorySegment} at an arbitrary, possibly unaligned
+     * byte offset, producing the same value as
+     * {@link #getDouble(byte[], int, ByteOrder)} for the same bytes.
+     *
+     * @param segment the source segment
+     * @param offset  the byte offset at which to start reading
+     * @param order   the byte order to interpret the eight bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > segment.byteSize()}
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static double getDouble(MemorySegment segment, long offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (double) DOUBLE_SEGMENT_BE.get(segment, offset);
+        }
+        return (double) DOUBLE_SEGMENT_LE.get(segment, offset);
+    }
+
+    /**
+     * Writes {@code value} to {@code segment} at {@code offset} using
+     * {@code order}.
+     *
+     * <p>Encodes an IEEE-754 double-precision field into a heap- or
+     * native-backed {@link MemorySegment} at an arbitrary, possibly unaligned
+     * byte offset, writing the same bytes as
+     * {@link #putDouble(byte[], int, double, ByteOrder)}.
+     *
+     * @param segment the destination segment
+     * @param offset  the byte offset at which to start writing
+     * @param value   the value to encode
+     * @param order   the byte order to encode the eight bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > segment.byteSize()}
+     * @throws IllegalArgumentException  if {@code segment} is read-only
+     * @throws IllegalStateException     if the scope associated with
+     *                                   {@code segment} is no longer alive
+     */
+    public static void putDouble(MemorySegment segment, long offset, double value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            DOUBLE_SEGMENT_BE.set(segment, offset, value);
+        } else {
+            DOUBLE_SEGMENT_LE.set(segment, offset, value);
         }
     }
 

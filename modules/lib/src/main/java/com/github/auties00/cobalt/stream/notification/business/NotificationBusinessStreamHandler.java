@@ -8,17 +8,28 @@ import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedBusinessPrivacySettingChangedListener;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.BusinessCampaignStatusBuilder;
 import com.github.auties00.cobalt.model.business.BusinessFeatureFlagBuilder;
 import com.github.auties00.cobalt.model.business.BusinessDataSharingConsent;
 import com.github.auties00.cobalt.model.business.BusinessSubscriptionBuilder;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.stanza.smax.biz.SmaxBannerSuggestionAction;
+import com.github.auties00.cobalt.stanza.smax.biz.SmaxBannerSuggestionBanner;
+import com.github.auties00.cobalt.stanza.smax.biz.SmaxBannerSuggestionFalseTrueFlag;
+import com.github.auties00.cobalt.stanza.smax.biz.SmaxBannerSuggestionResponse;
+import com.github.auties00.cobalt.stanza.smax.biz.SmaxCampaignStateChangedNotificationResponse;
 import com.github.auties00.cobalt.stanza.smax.biz.SmaxNonceNotificationResponse;
 import com.github.auties00.cobalt.stanza.smax.biz.SmaxSyncPrivacySettingResponse;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.CtwaActionBannerUnderstandEventBuilder;
+import com.github.auties00.cobalt.wam.type.PreferredLinkType;
 
 import java.time.Instant;
+import java.util.Locale;
 
 /**
  * Handles {@code type="business"}, {@code type="digital_commerce_subscription"}, and {@code type="fb:update"}
@@ -54,16 +65,24 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
     private final AckSender ackSender;
 
     /**
-     * Constructs the handler with the shared client and ack sender.
+     * Sink for the {@code CtwaActionBannerUnderstand} telemetry committed when a click-to-WhatsApp
+     * {@code <ctwa_suggestion>} banner notification is parsed.
+     */
+    private final WamService wamService;
+
+    /**
+     * Constructs the handler with the shared client, ack sender, and telemetry sink.
      *
      * <p>Called once by {@link NotificationBusinessDispatcher}.
      *
-     * @param whatsapp  the client used for store reads and business-profile queries
-     * @param ackSender the ack sender used for the post-processing acks
+     * @param whatsapp   the client used for store reads and business-profile queries
+     * @param ackSender  the ack sender used for the post-processing acks
+     * @param wamService the telemetry sink used to commit the click-to-WhatsApp banner-understand event
      */
-    public NotificationBusinessStreamHandler(LinkedWhatsAppClient whatsapp, AckSender ackSender) {
+    public NotificationBusinessStreamHandler(LinkedWhatsAppClient whatsapp, AckSender ackSender, WamService wamService) {
         this.whatsapp = whatsapp;
         this.ackSender = ackSender;
+        this.wamService = wamService;
     }
 
     /**
@@ -229,9 +248,7 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
         }
 
         if (stanza.hasChild("ctwa_suggestion")) {
-            // TODO: implement the CTWA action-banner suggestion pipeline once Cobalt has an equivalent of WAWebHandleCTWASuggestion.
-            LOGGER.log(System.Logger.Level.DEBUG,
-                    "Received ctwa_suggestion business notification (not implemented)");
+            handleCtwaSuggestion(stanza);
             return false;
         }
 
@@ -531,32 +548,183 @@ public final class NotificationBusinessStreamHandler extends SocketStreamHandler
      * {@code adCreativeId}, {@code adGroupId}, or {@code adId} fields is missing.
      *
      * @implNote
-     * This implementation reads the inline {@code <mm_campaign>} child attributes directly rather than re-parsing via
-     * SMAX, because the notification already carries the fields the campaign store needs and a second parser pass adds
-     * no validation.
+     * This implementation routes through the typed {@link SmaxCampaignStateChangedNotificationResponse} parser so the
+     * SMAX export remains the single source of truth for the wire attribute names ({@code ad_id}, {@code ad_group_id},
+     * {@code ad_creative_id}) and the envelope validation.
      *
      * @param stanza the {@code <notification>} stanza
      */
     private void handleMarketingCampaign(Stanza stanza) {
-        var campaignNode = stanza.getChild("mm_campaign").orElse(null);
-        if (campaignNode == null) {
+        var notification = SmaxCampaignStateChangedNotificationResponse.of(stanza).orElse(null);
+        if (notification == null) {
             return;
         }
 
-        var adCreativeId = campaignNode.getAttributeAsString("adCreativeId", null);
-        var adGroupId = campaignNode.getAttributeAsString("adGroupId", null);
-        var adId = campaignNode.getAttributeAsString("adId", null);
-        var status = campaignNode.getAttributeAsString("status", null);
+        var adCreativeId = notification.adCreativeId().orElse(null);
+        var adGroupId = notification.adGroupId().orElse(null);
+        var adId = notification.adId().orElse(null);
         if (adCreativeId == null || adGroupId == null || adId == null) {
             return;
         }
 
-        if (status != null) {
-            whatsapp.store().businessStore().putBusinessCampaignStatus(new BusinessCampaignStatusBuilder()
-                    .campaignId(adCreativeId)
-                    .status(status)
-                    .build());
+        whatsapp.store().businessStore().putBusinessCampaignStatus(new BusinessCampaignStatusBuilder()
+                .campaignId(adCreativeId)
+                .status(notification.status())
+                .build());
+    }
+
+    /**
+     * Parses the click-to-WhatsApp {@code <ctwa_suggestion>} banner notification and commits the resulting
+     * {@code CtwaActionBannerUnderstand} telemetry.
+     *
+     * <p>The suggestion is parsed through {@link SmaxBannerSuggestionResponse#of(Stanza)}. A banner whose
+     * {@code <config revoked="true"/>} marks it as pulled server-side is dismissed by id and carries no telemetry, in line
+     * with WA Web. Every other suggestion, including one with missing or malformed banner data, produces exactly one
+     * committed event through {@link #emitCtwaActionBannerUnderstand(Stanza, String, SmaxBannerSuggestionBanner)}.
+     *
+     * @implNote
+     * This implementation resolves the banner identifier from the parsed {@code target_entity_id} when the notification
+     * parses, and otherwise reads it directly from the {@code <ctwa_suggestion>} child so an unparseable banner still
+     * reports the entity it targeted.
+     *
+     * @param stanza the {@code <notification type="business"/>} stanza carrying the {@code <ctwa_suggestion>} child
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCTWAParseSuggestion", exports = "parseCTWASuggestion", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void handleCtwaSuggestion(Stanza stanza) {
+        var notification = SmaxBannerSuggestionResponse.of(stanza).orElse(null);
+        var banner = notification == null ? null : notification.banner().orElse(null);
+        if (banner != null && banner.config().revoked() == SmaxBannerSuggestionFalseTrueFlag.TRUE) {
+            return;
         }
+
+        var bannerIdentifier = notification != null
+                ? notification.targetEntityId()
+                : stanza.getChild("ctwa_suggestion")
+                        .flatMap(child -> child.getAttributeAsString("target_entity_id"))
+                        .orElse(null);
+        emitCtwaActionBannerUnderstand(stanza, bannerIdentifier, banner);
+    }
+
+    /**
+     * Builds and commits a single {@code CtwaActionBannerUnderstand} event describing the parsed banner suggestion.
+     *
+     * <p>Mirrors WA Web's metric reporter: {@code bannerIdentifier} and {@code validNotification} are always populated,
+     * while {@code bannerLocale} and {@code validLocale} are populated only when banner content is present. A notification
+     * is considered valid when the banner ships exactly one {@code platform="web"} native action whose deep link is a
+     * usable HTTPS URL or a recognised API command; a lone action with an unusable link additionally reports that link
+     * through {@code invalidLink}. The {@code hasLocalLink}, {@code hasUniversalLink}, and {@code preferredLink} fields are
+     * derived from the web native action and the cross-platform {@code <action>} element; {@code clientLocale} is the
+     * account locale (host default when unset) and {@code notificationLogId} echoes the notification's server id.
+     *
+     * @implNote
+     * This implementation commits the event unconditionally when a {@code <ctwa_suggestion>} arrives rather than behind
+     * WA Web's {@code WAWebBizSuggestionsGatingUtils.adsActionBannersLoggingEnabled} logging gate, because the AB-props
+     * service is not injected into this handler.
+     *
+     * @param stanza           the {@code <notification>} stanza, used for the notification log id
+     * @param bannerIdentifier the CTWA target-entity id, or {@code null} when the suggestion could not be parsed
+     * @param banner           the parsed banner payload, or {@code null} when banner data was missing or malformed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCTWAParseSuggestion", exports = "maybeReportMetric", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitCtwaActionBannerUnderstand(Stanza stanza, String bannerIdentifier, SmaxBannerSuggestionBanner banner) {
+        // TODO: gate this emission behind WAWebBizSuggestionsGatingUtils.adsActionBannersLoggingEnabled once the AB-props service is injected into this handler.
+        var clientLocale = whatsapp.store().accountStore().locale()
+                .orElseGet(() -> Locale.getDefault().toLanguageTag());
+        var builder = new CtwaActionBannerUnderstandEventBuilder()
+                .clientLocale(clientLocale)
+                .notificationLogId(stanza.getAttributeAsString("id", null));
+        if (bannerIdentifier != null) {
+            builder.bannerIdentifier(bannerIdentifier);
+        }
+
+        if (banner == null) {
+            wamService.commit(builder.validNotification(false)
+                    .hasLocalLink(false)
+                    .hasUniversalLink(false)
+                    .preferredLink(PreferredLinkType.UNIVERSAL)
+                    .build());
+            return;
+        }
+
+        var bannerLocale = banner.content().locale();
+        var webActions = banner.nativeActions().stream()
+                .filter(action -> "web".equals(action.platform()))
+                .toList();
+        var webAction = webActions.size() == 1 ? webActions.getFirst() : null;
+        var actionLink = webAction == null ? null : webAction.localLink();
+        var validLink = isValidActionLink(actionLink);
+        var hasLocalLink = webAction != null
+                || banner.action().flatMap(SmaxBannerSuggestionAction::localLink).isPresent();
+        var hasUniversalLink = (webAction != null && webAction.universalLink().isPresent())
+                || banner.action().flatMap(SmaxBannerSuggestionAction::deepLink).isPresent();
+
+        builder.bannerLocale(bannerLocale)
+                .validLocale(localesMatch(bannerLocale, clientLocale))
+                .validNotification(webAction != null && validLink)
+                .hasLocalLink(hasLocalLink)
+                .hasUniversalLink(hasUniversalLink)
+                .preferredLink(hasLocalLink ? PreferredLinkType.LOCAL : PreferredLinkType.UNIVERSAL);
+        if (webAction != null && !validLink) {
+            builder.invalidLink(actionLink);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Returns whether a banner action deep link is a usable navigation target.
+     *
+     * <p>A link is usable when it is a non-blank HTTPS URL or an all-uppercase API command token such as
+     * {@code MANAGE_ADS} or {@code RECREATE_AD}; every other value is treated as an invalid link.
+     *
+     * @implNote
+     * This implementation approximates WA Web's {@code WAWebApiParse.parseAPICmd} acceptance without porting the full
+     * command grammar: it accepts the {@code https://} scheme and the recognised command-token shape and rejects the rest.
+     *
+     * @param link the deep-link value, or {@code null}
+     * @return {@code true} when the link is a usable HTTPS URL or an API command token; {@code false} otherwise
+     */
+    private static boolean isValidActionLink(String link) {
+        if (link == null || link.isBlank()) {
+            return false;
+        }
+        if (link.startsWith("https://")) {
+            return true;
+        }
+        return link.chars().allMatch(character -> Character.isUpperCase(character) || character == '_');
+    }
+
+    /**
+     * Returns whether two locale identifiers share the same primary language subtag.
+     *
+     * <p>Comparison is case-insensitive on the substring preceding the first {@code '_'} or {@code '-'} separator, so
+     * {@code "en_US"} matches {@code "en-GB"} but not {@code "fr_FR"}.
+     *
+     * @param bannerLocale the banner content locale
+     * @param clientLocale the account or host locale
+     * @return {@code true} when both carry the same language subtag; {@code false} otherwise
+     */
+    private static boolean localesMatch(String bannerLocale, String clientLocale) {
+        return languageSubtag(bannerLocale).equalsIgnoreCase(languageSubtag(clientLocale));
+    }
+
+    /**
+     * Returns the primary language subtag of a locale identifier.
+     *
+     * <p>Splits on the first {@code '_'} or {@code '-'} separator and returns the leading component; a value with no
+     * separator is returned unchanged and a {@code null} value yields the empty string.
+     *
+     * @param locale the locale identifier, or {@code null}
+     * @return the language subtag, or the empty string when {@code locale} is {@code null}
+     */
+    private static String languageSubtag(String locale) {
+        if (locale == null) {
+            return "";
+        }
+        var separator = locale.indexOf('_');
+        if (separator < 0) {
+            separator = locale.indexOf('-');
+        }
+        return separator < 0 ? locale : locale.substring(0, separator);
     }
 
     /**

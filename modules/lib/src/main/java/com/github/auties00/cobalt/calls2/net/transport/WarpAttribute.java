@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.calls2.net.transport;
 
+import java.util.Comparator;
+
 /**
  * Represents one decoded attribute of a WARP media-control message.
  *
@@ -30,6 +32,16 @@ public sealed interface WarpAttribute
      * @return the {@link WarpAttributeFlag} whose presence indicates this attribute is in the message
      */
     WarpAttributeFlag flag();
+
+    /**
+     * Orders attributes by ascending flag-bit ordinal, the order the WARP serializer appends them in.
+     *
+     * <p>A {@link WarpMessage} sorts its attributes with this comparator once at construction so
+     * {@link WarpMessage#encode(int)} can append them directly without re-sorting per packet; the wire
+     * order is identical to sorting inside {@code encode}.
+     */
+    Comparator<WarpAttribute> FLAG_ORDER =
+            Comparator.comparingInt(attribute -> attribute.flag().ordinal());
 
     /**
      * Writes this attribute's payload bytes into a buffer at the given offset.

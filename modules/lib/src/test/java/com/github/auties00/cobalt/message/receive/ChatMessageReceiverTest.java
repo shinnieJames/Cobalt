@@ -1,7 +1,9 @@
 package com.github.auties00.cobalt.message.receive;
 
+import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.message.TestSignalSession;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryption;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -71,7 +73,7 @@ class ChatMessageReceiverTest {
                 new SignalSessionCipher(recipientStore.signalStore()),
                 new SignalGroupCipher(recipientStore.signalStore()),
                 new SignalCryptoLocks());
-        var receiver = new ChatMessageReceiver(recipientStore, recipientDecryption);
+        var receiver = new ChatMessageReceiver(recipientStore, recipientDecryption, TestWamService.create(TestWhatsAppClient.create().withStore(recipientStore)));
 
         var info = receiver.receive(inbound, SENDER_PRIMARY);
 
@@ -102,7 +104,7 @@ class ChatMessageReceiverTest {
                 new SignalSessionCipher(recipientStore.signalStore()),
                 new SignalGroupCipher(recipientStore.signalStore()),
                 new SignalCryptoLocks());
-        var receiver = new ChatMessageReceiver(recipientStore, recipientDecryption);
+        var receiver = new ChatMessageReceiver(recipientStore, recipientDecryption, TestWamService.create(TestWhatsAppClient.create().withStore(recipientStore)));
 
         var firstPayload = senderEncryption.encryptForDevice(
                 RECIPIENT_PRIMARY,

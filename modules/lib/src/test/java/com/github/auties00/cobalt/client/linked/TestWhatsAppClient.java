@@ -902,6 +902,11 @@ public final class TestWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     @Override
+    public void revokeNewsletterStatus(JidProvider newsletterProvider, String statusId) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: revokeNewsletterStatus(..) is not stubbed");
+    }
+
+    @Override
     public void acceptNewsletterAdminInvite(JidProvider newsletterProvider) {
         throw new UnsupportedOperationException("TestWhatsAppClient: acceptNewsletterAdminInvite(..) is not stubbed");
     }
@@ -1667,6 +1672,11 @@ public final class TestWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     @Override
+    public Map<Jid, OptionalLong> storeGroupInviteSms(JidProvider groupProvider, Collection<? extends JidProvider> inviteesProvider) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: storeGroupInviteSms(..) is not stubbed");
+    }
+
+    @Override
     public Map<Jid, GroupParticipantStatus> removeGroupParticipants(JidProvider groupProvider, Collection<? extends JidProvider> toRemoveProvider) {
         throw new UnsupportedOperationException("TestWhatsAppClient: removeGroupParticipants(..) is not stubbed");
     }
@@ -2085,6 +2095,11 @@ public final class TestWhatsAppClient implements LinkedWhatsAppClient {
     @Override
     public LinkedWhatsAppClient addAboutChangedListener(LinkedAboutChangedListener listener) {
         throw new UnsupportedOperationException("TestWhatsAppClient: addAboutChangedListener(..) is not stubbed");
+    }
+
+    @Override
+    public LinkedWhatsAppClient addIntegrityChallengeListener(LinkedIntegrityChallengeListener listener) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: addIntegrityChallengeListener(..) is not stubbed");
     }
 
     @Override

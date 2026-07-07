@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.exception.WhatsAppException;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
@@ -656,7 +657,7 @@ public sealed abstract class WhatsAppSocketClient {
                 .localeLanguageIso6391("en")
                 .localeCountryIso31661Alpha2("US")
                 .deviceType(ClientPayload.ClientType.PHONE)
-                .deviceModelType(store.accountStore().device().modelId())
+                .deviceModelType(store.accountStore().device() instanceof LinkedWhatsAppClientDevice.Mobile mobile ? mobile.modelId() : null)
                 .build();
     }
 
@@ -851,7 +852,7 @@ public sealed abstract class WhatsAppSocketClient {
                 .localeLanguageIso6391("en")
                 .localeCountryIso31661Alpha2("US")
                 .deviceType(ClientPayload.ClientType.PHONE)
-                .deviceModelType(store.accountStore().device().modelId())
+                .deviceModelType(store.accountStore().device() instanceof LinkedWhatsAppClientDevice.Mobile mobile ? mobile.modelId() : null)
                 .build();
     }
 

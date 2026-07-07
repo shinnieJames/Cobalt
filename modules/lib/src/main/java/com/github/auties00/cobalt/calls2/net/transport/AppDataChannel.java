@@ -80,12 +80,13 @@ public final class AppDataChannel {
     /**
      * Whether the SCTP data channel has opened; while {@code false}, sends are buffered.
      */
-    private boolean ready;
+    // TODO: wire Web-P2P DataChannelState - replace/back this boolean `ready` field with a DataChannelState field driven UNINITIALIZED->DTLS->SCTP->READY (and RELAY_FALLBACK on send-failure relay fallback), each step gating on the previous
+    private volatile boolean ready;
 
     /**
      * Cumulative count of payloads dropped because the channel could not accept them.
      */
-    private long droppedPayloads;
+    private volatile long droppedPayloads;
 
     /**
      * Constructs an app-data channel that ships every payload over the SCTP data channel.

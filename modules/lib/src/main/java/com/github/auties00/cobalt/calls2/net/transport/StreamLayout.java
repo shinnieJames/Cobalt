@@ -4,7 +4,6 @@ import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptor;
 import com.github.auties00.cobalt.model.call.datachannel.StreamDescriptors;
 
 import java.util.Objects;
-import java.util.OptionalInt;
 
 /**
  * The set of SSRCs and feature streams a client publishes for one call.
@@ -12,7 +11,7 @@ import java.util.OptionalInt;
  * <p>A client allocates its full media layout up front and declares it to the
  * selective-forwarding unit as a {@link StreamDescriptors} list, one descriptor per
  * active logical stream. This record is the typed input the
- * {@link SubscriptionPublisher} turns into those descriptors: it names the audio SSRC,
+ * {@link LiveSubscriptionPublisher} turns into those descriptors: it names the audio SSRC,
  * the two video simulcast-layer SSRCs (each carrying its own media plus the paired
  * forward-error-correction and negative-acknowledgement streams), the application-data
  * SSRC, the optional live-transcription SSRC, and the optional hop-by-hop
@@ -68,69 +67,6 @@ public record StreamLayout(int audioSsrc,
     public static final int MAX_STREAM_DESCRIPTORS = 21;
 
     /**
-     * Returns the audio media SSRC, if this layout publishes audio.
-     *
-     * @return an {@link OptionalInt} holding the audio SSRC, or empty when absent
-     */
-    public OptionalInt audioSsrcValue() {
-        return audioSsrc == ABSENT_SSRC ? OptionalInt.empty() : OptionalInt.of(audioSsrc);
-    }
-
-    /**
-     * Returns the lower-resolution video simulcast-layer SSRC, if present.
-     *
-     * @return an {@link OptionalInt} holding the SSRC, or empty when absent
-     */
-    public OptionalInt videoStream0SsrcValue() {
-        return videoStream0Ssrc == ABSENT_SSRC ? OptionalInt.empty() : OptionalInt.of(videoStream0Ssrc);
-    }
-
-    /**
-     * Returns the higher-resolution video simulcast-layer SSRC, if present.
-     *
-     * @return an {@link OptionalInt} holding the SSRC, or empty when absent
-     */
-    public OptionalInt videoStream1SsrcValue() {
-        return videoStream1Ssrc == ABSENT_SSRC ? OptionalInt.empty() : OptionalInt.of(videoStream1Ssrc);
-    }
-
-    /**
-     * Returns the application-data SSRC, if this layout allocates one.
-     *
-     * @return an {@link OptionalInt} holding the SSRC, or empty when absent
-     */
-    public OptionalInt appDataSsrcValue() {
-        return appDataSsrc == ABSENT_SSRC ? OptionalInt.empty() : OptionalInt.of(appDataSsrc);
-    }
-
-    /**
-     * Returns the live-transcription SSRC, if enabled.
-     *
-     * @return an {@link OptionalInt} holding the SSRC, or empty when absent
-     */
-    public OptionalInt liveTranscriptionSsrcValue() {
-        return liveTranscriptionSsrc == ABSENT_SSRC ? OptionalInt.empty() : OptionalInt.of(liveTranscriptionSsrc);
-    }
-
-    /**
-     * Returns the client-to-server hop-by-hop FEC SSRC, if present.
-     *
-     * @return an {@link OptionalInt} holding the SSRC, or empty when absent
-     */
-    public OptionalInt hbhFecTxSsrcValue() {
-        return hbhFecTxSsrc == ABSENT_SSRC ? OptionalInt.empty() : OptionalInt.of(hbhFecTxSsrc);
-    }
-
-    /**
-     * Returns the server-to-client hop-by-hop FEC SSRC, if present.
-     *
-     * @return an {@link OptionalInt} holding the SSRC, or empty when absent
-     */
-    public OptionalInt hbhFecRxSsrcValue() {
-        return hbhFecRxSsrc == ABSENT_SSRC ? OptionalInt.empty() : OptionalInt.of(hbhFecRxSsrc);
-    }
-
-    /**
      * Returns whether this layout publishes any video simulcast layer.
      *
      * <p>True when either {@link #videoStream0Ssrc()} or {@link #videoStream1Ssrc()} is
@@ -160,33 +96,8 @@ public record StreamLayout(int audioSsrc,
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return obj == this || (obj instanceof StreamLayout that
-                && this.audioSsrc == that.audioSsrc
-                && this.videoStream0Ssrc == that.videoStream0Ssrc
-                && this.videoStream1Ssrc == that.videoStream1Ssrc
-                && this.appDataSsrc == that.appDataSsrc
-                && this.liveTranscriptionSsrc == that.liveTranscriptionSsrc
-                && this.hbhFecTxSsrc == that.hbhFecTxSsrc
-                && this.hbhFecRxSsrc == that.hbhFecRxSsrc
-                && this.uplinkPrefetch == that.uplinkPrefetch);
-    }
-
-    @Override
     public int hashCode() {
         return Objects.hash(audioSsrc, videoStream0Ssrc, videoStream1Ssrc, appDataSsrc,
                 liveTranscriptionSsrc, hbhFecTxSsrc, hbhFecRxSsrc, uplinkPrefetch);
-    }
-
-    @Override
-    public String toString() {
-        return "StreamLayout[audioSsrc=" + audioSsrc
-                + ", videoStream0Ssrc=" + videoStream0Ssrc
-                + ", videoStream1Ssrc=" + videoStream1Ssrc
-                + ", appDataSsrc=" + appDataSsrc
-                + ", liveTranscriptionSsrc=" + liveTranscriptionSsrc
-                + ", hbhFecTxSsrc=" + hbhFecTxSsrc
-                + ", hbhFecRxSsrc=" + hbhFecRxSsrc
-                + ", uplinkPrefetch=" + uplinkPrefetch + ']';
     }
 }

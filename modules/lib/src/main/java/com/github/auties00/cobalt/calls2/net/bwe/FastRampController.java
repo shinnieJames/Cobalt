@@ -121,7 +121,7 @@ public final class FastRampController {
             }
             slopeWindow.addLast(new RttSample(nowMs, rttMs));
         }
-        if (isCongested(lossRatio)) {
+        if (rampActive && isCongested(lossRatio)) {
             rampActive = false;
         }
         return rampActive;

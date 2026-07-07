@@ -55,11 +55,12 @@ public final class SubframeLpc {
     /**
      * Per-subframe interpolation factors for a single-subframe frame, the native {@code smpl_lsf_interpol_1}.
      *
-     * <p>A 10 ms low-band frame has one subframe; there is no interpolation index, so the single factor
-     * {@code 0.95f} is always used. Held as a one-row table so the row-selection logic is uniform across
-     * subframe counts.
+     * <p>A 10 ms low-band frame has one subframe; there is no interpolation index (the parameter decoder
+     * never codes one for a single-subframe frame, so {@code lsf_interpol_idx} is always {@code 0}), so the
+     * single factor {@code 0.95f} is always used. Held as a flat one-row array, like its
+     * {@link #INTERPOL_DTX_1} comfort-noise counterpart.
      */
-    private static final float[][] INTERPOL_1 = {{0.95f}};
+    private static final float[] INTERPOL_1 = {0.95f};
 
     /**
      * Per-subframe interpolation factors for a two-subframe frame, the native {@code smpl_lsf_interpol_2}.
@@ -179,7 +180,7 @@ public final class SubframeLpc {
      */
     private static float[] interpolRow(int numSubframes, int lsfInterpolIdx, boolean sid) {
         return switch (numSubframes) {
-            case 1 -> sid ? INTERPOL_DTX_1 : INTERPOL_1[lsfInterpolIdx];
+            case 1 -> sid ? INTERPOL_DTX_1 : INTERPOL_1;
             case 2 -> sid ? INTERPOL_DTX_2 : INTERPOL_2[lsfInterpolIdx];
             case 4 -> sid ? INTERPOL_DTX_4 : INTERPOL_4[lsfInterpolIdx];
             default -> throw new IllegalArgumentException("unsupported subframe count " + numSubframes);

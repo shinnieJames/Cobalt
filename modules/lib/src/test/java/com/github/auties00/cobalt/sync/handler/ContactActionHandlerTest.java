@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -61,7 +62,7 @@ class ContactActionHandlerTest {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         props = TestABPropsService.builder().build();
         client = TestWhatsAppClient.create().withStore(store).withAbPropsService(props);
-        handler = new ContactActionHandler(props, new UserStatusMuteHandler());
+        handler = new ContactActionHandler(props, new UserStatusMuteHandler(TestWamService.create(client)));
         factory = new ContactActionMutationFactory();
     }
 

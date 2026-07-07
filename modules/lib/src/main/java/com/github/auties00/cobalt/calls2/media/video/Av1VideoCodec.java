@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.calls2.media.video.av1.bindings.CobaltRav1e;
 import com.github.auties00.cobalt.calls2.stream.VideoFrame;
 import com.github.auties00.cobalt.calls2.stream.VideoPixelFormat;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -253,7 +254,7 @@ public final class Av1VideoCodec implements VideoCodec {
                     "frame " + frame.width() + "x" + frame.height() + " does not match codec geometry "
                             + params.width() + "x" + params.height());
         }
-        var planar = frame.format() == VideoPixelFormat.I420 ? frame.pixels() : toI420Planar(frame);
+        var planar = frame.pixels();
         var pixels = encodeStagingFor(planar.length);
         MemorySegment.copy(planar, 0, pixels, ValueLayout.JAVA_BYTE, 0, planar.length);
         int sendRc;
@@ -293,7 +294,7 @@ public final class Av1VideoCodec implements VideoCodec {
         }
         var packet = outPacketCell.get(CobaltRav1e.C_POINTER, 0);
         if (packet.equals(MemorySegment.NULL)) {
-            return new EncodedVideoFrame(new byte[0], VideoDecoderCapability.AV1, false,
+            return new EncodedVideoFrame(DataUtils.EMPTY_BYTE_ARRAY, VideoDecoderCapability.AV1, false,
                     source.width(), source.height(), source.ptsMicros());
         }
         var len = outLenCell.get(CobaltRav1e.C_INT, 0);
@@ -315,29 +316,6 @@ public final class Av1VideoCodec implements VideoCodec {
         }
         return new EncodedVideoFrame(bytes, VideoDecoderCapability.AV1, keyFrame,
                 source.width(), source.height(), source.ptsMicros());
-    }
-
-    /**
-     * Repacks an {@link VideoPixelFormat#NV12 NV12} frame into planar I420 for rav1e.
-     *
-     * @param frame the NV12 source frame
-     * @return the planar I420 pixel bytes
-     */
-    private byte[] toI420Planar(VideoFrame frame) {
-        var width = frame.width();
-        var height = frame.height();
-        var src = frame.pixels();
-        var lumaSize = width * height;
-        var chromaSize = (width / 2) * (height / 2);
-        var out = new byte[lumaSize + 2 * chromaSize];
-        System.arraycopy(src, 0, out, 0, lumaSize);
-        var uBase = lumaSize;
-        var vBase = lumaSize + chromaSize;
-        for (var i = 0; i < chromaSize; i++) {
-            out[uBase + i] = src[lumaSize + i * 2];
-            out[vBase + i] = src[lumaSize + i * 2 + 1];
-        }
-        return out;
     }
 
     /**

@@ -19,7 +19,10 @@ import java.util.Optional;
  * ack the delivery. The {@link #raw()} accessor exposes the backing {@link Stanza} so callers can
  * decode the variable-shape payload (reaction emoji, target server-id) without Cobalt having to
  * model each variant here.
+ *
+ * @deprecated superseded by the general newsletter-status path ({@code NewsletterStatusStreamHandler}).
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInStatusDeliverIncomingNewsletterStatusRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInStatusDeliverFromNewsletterMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInStatusDeliverStatusNewsletterContentMixin")

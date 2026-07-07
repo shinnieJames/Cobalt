@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.wam.WamService;
 
 import java.util.Objects;
 
@@ -64,22 +65,21 @@ public final class LiveMessageReceivingService implements MessageReceivingServic
      * <p>The same {@link LinkedWhatsAppStore} used by the rest of the client must be passed so
      * the receivers see consistent self-JID and Signal-session state.
      *
-     * @implNote
-     * This implementation injects both receivers through the constructor and exposes no
-     * service-locator accessor for them; both are package-private and owned solely by
-     * this service.
-     *
      * @param store      the central session store, shared with the rest of the client
      * @param decryption the Signal-protocol decryption service (PKMSG/MSG/SKMSG) plus
      *                   the MSMSG bot-message scheme used by {@link ChatMessageReceiver}
+     * @param wamService
+     * @implNote This implementation injects both receivers through the constructor and exposes no
+     * service-locator accessor for them; both are package-private and owned solely by
+     * this service.
      */
     @WhatsAppWebExport(moduleName = "WAWebCommsHandleMessagingStanza", exports = "handleMessagingStanza",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public LiveMessageReceivingService(
             LinkedWhatsAppStore store,
-            MessageDecryption decryption
-    ) {
-        this.chatReceiver = new ChatMessageReceiver(store, decryption);
+            MessageDecryption decryption,
+            WamService wamService) {
+        this.chatReceiver = new ChatMessageReceiver(store, decryption, wamService);
         this.newsletterReceiver = new NewsletterMessageReceiver(store);
         this.dedup = new MessageDedup();
     }

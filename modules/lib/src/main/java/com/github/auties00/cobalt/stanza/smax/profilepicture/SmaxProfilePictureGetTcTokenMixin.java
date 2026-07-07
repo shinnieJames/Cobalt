@@ -88,7 +88,7 @@ public final class SmaxProfilePictureGetTcTokenMixin {
     @WhatsAppWebExport(moduleName = "WASmaxOutProfilePictureTCTokenMixin",
             exports = "mergeTCTokenMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Stanza toNode() {
+    public Stanza toStanza() {
         var tctokenBuilder = new StanzaBuilder()
                 .description("tctoken")
                 .content(anyElementValue);

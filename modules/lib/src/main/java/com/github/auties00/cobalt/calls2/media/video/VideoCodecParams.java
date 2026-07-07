@@ -242,6 +242,9 @@ public record VideoCodecParams(
      */
     public VideoCodecParams withTargetBitrate(int bitrate) {
         var clamped = Math.clamp(bitrate, minBitrate, maxBitrate);
+        if (clamped == targetBitrate) {
+            return this;
+        }
         return new VideoCodecParams(codec, width, height, frameRate, clamped, minBitrate, maxBitrate,
                 minQuantizer, maxQuantizer, keyFrameIntervalSeconds, complexity, frameSkip,
                 idrBitrateRatio, temporalLayers, longTermReference);

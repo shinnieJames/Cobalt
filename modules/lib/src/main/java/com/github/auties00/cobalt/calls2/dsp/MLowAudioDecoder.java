@@ -157,7 +157,6 @@ public final class MLowAudioDecoder implements AudioDecoder {
         this.lpcPostfilterEnabled = lpcPostfilterEnabled;
         this.sampleRate = sampleRate;
         this.channels = channels;
-        this.closed = false;
     }
 
     /**

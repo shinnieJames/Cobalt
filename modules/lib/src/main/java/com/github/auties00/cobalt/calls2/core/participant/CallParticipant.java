@@ -161,7 +161,7 @@ public final class CallParticipant {
         this.pushName = null;
         this.guestName = null;
         this.activeDeviceJid = null;
-        this.devices = new ArrayList<>();
+        this.devices = new ArrayList<>(2);
         this.media = new CallParticipantMedia();
         this.crypto = new CallParticipantCrypto();
         this.screenSharing = false;

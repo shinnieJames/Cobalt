@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.wam.threadlogging;
 
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.commerce.OrderMessage;
 import com.github.auties00.cobalt.model.message.commerce.ProductMessage;
@@ -50,7 +51,7 @@ public final class ThreadLoggingMessages {
      * @param container the message to classify
      * @return {@code true} if the message is a commerce message
      */
-    @WhatsAppWebExport(moduleName = "WAWebChatThreadLoggingUtils", exports = "isCommerceMessage")
+    @WhatsAppWebExport(moduleName = "WAWebChatThreadLoggingUtils", exports = "isCommerceMessage", adaptation = WhatsAppAdaptation.DIRECT)
     public static boolean isCommerceMessage(MessageContainer container) {
         if (isCommerceContent(container)) {
             return true;
@@ -104,7 +105,7 @@ public final class ThreadLoggingMessages {
                 .map(InteractiveMessage.NativeFlowMessage::buttons)
                 .orElseGet(List::of)
                 .stream()
-                .map(InteractiveMessage.NativeFlowButton::name)
+                .map(InteractiveMessage.NativeFlowMessage.NativeFlowButton::name)
                 .flatMap(Optional::stream)
                 .anyMatch(name -> name.equals(ORDER_DETAILS_FLOW) || name.equals(ORDER_STATUS_FLOW));
     }

@@ -104,6 +104,12 @@ public enum CallParticipantState {
     LEFT(12);
 
     /**
+     * Caches the constant array so the {@link #ofCode(int)} decode scan does not pay the
+     * defensive-clone cost of {@link #values()} on every membership-state lookup.
+     */
+    private static final CallParticipantState[] VALUES = values();
+
+    /**
      * The integer code the engine stores for this membership state.
      */
     private final int code;
@@ -161,7 +167,7 @@ public enum CallParticipantState {
      *         matches
      */
     public static Optional<CallParticipantState> ofCode(int code) {
-        for (var state : values()) {
+        for (var state : VALUES) {
             if (state.code == code) {
                 return Optional.of(state);
             }

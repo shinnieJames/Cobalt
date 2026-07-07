@@ -21,7 +21,13 @@ import java.util.Objects;
  * @implNote
  * This implementation always emits the {@code readreceipts} category and toggles only between
  * {@code "all"} and {@code "none"}; no other category is reachable through this stanza.
+ *
+ * @deprecated redundant with the multi-row privacy path: {@code editPrivacySetting} writes the same
+ * {@code <category name="readreceipts" value="all|none"/>} via {@link IqSetPrivacyRequest}, verified
+ * byte-identical to WhatsApp Web's {@code WAWebSetReadReceiptJob}. Prefer that path; this single-row
+ * variant is retained only for source-mapping completeness.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WAWebSetReadReceiptJob")
 public final class IqSetReadReceiptRequest implements IqStanza.Request {
     /**

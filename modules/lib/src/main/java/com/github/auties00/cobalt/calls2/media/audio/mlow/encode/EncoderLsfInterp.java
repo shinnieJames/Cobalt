@@ -261,7 +261,12 @@ public final class EncoderLsfInterp {
         for (int j = 0; j < numSubfr; j++) {
             float factor = interpol[j];
             if (factor == prevFactor) {
-                lpc[j] = lpc[j - 1].clone();
+                // Repeated factor reuses the prior subframe's filter and interpolated vector verbatim. The LPC
+                // rows are read-only downstream (computeReslpc and encodeSubframe only read the coefficients),
+                // the LSF rows are read by no consumer, and neither is pooled as scratch, so aliasing the prior
+                // rows is bit-identical to cloning them.
+                lpc[j] = lpc[j - 1];
+                lsfs[j] = lsfs[j - 1];
             } else {
                 if (factor == 1.0f) {
                     System.arraycopy(qlsf, 0, ilsf, 0, LPC_ORDER);
@@ -275,9 +280,9 @@ public final class EncoderLsfInterp {
                     }
                 }
                 lpc[j] = nlsf2aStabilize(ilsf);
+                lsfs[j] = ilsf.clone();
             }
             prevFactor = factor;
-            lsfs[j] = ilsf.clone();
         }
         float[] carry = ilsf.clone();
         return new Candidate(lsfs, lpc, carry);

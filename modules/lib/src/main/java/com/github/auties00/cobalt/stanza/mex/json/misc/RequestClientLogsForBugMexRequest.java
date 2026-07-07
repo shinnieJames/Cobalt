@@ -23,7 +23,10 @@ import java.util.List;
  * single {@code input} GraphQL variable.
  *
  * @see RequestClientLogsForBugMexResponse
+ *
+ * @deprecated not wired: bug-report peer-log solicitation has no headless surface.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WAWebMexRequestClientLogsForBugJob")
 public final class RequestClientLogsForBugMexRequest implements MexStanza.Request.Json {
     /**

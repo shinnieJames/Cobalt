@@ -31,7 +31,7 @@ public sealed interface SmaxPushConfigSetSetVariant
      * {@code config} or {@code clear}, with no surrounding envelope.
      * @return the {@link Stanza} for this variant
      */
-    Stanza toNode();
+    Stanza toStanza();
 
     /**
      * Represents the {@code <config>} variant that registers a push channel for a specific client
@@ -73,14 +73,14 @@ public sealed interface SmaxPushConfigSetSetVariant
          * Builds the {@code <config>} child stanza by delegating to the carried platform-specific
          * variant.
          *
-         * @return the {@link Stanza} produced by {@link SmaxPushConfigSetConfigVariant#toNode()}
+         * @return the {@link Stanza} produced by {@link SmaxPushConfigSetConfigVariant#toStanza()}
          */
         @Override
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigSetSetConfigMixin",
                 exports = "mergeSetSetConfigMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
-            return config.toNode();
+        public Stanza toStanza() {
+            return config.toStanza();
         }
 
         /**
@@ -172,7 +172,7 @@ public sealed interface SmaxPushConfigSetSetVariant
         @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigSetClearMixin",
                 exports = "mergeSetClearMixin",
                 adaptation = WhatsAppAdaptation.DIRECT)
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var builder = new StanzaBuilder()
                     .description("clear");
             if (clearPlatform != null) {

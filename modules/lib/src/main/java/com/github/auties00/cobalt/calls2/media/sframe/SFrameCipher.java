@@ -106,6 +106,42 @@ public final class SFrameCipher {
     private final byte[] counterMask;
 
     /**
+     * Holds the immutable AES key specification reused across frames on this thread-confined cipher.
+     */
+    private final SecretKeySpec aesKeySpec;
+
+    /**
+     * Holds the immutable HMAC key specification reused across frames on this thread-confined cipher.
+     */
+    private final SecretKeySpec macKeySpec;
+
+    /**
+     * Holds the AES counter-mode engine reused across frames.
+     *
+     * <p>One {@link SFrameCipher} instance is confined to a single stream direction and its media thread,
+     * so the mutable JCA engine is a plain reused field rather than a per-call {@code getInstance}.
+     */
+    private final Cipher ctrCipher;
+
+    /**
+     * Holds the AES single-block engine reused to turn each per-frame counter block into keystream.
+     */
+    private final Cipher blockCipher;
+
+    /**
+     * Holds the HMAC-SHA256 engine reused across frames for the truncated authentication tag.
+     */
+    private final Mac hmac;
+
+    /**
+     * Holds the sixteen-byte counter-block scratch reused across frames.
+     *
+     * <p>Only the middle eight counter bytes are ever written; the surrounding bytes stay zero across
+     * reuse, matching the fresh zero-filled block the native layout expects.
+     */
+    private final byte[] counterScratch = new byte[SFrameCipherSuite.IV_LENGTH];
+
+    /**
      * Holds the length, in bytes, of the per-key-id salt the counter mask is built from.
      *
      * <p>The native {@code initCipher} (fn6878) reads exactly this many bytes from {@code key+0x10} of
@@ -152,6 +188,15 @@ public final class SFrameCipher {
         this.aesKey = aesKey.clone();
         this.authKey = authKey.clone();
         this.counterMask = counterMask.clone();
+        this.aesKeySpec = new SecretKeySpec(this.aesKey, AES_KEY_ALGORITHM);
+        this.macKeySpec = new SecretKeySpec(this.authKey, HMAC_ALGORITHM);
+        try {
+            this.ctrCipher = Cipher.getInstance(AES_CTR_TRANSFORMATION);
+            this.blockCipher = Cipher.getInstance("AES/ECB/NoPadding");
+            this.hmac = Mac.getInstance(HMAC_ALGORITHM);
+        } catch (GeneralSecurityException e) {
+            throw new WhatsAppCallException.Srtp("SFrame cipher initialization failed", e);
+        }
     }
 
     /**
@@ -315,7 +360,7 @@ public final class SFrameCipher {
      * @throws WhatsAppCallException.Srtp if the AES encryption of the counter block fails
      */
     private byte[] counterBlock(long counter) {
-        var block = new byte[SFrameCipherSuite.IV_LENGTH];
+        var block = counterScratch;
         for (var i = 0; i < Long.BYTES; i++) {
             block[Long.BYTES + 3 - i] = (byte) (counter >>> (8 * i));
         }
@@ -336,10 +381,8 @@ public final class SFrameCipher {
      */
     private byte[] aesCtr(byte[] data, byte[] initalBlock) {
         try {
-            var cipher = Cipher.getInstance(AES_CTR_TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(aesKey, AES_KEY_ALGORITHM),
-                    new IvParameterSpec(initalBlock));
-            return cipher.doFinal(data);
+            ctrCipher.init(Cipher.ENCRYPT_MODE, aesKeySpec, new IvParameterSpec(initalBlock));
+            return ctrCipher.doFinal(data);
         } catch (GeneralSecurityException e) {
             throw new WhatsAppCallException.Srtp("SFrame AES-CTR failed", e);
         }
@@ -355,9 +398,8 @@ public final class SFrameCipher {
      */
     private byte[] aesEncryptBlock(byte[] block) {
         try {
-            var cipher = Cipher.getInstance("AES/ECB/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(aesKey, AES_KEY_ALGORITHM));
-            return cipher.doFinal(block);
+            blockCipher.init(Cipher.ENCRYPT_MODE, aesKeySpec);
+            return blockCipher.doFinal(block);
         } catch (GeneralSecurityException e) {
             throw new WhatsAppCallException.Srtp("SFrame AES block encryption failed", e);
         }
@@ -377,11 +419,10 @@ public final class SFrameCipher {
      */
     private byte[] authTag(byte[] trailer, byte[] ciphertext) {
         try {
-            var mac = Mac.getInstance(HMAC_ALGORITHM);
-            mac.init(new SecretKeySpec(authKey, HMAC_ALGORITHM));
-            mac.update(trailer);
-            mac.update(ciphertext);
-            var full = mac.doFinal();
+            hmac.init(macKeySpec);
+            hmac.update(trailer);
+            hmac.update(ciphertext);
+            var full = hmac.doFinal();
             return Arrays.copyOf(full, suite.tagLength());
         } catch (GeneralSecurityException e) {
             throw new WhatsAppCallException.Srtp("SFrame HMAC failed", e);

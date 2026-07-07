@@ -3,10 +3,10 @@ package com.github.auties00.cobalt.calls2.core.control;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.UnaryOperator;
 
@@ -20,9 +20,8 @@ import java.util.function.UnaryOperator;
  * update. When the resulting order differs from the last emitted order it emits a
  * {@link CallGridRankingChanged} carrying the new ordering, the highest-ranked participant first.
  *
- * <p>The per-participant inputs are kept in a concurrent map and the last emitted order behind a lock so a
- * concurrent update never emits a torn ranking. The service is bound to its event sink at construction; it
- * owns no timers.
+ * <p>The per-participant inputs and the last emitted order are kept behind a lock so a concurrent update
+ * never emits a torn ranking. The service is bound to its event sink at construction; it owns no timers.
  *
  * @implNote This implementation reproduces the grid-ranking comparator of the wa-voip WASM module
  * {@code ff-tScznZ8P}: the engine orders participants by hand-raised descending, active-speaker
@@ -41,8 +40,8 @@ public final class SpeakerRankingService {
      * before a larger one as the final stable tie-break.
      */
     private static final Comparator<RankingInputs> GRID_ORDER = Comparator
-            .comparing(RankingInputs::handRaised, Comparator.<Boolean>reverseOrder())
-            .thenComparing(RankingInputs::activeSpeaker, Comparator.<Boolean>reverseOrder())
+            .comparingInt((RankingInputs input) -> input.handRaised() ? 0 : 1)
+            .thenComparingInt(input -> input.activeSpeaker() ? 0 : 1)
             .thenComparing(Comparator.comparingInt(RankingInputs::rank).reversed())
             .thenComparingInt(RankingInputs::index);
 
@@ -54,7 +53,7 @@ public final class SpeakerRankingService {
     /**
      * The current per-participant ranking inputs, keyed by participant device JID.
      */
-    private final Map<Jid, RankingInputs> inputs = new ConcurrentHashMap<>();
+    private final Map<Jid, RankingInputs> inputs = new HashMap<>();
 
     /**
      * Guards the recompute-and-compare against the last emitted order.
@@ -158,7 +157,10 @@ public final class SpeakerRankingService {
         Objects.requireNonNull(participant, "participant cannot be null");
         lock.lock();
         try {
-            var current = inputs.getOrDefault(participant, RankingInputs.initial(participant));
+            var current = inputs.get(participant);
+            if (current == null) {
+                current = RankingInputs.initial(participant);
+            }
             inputs.put(participant, mutation.apply(current));
             recomputeAndEmit();
         } finally {

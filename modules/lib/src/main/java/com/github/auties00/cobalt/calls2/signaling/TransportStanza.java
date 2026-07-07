@@ -265,12 +265,10 @@ public record TransportStanza(String callId,
         var callId = stanza.getRequiredAttributeAsString(CallMessages.CALL_ID_ATTRIBUTE);
         var callCreator = stanza.getRequiredAttributeAsJid(CallMessages.CALL_CREATOR_ATTRIBUTE);
         var hasBot = FLAG_TRUE.equals(stanza.getAttributeAsString(HAS_BOT_ATTRIBUTE, null));
-        var transportSubType = stanza.getAttributeAsInt(TRANSPORT_MESSAGE_TYPE_ATTRIBUTE)
-                .stream()
-                .boxed()
-                .flatMap(value -> CallTransportSubType.ofWireValue(value).stream())
-                .findFirst()
-                .orElse(null);
+        var transportMessageType = stanza.getAttributeAsInt(TRANSPORT_MESSAGE_TYPE_ATTRIBUTE);
+        var transportSubType = transportMessageType.isPresent()
+                ? CallTransportSubType.ofWireValue(transportMessageType.getAsInt()).orElse(null)
+                : null;
         var p2pCandRound = stanza.getAttributeAsInt(P2P_CAND_ROUND_ATTRIBUTE, UNSET);
         var iceUfrag = stanza.getAttributeAsString(ICE_UFRAG_ATTRIBUTE, null);
         var icePwd = stanza.getAttributeAsString(ICE_PWD_ATTRIBUTE, null);

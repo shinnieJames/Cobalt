@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -23,8 +23,8 @@ import java.util.function.Consumer;
  * <p>Unlike the other in-call controls, IMU has no host-facing {@link com.github.auties00.cobalt.calls2.core.CallEvent}
  * in the recovered event table, so this controller emits none; it bridges between the local capture and
  * the application-data stream and exposes the latest inbound sample per participant for a consumer such as
- * a video renderer. The latest-sample state is guarded by a lock; the controller is bound to its sample
- * sender and the inbound observer at construction and owns no timers.
+ * a video renderer. The latest-sample state is held in a volatile field; the controller is bound to its
+ * sample sender and the inbound observer at construction and owns no timers.
  *
  * @implNote This implementation reproduces the {@code imu_data} handling of the wa-voip WASM module
  * {@code ff-tScznZ8P}: {@code send_imu_data_on_stream} (fn11527) drains a mutex-guarded ring of
@@ -43,8 +43,9 @@ import java.util.function.Consumer;
  * path ({@code fn10606}), not an export of this module, and no member of the controller fills the ring (the
  * feature is config-gated, with only a test-only {@code enable_mock_imu_data_sender} path whose data also
  * originates in the host). Carrying the reading as opaque bytes is therefore the faithful web/shared-core
- * behavior rather than a recovery gap. Cobalt keeps the latest sample in each direction; the info-mutex is
- * replaced by a {@link ReentrantLock} per the threading design.
+ * behavior rather than a recovery gap. Cobalt keeps the latest sample in each direction; the single
+ * latest-outbound-sample reference is held in a volatile field rather than behind the info-mutex, per the
+ * threading design.
  */
 public final class ImuDataController {
     // The internal field layout of the 0x24-byte IMU sample (ImuSample.FRAME_SIZE) is not a property of
@@ -83,12 +84,7 @@ public final class ImuDataController {
     /**
      * The observer notified when an inbound peer IMU sample arrives.
      */
-    private final InboundObserver inboundObserver;
-
-    /**
-     * Guards the latest-sample state in each direction.
-     */
-    private final ReentrantLock lock = new ReentrantLock();
+    private final BiConsumer<Jid, ImuSample> inboundObserver;
 
     /**
      * The latest inbound sample per participant, keyed by device JID.
@@ -97,8 +93,11 @@ public final class ImuDataController {
 
     /**
      * The latest local sample published, or {@code null} when none has been published.
+     *
+     * <p>Volatile so {@link #publish(ImuSample)} can store it and {@link #latestOutbound()} can read it
+     * without a lock: the field is a lone reference with no compound read-modify-write.
      */
-    private ImuSample latestOutbound;
+    private volatile ImuSample latestOutbound;
 
     /**
      * Constructs an IMU controller bound to the application-data stream sender and the inbound observer.
@@ -108,7 +107,7 @@ public final class ImuDataController {
      * @param inboundObserver the observer for inbound peer IMU samples; never {@code null}
      * @throws NullPointerException if either argument is {@code null}
      */
-    public ImuDataController(Consumer<ImuSample> streamSender, InboundObserver inboundObserver) {
+    public ImuDataController(Consumer<ImuSample> streamSender, BiConsumer<Jid, ImuSample> inboundObserver) {
         this.streamSender = Objects.requireNonNull(streamSender, "streamSender cannot be null");
         this.inboundObserver = Objects.requireNonNull(inboundObserver, "inboundObserver cannot be null");
     }
@@ -123,12 +122,7 @@ public final class ImuDataController {
      */
     public void publish(ImuSample sample) {
         Objects.requireNonNull(sample, "sample cannot be null");
-        lock.lock();
-        try {
-            latestOutbound = sample;
-        } finally {
-            lock.unlock();
-        }
+        latestOutbound = sample;
         streamSender.accept(sample);
     }
 
@@ -145,7 +139,7 @@ public final class ImuDataController {
         Objects.requireNonNull(participant, "participant cannot be null");
         Objects.requireNonNull(sample, "sample cannot be null");
         latestInbound.put(participant, sample);
-        inboundObserver.onImuSample(participant, sample);
+        inboundObserver.accept(participant, sample);
     }
 
     /**
@@ -154,12 +148,7 @@ public final class ImuDataController {
      * @return an {@link Optional} with the latest local sample, or empty when none has been published
      */
     public Optional<ImuSample> latestOutbound() {
-        lock.lock();
-        try {
-            return Optional.ofNullable(latestOutbound);
-        } finally {
-            lock.unlock();
-        }
+        return Optional.ofNullable(latestOutbound);
     }
 
     /**
@@ -172,22 +161,5 @@ public final class ImuDataController {
     public Optional<ImuSample> latestInbound(Jid participant) {
         Objects.requireNonNull(participant, "participant cannot be null");
         return Optional.ofNullable(latestInbound.get(participant));
-    }
-
-    /**
-     * Observer of inbound peer IMU samples.
-     *
-     * <p>Notified with the originating participant and the sample whenever a peer IMU sample arrives, so a
-     * consumer such as a video renderer can react to a peer's motion.
-     */
-    @FunctionalInterface
-    public interface InboundObserver {
-        /**
-         * Notifies that an inbound IMU sample arrived from a participant.
-         *
-         * @param participant the device JID the sample came from; never {@code null}
-         * @param sample      the inbound IMU sample; never {@code null}
-         */
-        void onImuSample(Jid participant, ImuSample sample);
     }
 }

@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.client.WhatsAppClientDisconnectReason;
 import com.github.auties00.cobalt.listener.linked.*;
 
 import com.github.auties00.cobalt.model.call.CallEndReason;
+import com.github.auties00.cobalt.model.integrity.IntegrityChallenge;
 import com.github.auties00.cobalt.model.call.CallInteraction;
 import com.github.auties00.cobalt.model.call.JoinableCallLink;
 import com.github.auties00.cobalt.model.call.IncomingCall;
@@ -85,6 +86,7 @@ public non-sealed interface LinkedWhatsAppClientListener extends LinkedListener,
         LinkedProfilePictureChangedListener,
         LinkedNameChangedListener,
         LinkedAboutChangedListener,
+        LinkedIntegrityChallengeListener,
         LinkedContactTextStatusListener,
         LinkedLocaleChangedListener,
         LinkedContactBlockedListener,
@@ -206,6 +208,10 @@ public non-sealed interface LinkedWhatsAppClientListener extends LinkedListener,
 
     @Override
     default void onAboutChanged(LinkedWhatsAppClient whatsapp, String oldAbout, String newAbout) {
+    }
+
+    @Override
+    default void onIntegrityChallenge(LinkedWhatsAppClient whatsapp, IntegrityChallenge challenge) {
     }
 
     @Override

@@ -30,7 +30,11 @@ import java.util.Optional;
  * three optional children {@code <biz name="..."/>}, {@code <client-props/>}, and
  * {@code <encryption-metadata/>}. Upstream caps the {@code <device-identity/>} byte length to
  * {@code [1..500]}; Cobalt skips that cap.
+ *
+ * @deprecated superseded by the inline companion-pairing flow; only the {@code SmaxMdSetRegEncryptionMetadata}
+ * helper is used.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInMdSetRegRequest")
 public final class SmaxMdSetRegResponse implements SmaxStanza.Response {
     /**

@@ -156,6 +156,12 @@ public final class OpusAudioCodec implements AudioCodec {
     private final AdaptiveComplexityController complexityController;
 
     /**
+     * The in-band forward-error-correction policy deciding, per lost frame, whether to reconstruct from
+     * the following packet's LBRR copy or fall back to packet-loss concealment.
+     */
+    private final OpusInbandFecPacker fecPacker;
+
+    /**
      * Cumulative count of frames passed to the encoder.
      */
     private long totalEncodedFrames;
@@ -249,6 +255,7 @@ public final class OpusAudioCodec implements AudioCodec {
             this.packetInBuf = arena.allocate(MAX_PACKET_BYTES);
             this.complexityController = new AdaptiveComplexityController(
                     ENCODE_BUDGET_MILLIS_PER_SECOND, params.complexity());
+            this.fecPacker = new OpusInbandFecPacker();
             applyOpenControls(params);
         } catch (RuntimeException e) {
             destroyStates();
@@ -361,6 +368,12 @@ public final class OpusAudioCodec implements AudioCodec {
         lastWasDiscontinuous = discontinuous;
         var voiceActive = !discontinuous && packetHasVoiceActivity(payload);
         var hasFec = !discontinuous && packetHasInbandFec(payload);
+        // TODO: [perf] when written==0, skip the audioLevelDbov RMS scan and the byte[0] allocation and
+        //  return a frame from a shared static EMPTY_PAYLOAD with SILENCE_LEVEL. The sole in-pipeline
+        //  consumer (AudioEncoderSender.accept) discards empty frames via isEmpty() without reading
+        //  levelDbov, but encode() is public AudioCodec API whose documented contract computes the captured
+        //  loudness even for a DTX frame, so substituting SILENCE_LEVEL is an observable change for any
+        //  other AudioCodec.encode caller; left as-is until that contract is confirmed unobserved.
         var levelDbov = audioLevelDbov(pcm, required);
         adaptComplexity(encodeMicros);
         return new EncodedAudioFrame(payload, voiceActive, discontinuous, hasFec, levelDbov);
@@ -450,13 +463,14 @@ public final class OpusAudioCodec implements AudioCodec {
     public short[] recover(byte[] nextPayload, int frameSize) {
         requireOpen();
         var t0 = System.nanoTime();
+        var decodeFec = fecPacker.shouldDecodeFec(nextPayload != null);
         int decoded;
         try {
-            if (nextPayload == null) {
-                decoded = CobaltOpus.cobalt_opus_decode(decoder, MemorySegment.NULL, 0, pcmOutBuf, frameSize, 0);
-            } else {
+            if (decodeFec) {
                 MemorySegment.copy(nextPayload, 0, packetInBuf, ValueLayout.JAVA_BYTE, 0, nextPayload.length);
                 decoded = CobaltOpus.cobalt_opus_decode(decoder, packetInBuf, nextPayload.length, pcmOutBuf, frameSize, 1);
+            } else {
+                decoded = CobaltOpus.cobalt_opus_decode(decoder, MemorySegment.NULL, 0, pcmOutBuf, frameSize, 0);
             }
         } catch (Throwable t) {
             throw new WhatsAppCallException.Opus("cobalt_opus_decode recovery failed", t);
@@ -465,10 +479,10 @@ public final class OpusAudioCodec implements AudioCodec {
         if (decoded < 0) {
             throw WhatsAppCallException.Opus.fromErr("cobalt_opus_decode recovery", decoded);
         }
-        if (nextPayload == null) {
-            plcFrames++;
-        } else {
+        if (decodeFec) {
             fecFrames++;
+        } else {
+            plcFrames++;
         }
         return readPcm(decoded);
     }

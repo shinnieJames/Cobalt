@@ -206,6 +206,7 @@ public final class AudioSenderBandwidthEstimator {
             var factor = Math.max(DECREASE_FLOOR, 1.0 - DECREASE_LOSS_SLOPE * plr);
             senderBweBps = (long) (senderBweBps * factor);
         } else {
+            // TODO: wire FastRampController - instantiate FastRampController (aboveMin/slope/loss thresholds once recovered) and call onRxRtp(rttMs, lossRatio, nowMs) per received RTP; let isRampActive() extend the additive ramp here inside this sender estimator (driven from LiveMediaSession.java:5653)
             var factor = remoteBweBps == 0 || remoteBweBps < minRemoteBweBps
                     ? INCREASE_FACTOR_LOW
                     : INCREASE_FACTOR_HIGH;

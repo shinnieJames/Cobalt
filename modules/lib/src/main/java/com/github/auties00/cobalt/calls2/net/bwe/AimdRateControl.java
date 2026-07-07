@@ -76,6 +76,15 @@ public final class AimdRateControl {
     static final double AVERAGE_PACKET_SIZE_BITS = 1200.0 * 8.0;
 
     /**
+     * Additive-increase quantum, in bits per millisecond, spreading one {@link #AVERAGE_PACKET_SIZE_BITS}
+     * over the response time of {@link #DEFAULT_RTT_MS} plus {@link #RESPONSE_TIME_OVERHEAD_MS}.
+     *
+     * <p>Precomputed from the compile-time response-time model so the additive step scales it by the
+     * elapsed time without recomputing the quotient on each increase.
+     */
+    static final double ADDITIVE_INCREASE_BITS_PER_MS = AVERAGE_PACKET_SIZE_BITS / (DEFAULT_RTT_MS + RESPONSE_TIME_OVERHEAD_MS);
+
+    /**
      * Number of standard deviations defining the near-max band around the tracked link capacity.
      *
      * <p>While the estimate is below capacity minus this many deviations of the capacity estimate the
@@ -231,18 +240,37 @@ public final class AimdRateControl {
     /**
      * Applies the additive or multiplicative increase for one step.
      *
+     * <p>When the acknowledged throughput exceeds the tracked link capacity's upper bound (the estimate
+     * plus {@link #CAPACITY_DEVIATIONS} deviations), the link-capacity tracker is reset so a network that
+     * has just demonstrated more capacity than the estimate no longer pins the increase into the additive
+     * near-max branch; the reset drops the estimate to unseeded, which routes this and following steps
+     * back through the multiplicative ramp until the capacity re-seeds on the next decrease.
+     *
      * <p>When the estimate is below the link capacity minus {@link #CAPACITY_DEVIATIONS} deviations,
      * or the capacity is not yet seeded, the estimate grows by
      * {@link #MULTIPLICATIVE_INCREASE_PER_SECOND} scaled by the elapsed seconds. Otherwise it grows by
      * the additive quantum: one {@link #AVERAGE_PACKET_SIZE_BITS} per response time of
      * {@link #DEFAULT_RTT_MS} plus {@link #RESPONSE_TIME_OVERHEAD_MS}, scaled by the elapsed time.
      *
-     * @param ackedThroughputBps the acknowledged throughput, in bits per second; unused beyond the
-     *                           later headroom clamp
+     * @implNote This implementation ports the {@code estimated_throughput > link_capacity_.UpperBound()}
+     * guard at the head of the {@code kRcIncrease} branch of WebRTC's {@code AimdRateControl::ChangeBitrate}
+     * ({@code modules/congestion_controller/goog_cc/aimd_rate_control.cc}), which calls
+     * {@code link_capacity_.Reset()} when the acknowledged throughput overshoots the capacity estimator's
+     * upper bound. The upper bound is the estimate plus {@link #CAPACITY_DEVIATIONS} deviations, mirroring
+     * {@code LinkCapacityEstimator::UpperBound}; the reset is skipped while the capacity is unseeded (upper
+     * bound infinity) or the acknowledged throughput is unavailable.
+     *
+     * @param ackedThroughputBps the acknowledged throughput, in bits per second; when it overshoots the
+     *                           tracked link-capacity upper bound the tracker is reset, and a non-positive
+     *                           value disables the reset for this step
      * @param nowMs              the monotonic timestamp, in milliseconds, of this step
      */
-    @SuppressWarnings("unused")
     private void applyIncrease(long ackedThroughputBps, long nowMs) {
+        if (ackedThroughputBps > 0 && linkCapacityEstimateBps >= 0
+                && ackedThroughputBps > linkCapacityEstimateBps + CAPACITY_DEVIATIONS * linkCapacityDeviationBps) {
+            linkCapacityEstimateBps = -1.0;
+            linkCapacityDeviationBps = 0.0;
+        }
         var elapsedMs = lastIncreaseMs < 0 ? 0.0 : (double) (nowMs - lastIncreaseMs);
         lastIncreaseMs = nowMs;
         var nearMaxBoundary = linkCapacityEstimateBps - CAPACITY_DEVIATIONS * linkCapacityDeviationBps;
@@ -250,9 +278,7 @@ public final class AimdRateControl {
             var multiplier = Math.pow(1.0 + MULTIPLICATIVE_INCREASE_PER_SECOND, Math.min(elapsedMs / 1000.0, 1.0));
             currentBitrateBps = Math.max(currentBitrateBps, (long) (currentBitrateBps * multiplier));
         } else {
-            var responseTimeMs = DEFAULT_RTT_MS + RESPONSE_TIME_OVERHEAD_MS;
-            var additivePerMs = AVERAGE_PACKET_SIZE_BITS / responseTimeMs;
-            var increaseBits = Math.max(AVERAGE_PACKET_SIZE_BITS, additivePerMs * elapsedMs);
+            var increaseBits = Math.max(AVERAGE_PACKET_SIZE_BITS, ADDITIVE_INCREASE_BITS_PER_MS * elapsedMs);
             currentBitrateBps += (long) increaseBits;
         }
     }

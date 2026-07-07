@@ -22,7 +22,10 @@ import java.util.Optional;
  * carries the echoed {@code id}, {@code from}, and {@code type} attributes
  * the ack must echo back, plus the relay-side timestamp and an optional
  * offline-queue hint.
+ *
+ * @deprecated not wired: SMB QP-prefetch reset has no headless consumer.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInPsaResetSmbLastQpPrefetchTimestampRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInPsaServerNotificationMixin")
 public final class SmaxPsaResetSmbLastQpPrefetchTimestampResponse implements SmaxStanza.Response {

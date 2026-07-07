@@ -230,6 +230,10 @@ public final class RtcpFeedbackParser {
      * @throws NullPointerException     if {@code packet} is {@code null}
      * @throws IllegalArgumentException if {@code length} is negative or exceeds {@code packet.length}
      */
+    // TODO (item 7): return a nullable RtcpFeedback (and inline the private ReportFields holder) to drop
+    //  the per-packet Optional allocation on this hot inbound-RTCP path. Blocked because the sole caller,
+    //  LiveRelayTransport.parse (outside this owned set), consumes the Optional; changing the return type
+    //  requires updating that call site, which is not in scope here.
     public static Optional<RtcpFeedback> parse(byte[] packet, int length) {
         Objects.requireNonNull(packet, "packet cannot be null");
         if (length < 0 || length > packet.length) {

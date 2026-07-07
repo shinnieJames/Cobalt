@@ -3,7 +3,10 @@ package com.github.auties00.cobalt.calls2.core;
 import com.github.auties00.cobalt.calls2.VideoStreamState;
 import com.github.auties00.cobalt.calls2.common.CallDeviceJid;
 import com.github.auties00.cobalt.calls2.common.VoipCapabilities;
+import com.github.auties00.cobalt.calls2.common.VoipParamJsonDeserializer;
+import com.github.auties00.cobalt.calls2.common.VoipParamKey;
 import com.github.auties00.cobalt.calls2.config.Calls2FeatureGate;
+import com.github.auties00.cobalt.calls2.config.VoipSettings;
 import com.github.auties00.cobalt.calls2.core.control.*;
 import com.github.auties00.cobalt.calls2.core.participant.CallMembership;
 import com.github.auties00.cobalt.calls2.core.participant.CallParticipant;
@@ -20,6 +23,7 @@ import com.github.auties00.cobalt.model.call.*;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -281,6 +285,24 @@ public final class Calls2LifecycleController {
     private final ConcurrentHashMap<String, Calls2OrchestratedCall> calls = new ConcurrentHashMap<>();
 
     /**
+     * Holds the single buffered busy/lobby pending call, or {@code null} when none is buffered.
+     *
+     * <p>When an inbound offer arrives while the dual-call ceiling is reached and the offer's
+     * {@code <voip_settings>} enable the pending-call path, the offer is not dropped but retained here as a
+     * {@link Calls2PendingCall}; every later signaling message for that call is appended to it through the
+     * {@link Calls2IncomingMessageRouter.RoutingClass#BUFFER_PENDING} router verdict, so nothing is lost in
+     * the interval before the local user joins. The field is a single reference because the native engine
+     * keeps one singleton pending-call context; it is {@code volatile} so the socket-reader thread that
+     * buffers into it and any join-path reader see a consistent reference, and the {@link Calls2PendingCall}
+     * itself guards its own queue and state.
+     *
+     * @implNote This implementation binds the native singleton {@code pending_call_ctx}
+     * ({@code DAT_ram_001508c4}) that {@code handle_pending_call_offer} (fn10959) allocates off the busy
+     * offer path.
+     */
+    private volatile Calls2PendingCall pendingCall;
+
+    /**
      * The shared host event bus a call's in-call control units publish their host-facing events onto, or
      * {@code null} until {@linkplain #bindEventBus(LiveCallEventBus, Supplier) bound}.
      *
@@ -385,6 +407,24 @@ public final class Calls2LifecycleController {
      * that never bind it tear a call down without draining service-level telemetry.
      */
     private volatile Consumer<String> teardownSink = callId -> {
+    };
+
+    /**
+     * The connected sink each call's identifier is reported to once its media plane first goes
+     * {@link Calls2CallState#CALL_ACTIVE}, or a no-op until {@linkplain #bindConnectedSink(Consumer) bound}.
+     *
+     * <p>WhatsApp stamps a call's connected instant the first time its media plane becomes bidirectional, so
+     * the end-of-call telemetry can report a non-zero connected duration. The controller fires this sink from
+     * {@link #onMediaConnected(String)} when the media-connected transition lands on
+     * {@link Calls2CallState#CALL_ACTIVE} (a group call that settles in
+     * {@link Calls2CallState#CONNECTED_LONELY} with no connected peer is not yet connected and fires nothing).
+     * The call service binds a sink that stamps the call's telemetry accumulator, symmetric with the teardown
+     * sink that stamps the ended instant. The sink is bound after construction rather than taken as a
+     * constructor argument, mirroring the teardown and result sinks; it defaults to a no-op so the
+     * controller-construction test harnesses that never bind it connect a call without stamping service-level
+     * telemetry.
+     */
+    private volatile Consumer<String> connectedSink = callId -> {
     };
 
     /**
@@ -572,6 +612,23 @@ public final class Calls2LifecycleController {
     }
 
     /**
+     * Binds the sink each call's identifier is reported to once its media plane first goes active.
+     *
+     * <p>Bound once, before any call is placed, to the service that stamps the call's telemetry accumulator
+     * with its connected instant. The controller fires it from {@link #onMediaConnected(String)} the first
+     * time the media-connected transition lands on {@link Calls2CallState#CALL_ACTIVE}, symmetric with the
+     * teardown sink that stamps the ended instant, so the WAM Call event reports a non-zero connected
+     * duration. Defaults to a no-op so an unbound build is unaffected.
+     *
+     * @apiNote The call service is the only caller; an embedder never binds the sink.
+     * @param connectedSink the sink consuming the identifier of each call whose media plane went active
+     * @throws NullPointerException if {@code connectedSink} is {@code null}
+     */
+    public void bindConnectedSink(Consumer<String> connectedSink) {
+        this.connectedSink = Objects.requireNonNull(connectedSink, "connectedSink cannot be null");
+    }
+
+    /**
      * Reports the local user's own mute state for a call, announcing it to the peer.
      *
      * <p>Delegates to the call's {@link MuteController#setMuted(boolean)}, which sends the {@code mute_v2}
@@ -708,6 +765,88 @@ public final class Calls2LifecycleController {
     public void stopScreenShare(String callId) {
         Objects.requireNonNull(callId, "callId cannot be null");
         withControls(callId, controls -> controls.screenShare().stop());
+    }
+
+    /**
+     * Enables or disables a call's waiting-room gate as the call host.
+     *
+     * <p>Delegates to the call's {@link WaitingRoomController#setEnabled(boolean)}, which dispatches the
+     * waiting-room toggle IQ and emits the applied-gate ack event. A call that is not tracked, one whose
+     * control units are not built, or one not joined through a call link (so it carries no waiting-room
+     * controller) is a no-op.
+     *
+     * @param callId  the identifier of the call whose waiting-room gate is toggled
+     * @param enabled {@code true} to enable the waiting room, {@code false} to disable it
+     * @throws NullPointerException if {@code callId} is {@code null}
+     */
+    public void setWaitingRoomEnabled(String callId, boolean enabled) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        withControls(callId, controls -> {
+            if (controls.waitingRoom() != null) {
+                controls.waitingRoom().setEnabled(enabled);
+            }
+        });
+    }
+
+    /**
+     * Admits a single queued participant into a call from its waiting-room lobby as the call host.
+     *
+     * <p>Delegates to the call's {@link WaitingRoomController#admit(Jid)}, which dispatches the admit IQ and
+     * emits the admitted-participants ack event. A call that is not tracked, one whose control units are not
+     * built, or one not joined through a call link is a no-op.
+     *
+     * @param callId  the identifier of the call the participant is admitted into
+     * @param userJid the device JID of the participant to admit
+     * @throws NullPointerException if {@code callId} or {@code userJid} is {@code null}
+     */
+    public void admitWaitingRoomParticipant(String callId, Jid userJid) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        Objects.requireNonNull(userJid, "userJid cannot be null");
+        withControls(callId, controls -> {
+            if (controls.waitingRoom() != null) {
+                controls.waitingRoom().admit(userJid);
+            }
+        });
+    }
+
+    /**
+     * Admits every queued participant into a call from its waiting-room lobby at once as the call host.
+     *
+     * <p>Delegates to the call's {@link WaitingRoomController#admitAll()}, which dispatches the admit-all IQ
+     * and emits the admitted-participants ack event. A call that is not tracked, one whose control units are
+     * not built, or one not joined through a call link is a no-op.
+     *
+     * @param callId the identifier of the call whose lobby is drained
+     * @throws NullPointerException if {@code callId} is {@code null}
+     */
+    public void admitAllWaitingRoomParticipants(String callId) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        withControls(callId, controls -> {
+            if (controls.waitingRoom() != null) {
+                controls.waitingRoom().admitAll();
+            }
+        });
+    }
+
+    /**
+     * Denies a single queued participant admission to a call from its waiting-room lobby as the call host.
+     *
+     * <p>Delegates to the call's {@link WaitingRoomController#deny(Jid)}, which dispatches the deny IQ and
+     * emits the denied-participants ack event. A call that is not tracked, one whose control units are not
+     * built, or one not joined through a call link is a no-op.
+     *
+     * @param callId  the identifier of the call the participant is denied from
+     * @param userJid the device JID of the participant to deny
+     * @throws NullPointerException if {@code callId} or {@code userJid} is {@code null}
+     */
+    public void denyWaitingRoomParticipant(String callId, Jid userJid) {
+        Objects.requireNonNull(callId, "callId cannot be null");
+        Objects.requireNonNull(userJid, "userJid cannot be null");
+        withControls(callId, controls -> {
+            if (controls.waitingRoom() != null) {
+                controls.waitingRoom().deny(userJid);
+            }
+        });
     }
 
     /**
@@ -1189,6 +1328,13 @@ public final class Calls2LifecycleController {
         orchestrated.groupOutbound(new GroupCallOutbound(callId, self, membership, host));
         calls.put(callId, orchestrated);
         orchestrated.engineContext(registry.allocate(call, Calls2CallState.NONE));
+        // TODO: drain a buffered pending call for this id here and replay it against the freshly allocated
+        //  context. When pendingCall matches callId, pendingCall.drain() yields the queued signaling in
+        //  arrival order and the holder must then be cleared; the busy-offer buffering and the router
+        //  BUFFER_PENDING consult are wired, but the replay ORDER against the promoted context
+        //  (wa_call_join_ongoing_call, fn10712, drains and replays fn10961's queue) is unconfirmed and needs
+        //  a live ongoing-group-call join capture, so the drain/replay is left unwired rather than guessed.
+        //  See Calls2PendingCall and handleIncomingOffer.
         orchestrated.lock().lock();
         try {
             transition(orchestrated, Calls2CallState.LINK, CallEventType.CALL_LINK_STATE_CHANGED);
@@ -1332,6 +1478,44 @@ public final class Calls2LifecycleController {
         } finally {
             orchestrated.lock().unlock();
         }
+    }
+
+    /**
+     * Mints a fresh shareable call link through the call-link control plane.
+     *
+     * <p>Builds a transient {@link CallLinkController} over the bound call-link IQ sender and runs its
+     * {@link CallLinkController#create(CallLinkMedia, boolean)} to dispatch the {@code link_create} request
+     * and parse the relay's reply, returning the minted link. This is a standalone control-plane operation
+     * that mints a link the host can share: it allocates no call and advances no call-link join sub-state,
+     * and it is gated on the same server call-link feature flag and the same bound call-link IQ sender as
+     * {@link #joinCallLink(Jid, String, CallLinkMedia, boolean, Calls2MediaStreams) joining a link}.
+     *
+     * @implNote This implementation constructs the {@link CallLinkController} with a no-op event sink because
+     * the create is a blocking request-reply whose result is delivered through the return value, and the
+     * five-value call-link join sub-state carries no create state, so the controller emits nothing. The
+     * feature-gate and IQ-sender guards mirror {@link #joinCallLink}.
+     *
+     * @param media              the media kind the link is created with; never {@code null}
+     * @param waitingRoomEnabled {@code true} to request the link's waiting-room gate at creation time
+     * @return the minted call link
+     * @throws NullPointerException  if {@code media} is {@code null}
+     * @throws IllegalStateException if call links are disabled for this account by the server feature gate,
+     *                               or if the call-link IQ sender is not wired
+     */
+    public CallLink createCallLink(CallLinkMedia media, boolean waitingRoomEnabled) {
+        Objects.requireNonNull(media, "media cannot be null");
+        var gate = featureGate;
+        if (gate != null && !gate.isCallLinkEnabled()) {
+            throw new IllegalStateException(
+                    "Cannot create a call link: call links are disabled for this account");
+        }
+        var iqSender = callLinkIqSender;
+        if (iqSender == null) {
+            throw new IllegalStateException(
+                    "Cannot create a call link: the call-link IQ sender is not wired");
+        }
+        var controller = new CallLinkController(iqSender, event -> { });
+        return controller.create(media, waitingRoomEnabled).toCallLink();
     }
 
     /**
@@ -1526,8 +1710,10 @@ public final class Calls2LifecycleController {
      * offer additionally allocates the call's {@link CallMembership} and reconciles it against the offer's
      * {@code <group_info>} roster, so a subsequent inbound {@code <group_update>} reconciles against an
      * already-populated membership rather than being dropped. The returned {@link IncomingCall} is the
-     * listener-facing offer the application accepts or rejects. An offer for a call that already exists, or
-     * arriving while the dual-call ceiling is reached, is dropped and reported as an empty result.
+     * listener-facing offer the application accepts or rejects. An offer for a call that already exists is
+     * dropped and reported as an empty result; an offer arriving while the dual-call ceiling is reached is
+     * buffered into the busy/lobby pending-call holder when its {@code <voip_settings>} enable the
+     * pending-call path, and dropped otherwise, both reported as an empty result.
      *
      * @implNote This implementation reproduces {@code wa_call_handle_incoming_xmpp_offer}: it allocates the
      * orchestration handle from the offer, Signal-decrypts the call key through
@@ -1537,9 +1723,10 @@ public final class Calls2LifecycleController {
      * by whether the offer carried a media descriptor. A group offer's {@code <group_info>} establishes the
      * call's membership up front through {@link CallMembership#reconcile(GroupInfoStanza)}, mirroring the
      * native receive path seeding the participant set from the offer roster before the first
-     * {@code <group_update>}. The busy-offer buffering into a pending-call context
-     * ({@code handle_pending_call_offer}, fn10959) is owned by the pending-call unit; this method handles a
-     * direct ringing offer.
+     * {@code <group_update>}. When the ceiling is reached this method takes the busy-offer branch of
+     * {@code handle_pending_call_offer} (fn10959): gated on the offer's {@code enable_pending_call}
+     * {@code <voip_settings>} leaf, it stores the offer in the {@link Calls2PendingCall} holder instead of
+     * dropping it, so the router can queue the call's later signaling.
      *
      * @param offer     the decoded inbound offer
      * @param senderJid the device JID that authored the offer envelope, used as the call-key decryption
@@ -1557,20 +1744,22 @@ public final class Calls2LifecycleController {
             return Optional.empty();
         }
         if (calls.size() >= MAX_CONCURRENT_CALLS) {
-            // TODO: buffer the busy offer into a pending-call context (Calls2PendingCall) instead of
-            //  dropping it, replaying its queued signaling once the user joins. The native
-            //  handle_pending_call_offer (fn10959, call_waiting.cc) buffers a busy/group/lobby offer and its
-            //  later messages into the singleton pending_call_ctx (DAT_ram_001508c4), but only when
-            //  vp->enable_pending_call is set (its first gate); that flag is a per-call <voip_settings> field
-            //  (VoipParamKey VP_ENABLE_PENDING_CALL, default 0/disabled), so with it unset the native engine
-            //  also drops the offer here and this matches the default. Wiring the enabled path is blocked on
-            //  two unrecovered details: (1) the incoming inbound-message router (Calls2IncomingMessageRouter)
-            //  DROPs any non-offer message for a call-id not in the active-calls map, so the buffered call
-            //  needs a separate holder the router and handleIncomingMessage consult before the DROP, and
-            //  (2) the promotion-on-join sequencing (wa_call_join_ongoing_call, fn10712) that drains the
-            //  buffer and replays it against the promoted context is the same path joinCall leaves unconfirmed
-            //  (no live ongoing-group-call join capture). See Calls2PendingCall and joinCall.
-            LOGGER.log(System.Logger.Level.DEBUG, "Dropping offer for {0}: dual-call ceiling reached", callId);
+            if (isPendingCallEnabled(offer)) {
+                bufferPendingOffer(offer);
+                // TODO: surface the buffered pending call to the host (native INCOMING_PENDING_CALL) and,
+                //  on join, drain the queue and replay it against the promoted context. The busy-offer
+                //  buffering and the router BUFFER_PENDING consult are wired; the host-surfacing shape (the
+                //  IncomingCall model carries no pending flag distinct from a ringing offer) and the
+                //  join-time replay ORDER (wa_call_join_ongoing_call, fn10712, drains and replays fn10961's
+                //  queue) are unconfirmed - the replay order needs a live ongoing-group-call join capture -
+                //  so both are left rather than guessed. See Calls2PendingCall and joinCall.
+                return Optional.empty();
+            }
+            // With enable_pending_call unset (the per-call <voip_settings> default 0/disabled) the native
+            // engine also drops a busy offer here, so this matches the default.
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Dropping offer for {0}: dual-call ceiling reached and pending-call buffering disabled",
+                    callId);
             return Optional.empty();
         }
 
@@ -1615,6 +1804,103 @@ public final class Calls2LifecycleController {
     }
 
     /**
+     * Returns whether an inbound offer's {@code <voip_settings>} enable the busy/lobby pending-call path.
+     *
+     * <p>Parses the offer's {@code <voip_settings>} bundles and reports whether any carries
+     * {@link VoipParamKey#OPTIONS_ENABLE_PENDING_CALL options.enable_pending_call} set. The flag is a
+     * per-call server-pushed parameter defaulting to {@code 0} (disabled), so an offer that carries no such
+     * leaf yields {@code false} and the busy offer is dropped rather than buffered.
+     *
+     * @implNote This implementation reads the {@code vp->enable_pending_call} gate the native
+     * {@code handle_pending_call_offer} (fn10959) checks first before allocating the singleton
+     * {@code pending_call_ctx}; the value is the {@code options.enable_pending_call} leaf of the per-call
+     * {@code <voip_settings>} document, parsed through {@link VoipSettings#of(Stanza, VoipParamJsonDeserializer)}
+     * the same way the media plane materialises the negotiated bundle.
+     *
+     * @param offer the decoded inbound offer
+     * @return {@code true} when the pending-call path is enabled for the offer, {@code false} otherwise
+     */
+    private boolean isPendingCallEnabled(OfferStanza offer) {
+        var deserializer = new VoipParamJsonDeserializer();
+        for (var node : offer.voipSettings()) {
+            var enabled = VoipSettings.of(node, deserializer).params()
+                    .getBoolean(VoipParamKey.OPTIONS_ENABLE_PENDING_CALL);
+            if (enabled.isPresent() && enabled.get()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Buffers a busy/lobby offer into the singleton pending-call holder for join-time replay.
+     *
+     * <p>Retains the offer as a new {@link Calls2PendingCall} unless the holder already buffers a still
+     * {@link Calls2PendingCall.State#PENDING pending} call with the same identifier, in which case the offer
+     * is a re-ring of the already-buffered call and the existing buffer is kept so its queued signaling is
+     * not discarded. The holder is a single reference because the native engine keeps one pending-call
+     * context at a time.
+     *
+     * @implNote This implementation reproduces the store step of {@code handle_pending_call_offer} (fn10959):
+     * it fills the singleton pending context with the offer once the {@code enable_pending_call} gate has
+     * passed. A re-ring is detected by call identifier so the queued messages survive the re-ring, matching
+     * the native context reuse rather than reallocating the buffer.
+     *
+     * @param offer the decoded inbound offer to buffer
+     */
+    private void bufferPendingOffer(OfferStanza offer) {
+        var callId = offer.callId();
+        var existing = pendingCall;
+        if (existing != null && existing.state() == Calls2PendingCall.State.PENDING
+                && existing.callId().equals(callId)) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Re-ring of buffered pending-call offer {0}: keeping existing buffer", callId);
+            return;
+        }
+        pendingCall = new Calls2PendingCall(offer);
+        LOGGER.log(System.Logger.Level.DEBUG,
+                "Buffering pending-call offer for {0}: dual-call ceiling reached, enable_pending_call set",
+                callId);
+    }
+
+    /**
+     * Returns whether a call identifier names the buffered busy/lobby pending call awaiting join.
+     *
+     * <p>Reports {@code true} only while the holder buffers a {@link Calls2PendingCall.State#PENDING pending}
+     * call whose identifier matches, so the inbound router consults it before dropping a non-offer message
+     * for a call not in the active-calls map. A rejected or absent pending call yields {@code false}.
+     *
+     * @param callId the call identifier from an inbound message
+     * @return {@code true} when the identifier names the buffered pending call, {@code false} otherwise
+     */
+    private boolean isBufferedPendingCall(String callId) {
+        var pending = pendingCall;
+        return pending != null && pending.state() == Calls2PendingCall.State.PENDING
+                && pending.callId().equals(callId);
+    }
+
+    /**
+     * Appends a router-classified pending-call signaling message to the buffered pending call's queue.
+     *
+     * <p>Buffers the message onto the holder for join-time replay; a message that arrives after the pending
+     * call has been rejected, or after the holder has been cleared by a race, is dropped, mirroring the
+     * queue's own terminal-state guard.
+     *
+     * @implNote This implementation reproduces the pending-call message-queue fill (fn10961) the native
+     * engine runs for a message on the busy pending call instead of the active-calls dispatch.
+     *
+     * @param message the router-classified inbound message to buffer
+     * @param callId  the message's call identifier, for the diagnostic log
+     */
+    private void bufferPendingMessage(CallMessage message, String callId) {
+        var pending = pendingCall;
+        if (pending != null && pending.buffer(message)) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Buffered pending-call signaling {0} for {1}", message.type(), callId);
+        }
+    }
+
+    /**
      * Classifies one decoded inbound signaling action through the message router, then dispatches it to its
      * lifecycle handler on a routable verdict.
      *
@@ -1634,6 +1920,9 @@ public final class Calls2LifecycleController {
      *       re-sent by the receiver before this dispatch);</li>
      *   <li>{@link Calls2IncomingMessageRouter.RoutingClass#ACCEPT_HANDLE ACCEPT_HANDLE} routes the accept onto
      *       the accept-received bring-up path;</li>
+     *   <li>{@link Calls2IncomingMessageRouter.RoutingClass#BUFFER_PENDING BUFFER_PENDING} appends the
+     *       message to the buffered busy/lobby pending call's queue for join-time replay rather than
+     *       dropping it as unknown;</li>
      *   <li>{@link Calls2IncomingMessageRouter.RoutingClass#IGNORE IGNORE},
      *       {@link Calls2IncomingMessageRouter.RoutingClass#IGNORE_REJECTED IGNORE_REJECTED}, and
      *       {@link Calls2IncomingMessageRouter.RoutingClass#DROP DROP} drop the message without dispatch
@@ -1688,13 +1977,14 @@ public final class Calls2LifecycleController {
                 : Optional.ofNullable(calls.get(callId))
                         .map(Calls2OrchestratedCall::dedupState)
                         .orElse(Calls2IncomingMessageRouter.DedupState.INITIAL);
-        var verdict = incomingRouter.route(message, senderJid, dedup, calls::get);
+        var verdict = incomingRouter.route(message, senderJid, dedup, calls::get, this::isBufferedPendingCall);
         switch (verdict.routingClass()) {
             case PROCESS, OFFER_RERING, ACCEPT_HANDLE -> {
                 var terminateEffected = dispatchInbound(message, senderJid);
                 advanceDedup(message, callId);
                 return terminateEffected;
             }
+            case BUFFER_PENDING -> bufferPendingMessage(message, callId);
             case IGNORE, IGNORE_REJECTED, DROP -> LOGGER.log(System.Logger.Level.DEBUG,
                     "Router verdict {0} drops inbound call message {1} for call {2}",
                     verdict.routingClass(), message.type(), callId);
@@ -1895,11 +2185,36 @@ public final class Calls2LifecycleController {
                     && state != Calls2CallState.CONNECTED_LONELY && state != Calls2CallState.REJOINING) {
                 return;
             }
-            transition(orchestrated, mediaConnectedTarget(orchestrated), CallEventType.CALL_STATE_CHANGED);
+            var target = mediaConnectedTarget(orchestrated);
+            transition(orchestrated, target, CallEventType.CALL_STATE_CHANGED);
             ensureControls(orchestrated);
             announceInitialVideoState(orchestrated);
+            if (target == Calls2CallState.CALL_ACTIVE) {
+                notifyConnected(callId);
+            }
         } finally {
             orchestrated.lock().unlock();
+        }
+    }
+
+    /**
+     * Reports a call's identifier to the bound service connected sink once its media plane goes active.
+     *
+     * <p>Fires the {@linkplain #bindConnectedSink(Consumer) bound} sink so the call service stamps the call's
+     * telemetry accumulator with its connected instant. A controller whose sink is unbound runs the no-op
+     * default sink, so an unbound build stamps no connected instant. The stamp the sink applies is
+     * idempotent, so a reconnect that re-enters {@link Calls2CallState#CALL_ACTIVE} through
+     * {@link #onMediaConnected(String)} does not move the connected timestamp. Any failure the sink raises is
+     * caught and logged so the media-connected transition that called this always completes.
+     *
+     * @param callId the identifier of the call whose media plane went active
+     */
+    private void notifyConnected(String callId) {
+        try {
+            connectedSink.accept(callId);
+        } catch (RuntimeException e) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Connected sink failed for call {0}: {1}", callId, e.getMessage());
         }
     }
 
@@ -2439,7 +2754,7 @@ public final class Calls2LifecycleController {
             var diff = membership.reconcile(roster);
             if (!diff.isEmpty()) {
                 infoUpdater.updateForEvent(orchestrated.callId(), CallEventType.GROUP_INFO_CHANGED);
-                events.emit(CallEventType.GROUP_INFO_CHANGED, new byte[0]);
+                events.emit(CallEventType.GROUP_INFO_CHANGED, DataUtils.EMPTY_BYTE_ARRAY);
                 if (orchestrated.isCaller()) {
                     orchestrated.callKey().ifPresent(callKey ->
                             fanOutGroupRekey(orchestrated, orchestrated.call().creator(), callKey));
@@ -2657,7 +2972,7 @@ public final class Calls2LifecycleController {
      * are also constructed over the media session's {@link AppDataController} and wired onto the same
      * {@link ControlEventBridge}: the {@link ReactionController} attaches its outbound send seam to
      * {@link AppDataController#sendReaction(String)} and registers itself as the controller's inbound
-     * reaction observer ({@link AppDataController#attachReactionObserver(AppDataController.ReactionObserver)},
+     * reaction observer ({@link AppDataController#attachReactionObserver(java.util.function.BiConsumer)},
      * host event {@code 0x91} plus the reaction-clear sweep), the {@link LiveTranscriptionController}
      * registers as the inbound transcription observer
      * ({@link AppDataController#attachTranscriptionObserver(java.util.function.BiConsumer)}, host event
@@ -2701,6 +3016,10 @@ public final class Calls2LifecycleController {
         var video = new VideoStateController(context, sender, bridge);
         var screenShare = new ScreenShareController(context, sender, bridge, screenShareVersion());
         var raiseHand = new RaiseHandController(context, sender, bridge, ranking);
+        // TODO: wire TonePlaybackManager - construct new TonePlaybackManager(bridge) next to these per-call
+        //  controllers and drive activate/deactivate from Calls2CallStateMachine transitions
+        //  (CONNECTING/RINGBACK/BUSY/INCOMING_PENDING_CALL), calling clear() at teardown; reproduces the
+        //  wa-voip PlayCallTone / event 0x5f tone-priority playback.
 
         ReactionController reaction = null;
         LiveTranscriptionController transcription = null;
@@ -2708,8 +3027,8 @@ public final class Calls2LifecycleController {
         var appData = orchestrated.appDataController().orElse(null);
         if (appData != null) {
             reaction = new ReactionController(self, bridge);
-            reaction.attach(appData::sendReaction);
-            appData.attachReactionObserver(reaction);
+            reaction.attach(appData);
+            appData.attachReactionObserver(reaction::onReaction);
 
             transcription = new LiveTranscriptionController(bridge);
             var transcriptionUnit = transcription;
@@ -3195,7 +3514,7 @@ public final class Calls2LifecycleController {
             return;
         }
         infoUpdater.updateForEvent(callId, CallEventType.CALL_OFFER_ACK_RECEIVED);
-        events.emit(CallEventType.CALL_OFFER_ACK_RECEIVED, new byte[0]);
+        events.emit(CallEventType.CALL_OFFER_ACK_RECEIVED, DataUtils.EMPTY_BYTE_ARRAY);
         ack.getChild("relay").ifPresent(orchestrated::relay);
         orchestrated.offerAckVoipSettings(voipSettingsOf(ack));
         // The offer-ack relay block names the caller's relay set (placeholder credentials notwithstanding):
@@ -3285,10 +3604,10 @@ public final class Calls2LifecycleController {
         orchestrated.state(newState);
         orchestrated.call().setState(newState.toPublic());
         infoUpdater.updateForEvent(callId, lifecycleEvent);
-        events.emit(lifecycleEvent, new byte[0]);
+        events.emit(lifecycleEvent, DataUtils.EMPTY_BYTE_ARRAY);
         var silent = newState == Calls2CallState.LINK || newState == Calls2CallState.ENDING;
         if (!silent && lifecycleEvent != CallEventType.CALL_STATE_CHANGED) {
-            events.emit(CallEventType.CALL_STATE_CHANGED, new byte[0]);
+            events.emit(CallEventType.CALL_STATE_CHANGED, DataUtils.EMPTY_BYTE_ARRAY);
         }
     }
 
@@ -3330,7 +3649,7 @@ public final class Calls2LifecycleController {
         var callId = orchestrated.callId();
         orchestrated.call().setEndReason(reason);
         infoUpdater.updateForEvent(callId, endEvent);
-        events.emit(endEvent, new byte[0]);
+        events.emit(endEvent, DataUtils.EMPTY_BYTE_ARRAY);
 
         var current = orchestrated.state();
         if (current != Calls2CallState.CALL_ACTIVE && current != Calls2CallState.CONNECTED_LONELY) {
@@ -3339,7 +3658,7 @@ public final class Calls2LifecycleController {
         stateMachine.transition(callId, Calls2CallState.NONE);
         orchestrated.state(Calls2CallState.NONE);
         orchestrated.call().setState(CallState.ENDED);
-        events.emit(CallEventType.CALL_STATE_CHANGED, new byte[0]);
+        events.emit(CallEventType.CALL_STATE_CHANGED, DataUtils.EMPTY_BYTE_ARRAY);
 
         recordCallLog(orchestrated, reason);
         notifyTeardown(callId);

@@ -19,7 +19,7 @@ import java.util.Optional;
  * {@link #shouldPublish(RxSubscriptions)} after construction always reports that a
  * publish is due. {@link #record(RxSubscriptions)} updates the cached subscription after
  * a binding is sent. This state is not thread-safe: the single call transport thread
- * that drives the {@link SubscriptionPublisher} owns it.
+ * that drives the {@link LiveSubscriptionPublisher} owns it.
  *
  * @implNote This implementation mirrors the cached-subscription comparison performed by
  * {@code is_rx_sub_the_same} (fn5181) and {@code wa_transport_p2p_send_cached_rx_subscription}

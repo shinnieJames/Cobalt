@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
@@ -238,7 +239,7 @@ class LockChatHandlerTest {
         @DisplayName("getChatLockMutation carries the locked flag and the [\"lock\", jid] index")
         void chatLockMutationStructure() {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pinChatMutationFactory = new PinChatMutationFactory();
+            var pinChatMutationFactory = new PinChatMutationFactory(TestWamService.create(client));
             var pending = new LockChatMutationFactory(new ArchiveChatMutationFactory(pinChatMutationFactory), pinChatMutationFactory).getChatLockMutation(ts, true, PEER);
 
             var trusted = pending.mutation();
@@ -252,7 +253,7 @@ class LockChatHandlerTest {
         @DisplayName("getMutationsForLock when locking emits (unarchive, unpin, lock) in that order")
         void lockingEmitsThreeMutations() {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pinChatMutationFactory = new PinChatMutationFactory();
+            var pinChatMutationFactory = new PinChatMutationFactory(TestWamService.create(client));
             var mutations = new LockChatMutationFactory(new ArchiveChatMutationFactory(pinChatMutationFactory), pinChatMutationFactory).getMutationsForLock(ts, true, PEER, null);
 
             assertEquals(3, mutations.size(),
@@ -266,7 +267,7 @@ class LockChatHandlerTest {
         @DisplayName("getMutationsForLock when unlocking emits only the lock mutation")
         void unlockingEmitsOnlyLock() {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pinChatMutationFactory = new PinChatMutationFactory();
+            var pinChatMutationFactory = new PinChatMutationFactory(TestWamService.create(client));
             var mutations = new LockChatMutationFactory(new ArchiveChatMutationFactory(pinChatMutationFactory), pinChatMutationFactory).getMutationsForLock(ts, false, PEER, null);
 
             assertEquals(1, mutations.size(), "unlocking only emits the lock(false) mutation");

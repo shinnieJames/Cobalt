@@ -96,6 +96,13 @@ public final class MlowDecoder {
     private static final int LAG_SUBFRLEN = 40;
 
     /**
+     * Maximum low-band subframe length in samples, the native {@code SMPL_MAX_SF_LEN} = {@code 10 ms * 16 kHz}
+     * = 160; the ceiling every in-scope {@code subframeLength} (80 or 160) stays within, and the size of the
+     * reusable per-subframe {@link #excSubframe} and {@link #noise} scratch buffers.
+     */
+    private static final int MAX_SF_LEN = 160;
+
+    /**
      * The unvoiced pulse-shaping coefficient table, the native {@code smpl_uv_pulse_shaping_coefs[2][2][2]}
      * indexed {@code [lowRate][maOrAr][tap]}.
      *
@@ -212,6 +219,21 @@ public final class MlowDecoder {
     private final float[] tiltState;
 
     /**
+     * Reusable per-subframe excitation buffer, sized to {@value #MAX_SF_LEN}. Every subframe fully
+     * overwrites its {@code [0, subframeLength)} region with {@code lpcRes} before any read, so one
+     * instance-owned buffer replaces the per-subframe allocation without changing any consumed value; the
+     * decode is single-threaded per stream, so the single owner is safe.
+     */
+    private final float[] excSubframe;
+
+    /**
+     * Reusable per-subframe noise buffer, sized to {@value #MAX_SF_LEN}. {@link NoiseGenerator#genNoise}
+     * fully defines its {@code [0, subframeLength)} region on every call before it is added into
+     * {@link #excSubframe}, so one instance-owned buffer replaces the per-subframe allocation.
+     */
+    private final float[] noise;
+
+    /**
      * Constructs an MLow low-band decoder with a freshly constructed parameter front end and synthesis back
      * end and zeroed cross-frame state.
      *
@@ -228,6 +250,8 @@ public final class MlowDecoder {
         this.uvPulseShapingState = new float[2];
         this.hpArma2State = new float[4];
         this.tiltState = new float[1];
+        this.excSubframe = new float[MAX_SF_LEN];
+        this.noise = new float[MAX_SF_LEN];
     }
 
     /**
@@ -422,9 +446,7 @@ public final class MlowDecoder {
     private PacketSynthesis decodeFrameWithSynthesis(byte[] packet, int offset, int length,
                                                      boolean lpcPostfilterEnabled) {
         MlowTocByte tocByte = MlowTocByte.decode(packet[offset] & 0xFF);
-        byte[] payload = new byte[length - 1];
-        System.arraycopy(packet, offset + 1, payload, 0, length - 1);
-        ParamDecoder.DecodedFrame[] decodedFrames = paramDecoder.decodePacket(tocByte, payload);
+        ParamDecoder.DecodedFrame[] decodedFrames = paramDecoder.decodePacket(tocByte, packet, offset, length);
 
         int frameLength = tocByte.frameLength16();
         int numSubframes = tocByte.numSubframes();
@@ -510,7 +532,6 @@ public final class MlowDecoder {
 
         for (int sf = 0; sf < numSubframes; sf++) {
             float[] acbGain = CelpSynthesizer.acbDequant(lowRate, df.acbgIdx()[sf]);
-            float[] excSubframe = new float[subframeLength];
             System.arraycopy(lpcRes, sf * subframeLength, excSubframe, 0, subframeLength);
             celpSynthesizer.celpDecode(voiced, acbGain, sliceLags(lags, sf * lagsPerSubframe, lagsPerSubframe),
                     lagsPerSubframe, subframeLength, lowRate, normalizedBitrate, excSubframe);
@@ -520,7 +541,6 @@ public final class MlowDecoder {
                 prevNrgres = nrgres;
             }
 
-            float[] noise = new float[subframeLength];
             noiseGenerator.genNoise(excSubframe, subframeLength, voiced, df.sfPulses()[sf], nrgres,
                     df.fcbgIdx()[sf], lsfs[sf], normalizedBitrate, noise);
 
@@ -685,9 +705,9 @@ public final class MlowDecoder {
      */
     private float[] decodeFrameFloat(byte[] packet, int offset, int length) {
         MlowTocByte tocByte = MlowTocByte.decode(packet[offset] & 0xFF);
-        byte[] payload = new byte[length - 1];
-        System.arraycopy(packet, offset + 1, payload, 0, length - 1);
-        ParamDecoder.DecodedFrame[] decodedFrames = paramDecoder.decodePacket(tocByte, payload);
+        // TODO: wire MlowBandwidthExtension - on the >16 kHz (SWB/FB) branch ParamDecoder currently rejects, instantiate MlowBandwidthExtension and call decodeWideband(low band + LPC residual + nyquist gains + MlowHbParamDecoder HbFrameInput) to synthesize 32/48 kHz PCM, gated on the packet-announced sample rate from tocByte
+        // TODO: wire MlowLsfInterpolTables - reachable via decodeWideband -> hbLsfInterpolate -> MlowLsfInterpolTables.factors once the SWB bandwidth-extension path is wired here and in MLowAudioDecoder.decode
+        ParamDecoder.DecodedFrame[] decodedFrames = paramDecoder.decodePacket(tocByte, packet, offset, length);
 
         int frameLength = tocByte.frameLength16();
         int numSubframes = tocByte.numSubframes();
@@ -751,7 +771,6 @@ public final class MlowDecoder {
 
         for (int sf = 0; sf < numSubframes; sf++) {
             float[] acbGain = CelpSynthesizer.acbDequant(lowRate, df.acbgIdx()[sf]);
-            float[] excSubframe = new float[subframeLength];
             System.arraycopy(lpcRes, sf * subframeLength, excSubframe, 0, subframeLength);
             celpSynthesizer.celpDecode(voiced, acbGain, sliceLags(lags, sf * lagsPerSubframe, lagsPerSubframe),
                     lagsPerSubframe, subframeLength, lowRate, normalizedBitrate, excSubframe);
@@ -761,7 +780,6 @@ public final class MlowDecoder {
                 prevNrgres = nrgres;
             }
 
-            float[] noise = new float[subframeLength];
             noiseGenerator.genNoise(excSubframe, subframeLength, voiced, df.sfPulses()[sf], nrgres,
                     df.fcbgIdx()[sf], lsfs[sf], normalizedBitrate, noise);
 

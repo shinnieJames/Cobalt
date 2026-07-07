@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.calls2.signaling;
 
+import com.github.auties00.cobalt.util.DataUtils;
+
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.util.Arrays;
@@ -152,38 +154,6 @@ public record RelayCandidate(int relayId,
     }
 
     /**
-     * Returns whether this candidate shares the relay identity triple of another candidate.
-     *
-     * <p>The triple is the {@link #relayId() relay id}, the {@link #portByte() port byte}, and the
-     * {@link #protoAfFlag() protocol address-family flag}; two candidates with the same triple address
-     * the same relay and the list keeps only one of them.
-     *
-     * @param other the candidate to compare against; never {@code null}
-     * @return {@code true} when both candidates carry the same relay identity triple
-     * @throws NullPointerException if {@code other} is {@code null}
-     */
-    public boolean sameRelayAs(RelayCandidate other) {
-        Objects.requireNonNull(other, "other cannot be null");
-        return this.relayId == other.relayId
-                && this.portByte == other.portByte
-                && this.protoAfFlag == other.protoAfFlag;
-    }
-
-    /**
-     * Returns whether this candidate carries the same {@code auth_token} and {@code enc_relay_token}
-     * as another candidate.
-     *
-     * @param other the candidate to compare against; never {@code null}
-     * @return {@code true} when both tokens match byte for byte
-     * @throws NullPointerException if {@code other} is {@code null}
-     */
-    public boolean sameTokensAs(RelayCandidate other) {
-        Objects.requireNonNull(other, "other cannot be null");
-        return Arrays.equals(this.authToken, other.authToken)
-                && Arrays.equals(this.encRelayToken, other.encRelayToken);
-    }
-
-    /**
      * Normalizes a token argument, defaulting {@code null} to an empty array and bounding the length.
      *
      * @param token the token bytes, or {@code null}
@@ -193,7 +163,7 @@ public record RelayCandidate(int relayId,
      */
     private static byte[] normalizeToken(byte[] token, String name) {
         if (token == null) {
-            return new byte[0];
+            return DataUtils.EMPTY_BYTE_ARRAY;
         }
         if (token.length > TOKEN_MAX_LENGTH) {
             throw new IllegalArgumentException(name + " exceeds " + TOKEN_MAX_LENGTH + " bytes: " + token.length);

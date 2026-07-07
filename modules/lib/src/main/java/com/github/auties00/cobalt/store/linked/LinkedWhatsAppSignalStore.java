@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.store.linked;
 
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
+import com.github.auties00.cobalt.model.device.identity.LocalPasskeyCredential;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.libsignal.SignalProtocolAddress;
 import com.github.auties00.libsignal.SignalProtocolStore;
@@ -196,6 +197,27 @@ public interface LinkedWhatsAppSignalStore extends SignalProtocolStore {
      * @return this store instance for method chaining
      */
     LinkedWhatsAppSignalStore setAdvSecretKey(byte[] key);
+
+    /**
+     * Returns the resident WebAuthn credential the local passkey authenticator signs with.
+     *
+     * @apiNote
+     * Present only when a local passkey has been provisioned for this session through the
+     * registration ceremony; the relay and operating-system authenticators hold their credential
+     * elsewhere and leave this empty.
+     *
+     * @return an {@link Optional} containing the {@link LocalPasskeyCredential}, or empty if not
+     *         set
+     */
+    Optional<LocalPasskeyCredential> passkeyCredential();
+
+    /**
+     * Sets the resident WebAuthn credential the local passkey authenticator signs with.
+     *
+     * @param passkeyCredential the {@link LocalPasskeyCredential}, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    LinkedWhatsAppSignalStore setPasskeyCredential(LocalPasskeyCredential passkeyCredential);
 
     /**
      * Returns all registered Signal pre-keys in insertion order.

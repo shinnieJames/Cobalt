@@ -58,7 +58,7 @@ class PaymentInfoHandlerTest {
     }
 
     private void smbPlatform() {
-        store.accountStore().device().setPlatform(ClientPlatformType.IOS_BUSINESS);
+        store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.IOS_BUSINESS));
     }
 
     private void enableSync() {
@@ -112,7 +112,7 @@ class PaymentInfoHandlerTest {
         @Test
         @DisplayName("ANDROID_BUSINESS platform is accepted")
         void androidBusinessAccepted() {
-            store.accountStore().device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.ANDROID_BUSINESS));
             enableSync();
             var action = new PaymentInfoActionBuilder().cpi("cpi-1234").build();
             assertEquals(SyncActionState.SUCCESS,
@@ -122,7 +122,7 @@ class PaymentInfoHandlerTest {
         @Test
         @DisplayName("IOS_BUSINESS platform is accepted")
         void iosBusinessAccepted() {
-            store.accountStore().device().setPlatform(ClientPlatformType.IOS_BUSINESS);
+            store.accountStore().setDevice(store.accountStore().device().withPlatform(ClientPlatformType.IOS_BUSINESS));
             enableSync();
             var action = new PaymentInfoActionBuilder().cpi("cpi-1234").build();
             assertEquals(SyncActionState.SUCCESS,

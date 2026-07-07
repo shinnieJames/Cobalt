@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadataBuilder;
@@ -70,20 +71,20 @@ class UserStatusMuteHandlerTest {
         @Test
         @DisplayName("actionName() returns the WA wire constant 'userStatusMute'")
         void actionName() {
-            assertEquals(UserStatusMuteAction.ACTION_NAME, new UserStatusMuteHandler().actionName());
-            assertEquals("userStatusMute", new UserStatusMuteHandler().actionName());
+            assertEquals(UserStatusMuteAction.ACTION_NAME, new UserStatusMuteHandler(TestWamService.create(client)).actionName());
+            assertEquals("userStatusMute", new UserStatusMuteHandler(TestWamService.create(client)).actionName());
         }
 
         @Test
         @DisplayName("collectionName() resolves to SyncPatchType.REGULAR_HIGH")
         void collectionName() {
-            assertEquals(SyncPatchType.REGULAR_HIGH, new UserStatusMuteHandler().collectionName());
+            assertEquals(SyncPatchType.REGULAR_HIGH, new UserStatusMuteHandler(TestWamService.create(client)).collectionName());
         }
 
         @Test
         @DisplayName("version() returns the declared action version")
         void version() {
-            assertEquals(UserStatusMuteAction.ACTION_VERSION, new UserStatusMuteHandler().version());
+            assertEquals(UserStatusMuteAction.ACTION_VERSION, new UserStatusMuteHandler(TestWamService.create(client)).version());
         }
     }
 
@@ -95,7 +96,7 @@ class UserStatusMuteHandlerTest {
         void appliesToContact() {
             client.store().contactStore().addContact(new ContactBuilder().jid(CONTACT).build());
 
-            var result = new UserStatusMuteHandler().applyMutation(
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(
                     client, mutationFor(CONTACT.toString(), Boolean.TRUE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L)));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState(),
@@ -110,7 +111,7 @@ class UserStatusMuteHandlerTest {
             var contact = new ContactBuilder().jid(CONTACT).statusMuted(true).build();
             client.store().contactStore().addContact(contact);
 
-            var result = new UserStatusMuteHandler().applyMutation(
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(
                     client, mutationFor(CONTACT.toString(), Boolean.FALSE, SyncdOperation.SET, Instant.now()));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
@@ -130,7 +131,7 @@ class UserStatusMuteHandlerTest {
                     .build();
             client.store().chatStore().addChatMetadata(metadata);
 
-            var result = new UserStatusMuteHandler().applyMutation(
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(
                     client, mutationFor(GROUP.toString(), Boolean.TRUE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L)));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState(),
@@ -148,7 +149,7 @@ class UserStatusMuteHandlerTest {
         @Test
         @DisplayName("unknown contact wid returns ORPHAN with the wid as the model id")
         void unknownContact() {
-            var result = new UserStatusMuteHandler().applyMutation(
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(
                     client, mutationFor(CONTACT.toString(), Boolean.TRUE, SyncdOperation.SET, Instant.now()));
 
             assertEquals(SyncActionState.ORPHAN, result.actionState());
@@ -159,7 +160,7 @@ class UserStatusMuteHandlerTest {
         @Test
         @DisplayName("unknown group wid returns ORPHAN with the wid as the model id")
         void unknownGroup() {
-            var result = new UserStatusMuteHandler().applyMutation(
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(
                     client, mutationFor(GROUP.toString(), Boolean.TRUE, SyncdOperation.SET, Instant.now()));
 
             assertEquals(SyncActionState.ORPHAN, result.actionState());
@@ -179,7 +180,7 @@ class UserStatusMuteHandlerTest {
             var mutation = new DecryptedMutation.Trusted(
                     "[\"userStatusMute\",\"\"]", value, SyncdOperation.SET, Instant.now(), 7);
 
-            var result = new UserStatusMuteHandler().applyMutation(client, mutation);
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(client, mutation);
 
             assertEquals(SyncActionState.MALFORMED, result.actionState());
         }
@@ -192,7 +193,7 @@ class UserStatusMuteHandlerTest {
             var mutation = new DecryptedMutation.Trusted(
                     "[\"userStatusMute\"]", value, SyncdOperation.SET, Instant.now(), 7);
 
-            var result = new UserStatusMuteHandler().applyMutation(client, mutation);
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(client, mutation);
 
             assertEquals(SyncActionState.MALFORMED, result.actionState());
         }
@@ -208,7 +209,7 @@ class UserStatusMuteHandlerTest {
                     "[\"userStatusMute\",\"" + CONTACT + "\"]",
                     wrongValue, SyncdOperation.SET, Instant.now(), 7);
 
-            var result = new UserStatusMuteHandler().applyMutation(client, mutation);
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(client, mutation);
 
             assertEquals(SyncActionState.MALFORMED, result.actionState(),
                     "a value carrying " + FavoritesAction.class.getSimpleName() + " must be tagged malformed");
@@ -223,7 +224,7 @@ class UserStatusMuteHandlerTest {
         void removeIsUnsupported() {
             client.store().contactStore().addContact(new ContactBuilder().jid(CONTACT).build());
 
-            var result = new UserStatusMuteHandler().applyMutation(
+            var result = new UserStatusMuteHandler(TestWamService.create(client)).applyMutation(
                     client, mutationFor(CONTACT.toString(), Boolean.TRUE, SyncdOperation.REMOVE, Instant.now()));
 
             assertEquals(SyncActionState.UNSUPPORTED, result.actionState());
@@ -240,7 +241,7 @@ class UserStatusMuteHandlerTest {
         void buildsPendingMutation() {
             var ts = Instant.ofEpochSecond(1700000000L);
 
-            var pending = new UserStatusMuteHandler().getMutationForStatusMute(CONTACT, true, ts);
+            var pending = new UserStatusMuteHandler(TestWamService.create(client)).getMutationForStatusMute(CONTACT, true, ts);
 
             assertEquals(SyncdOperation.SET, pending.mutation().operation());
             assertEquals(ts, pending.mutation().timestamp());
@@ -260,7 +261,7 @@ class UserStatusMuteHandlerTest {
             var earlier = mutationFor(CONTACT.toString(), Boolean.FALSE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L));
             var later   = mutationFor(CONTACT.toString(), Boolean.TRUE,  SyncdOperation.SET, Instant.ofEpochSecond(1700000010L));
 
-            var resolution = new UserStatusMuteHandler().resolveConflicts(earlier, later);
+            var resolution = new UserStatusMuteHandler(TestWamService.create(client)).resolveConflicts(earlier, later);
 
             assertEquals(MutationConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
@@ -271,7 +272,7 @@ class UserStatusMuteHandlerTest {
             var later   = mutationFor(CONTACT.toString(), Boolean.TRUE,  SyncdOperation.SET, Instant.ofEpochSecond(1700000010L));
             var earlier = mutationFor(CONTACT.toString(), Boolean.FALSE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L));
 
-            var resolution = new UserStatusMuteHandler().resolveConflicts(later, earlier);
+            var resolution = new UserStatusMuteHandler(TestWamService.create(client)).resolveConflicts(later, earlier);
 
             assertEquals(MutationConflictResolutionState.SKIP_REMOTE, resolution.state());
         }

@@ -100,7 +100,7 @@ public final class SmaxProfilePictureGetAddRequestMixin {
     @WhatsAppWebExport(moduleName = "WASmaxOutProfilePictureAddRequestMixin",
             exports = "mergeAddRequestMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Stanza toNode() {
+    public Stanza toStanza() {
         var builder = new StanzaBuilder()
                 .description("add_request")
                 .attribute("code", addRequestCode)

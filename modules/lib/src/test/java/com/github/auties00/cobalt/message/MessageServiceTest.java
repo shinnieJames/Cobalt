@@ -49,7 +49,7 @@ class MessageServiceTest {
         var props = client.abPropsService();
         var wam = new LiveWamService(client, props);
         var migration = new LiveLidMigrationService(client, props, wam);
-        var transcoder = new LiveMediaTranscoderService(client, props, TestMediaConnectionService.create());
+        var transcoder = new LiveMediaTranscoderService(client, props, TestMediaConnectionService.create(), wam);
 
         assertThrows(NullPointerException.class, () -> new LiveMessageService(null, encryption, decryption, device, migration, props, wam, transcoder));
         assertThrows(NullPointerException.class, () -> new LiveMessageService(client, null, decryption, device, migration, props, wam, transcoder));
@@ -77,7 +77,7 @@ class MessageServiceTest {
         var props = client.abPropsService();
         var wam = new LiveWamService(client, props);
         var migration = new LiveLidMigrationService(client, props, wam);
-        var transcoder = new LiveMediaTranscoderService(client, props, TestMediaConnectionService.create());
+        var transcoder = new LiveMediaTranscoderService(client, props, TestMediaConnectionService.create(), wam);
 
         var service = new LiveMessageService(client, encryption, decryption, device, migration, props, wam, transcoder);
         assertNotNull(service,
@@ -100,7 +100,7 @@ class MessageServiceTest {
         var props = client.abPropsService();
         var wam = new LiveWamService(client, props);
         var migration = new LiveLidMigrationService(client, props, wam);
-        var transcoder = new LiveMediaTranscoderService(client, props, TestMediaConnectionService.create());
+        var transcoder = new LiveMediaTranscoderService(client, props, TestMediaConnectionService.create(), wam);
         var service = new LiveMessageService(client, encryption, decryption, device, migration, props, wam, transcoder);
 
         Assertions.assertDoesNotThrow(service::clearPendingMessages);

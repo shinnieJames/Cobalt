@@ -26,7 +26,12 @@ import java.util.Optional;
  * This implementation targets the deprecated WAP path; the WA Web job routes through a GraphQL query first when the
  * GraphQL-for-order-info flag is set and only falls back to this stanza shape when the GraphQL path is disabled. Cobalt
  * ships only the wire-level WAP envelope.
+ *
+ * @deprecated superseded by the GraphQL order-details read ({@code LiveLinkedWhatsAppClient.queryOrder}
+ * via {@code BizQueryOrderJobWhatsAppGraphQlRequest}); WA Web no longer emits the {@code fb:thrift_iq}
+ * order shape.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJob")
 public final class IqBizQueryOrderRequest implements IqStanza.Request {
     /**

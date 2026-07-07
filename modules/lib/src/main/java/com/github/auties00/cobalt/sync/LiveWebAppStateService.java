@@ -68,7 +68,10 @@ import com.github.auties00.cobalt.wam.event.SyncdKeyCountEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateCriticalDataProcessingEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateDataDownloadedEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdBootstrapDataAppliedEventBuilder;
+import com.github.auties00.cobalt.wam.event.MdAppStateSyncDailyEventBuilder;
+import com.github.auties00.cobalt.wam.event.MdSyncdBundleEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdSyncdMutationEventBuilder;
+import com.github.auties00.cobalt.wam.event.MdSyncdMutationsSummaryEventBuilder;
 import com.github.auties00.cobalt.wam.event.MediaDownload2EventBuilder;
 import com.github.auties00.cobalt.wam.type.BootstrapAppStateDataStageCode;
 import com.github.auties00.cobalt.wam.type.DownloadOriginType;
@@ -77,6 +80,7 @@ import com.github.auties00.cobalt.wam.type.MdBootstrapSource;
 import com.github.auties00.cobalt.wam.type.MdBootstrapStepResult;
 import com.github.auties00.cobalt.wam.type.MediaDownloadModeType;
 import com.github.auties00.cobalt.wam.type.MediaDownloadResultType;
+import com.github.auties00.cobalt.wam.type.KmpSyncdFlowEnum;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MutationBundleType;
 import com.github.auties00.cobalt.wam.type.MutationCountBucket;
@@ -88,6 +92,8 @@ import javax.crypto.Mac;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.util.concurrent.atomic.AtomicLong;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -169,11 +175,25 @@ import java.util.logging.Logger;
 @WhatsAppWebModule(moduleName = "WAWebSyncdServerSync")
 @WhatsAppWebModule(moduleName = "WAWebSyncdReportSyncdStatJob")
 @WhatsAppWebModule(moduleName = "WAWebSyncdWamUtils")
+@WhatsAppWebModule(moduleName = "WAWebSyncdWamReportingUtils")
+@WhatsAppWebModule(moduleName = "WAWebSyncdWamAppState")
 public final class LiveWebAppStateService implements WebAppStateService {
     /**
      * The class-scoped logger used for sync-pipeline diagnostics.
      */
     private static final Logger LOGGER = Logger.getLogger(LiveWebAppStateService.class.getName());
+
+    /**
+     * The debounce window after the last mutation-processing activity before
+     * the accumulated
+     * {@link MdAppStateSyncDailyEventBuilder MdAppStateSyncDaily} aggregate is
+     * committed.
+     *
+     * <p>Mirrors WhatsApp Web's five-minute {@code ShiftTimer} window, which
+     * shifts forward on every counter update so the single daily aggregate is
+     * flushed once the collection has quiesced rather than on a fixed clock.
+     */
+    private static final Duration APP_STATE_SYNC_DAILY_FLUSH_DELAY = Duration.ofMinutes(5);
 
     /**
      * The {@link LinkedWhatsAppClient} used for store access, stanza dispatch, and
@@ -285,6 +305,49 @@ public final class LiveWebAppStateService implements WebAppStateService {
     private volatile ScheduledTask periodicReportSyncdKeyStatsJob;
 
     /**
+     * The handle of the pending debounced flush that ships the accumulated
+     * {@link MdAppStateSyncDailyEventBuilder MdAppStateSyncDaily} aggregate, or
+     * {@code null} when no flush is armed.
+     *
+     * <p>Rescheduled on every mutation-processing activity so the aggregate is
+     * emitted on a shifting window that settles after the collection has been
+     * idle for {@link #APP_STATE_SYNC_DAILY_FLUSH_DELAY}.
+     */
+    private volatile ScheduledTask appStateSyncDailyFlushTask;
+
+    /**
+     * The live accumulator behind the
+     * {@link MdAppStateSyncDailyEventBuilder MdAppStateSyncDaily} aggregate.
+     *
+     * <p>Fed from the mutation-processing chokepoints
+     * ({@link #applyMutations}, {@link #recordMutationState}, {@link #decryptMutations},
+     * {@link #processUploadSuccess}) and drained by {@link #flushAppStateSyncDaily()}.
+     */
+    private final SyncdDailyStats syncdDailyStats;
+
+    /**
+     * The fabricated per-connection application session identifier reported on
+     * the syncd bundle and mutation-summary telemetry.
+     *
+     * <p>WhatsApp Web sources this from {@code getSharedSessionId()}, a value
+     * scoped to the browser page session; Cobalt has no page, so a stable
+     * random identifier is minted once per service instance and reused across
+     * the connection.
+     */
+    private final String wamAppSessionId;
+
+    /**
+     * The fabricated companion session identifier reported on the syncd bundle
+     * and mutation-summary telemetry.
+     *
+     * <p>WhatsApp Web sources this from a six-character SHA-1 slice of the
+     * multi-device session identifier; Cobalt has no such derivation, so a
+     * stable six-character random identifier is minted once per service
+     * instance.
+     */
+    private final String wamCompanionSessionId;
+
+    /**
      * Serializes every syncd state mutation and tracks which collections are
      * mid-round.
      *
@@ -364,6 +427,16 @@ public final class LiveWebAppStateService implements WebAppStateService {
         this.missingSyncKeyRequestService.setTimeoutScheduler(missingSyncKeyTimeoutScheduler);
         this.syncKeyRotationService = new LiveSyncKeyRotationService(whatsapp, this, abPropsService, wamService, coordinator);
         this.snapshotRecoveryService = snapshotRecoveryService;
+        this.syncdDailyStats = new SyncdDailyStats();
+        var sessionRandom = new SecureRandom();
+        var appSessionBytes = new byte[12];
+        sessionRandom.nextBytes(appSessionBytes);
+        this.wamAppSessionId = Base64.getUrlEncoder().withoutPadding().encodeToString(appSessionBytes);
+        var companionSessionBytes = new byte[6];
+        sessionRandom.nextBytes(companionSessionBytes);
+        this.wamCompanionSessionId = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(companionSessionBytes)
+                .substring(0, 6);
     }
 
     /**
@@ -1411,6 +1484,18 @@ public final class LiveWebAppStateService implements WebAppStateService {
 
             var newHash = computeNewLTHash(collectionName, MutationLTHash.EMPTY_HASH, untrusted);
 
+            emitSyncdBundleAndSummaryWamEvents(
+                    collectionName,
+                    snapshotProtoVersion,
+                    MutationDirectionType.INCOMING,
+                    MutationBundleType.SNAPSHOT,
+                    !wasBootstrapped,
+                    untrusted,
+                    newHash.newHash(),
+                    snapshot.mac().orElse(null),
+                    snapshot.mac().orElse(null),
+                    null);
+
             try {
                 integrityVerifier.verifySnapshotMac(collectionName, snapshotProtoVersion, snapshot, newHash.newHash());
 
@@ -1537,6 +1622,18 @@ public final class LiveWebAppStateService implements WebAppStateService {
             }
 
             var newHash = computeNewLTHash(collectionName, currentHash, untrusted);
+
+            emitSyncdBundleAndSummaryWamEvents(
+                    collectionName,
+                    patchVersion,
+                    MutationDirectionType.INCOMING,
+                    MutationBundleType.PATCH,
+                    !wasBootstrapped,
+                    untrusted,
+                    newHash.newHash(),
+                    patch.patchMac().orElse(null),
+                    patch.snapshotMac().orElse(null),
+                    patch.patchMac().orElse(null));
 
             if (!store.syncStore().isCollectionInMacMismatchFatal(collectionName)) {
                 var patchValueMacs = untrusted.stream()
@@ -1828,6 +1925,158 @@ public final class LiveWebAppStateService implements WebAppStateService {
     }
 
     /**
+     * Commits the per-bundle
+     * {@link MdSyncdBundleEventBuilder MdSyncdBundle} and per-collection
+     * {@link MdSyncdMutationsSummaryEventBuilder MdSyncdMutationsSummary}
+     * telemetry for a single processed snapshot or patch.
+     *
+     * <p>Called from the snapshot and patch branches of
+     * {@link #handleSyncResponseInternal} once the LT-Hash has been recomputed
+     * (so {@code computedLtHash} is available) but before the collection version
+     * is advanced. The bundle event records the wire and computed MACs, the
+     * bundle version, and the encoded byte counts; the summary event records the
+     * per-mutation-name histograms of set, remove, and LID-scoped mutations for
+     * the same bundle. Both are skipped when {@code mutations} is empty, since
+     * an empty bundle carries no mutation identity to report.
+     *
+     * @implNote
+     * This implementation has no per-call-site AB allowlist gate; WhatsApp Web
+     * gates the bundle event on the {@code md_syncd_bundle_logging} list and the
+     * summary event on {@code md_syncd_mutation_summary_logging}, but Cobalt's
+     * WAM pipeline filters upstream. The {@code kmpSyncdFlow} is always reported
+     * as {@link KmpSyncdFlowEnum#NONE} because Cobalt drives a single non-KMP
+     * app-state path, and both {@code syncdKeyhash}/{@code syncdKeyid} on the
+     * bundle are left empty for the same key-derivation reason as
+     * {@link #emitSyncdMutationWamEvents}. The {@code patchSize} and
+     * {@code snapshotSize} carry the mutation count of the bundle, matching
+     * WhatsApp Web's outgoing accumulator which reports the mutation-array
+     * length rather than the serialized byte size.
+     *
+     * @param collectionName the collection the bundle belongs to
+     * @param seqNumber      the snapshot or patch version number
+     * @param direction      {@link MutationDirectionType#INCOMING} for
+     *                       snapshot/patch apply
+     * @param bundle         {@link MutationBundleType#SNAPSHOT} for the
+     *                       snapshot branch,
+     *                       {@link MutationBundleType#PATCH} for the patch
+     *                       branch
+     * @param isInBootstrap  {@code true} when the collection had not yet
+     *                       been bootstrapped before this round
+     * @param mutations      the decrypted mutations carried by the bundle
+     * @param computedLtHash the LT-Hash recomputed over the bundle's
+     *                       mutations
+     * @param wireExpectedMac the wire snapshot MAC for a snapshot bundle or
+     *                       the wire patch MAC for a patch bundle
+     * @param snapshotMac    the snapshot MAC to report; the snapshot's own
+     *                       MAC for a snapshot bundle or the patch's carried
+     *                       snapshot MAC for a patch bundle
+     * @param patchMac       the wire patch MAC for a patch bundle, or
+     *                       {@code null} for a snapshot bundle
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdWamReportingUtils", exports = "reportSyncdWamAccumulator", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitSyncdBundleAndSummaryWamEvents(
+            SyncPatchType collectionName,
+            long seqNumber,
+            MutationDirectionType direction,
+            MutationBundleType bundle,
+            boolean isInBootstrap,
+            SequencedCollection<DecryptedMutation.Untrusted> mutations,
+            byte[] computedLtHash,
+            byte[] wireExpectedMac,
+            byte[] snapshotMac,
+            byte[] patchMac) {
+        if (mutations.isEmpty()) {
+            return;
+        }
+        var syncdCollection = mapSyncdCollectionType(collectionName);
+        var isPatch = bundle == MutationBundleType.PATCH;
+
+        var bundleBuilder = new MdSyncdBundleEventBuilder()
+                .appSessionId(wamAppSessionId)
+                .companionSessionIds(wamCompanionSessionId)
+                .bundleVersion(seqNumber)
+                .seqNumber(seqNumber)
+                .kmpSyncdFlow(KmpSyncdFlowEnum.NONE)
+                .mutationBundle(bundle)
+                .mutationDirection(direction)
+                .computedLthash(encodeWamMac(computedLtHash))
+                .expectedMac(encodeWamMac(wireExpectedMac))
+                .snapshotMac(encodeWamMac(snapshotMac))
+                .syncdCollection(syncdCollection)
+                .syncdKeyhash("")
+                .syncdKeyid("");
+        if (isPatch) {
+            bundleBuilder.patchSize(mutations.size());
+            if (patchMac != null && patchMac.length != 0) {
+                bundleBuilder.patchMac(encodeWamMac(patchMac));
+            }
+        } else {
+            bundleBuilder.snapshotSize(mutations.size());
+        }
+        wamService.commit(bundleBuilder.build());
+
+        var setMutations = new LinkedHashMap<String, Integer>();
+        var removeMutations = new LinkedHashMap<String, Integer>();
+        var lidMutations = new LinkedHashMap<String, Integer>();
+        var keyidKeyhash = new LinkedHashMap<String, String>();
+        for (var mutation : mutations) {
+            var mutationName = SyncdIndexUtils
+                    .getMutationNameFromIndex(collectionName.toString(), mutation.index());
+            if (mutationName == null || mutationName.isBlank()) {
+                mutationName = "unknown";
+            }
+            if (mutation.operation() == SyncdOperation.SET) {
+                setMutations.merge(mutationName, 1, Integer::sum);
+            } else {
+                removeMutations.merge(mutationName, 1, Integer::sum);
+            }
+            if (mutation.index().contains("@lid")) {
+                lidMutations.merge(mutationName, 1, Integer::sum);
+            }
+            var keyId = mutation.keyId();
+            if (keyId != null && keyId.length != 0) {
+                keyidKeyhash.putIfAbsent(encodeWamMac(keyId), "");
+            }
+        }
+
+        var summaryBuilder = new MdSyncdMutationsSummaryEventBuilder()
+                .appSessionId(wamAppSessionId)
+                .companionSessionIds(wamCompanionSessionId)
+                .isInBootstrap(isInBootstrap)
+                .mutationBundle(bundle)
+                .mutationDirection(direction)
+                .seqNumber(seqNumber)
+                .setMutations(JSON.toJSONString(setMutations))
+                .removeMutations(JSON.toJSONString(removeMutations))
+                .lidMutations(JSON.toJSONString(lidMutations))
+                .snapshotMac(encodeWamMac(snapshotMac))
+                .syncdCollection(syncdCollection)
+                .syncdKeyidKeyhash(JSON.toJSONString(keyidKeyhash));
+        if (isPatch && patchMac != null && patchMac.length != 0) {
+            summaryBuilder.patchMac(encodeWamMac(patchMac));
+        }
+        wamService.commit(summaryBuilder.build());
+    }
+
+    /**
+     * Encodes a MAC or key blob for WAM telemetry, returning the empty string
+     * for a {@code null} or empty input.
+     *
+     * <p>Uses the unpadded URL-safe Base64 alphabet that WhatsApp Web applies
+     * to every MAC, hash, and key identifier it ships in syncd telemetry.
+     *
+     * @param value the raw bytes to encode, or {@code null}
+     * @return the unpadded URL-safe Base64 encoding, or the empty string when
+     *         {@code value} is {@code null} or empty
+     */
+    private static String encodeWamMac(byte[] value) {
+        if (value == null || value.length == 0) {
+            return "";
+        }
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
+    }
+
+    /**
      * Finalizes a successful outgoing patch upload by persisting sync action
      * entries, advancing the collection version and LT-Hash, and dropping the
      * pending mutations that the server acknowledged.
@@ -1861,6 +2110,8 @@ public final class LiveWebAppStateService implements WebAppStateService {
         if (expectedVersion != currentVersion + 1) {
             LOGGER.warning("Unexpected version after upload for " + patchType
                     + ": expected " + (currentVersion + 1) + " but computed " + expectedVersion);
+            syncdDailyStats.uploadConflictCount.incrementAndGet();
+            scheduleAppStateSyncDailyFlush();
             return;
         }
 
@@ -2675,6 +2926,8 @@ public final class LiveWebAppStateService implements WebAppStateService {
             }
         }
         if (!missingKeyIds.isEmpty()) {
+            syncdDailyStats.missingKeyCount.addAndGet(missingKeyIds.size());
+            scheduleAppStateSyncDailyFlush();
             throw new WhatsAppWebAppStateSyncException.MissingKey(new ArrayList<>(missingKeyIds.values()));
         }
 
@@ -2989,6 +3242,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
     @WhatsAppWebExport(moduleName = "WAWebSyncdCollectionHandler", exports = "Xe", adaptation = WhatsAppAdaptation.ADAPTED)
     private void applyMutations(SyncPatchType collectionName, SequencedCollection<DecryptedMutation.Trusted> remoteMutations) {
         logCriticalBootstrapStageIfNecessary(BootstrapAppStateDataStageCode.ABOUT_TO_APPLY_MUTATIONS);
+        syncdDailyStats.mutationCount.addAndGet(remoteMutations.size());
         var mutationsToApply = resolveConflicts(remoteMutations, collectionName);
 
         var mutationsByAction = new HashMap<String, List<DecryptedMutation.Trusted>>();
@@ -2996,6 +3250,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
         for (var mutation : mutationsToApply) {
             var actionName = resolveActionName(mutation);
             if (actionName == null) {
+                syncdDailyStats.unsetActionCount.incrementAndGet();
                 recordMutationState(collectionName, mutation, null, MutationApplicationResult.unsupported());
                 continue;
             }
@@ -3066,6 +3321,8 @@ public final class LiveWebAppStateService implements WebAppStateService {
         }
 
         logCriticalBootstrapStageIfNecessary(BootstrapAppStateDataStageCode.APPLIED_MUTATIONS);
+
+        scheduleAppStateSyncDailyFlush();
 
         retryOrphanMutations(collectionName);
     }
@@ -3342,6 +3599,14 @@ public final class LiveWebAppStateService implements WebAppStateService {
             String actionName,
             MutationApplicationResult result
     ) {
+        switch (result.actionState()) {
+            case SUCCESS, SKIPPED -> syncdDailyStats.storedMutationCount.incrementAndGet();
+            case MALFORMED -> syncdDailyStats.invalidActionCount.incrementAndGet();
+            case UNSUPPORTED -> syncdDailyStats.unsupportedActionCount.incrementAndGet();
+            default -> {
+            }
+        }
+
         if (mutation.operation() != SyncdOperation.SET) {
             return;
         }
@@ -4429,6 +4694,185 @@ public final class LiveWebAppStateService implements WebAppStateService {
     }
 
     /**
+     * Arms or shifts the debounced flush that ships the accumulated
+     * {@link MdAppStateSyncDailyEventBuilder MdAppStateSyncDaily} aggregate.
+     *
+     * <p>Called from every mutation-processing chokepoint that touches
+     * {@link #syncdDailyStats}. Any pending flush is cancelled and replaced with
+     * a fresh one {@link #APP_STATE_SYNC_DAILY_FLUSH_DELAY} out, so a burst of
+     * sync activity keeps shifting the window forward and a single aggregate is
+     * emitted only after the collection has quiesced.
+     *
+     * @implNote
+     * This implementation reproduces WhatsApp Web's {@code ShiftTimer.onOrBefore}
+     * behaviour with a rescheduled {@link ScheduledTask}; the previous handle is
+     * cancelled before the new one is armed so at most one flush is ever
+     * pending, and the cancellation is a no-op when the prior flush already
+     * fired.
+     */
+    private void scheduleAppStateSyncDailyFlush() {
+        var previous = appStateSyncDailyFlushTask;
+        if (previous != null) {
+            previous.cancel();
+        }
+        appStateSyncDailyFlushTask = ScheduledTask.scheduleDelayed(
+                APP_STATE_SYNC_DAILY_FLUSH_DELAY, this::runFlushAppStateSyncDaily);
+    }
+
+    /**
+     * Runs one daily-aggregate flush tick, swallowing any failure so a bad tick
+     * cannot escape onto the scheduler's virtual thread.
+     *
+     * <p>The body of the debounced flush armed by
+     * {@link #scheduleAppStateSyncDailyFlush()}; a {@link #flushAppStateSyncDaily()}
+     * failure is logged and dropped.
+     */
+    private void runFlushAppStateSyncDaily() {
+        try {
+            flushAppStateSyncDaily();
+        } catch (Exception e) {
+            LOGGER.warning("App-state sync daily aggregate flush failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Drains {@link #syncdDailyStats} and commits a single
+     * {@link MdAppStateSyncDailyEventBuilder MdAppStateSyncDaily} aggregate when
+     * at least one counter is non-zero.
+     *
+     * <p>Each counter is atomically read and reset to zero; only the counters
+     * that are strictly positive are set on the event, matching WhatsApp Web's
+     * per-field {@code > 0} gate, so a quiet window that accumulated nothing
+     * emits no event at all.
+     *
+     * @implNote
+     * This implementation omits {@code crossIndexConflictCount} and
+     * {@code keyRotationRemoveCount}: WhatsApp Web's daily accumulator never
+     * feeds the former, and the latter is driven by the key-rotation module
+     * which lives outside this service, so both stay absent from the aggregate
+     * rather than carrying a fabricated value.
+     */
+    private void flushAppStateSyncDaily() {
+        var mutationCount = syncdDailyStats.mutationCount.getAndSet(0);
+        var invalidActionCount = syncdDailyStats.invalidActionCount.getAndSet(0);
+        var unsupportedActionCount = syncdDailyStats.unsupportedActionCount.getAndSet(0);
+        var storedMutationCount = syncdDailyStats.storedMutationCount.getAndSet(0);
+        var unsetActionCount = syncdDailyStats.unsetActionCount.getAndSet(0);
+        var missingKeyCount = syncdDailyStats.missingKeyCount.getAndSet(0);
+        var uploadConflictCount = syncdDailyStats.uploadConflictCount.getAndSet(0);
+
+        if (mutationCount <= 0
+                && invalidActionCount <= 0
+                && unsupportedActionCount <= 0
+                && storedMutationCount <= 0
+                && unsetActionCount <= 0
+                && missingKeyCount <= 0
+                && uploadConflictCount <= 0) {
+            return;
+        }
+
+        var builder = new MdAppStateSyncDailyEventBuilder();
+        if (mutationCount > 0) {
+            builder.mutationCount(mutationCount);
+        }
+        if (invalidActionCount > 0) {
+            builder.invalidActionCount(invalidActionCount);
+        }
+        if (unsupportedActionCount > 0) {
+            builder.unsupportedActionCount(unsupportedActionCount);
+        }
+        if (storedMutationCount > 0) {
+            builder.storedMutationCount(storedMutationCount);
+        }
+        if (unsetActionCount > 0) {
+            builder.unsetActionCount(unsetActionCount);
+        }
+        if (missingKeyCount > 0) {
+            builder.missingKeyCount(missingKeyCount);
+        }
+        if (uploadConflictCount > 0) {
+            builder.uploadConflictCount(uploadConflictCount);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Cancels the pending daily-aggregate flush if one is armed.
+     *
+     * <p>Pairs with {@link #scheduleAppStateSyncDailyFlush()}; safe to call when
+     * no flush is pending (no-op) and invoked from {@link #reset()} during
+     * disconnect. Any counters accumulated since the last flush are dropped, the
+     * same as WhatsApp Web's teardown of its shift timer.
+     */
+    private void stopAppStateSyncDailyFlush() {
+        var task = appStateSyncDailyFlushTask;
+        if (task != null) {
+            task.cancel();
+            appStateSyncDailyFlushTask = null;
+        }
+    }
+
+    /**
+     * The live accumulator behind the daily app-state sync aggregate.
+     *
+     * <p>Each field is an {@link AtomicLong} fed from a mutation-processing
+     * chokepoint and drained by {@link #flushAppStateSyncDaily()} via
+     * {@link AtomicLong#getAndSet(long)}. The lock-free counters tolerate the
+     * benign race of an increment landing during a drain, which telemetry
+     * aggregates do not need to serialize against.
+     *
+     * @implNote
+     * This implementation mirrors WhatsApp Web's {@code WAWebSyncdWamAppState}
+     * accumulator object, minus the {@code crossIndexConflictCount} and
+     * {@code keyRotationRemoveCount} buckets that WhatsApp Web either never
+     * populates or feeds from a module outside this service.
+     */
+    private static final class SyncdDailyStats {
+        /**
+         * The number of mutations submitted for application across all
+         * collections since the last flush.
+         */
+        private final AtomicLong mutationCount = new AtomicLong();
+
+        /**
+         * The number of mutations recorded as
+         * {@link SyncActionState#MALFORMED} since the last flush.
+         */
+        private final AtomicLong invalidActionCount = new AtomicLong();
+
+        /**
+         * The number of mutations recorded as
+         * {@link SyncActionState#UNSUPPORTED} since the last flush.
+         */
+        private final AtomicLong unsupportedActionCount = new AtomicLong();
+
+        /**
+         * The number of mutations recorded as {@link SyncActionState#SUCCESS}
+         * or {@link SyncActionState#SKIPPED} (and thus persisted) since the
+         * last flush.
+         */
+        private final AtomicLong storedMutationCount = new AtomicLong();
+
+        /**
+         * The number of mutations whose action index resolved to no action
+         * name since the last flush.
+         */
+        private final AtomicLong unsetActionCount = new AtomicLong();
+
+        /**
+         * The number of distinct app-state sync keys found missing during
+         * mutation decryption since the last flush.
+         */
+        private final AtomicLong missingKeyCount = new AtomicLong();
+
+        /**
+         * The number of outgoing patch uploads that raced a competing version
+         * bump since the last flush.
+         */
+        private final AtomicLong uploadConflictCount = new AtomicLong();
+    }
+
+    /**
      * The mutable per-mutation-name accumulator used by
      * {@link #reportSyncdStats()} while bucketing
      * {@link SyncActionEntry#actionState()} counts.
@@ -4477,8 +4921,9 @@ public final class LiveWebAppStateService implements WebAppStateService {
      * <p>Called from the connection-shutdown path during graceful disconnect
      * or logout; pairs with {@link #startPeriodicSyncJob()} as the inverse
      * lifecycle hook. Stops the periodic catch-up sweep, the key-rotation job,
-     * both daily WAM stats jobs, the retry backoff scheduler, and the
-     * missing-key timeout scheduler. Idempotent.
+     * both daily WAM stats jobs, the debounced app-state sync daily aggregate
+     * flush, the retry backoff scheduler, and the missing-key timeout scheduler.
+     * Idempotent.
      *
      * @implNote
      * This implementation forwards to each scheduler's own shutdown method in
@@ -4489,6 +4934,7 @@ public final class LiveWebAppStateService implements WebAppStateService {
         stopPeriodicSyncJob();
         stopPeriodicReportSyncdStatsJob();
         stopPeriodicReportSyncdKeyStatsJob();
+        stopAppStateSyncDailyFlush();
         syncKeyRotationService.stopPeriodicRotationJob();
         retryScheduler.close();
         missingSyncKeyTimeoutScheduler.shutdown();

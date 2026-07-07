@@ -125,7 +125,6 @@ public final class SctpEngine {
         this.ticker = Thread.ofVirtual()
                 .name("calls2-sctp-ticker")
                 .unstarted(this::runTickerLoop);
-        this.ticker.setDaemon(true);
         this.ticker.start();
     }
 

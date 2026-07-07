@@ -42,9 +42,9 @@ import java.util.Arrays;
  * decode underflows. The maximum-pulse table {@code smpl_max_pulses_per_frame} is a tiny mode-scaling
  * constant private to this decode path and is transcribed here rather than reached through a shared table
  * holder. The run-length and split CMF lookups slice a contiguous window out of a prebuilt CMF the same
- * way the native code passes an offset pointer plus a length; the window is copied into a short array so
- * the {@link MlowEntropyWrapper#decodeUpdate(MlowRangeDecoder, int[])} base-relative span semantics match
- * the native {@code cmf + offset} call exactly.
+ * way the native code passes an offset pointer plus a length; the offset-aware
+ * {@link MlowEntropyWrapper#decodeUpdate(MlowRangeDecoder, int[], int, int)} measures every span relative
+ * to the first windowed entry, matching the native {@code cmf + offset} call exactly without copying.
  */
 public final class PulseDecoder {
     /**
@@ -249,8 +249,7 @@ public final class PulseDecoder {
                 int[] cmf = tables.splitCmfs()[nPulses - 1];
                 int cmfLen = maxSplit2 - minSplit2 + 2;
                 int base = minSplit2 - minSplit;
-                int[] window = Arrays.copyOfRange(cmf, base, base + cmfLen);
-                nPulsesFirsthalf = MlowEntropyWrapper.decodeUpdate(decoder, window) + minSplit2;
+                nPulsesFirsthalf = MlowEntropyWrapper.decodeUpdate(decoder, cmf, base, cmfLen) + minSplit2;
             } else {
                 nPulsesFirsthalf = minSplit2;
             }
@@ -308,8 +307,7 @@ public final class PulseDecoder {
         }
         int cmfLen = maxSplit - minSplit + 2;
         int[] cmf = tables.splitCmfs()[nPulses - 1];
-        int[] window = Arrays.copyOfRange(cmf, minSplit, minSplit + cmfLen);
-        return MlowEntropyWrapper.decodeUpdate(decoder, window) + minSplit;
+        return MlowEntropyWrapper.decodeUpdate(decoder, cmf, minSplit, cmfLen) + minSplit;
     }
 
     /**
@@ -351,8 +349,7 @@ public final class PulseDecoder {
                 int[] cmfFull = tables.runLenCmfs()[cmfInd][pulsesLeft];
                 int maxSamples = tables.runLenMaxSamples(cmfInd);
                 int start = maxSamples - nSamplesLeft;
-                int[] window = Arrays.copyOfRange(cmfFull, start, start + nSamplesLeft + 1);
-                int ix = MlowEntropyWrapper.decodeUpdate(decoder, window);
+                int ix = MlowEntropyWrapper.decodeUpdate(decoder, cmfFull, start, nSamplesLeft + 1);
                 if (j == 0 || ix > 0) {
                     pos += ix;
                     positions[++nPositions] = (short) pos;

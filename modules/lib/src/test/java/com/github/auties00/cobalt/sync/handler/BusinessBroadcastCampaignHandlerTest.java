@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.linked.TestWhatsAppClient;
+import com.github.auties00.cobalt.wam.TestWamService;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.mutation.MutationConflictResolutionState;
@@ -49,7 +50,7 @@ class BusinessBroadcastCampaignHandlerTest {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
         handler = new BusinessBroadcastCampaignHandler();
-        factory = new BusinessBroadcastCampaignMutationFactory();
+        factory = new BusinessBroadcastCampaignMutationFactory(TestWamService.create(client));
     }
 
     private DecryptedMutation.Trusted buildMutation(String indexId, BusinessBroadcastCampaignAction action,

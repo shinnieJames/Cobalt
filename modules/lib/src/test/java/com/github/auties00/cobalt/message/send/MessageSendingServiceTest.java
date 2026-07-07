@@ -187,6 +187,6 @@ class MessageSendingServiceTest {
         var migration = new LiveLidMigrationService(client, client.abPropsService(), wam);
         return new LiveMessageSendingService(client, encryption,
                 StubDeviceService.create(), migration, client.abPropsService(), wam,
-                new LiveMediaTranscoderService(client, client.abPropsService(), TestMediaConnectionService.create()));
+                new LiveMediaTranscoderService(client, client.abPropsService(), TestMediaConnectionService.create(), wam));
     }
 }

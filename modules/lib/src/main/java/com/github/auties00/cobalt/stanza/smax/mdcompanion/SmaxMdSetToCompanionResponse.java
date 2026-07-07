@@ -28,7 +28,10 @@ import java.util.Optional;
  * {@code s.whatsapp.net} domain, the {@code <pair-device/>} child is present, and the number of
  * {@code <ref/>} children whose content bytes resolve is exactly six. Empty-content children are
  * dropped before the size check, matching the upstream filter behaviour.
+ *
+ * @deprecated superseded by the inline companion-pairing flow in {@code IqStreamHandler}.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInMdSetToCompanionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMdBaseIQSetRequestMixin")
 public final class SmaxMdSetToCompanionResponse implements SmaxStanza.Response {

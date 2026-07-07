@@ -91,7 +91,7 @@ public final class SmaxWaffleRefreshAccessTokensRequest implements SmaxStanza.Re
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleRefreshAccessTokensRequest",
             exports = "makeRefreshAccessTokensRequest", adaptation = WhatsAppAdaptation.DIRECT)
     public StanzaBuilder toStanza() {
-        var encryptionMetadataNode = encryptionMetadata.toNode();
+        var encryptionMetadataNode = encryptionMetadata.toStanza();
         var timestampNode = new StanzaBuilder()
                 .description("timestamp")
                 .content(timestamp)

@@ -9,6 +9,9 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.WefrClientExposureEventBuilder;
+import com.github.auties00.cobalt.wam.event.WefrGroupClientExposureEventBuilder;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -18,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Production {@link ABPropsService} implementation that fetches and applies AB-props from
@@ -57,6 +61,12 @@ import java.util.concurrent.atomic.AtomicReference;
 @WhatsAppWebModule(moduleName = "WASmaxInAbPropsConfigs")
 @WhatsAppWebModule(moduleName = "WASmaxInAbPropsExperimentOrSamplingConfigMixinGroup")
 @WhatsAppWebModule(moduleName = "WASmaxInAbPropsEnums")
+@WhatsAppWebModule(moduleName = "WAWebABPropsGlobals")
+@WhatsAppWebModule(moduleName = "WAWebGroupABPropsGlobals")
+@WhatsAppWebModule(moduleName = "WAWebABPropsExpoKeyUtils")
+@WhatsAppWebModule(moduleName = "WAWebCanonicalUtils")
+@WhatsAppWebModule(moduleName = "WAWebWefrClientExposureWamEvent")
+@WhatsAppWebModule(moduleName = "WAWebWefrGroupClientExposureWamEvent")
 public final class LiveABPropsService implements ABPropsService {
     /**
      * Logger used for sync-cycle warnings, errors, and informational diagnostics.
@@ -160,6 +170,22 @@ public final class LiveABPropsService implements ABPropsService {
     private final LinkedWhatsAppClient client;
 
     /**
+     * WAM telemetry sink used to commit the WEFR client- and group-exposure pulse events.
+     *
+     * <p>Injected after construction through {@link #setWamService(WamService)} rather than through
+     * the constructor because the WAM service depends on this service (it reads sampling weights
+     * through {@link #getSamplingWeight(int)}), so it does not yet exist when this service is built.
+     * Every emit site guards on {@code null} so a session that never wires the sink simply skips the
+     * exposure beacons.
+     *
+     * @implNote
+     * This implementation stands in for the ambient {@code WAWebWamGlobals}-backed {@code .commit()}
+     * calls in {@code WAWebABPropsGlobals} and {@code WAWebGroupABPropsGlobals}, which reach the WAM
+     * runtime through a module-level singleton rather than an injected field.
+     */
+    private WamService wamService;
+
+    /**
      * Synced AB-prop values keyed by their numeric {@code config_code}.
      *
      * <p>Populated from {@code <prop>} children whose shape matches {@code ExperimentConfig};
@@ -236,6 +262,19 @@ public final class LiveABPropsService implements ABPropsService {
         this.accessedConfigs = ConcurrentHashMap.newKeySet();
         this.syncFuture = new AtomicReference<>(new CompletableFuture<>());
         this.syncTimeout = syncTimeout;
+    }
+
+    /**
+     * Injects the WAM telemetry sink used to emit the WEFR exposure pulse events.
+     *
+     * <p>Called once during client assembly, after the WAM service has been constructed, to break
+     * the construction-order cycle between this service and the WAM service. Until this is called
+     * the exposure emit sites are inert.
+     *
+     * @param wamService the WAM service that receives committed exposure events
+     */
+    public void setWamService(WamService wamService) {
+        this.wamService = wamService;
     }
 
     /**
@@ -816,6 +855,7 @@ public final class LiveABPropsService implements ABPropsService {
                     bundle.refresh().orElse(null),
                     bundle.refreshId().orElse(null),
                     entries);
+            emitGroupExposurePulse(groupJid, entries);
             return Optional.of(result);
         } catch (WhatsAppServerRuntimeException e) {
             LOGGER.log(System.Logger.Level.WARNING,
@@ -845,7 +885,10 @@ public final class LiveABPropsService implements ABPropsService {
      * attribute.
      *
      * <p>Embedders that mirror WA Web's exposure telemetry call this on first read of each prop so
-     * the WAM server can attribute downstream events to the right experiment cell.
+     * the WAM server can attribute downstream events to the right experiment cell. A first access
+     * grows the accessed-config set and therefore changes the combined client exposure key, so it
+     * fires the real-time client-exposure pulse, matching WA Web's {@code updateGlobalExpoKey}
+     * dispatch that debounces into the {@code WefrClientExposure} beacon.
      *
      * @param prop the AB prop that was just read
      * @return {@code true} when this is the first access, {@code false} when the prop was already
@@ -854,9 +897,15 @@ public final class LiveABPropsService implements ABPropsService {
      */
     @WhatsAppWebExport(moduleName = "WAWebApiAbPropConfig", exports = "setConfigAccessed",
             adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebABPropsGlobals", exports = "updateGlobalExpoKey",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean setConfigAccessed(ABProp prop) {
         Objects.requireNonNull(prop, "prop cannot be null");
-        return accessedConfigs.add(prop.code());
+        var firstAccess = accessedConfigs.add(prop.code());
+        if (firstAccess) {
+            emitClientExposurePulse(false);
+        }
+        return firstAccess;
     }
 
     /**
@@ -1126,6 +1175,130 @@ public final class LiveABPropsService implements ABPropsService {
      */
     public boolean isEmpty() {
         return props.isEmpty();
+    }
+
+    /**
+     * Emits the daily {@link com.github.auties00.cobalt.wam.event.WefrClientExposureEvent} pulse.
+     *
+     * <p>Re-emits the combined client exposure key with the {@code sentWithDaily} flag set, so the
+     * WAM server observes a once-per-day exposure beacon alongside the private-stats heartbeat in
+     * addition to the real-time change pulses fired from {@link #setConfigAccessed(ABProp)}. The
+     * intended cadence is one call per daily-stats cycle; it is a no-op until a WAM sink is wired
+     * through {@link #setWamService(WamService)}.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's {@code logClientExposurePulseEventFromDailyStatsTask}
+     * export, which the daily-stats task invokes on its once-per-day tick.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebABPropsGlobals",
+            exports = "logClientExposurePulseEventFromDailyStatsTask",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public void logClientExposurePulseFromDailyStatsTask() {
+        emitClientExposurePulse(true);
+    }
+
+    /**
+     * Commits a {@link com.github.auties00.cobalt.wam.event.WefrClientExposureEvent} carrying the
+     * combined client exposure key.
+     *
+     * <p>Backs both the real-time client-exposure pulse WA Web fires from
+     * {@code WAWebABPropsGlobals.updateGlobalExpoKey} (the {@code sentWithDaily = false} branch) and
+     * the daily-stats variant {@code logClientExposurePulseEventFromDailyStatsTask} (the
+     * {@code sentWithDaily = true} branch). Does nothing when no WAM sink has been wired through
+     * {@link #setWamService(WamService)}.
+     *
+     * @implNote
+     * This implementation derives the exposure key from the accessed config codes joined by commas,
+     * the Cobalt analog of {@code combineExposuresIntoExpoKey(exposureKeys)}, and reports
+     * canonical-entity presence from the store login state because Cobalt has no browser canonical
+     * token counterpart. The other schema fields ({@code deviceExpId}, {@code guestId},
+     * {@code userLid}, {@code fromMetaconfig}, {@code canonicalEntLastValidationTsMs}) are left
+     * unset because WA Web does not populate them at this callsite either.
+     *
+     * @param sentWithDaily whether this pulse rides the daily-stats task rather than the debounced
+     *                      real-time exposure-key change
+     */
+    private void emitClientExposurePulse(boolean sentWithDaily) {
+        var sink = wamService;
+        if (sink == null) {
+            return;
+        }
+        sink.commit(new WefrClientExposureEventBuilder()
+                .exposureKey(currentClientExposureKey())
+                .sentWithDaily(sentWithDaily)
+                .isCanonicalEntPresent(isCanonicalEntPresent())
+                .build());
+    }
+
+    /**
+     * Commits a {@link com.github.auties00.cobalt.wam.event.WefrGroupClientExposureEvent} for the
+     * resolved group props.
+     *
+     * <p>Mirrors the debounced per-group exposure pulse WA Web fires from
+     * {@code WAWebGroupABPropsGlobals.updateGroupExpoKey} (the {@code sentWithDaily = false}
+     * branch). Does nothing when no WAM sink has been wired through
+     * {@link #setWamService(WamService)}, or when the resolved bundle carried no experiment entries.
+     *
+     * @implNote
+     * This implementation derives the group exposure key from the resolved experiment config codes
+     * joined by commas, the Cobalt analog of the group-scoped
+     * {@code combineExposuresIntoExpoKey} over the per-group exposure-key set.
+     *
+     * @param groupJid the group whose exposure is being reported
+     * @param entries  the resolved experiment entries for the group
+     */
+    @WhatsAppWebExport(moduleName = "WAWebGroupABPropsGlobals", exports = "updateGroupExpoKey",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitGroupExposurePulse(Jid groupJid, List<GroupAbPropsResult.Entry> entries) {
+        var sink = wamService;
+        if (sink == null || entries.isEmpty()) {
+            return;
+        }
+        var exposureKey = entries.stream()
+                .map(GroupAbPropsResult.Entry::configCode)
+                .sorted()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        sink.commit(new WefrGroupClientExposureEventBuilder()
+                .exposureKey(exposureKey)
+                .groupJid(groupJid.toString())
+                .sentWithDaily(false)
+                .build());
+    }
+
+    /**
+     * Returns the combined client exposure key: the accessed config codes sorted ascending and
+     * joined by commas.
+     *
+     * <p>This is the Cobalt analog of {@code WAWebABPropsExpoKeyUtils.combineExposuresIntoExpoKey}
+     * applied to the global exposure-key set; Cobalt keys the exposure surface on the accessed
+     * config codes rather than the server-supplied per-config exposure-key strings it does not
+     * retain.
+     *
+     * @return the comma-joined exposure key, or the empty string when no config has been accessed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebABPropsExpoKeyUtils", exports = "combineExposuresIntoExpoKey",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private String currentClientExposureKey() {
+        return accessedConfigs.stream()
+                .sorted()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+    }
+
+    /**
+     * Returns whether a canonical entity credential is present for the current session.
+     *
+     * <p>Mirrors {@code WAWebCanonicalUtils.isCanonicalPresent}, which is satisfied when the user is
+     * logged in or a canonical token has been installed. Cobalt has no browser canonical token, so
+     * this implementation reports presence from the store login state, that is, a bound account JID.
+     *
+     * @return {@code true} when the session is authenticated, {@code false} otherwise
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCanonicalUtils", exports = "isCanonicalPresent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private boolean isCanonicalEntPresent() {
+        return client.store().accountStore().jid().isPresent();
     }
 
     /**

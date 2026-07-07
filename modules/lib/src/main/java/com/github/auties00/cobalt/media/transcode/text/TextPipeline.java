@@ -23,6 +23,10 @@ import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessageBuilder;
 import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.WebcLinkPreviewDisplayEvent;
+import com.github.auties00.cobalt.wam.event.WebcLinkPreviewDisplayEventBuilder;
+import com.github.auties00.cobalt.wam.type.WebcDisplayStatusType;
 import it.auties.linkpreview.LinkPreview;
 import it.auties.linkpreview.LinkPreviewMedia;
 
@@ -72,6 +76,7 @@ import java.util.Set;
 @WhatsAppWebModule(moduleName = "WAWebCheckIfDomainIsPreviewable")
 @WhatsAppWebModule(moduleName = "WAWebLinkPreviewUtils")
 @WhatsAppWebModule(moduleName = "WAWebGenMinimalLinkPreviewChatAction")
+@WhatsAppWebModule(moduleName = "WAWebWebcLinkPreviewDisplayWamEvent")
 public final class TextPipeline {
     /**
      * Holds the country-code sentinel used when no phone country code can be
@@ -103,6 +108,14 @@ public final class TextPipeline {
     private final MediaConnectionService mediaConnectionService;
 
     /**
+     * Holds the {@link WamService} used to commit the
+     * {@link WebcLinkPreviewDisplayEvent} telemetry that records the HQ-request,
+     * HQ-response, non-HQ-fallback, and terminal display status of each rich
+     * link-preview generation.
+     */
+    private final WamService wamService;
+
+    /**
      * Holds the per-session {@link LinkPreviewCache} keyed by URL.
      */
     private final LinkPreviewCache cache;
@@ -128,13 +141,16 @@ public final class TextPipeline {
      *                               gating and timeout configuration
      * @param mediaConnectionService the CDN credentials service used to
      *                               upload the HQ thumbnail
+     * @param wamService             the telemetry service used to commit the
+     *                               link-preview display outcome
      * @throws NullPointerException if any argument is {@code null}
      */
     public TextPipeline(LinkedWhatsAppClient client, ABPropsService abPropsService,
-                        MediaConnectionService mediaConnectionService) {
+                        MediaConnectionService mediaConnectionService, WamService wamService) {
         this.client = Objects.requireNonNull(client, "client cannot be null");
         this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
         this.mediaConnectionService = Objects.requireNonNull(mediaConnectionService, "mediaConnectionService cannot be null");
+        this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
         this.cache = new LinkPreviewCache();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -344,14 +360,20 @@ public final class TextPipeline {
      * <p>This method runs when no deep-link branch matched (or the matched
      * branch declined to produce a card) and the chat is not a newsletter. It
      * falls back to {@link #attachMinimal(Linkify.Match, ExtendedTextMessage)}
-     * on any failure so the recipient always sees a clickable preview.
+     * on any failure so the recipient always sees a clickable preview. Every
+     * terminal path commits one {@link WebcLinkPreviewDisplayEvent} through
+     * {@link #emitLinkPreviewDisplay} recording the HQ outcome.
      *
      * @implNote
      * This implementation skips the rich fetch and applies the minimal card
      * directly when {@link ABProp#WEB_LINK_PREVIEW_SYNC_ENABLED} is off,
      * mirroring the JS
      * {@code !web_link_preview_sync_enabled || !PrimaryFeatures.linkPreview}
-     * branch.
+     * branch. The HQ telemetry fields are derived from the direct-fetch state:
+     * an HQ request is counted once {@link LinkPreview#createPreview(URI)} is
+     * attempted, an HQ response once the thumbnail upload stamps a
+     * {@link ExtendedTextMessage#thumbnailDirectPath()}, and a non-HQ fallback
+     * whenever the minimal card or the inline-only thumbnail path is taken.
      *
      * @param match   the detected URL
      * @param message the outgoing message to enrich
@@ -359,6 +381,7 @@ public final class TextPipeline {
     private void attachRichPreview(Linkify.Match match, ExtendedTextMessage message) {
         if (!abPropsService.getBool(ABProp.WEB_LINK_PREVIEW_SYNC_ENABLED)) {
             attachMinimal(match, message);
+            emitLinkPreviewDisplay(WebcDisplayStatusType.SHOWED_PREVIEW_TO_USER, false, false, true);
             return;
         }
         URI uri;
@@ -366,11 +389,13 @@ public final class TextPipeline {
             uri = URI.create(match.href());
         } catch (IllegalArgumentException malformed) {
             attachMinimal(match, message);
+            emitLinkPreviewDisplay(WebcDisplayStatusType.PREVIEW_MALFORMED, false, false, true);
             return;
         }
         var preview = LinkPreview.createPreview(uri).orElse(null);
         if (preview == null) {
             attachMinimal(match, message);
+            emitLinkPreviewDisplay(WebcDisplayStatusType.PREVIEW_NOT_FOUND, true, false, true);
             return;
         }
         var thumbnailBytes = downloadThumbnail(preview.images());
@@ -379,6 +404,44 @@ public final class TextPipeline {
         message.setPreviewType(resolvePreviewType(preview.mediaType(), message.previewType().orElse(null)));
         message.setDoNotPlayInline(Boolean.TRUE);
         uploadThumbnail(message, thumbnailBytes);
+        var respondedHq = message.thumbnailDirectPath().isPresent();
+        emitLinkPreviewDisplay(WebcDisplayStatusType.SHOWED_PREVIEW_TO_USER, true, respondedHq, !respondedHq);
+    }
+
+    /**
+     * Commits one {@link WebcLinkPreviewDisplayEvent} recording the outcome of a
+     * rich link-preview generation.
+     *
+     * <p>This helper centralises the WAM emit so every terminal branch of
+     * {@link #attachRichPreview(Linkify.Match, ExtendedTextMessage)} reports a
+     * consistent tuple of HQ-request, HQ-response, non-HQ-fallback, and terminal
+     * display status.
+     *
+     * @implNote
+     * The WA Web counterpart fires this beacon on the companion when the paired
+     * phone answers the {@code GENERATE_LINK_PREVIEW} peer-data-operation.
+     * Cobalt is the primary, so the beacon reports the outcome of the direct
+     * HTTP fetch instead; the three boolean fields are mutually consistent by
+     * construction (an HQ response implies no non-HQ fallback).
+     *
+     * @param status              the terminal display status
+     * @param didRequestHq        whether a high-quality preview fetch was
+     *                            attempted
+     * @param didRespondHqPreview whether the high-quality thumbnail was uploaded
+     *                            to the CDN
+     * @param didFallbackNonHq    whether the non-HQ (minimal or inline-only)
+     *                            card was used
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWebcLinkPreviewDisplayWamEvent", exports = "WebcLinkPreviewDisplay",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitLinkPreviewDisplay(WebcDisplayStatusType status, boolean didRequestHq,
+                                        boolean didRespondHqPreview, boolean didFallbackNonHq) {
+        wamService.commit(new WebcLinkPreviewDisplayEventBuilder()
+                .webcDisplayStatus(status)
+                .didRequestHq(didRequestHq)
+                .didRespondHqPreview(didRespondHqPreview)
+                .didFallbackNonHq(didFallbackNonHq)
+                .build());
     }
 
     /**

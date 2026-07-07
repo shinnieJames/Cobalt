@@ -175,8 +175,7 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
      * @param memberAddMode                       the optional member-add-mode value
      * @param memberLinkMode                      the optional member-link-mode value
      * @param memberShareGroupHistoryMode         the optional member-share-history-mode value
-     * @throws NullPointerException     if {@code subject} or {@code participants} is {@code null}
-     * @throws IllegalArgumentException if {@code participants} is empty
+     * @throws NullPointerException if {@code subject} or {@code participants} is {@code null}
      */
     public SmaxGroupsCreateRequest(String subject,
                    List<RequestParticipant> participants,
@@ -203,9 +202,6 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
                    String memberShareGroupHistoryMode) {
         Objects.requireNonNull(subject, "subject cannot be null");
         Objects.requireNonNull(participants, "participants cannot be null");
-        if (participants.isEmpty()) {
-            throw new IllegalArgumentException("participants must contain at least one entry");
-        }
         this.subject = subject;
         this.participants = List.copyOf(participants);
         this.descriptionBody = descriptionBody;
@@ -255,7 +251,10 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
     /**
      * Returns the seed participants.
      *
-     * @return an unmodifiable list of {@link RequestParticipant}s; never empty
+     * <p>The list is empty for a community-parent create, which seeds no members; regular group creates carry
+     * one or more entries.
+     *
+     * @return an unmodifiable list of {@link RequestParticipant}s; possibly empty
      */
     public List<RequestParticipant> participants() {
         return participants;
@@ -467,7 +466,7 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
     /**
      * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * The resulting envelope wraps a {@code <create subject="..." [dedup="..." ...]/>} root carrying one or more
+     * The resulting envelope wraps a {@code <create subject="..." [dedup="..." ...]/>} root carrying zero or more
      * {@code <participant>} children plus every opt-in feature flag as a marker child. The reply is parsed by
      * {@link SmaxGroupsCreateResponse#of(Stanza, Stanza)}.
      *
@@ -494,7 +493,7 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
         }
         var children = new ArrayList<Stanza>();
         for (var participant : participants) {
-            children.add(participant.toNode());
+            children.add(participant.toStanza());
         }
         if (descriptionBody != null || descriptionId != null) {
             var descriptionBuilder = new StanzaBuilder()
@@ -766,7 +765,7 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
          *
          * @return the materialised {@link Stanza}
          */
-        public Stanza toNode() {
+        public Stanza toStanza() {
             var builder = new StanzaBuilder()
                     .description("participant")
                     .attribute("jid", jid);
@@ -830,9 +829,9 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
     /**
      * Fluent builder for {@link SmaxGroupsCreateRequest}.
      *
-     * Mandatory inputs are {@link #subject(String)} and at least one participant via
-     * {@link #addParticipant(RequestParticipant)} or {@link #addParticipants(List)}; every other setter is
-     * optional. {@link #build()} validates the mandatory inputs.
+     * The only mandatory input is {@link #subject(String)}; participants (via
+     * {@link #addParticipant(RequestParticipant)} or {@link #addParticipants(List)}) and every other setter are
+     * optional, as a community-parent create seeds no members. {@link #build()} validates the subject.
      */
     public static final class Builder {
         /**
@@ -1233,14 +1232,10 @@ public final class SmaxGroupsCreateRequest implements SmaxStanza.Request {
          * Materialises a {@link SmaxGroupsCreateRequest} from the accumulated state.
          *
          * @return the constructed request; never {@code null}
-         * @throws NullPointerException     if {@link #subject(String)} was never called
-         * @throws IllegalArgumentException if no participants were added
+         * @throws NullPointerException if {@link #subject(String)} was never called
          */
         public SmaxGroupsCreateRequest build() {
             Objects.requireNonNull(subject, "subject must be set before build()");
-            if (participants.isEmpty()) {
-                throw new IllegalArgumentException("at least one participant must be added before build()");
-            }
             return new SmaxGroupsCreateRequest(subject, participants, descriptionBody, descriptionId, locked, announcement,
                     parentDefaultMembershipApprovalMode, noFrequentlyForwarded, ephemeralExpiration,
                     ephemeralTrigger, membershipApprovalGroupJoinMode, breakout, createdAsLid,

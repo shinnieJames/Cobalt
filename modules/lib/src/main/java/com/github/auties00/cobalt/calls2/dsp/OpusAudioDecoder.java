@@ -157,6 +157,45 @@ public final class OpusAudioDecoder implements AudioDecoder {
     /**
      * {@inheritDoc}
      *
+     * @implNote This implementation fuses the decode and the voice-activity read onto one confined native
+     * scratch segment: it copies the packet in once, decodes it, then (for a non-forward-error-correction
+     * decode of a non-empty packet) reads {@code cobalt_opus_packet_get_bandwidth} from that same segment,
+     * saving the second scratch allocation and copy the separate {@link #decode(byte[], int, boolean)} and
+     * {@link #packetHasVoiceActivity(byte[])} calls would perform. The PCM and the verdict are bit-identical
+     * to those two calls.
+     */
+    @Override
+    public DecodedFrame decodeWithVoiceActivity(byte[] payload, int frameSamples, boolean fec) {
+        Objects.requireNonNull(payload, "payload cannot be null");
+        requireOpen();
+        try (var scratch = Arena.ofConfined()) {
+            var data = scratch.allocate(Math.max(payload.length, 1));
+            MemorySegment.copy(payload, 0, data, ValueLayout.JAVA_BYTE, 0, payload.length);
+            int samples;
+            try {
+                samples = CobaltOpus.cobalt_opus_decode(state, data, payload.length, pcmBuffer, frameSamples, fec ? 1 : 0);
+            } catch (Throwable t) {
+                throw new WhatsAppCallException.Opus("cobalt_opus_decode failed", t);
+            }
+            if (samples < 0) {
+                throw WhatsAppCallException.Opus.fromErr("cobalt_opus_decode", samples);
+            }
+            var pcm = copyOut(samples);
+            var voiceActive = false;
+            if (!fec && payload.length != 0) {
+                try {
+                    voiceActive = CobaltOpus.cobalt_opus_packet_get_bandwidth(data) >= 0;
+                } catch (Throwable _) {
+                    voiceActive = false;
+                }
+            }
+            return new DecodedFrame(pcm, voiceActive);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * @implNote This implementation calls {@code cobalt_opus_decode} with a {@link MemorySegment#NULL}
      * packet and zero length, the libopus convention requesting packet-loss concealment for one missing
      * frame; the codec synthesizes plausible audio from its decode history.

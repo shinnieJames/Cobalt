@@ -368,9 +368,7 @@ final class NetEqExpand {
         int needed = fsMult * 256;
         var full = new short[Math.max(needed, DOWNSAMPLE_LENGTH * fsMult * 4)];
         int copy = Math.min(full.length, capacity);
-        for (int i = 0; i < copy; i++) {
-            full[full.length - copy + i] = history.at(capacity - copy + i);
-        }
+        history.copyRange(capacity - copy, full, full.length - copy, copy);
 
         var decimated = new short[DOWNSAMPLE_LENGTH];
         int produced = NetEqSignalProcessing.downsampleTo4kHz(decimated, full, full.length, DOWNSAMPLE_LENGTH,
@@ -702,9 +700,12 @@ final class NetEqExpand {
             int idx = capacity - AR_FILTER_ORDER + j;
             buffer[j] = idx >= 0 ? perturb(history.at(idx)) : 0;
         }
-        for (int i = 0; i < frameSamples; i++) {
-            int idx = capacity - period + (i % period);
+        for (int i = 0, phase = 0; i < frameSamples; i++) {
+            int idx = capacity - period + phase;
             buffer[AR_FILTER_ORDER + i] = idx >= 0 && idx < capacity ? history.at(idx) : 0;
+            if (++phase == period) {
+                phase = 0;
+            }
         }
         NetEqSignalProcessing.filterAr(buffer, AR_FILTER_ORDER, arCoefficients, AR_FILTER_ORDER, frameSamples);
         var out = new short[frameSamples];
@@ -732,9 +733,12 @@ final class NetEqExpand {
     private short[] noiseExcitation(NetEqSyncBuffer history, int frameSamples, int period) {
         int capacity = history.capacity();
         var raw = new short[frameSamples];
-        for (int i = 0; i < frameSamples; i++) {
-            int idx = capacity - period + (i % period);
+        for (int i = 0, phase = 0; i < frameSamples; i++) {
+            int idx = capacity - period + phase;
             raw[i] = idx >= 0 && idx < capacity ? perturb(history.at(idx)) : 0;
+            if (++phase == period) {
+                phase = 0;
+            }
         }
         var scaled = new short[frameSamples];
         int round = excitationGainShift > 0 ? 1 << (excitationGainShift - 1) : 0;

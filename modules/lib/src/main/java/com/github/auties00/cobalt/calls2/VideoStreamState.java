@@ -146,6 +146,12 @@ public enum VideoStreamState {
     ERROR(20);
 
     /**
+     * Caches the constant array so the {@link #ofWireOrdinal(int)} decode scan does not pay the
+     * defensive-clone cost of {@link #values()} on every video-state lookup.
+     */
+    private static final VideoStreamState[] VALUES = values();
+
+    /**
      * The integer value the wa-voip engine stores and transmits for this state.
      */
     private final int wireOrdinal;
@@ -184,7 +190,7 @@ public enum VideoStreamState {
      * @return the matching state, or {@link #UNKNOWN_PEER} if no state matches
      */
     public static VideoStreamState ofWireOrdinal(int wireOrdinal) {
-        for (var state : values()) {
+        for (var state : VALUES) {
             if (state.wireOrdinal == wireOrdinal) {
                 return state;
             }

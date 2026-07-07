@@ -145,7 +145,7 @@ public final class SmaxWaffleGenerateWAEntACUserRequest implements SmaxStanza.Re
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleGenerateWAEntACUserRequest",
             exports = "makeGenerateWAEntACUserRequest", adaptation = WhatsAppAdaptation.DIRECT)
     public StanzaBuilder toStanza() {
-        var encryptionMetadataNode = encryptionMetadata.toNode();
+        var encryptionMetadataNode = encryptionMetadata.toStanza();
         var timestampNode = new StanzaBuilder()
                 .description("timestamp")
                 .content(timestamp)

@@ -133,7 +133,6 @@ public final class TimerHeap {
             heap = Arrays.copyOf(heap, heap.length << 1);
         }
         heap[size] = entry;
-        entry.slot = size;
         siftUp(size);
         size++;
         return entry;

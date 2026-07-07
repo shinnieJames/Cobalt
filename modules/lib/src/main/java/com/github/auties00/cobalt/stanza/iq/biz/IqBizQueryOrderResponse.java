@@ -23,7 +23,12 @@ import java.util.Optional;
  * order envelope, {@link ClientError} surfaces a sanctions block or a relay validation rejection, and {@link ServerError}
  * reports a transport or backend failure. {@link #of(Stanza, Stanza)} projects the raw {@link Stanza} into the right variant
  * before the caller switches over it.
+ *
+ * @deprecated superseded by the GraphQL order-details read ({@code LiveLinkedWhatsAppClient.queryOrder}
+ * via {@code BizQueryOrderJobWhatsAppGraphQlRequest}); WA Web no longer emits the {@code fb:thrift_iq}
+ * order shape.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJob")
 public sealed interface IqBizQueryOrderResponse extends IqStanza.Response
         permits IqBizQueryOrderResponse.Success, IqBizQueryOrderResponse.ClientError, IqBizQueryOrderResponse.ServerError {

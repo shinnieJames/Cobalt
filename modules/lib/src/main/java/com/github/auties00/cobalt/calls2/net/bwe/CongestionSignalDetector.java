@@ -181,7 +181,10 @@ public final class CongestionSignalDetector {
         if ((enableMask & ENABLE_STALENESS) != 0 && feedbackAgeMs >= STALENESS_WINDOW_MS) {
             congested = true;
         }
-        return new CongestionSignals(congested || aggressive, aggressive);
+        if (aggressive) {
+            return CongestionSignals.AGGRESSIVE;
+        }
+        return congested ? CongestionSignals.CONGESTED : CongestionSignals.NONE;
     }
 
     /**

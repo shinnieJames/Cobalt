@@ -1,7 +1,9 @@
 package com.github.auties00.cobalt.wam;
 
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientDevice;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.privacy.DefenseModePrivacyValue;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
@@ -13,6 +15,7 @@ import com.github.auties00.cobalt.wam.event.TestAnonymousIdLessEventBuilder;
 import com.github.auties00.cobalt.wam.event.TestAnonymousWeeklyIdEventBuilder;
 import com.github.auties00.cobalt.wam.event.WebDynamicSamplingTestEventWithSamplingEventBuilder;
 import com.github.auties00.cobalt.wam.event.WebDynamicSamplingTestEventWithoutSamplingEventBuilder;
+import com.github.auties00.cobalt.wam.synthetic.SyntheticTelemetryUtils;
 import com.github.auties00.cobalt.wam.type.NotificationSettingType;
 import com.github.auties00.cobalt.wam.type.PrivacySettingsContactsBuckets;
 import com.github.auties00.cobalt.wam.type.PrivacySettingsValueType;
@@ -91,36 +94,51 @@ public final class LiveDailyStatsService implements DailyStatsService {
     private static final String SUPPORTED_ENCODERS = "";
 
     /**
-     * The fixed comma-separated decoder capability list reported in the
-     * {@code supportedDecoders} field, captured verbatim from a real WhatsApp
-     * Web session so the emitted {@code Daily} matches a genuine browser's
-     * advertised hardware decoders.
-     */
-    private static final String SUPPORTED_DECODERS = "avc,hevc,av1,vp9";
-
-    /**
      * The fallback browser-storage quota, in bytes, reported when the host's total disk size is
      * unavailable; captured from a real WhatsApp Web session.
      */
     private static final long FALLBACK_STORAGE_QUOTA = 323172190617L;
 
     /**
-     * The browser-storage bytes in use, captured from a real WhatsApp Web session and reported as a
-     * plausible baseline (IndexedDB, caches, and service-worker registrations).
+     * The non-message browser-storage footprint, in bytes, observed in a captured WhatsApp Web
+     * session: the fixed baseline that does not grow with the number of persisted messages
+     * (service-worker asset caches, Signal key material, and the contact, settings, and metadata
+     * IndexedDB tables).
+     *
+     * <p>The reported used-bytes figure adds the per-message contribution
+     * ({@link #STORAGE_BYTES_PER_MESSAGE} times the real message count), the reclaimable cache, and a
+     * per-session jitter offset on top of this baseline, so it tracks the account's actual store
+     * size rather than freezing at an identical constant every session.
      */
-    private static final long STORAGE_USAGE_BYTES = 141509844L;
+    private static final long STORAGE_BASELINE_BYTES = 84_096_212L;
 
     /**
-     * The reclaimable service-worker cache bytes contained within {@link #STORAGE_USAGE_BYTES},
-     * captured from a real WhatsApp Web session; added back to report the with-cache available size.
+     * The estimated on-disk cost, in bytes, of a single persisted message (its protobuf record plus
+     * the MVStore key and value overhead), used to scale the reported used-bytes figure with the
+     * real size of the message store.
      */
-    private static final long STORAGE_CACHE_BYTES = 57413632L;
+    private static final long STORAGE_BYTES_PER_MESSAGE = 2_048L;
 
     /**
-     * The fixed {@code osBuildNumber} value, captured verbatim from a real
-     * WhatsApp Web session.
+     * The inclusive width, in bytes, of the per-session jitter offset added to the reported
+     * used-bytes figure so that successive sessions do not report a byte-identical value that would
+     * itself fingerprint the client.
      */
-    private static final String OS_BUILD_NUMBER = "0.1";
+    private static final long STORAGE_USAGE_JITTER_BYTES = 8_388_608L;
+
+    /**
+     * The reclaimable service-worker cache baseline, in bytes, contained within the reported
+     * used-bytes figure and added back to report the with-cache available size; captured from a real
+     * WhatsApp Web session and raised per session by at most {@link #STORAGE_CACHE_JITTER_BYTES}.
+     */
+    private static final long STORAGE_CACHE_BASE_BYTES = 57_413_632L;
+
+    /**
+     * The inclusive width, in bytes, of the per-session jitter offset added to the reclaimable
+     * service-worker cache figure so that successive sessions do not report a byte-identical cache
+     * size.
+     */
+    private static final long STORAGE_CACHE_JITTER_BYTES = 2_097_152L;
 
     /**
      * The default language subtag reported when the bound account carries no
@@ -254,23 +272,30 @@ public final class LiveDailyStatsService implements DailyStatsService {
      * faithfully source: real values computed from live store state (locale-derived
      * language and region, read-receipt and audience privacy settings, defense
      * mode, default disappearing duration, contact counts, account presence,
-     * username state) plus a handful of constants captured from a real WhatsApp Web
-     * session (build number, SIM identifiers, decoder list, notification
-     * permission). Every other {@code Daily} field is left unset, mirroring how Web
-     * omits fields it cannot supply. The canary block is the five zero-field events
-     * Web logs alongside {@code Daily} to drive deidentified-telemetry rotation.
+     * username state); device-sourced identity read from the persisted device
+     * descriptor and its browser fingerprint ({@code osBuildNumber} and the
+     * {@code supportedDecoders} list); a message-store-scaled storage shape; plus a
+     * handful of constants captured from a real WhatsApp Web session (SIM
+     * identifiers, encoder list, notification permission). Every other {@code Daily}
+     * field is left unset, mirroring how Web omits fields it cannot supply. The
+     * canary block is the five zero-field events Web logs alongside {@code Daily} to
+     * drive deidentified-telemetry rotation.
      *
      * @implNote
      * This implementation reports {@code storageTotalSize}, {@code storageAvailSize}, and
      * {@code storageAvailSizeWithCache} as int64 byte counts (the WAM {@code INTEGER} wire type is
      * variable-width up to sixty-four bits). The quota is derived from the host disk via
      * {@link #browserStorageQuota()} so it stays plausible and host-specific rather than a fixed
-     * constant; the in-use and reclaimable-cache figures are captured-session baselines.
+     * constant. The used-bytes figure is not frozen either: {@link #storageUsageBytes(long, long)}
+     * scales it with the real message count summed across every chat and adds a per-session jitter
+     * offset, and {@code supportedDecoders} co-varies with the same device fingerprint that supplies
+     * the GPU make so a reported Intel GPU never contradicts an advertised {@code av1} decoder.
      */
     void runDailyStats() {
         var store = client.store();
         var account = store.accountStore();
         var settings = store.settingsStore();
+        var device = account.device();
         var contactCount = store.contactStore().contacts().size();
 
         var locale = account.locale();
@@ -285,21 +310,30 @@ public final class LiveDailyStatsService implements DailyStatsService {
                 .map(mode -> (int) mode.duration().toSeconds())
                 .orElse(0);
 
+        var supportedDecoders = device instanceof LinkedWhatsAppClientDevice.Web web
+                ? web.supportedDecoders()
+                : LinkedWhatsAppClientDevice.Web.random(device.platform()).supportedDecoders();
+
+        var messageCount = store.chatStore().chats().stream()
+                .mapToLong(Chat::messageCount)
+                .sum();
         var storageQuota = browserStorageQuota();
+        var storageCache = storageCacheBytes();
+        var storageUsage = storageUsageBytes(messageCount, storageCache);
 
         var builder = new DailyEventBuilder()
                 .languageCode(languageCode)
                 .locationCode(locationCode)
-                .osBuildNumber(OS_BUILD_NUMBER)
+                .osBuildNumber(device.osBuildNumber())
                 .simMcc(0)
                 .simMnc(0)
                 .supportedEncoders(SUPPORTED_ENCODERS)
-                .supportedDecoders(SUPPORTED_DECODERS)
+                .supportedDecoders(supportedDecoders)
                 .osNotificationSetting(NotificationSettingType.UNKNOWN)
                 .mediaFolderFileCount(0)
                 .storageTotalSize(roundHundred(storageQuota))
-                .storageAvailSize(roundHundred(storageQuota - STORAGE_USAGE_BYTES))
-                .storageAvailSizeWithCache(roundHundred(storageQuota - STORAGE_USAGE_BYTES + STORAGE_CACHE_BYTES))
+                .storageAvailSize(roundHundred(storageQuota - storageUsage))
+                .storageAvailSizeWithCache(roundHundred(storageQuota - storageUsage + storageCache))
                 .addressbookWhatsappSize(contactCount)
                 .webcContactsTableSize(contactCount)
                 .webcFilteredContactsSize(contactCount)
@@ -440,6 +474,42 @@ public final class LiveDailyStatsService implements DailyStatsService {
     private static long browserStorageQuota() {
         var total = new File(System.getProperty("user.home", ".")).getTotalSpace();
         return total > 0 ? total / 10 * 6 : FALLBACK_STORAGE_QUOTA;
+    }
+
+    /**
+     * Computes the reclaimable service-worker cache figure reported for this run.
+     *
+     * <p>The value is {@link #STORAGE_CACHE_BASE_BYTES} raised by a per-session jitter offset of at
+     * most {@link #STORAGE_CACHE_JITTER_BYTES}, so successive sessions never report a byte-identical
+     * reclaimable-cache size. The figure is folded into {@link #storageUsageBytes(long, long)} so
+     * that {@code storageAvailSizeWithCache} adds back exactly the cache already counted as in use.
+     *
+     * @return the reclaimable service-worker cache in bytes
+     */
+    private static long storageCacheBytes() {
+        return SyntheticTelemetryUtils.jitter(STORAGE_CACHE_BASE_BYTES, STORAGE_CACHE_JITTER_BYTES);
+    }
+
+    /**
+     * Computes the browser-storage used-bytes figure reported for this run.
+     *
+     * <p>The figure is the fixed {@link #STORAGE_BASELINE_BYTES} baseline plus
+     * {@link #STORAGE_BYTES_PER_MESSAGE} for every persisted message plus the reclaimable
+     * {@code cacheBytes}, the whole then raised by a per-session jitter offset of at most
+     * {@link #STORAGE_USAGE_JITTER_BYTES}. Scaling with the real message count keeps the reported
+     * usage tracking the account's actual store size rather than freezing it at a constant that
+     * would fingerprint every Cobalt session identically, and the jitter keeps successive sessions
+     * from reporting a byte-identical value.
+     *
+     * @param messageCount the total number of persisted messages summed across every chat
+     * @param cacheBytes   the reclaimable service-worker cache already computed for this run by
+     *                     {@link #storageCacheBytes()}, folded in so it can be added back
+     *                     consistently
+     * @return the browser-storage used-bytes figure in bytes
+     */
+    private static long storageUsageBytes(long messageCount, long cacheBytes) {
+        var base = STORAGE_BASELINE_BYTES + messageCount * STORAGE_BYTES_PER_MESSAGE + cacheBytes;
+        return SyntheticTelemetryUtils.jitter(base, STORAGE_USAGE_JITTER_BYTES);
     }
 
     /**

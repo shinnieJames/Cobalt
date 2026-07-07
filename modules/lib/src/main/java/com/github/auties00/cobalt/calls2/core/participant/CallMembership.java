@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -374,7 +375,7 @@ public final class CallMembership {
         try {
             var added = new ArrayList<CallParticipantUserNode>();
             var updated = new ArrayList<CallParticipantUserNode>();
-            var seen = new ArrayList<Jid>();
+            var seen = new HashSet<Jid>();
             for (var entry : roster.entries()) {
                 var identity = CallParticipantUserNode.of(entry).orElse(null);
                 if (identity == null) {
@@ -413,7 +414,7 @@ public final class CallMembership {
                 removed.add(slot.identity());
                 iterator.remove();
             }
-            return new Reconciliation(List.copyOf(added), List.copyOf(updated), List.copyOf(removed));
+            return new Reconciliation(added, updated, removed);
         } finally {
             lock.unlock();
         }
@@ -852,6 +853,16 @@ public final class CallMembership {
     private static void upsertDevices(String callId, CallParticipant participant,
                                       List<CallParticipantUserNode.Device> devices,
                                       String decoderCapability) {
+        // TODO: gate the SSRC derivation on newly-added devices only. addDevice returns the existing
+        //  instance for a device already present (reference identity distinguishes a fresh add), and the
+        //  per-device and per-stream SSRCs are a pure function of (callId, deviceJid), so re-deriving them
+        //  on every reconcile recomputes identical values. Skipping the info.ssrcs(...) block for an
+        //  already-present device, and gating populateStreamSsrcs on the active device actually changing,
+        //  would drop that redundant work and let CallSecureSsrcGenerator encode the callId/base once per
+        //  reconcile via a batch deviceSsrcs(byte[] callIdBytes, ...) helper. Left as-is because the current
+        //  code unconditionally overwrites those media/device SSRC fields every reconcile, so gating is only
+        //  behavior-preserving if no other writer (the media plane) ever mutates them between reconciles;
+        //  that invariant is not proven here, and a divergence would be a silent wire-SSRC change.
         var seen = new ArrayList<CallDeviceJid>(devices.size());
         CallDeviceJid first = null;
         for (var device : devices) {

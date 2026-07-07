@@ -221,6 +221,15 @@ public record StunMessage(int messageType, int magicCookie, byte[] transactionId
      *
      * @return the serialized STUN message bytes
      */
+    // TODO: add package-private ownership-transfer seams to size the final buffer once and skip the
+    //  redundant clones on the single-transport-thread encode/decode path: Attribute.ofOwned(type,
+    //  ownedValue) (no defensive clone of a caller-owned value), an encodedLength()/encodeInto(dest,off)
+    //  pair here so encode() and finalizeWithIntegrity() write straight into one right-sized buffer
+    //  instead of building a List<byte[]> and re-copying, and a StunIntegrity.computeMessageIntegrity(
+    //  buffer, prefixLen) overload so finalizeWithIntegrity does not re-encode the prefix. The public
+    //  ctors and value()/transactionId() keep cloning for external callers. Deferred: correctness rests on
+    //  the "IceAgent/CallTransportController drive this from a single transport thread" invariant and on
+    //  every same-package writer honoring the no-alias contract, which is not locally provable here.
     public byte[] encode() {
         var body = new ArrayList<byte[]>(attributes.size());
         var attributeSectionLength = 0;
@@ -306,7 +315,7 @@ public record StunMessage(int messageType, int magicCookie, byte[] transactionId
             throw new WhatsAppCallException.Rtp("STUN attribute section length " + attributeSectionLength
                     + " exceeds the " + (message.length - HEADER_LENGTH) + " available bytes");
         }
-        var attributes = new ArrayList<Attribute>();
+        var attributes = new ArrayList<Attribute>(attributeSectionLength / ATTRIBUTE_PADDING);
         var cursor = HEADER_LENGTH;
         while (cursor + ATTRIBUTE_PADDING <= end) {
             var typeValue = readUnsignedShort(message, cursor);

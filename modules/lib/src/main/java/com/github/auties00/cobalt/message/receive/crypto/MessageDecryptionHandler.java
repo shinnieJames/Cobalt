@@ -2,10 +2,24 @@ package com.github.auties00.cobalt.message.receive.crypto;
 
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveEncryptedPayload;
+import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.E2eMessageRecvEventBuilder;
+import com.github.auties00.cobalt.wam.type.AddressingMode;
+import com.github.auties00.cobalt.wam.type.E2eCiphertextType;
+import com.github.auties00.cobalt.wam.type.E2eDestination;
+import com.github.auties00.cobalt.wam.type.E2eDeviceType;
+import com.github.auties00.cobalt.wam.type.E2eFailureReason;
+import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
+import com.github.auties00.cobalt.wam.type.MediaType;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
+import com.github.auties00.cobalt.wam.type.StanzaType;
+import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.EnumSet;
 import java.util.Optional;
@@ -28,6 +42,13 @@ import java.util.Set;
  * short-circuits the {@link MessageEncryptionType#SKMSG} attempt when it fails with a
  * retryable error.
  *
+ * <p>Once the receiver has finished iterating the stanza's encs it calls
+ * {@link #commitReceiveMetric(MessageReceiveStanza, boolean)} exactly once, which folds
+ * the recorded slot state together with the stanza addressing context into an
+ * {@code E2eMessageRecv} telemetry event and hands it to {@link WamService}. The metric
+ * is emitted on both the success and the all-failed path so the aggregate
+ * decrypt-success rate is observable.
+ *
  * @implNote
  * This implementation mirrors WhatsApp Web's
  * {@code WAWebMsgProcessingDecryptionHandler.createDecryptionHandler} closure but lifts
@@ -41,6 +62,17 @@ public final class MessageDecryptionHandler {
      * Holds the logger used for per-enc decryption-error diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(MessageDecryptionHandler.class.getName());
+
+    /**
+     * Holds the Signal ciphertext wire version reported on the per-message
+     * {@code E2eMessageRecv} metric.
+     *
+     * @implNote
+     * This implementation reports the constant {@code 3}, the current Signal double
+     * ratchet message version Cobalt encodes and decodes; Cobalt does not negotiate a
+     * per-message ciphertext version, so there is no runtime value to read.
+     */
+    private static final long SIGNAL_CIPHERTEXT_VERSION = 3;
 
     /**
      * Holds the error types that block further decryption attempts once observed on the
@@ -87,6 +119,27 @@ public final class MessageDecryptionHandler {
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
     private EncFailure skMsgFailure;
+
+    /**
+     * Holds the telemetry sink the per-message {@code E2eMessageRecv} metric is committed
+     * to once the stanza's encs have all been offered.
+     */
+    private final WamService wamService;
+
+    /**
+     * Constructs a handler bound to the telemetry sink that receives its per-message
+     * decryption metric.
+     *
+     * <p>A fresh handler is created for every incoming message stanza; the injected
+     * {@link WamService} is shared with the surrounding receive pipeline and is the same
+     * sink used for the other receive-side metrics.
+     *
+     * @param wamService the telemetry sink the {@code E2eMessageRecv} metric is committed
+     *                   to
+     */
+    public MessageDecryptionHandler(WamService wamService) {
+        this.wamService = wamService;
+    }
 
     /**
      * Returns whether the given encrypted payload should be attempted next and records
@@ -186,6 +239,267 @@ public final class MessageDecryptionHandler {
         }
 
         return mapErrorToResult(dominant);
+    }
+
+    /**
+     * Builds and commits the per-message {@code E2eMessageRecv} telemetry event for the
+     * stanza this handler tracked.
+     *
+     * <p>Invoked once by the receiver after the enc-iteration loop settles, on both the
+     * success and the all-failed path. The recorded slot state supplies the ciphertext
+     * type and, on failure, the mapped failure reason, while {@code stanza} supplies the
+     * addressing context (destination, sender device type, addressing modes, offline
+     * flag, retry count, group type). Fields Cobalt does not compute at decrypt time
+     * (post-quantum session flag, simple-Signal flag, processing-deferred flag) are
+     * reported with their steady-state values because Cobalt neither negotiates a
+     * post-quantum session nor defers orphan-bot processing.
+     *
+     * @implNote
+     * This implementation derives {@code successful} from the caller rather than from
+     * {@link #getResult()} so the no-enc stanza (which
+     * {@link #getResult()} reports as {@link MessageDecryptionResult#SUCCESS} because no
+     * failure was recorded) is still classified as a failure when no plaintext was
+     * produced, matching WhatsApp Web's split between {@code postSuccessE2eMessageRecvMetric}
+     * and {@code postFailureE2eMessageRecvMetric}.
+     *
+     * @param stanza     the stanza whose encs were offered to this handler
+     * @param successful whether a plaintext was ultimately recovered from any enc
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPostE2eMessageRecvMetric",
+            exports = "postSuccessE2eMessageRecvMetric", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebPostE2eMessageRecvMetric",
+            exports = "postFailureE2eMessageRecvMetric", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void commitReceiveMetric(MessageReceiveStanza stanza, boolean successful) {
+        var chatJid = stanza.chatJid();
+        var senderJid = stanza.senderJid();
+        var addressingMode = resolveAddressingMode(stanza);
+        var builder = new E2eMessageRecvEventBuilder()
+                .e2eSuccessful(successful)
+                .e2eCiphertextType(resolveCiphertextType())
+                .e2eCiphertextVersion(SIGNAL_CIPHERTEXT_VERSION)
+                .e2eDestination(resolveDestination(chatJid))
+                .e2eSenderType(resolveSenderType(senderJid))
+                .encryptionType(resolveEncryptionType())
+                .messageAddressingMode(addressingMode)
+                .serverAddressingMode(addressingMode)
+                .localAddressingMode(AddressingMode.LID)
+                .isLid(isLidAddressed(stanza))
+                .isHostedChat(chatJid.hasHostedServer() || chatJid.hasHostedLidServer())
+                .isPq(false)
+                .isSimpleSignal(false)
+                .offline(stanza.isOffline())
+                .processingDeferred(false)
+                .retryCount(stanza.retryCount().orElse(0))
+                .sessionScope(chatJid.isStatusBroadcastAccount()
+                        ? SessionScopeType.STATUS
+                        : SessionScopeType.DEFAULT)
+                .stanzaType(StanzaType.MESSAGE);
+
+        if (chatJid.hasGroupOrCommunityServer()) {
+            builder.typeOfGroup(TypeOfGroupEnum.GROUP);
+        }
+
+        resolveMediaType(stanza).ifPresent(builder::messageMediaType);
+
+        if (!successful) {
+            builder.e2eFailureReason(resolveFailureReason());
+        }
+
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Returns the representative Signal ciphertext type for the metric, chosen from the
+     * enc types this handler was offered.
+     *
+     * <p>Prefers the sender-key group envelope over the per-device envelopes so a group
+     * stanza carrying both a sender-key and a retry envelope reports the group envelope;
+     * returns {@code null} when no enc was offered.
+     *
+     * @return the ciphertext type, or {@code null} when the stanza carried no enc
+     */
+    private E2eCiphertextType resolveCiphertextType() {
+        if (accessedEncs.contains(MessageEncryptionType.SKMSG)) {
+            return E2eCiphertextType.SENDER_KEY_MESSAGE;
+        }
+        if (accessedEncs.contains(MessageEncryptionType.PKMSG)) {
+            return E2eCiphertextType.PREKEY_MESSAGE;
+        }
+        if (accessedEncs.contains(MessageEncryptionType.MSMSG)) {
+            return E2eCiphertextType.MESSAGE_SECRET_MESSAGE;
+        }
+        if (accessedEncs.contains(MessageEncryptionType.MSG)) {
+            return E2eCiphertextType.MESSAGE;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the encryption scheme code for the metric.
+     *
+     * <p>Reports {@link EncryptionTypeCode#BOT} when a bot multi-side envelope
+     * ({@link MessageEncryptionType#MSMSG}) was offered and standard end-to-end
+     * encryption otherwise.
+     *
+     * @return the encryption type code
+     */
+    private EncryptionTypeCode resolveEncryptionType() {
+        return accessedEncs.contains(MessageEncryptionType.MSMSG)
+                ? EncryptionTypeCode.BOT
+                : EncryptionTypeCode.E2EE;
+    }
+
+    /**
+     * Maps the dominant recorded failure onto the metric's failure reason.
+     *
+     * <p>Reads the same dominant-slot preference as {@link #getResult()}
+     * ({@link MessageEncryptionType#SKMSG} over the per-device slot) and collapses the
+     * classified {@link DecryptionErrorType} onto the closest
+     * {@link E2eFailureReason}; falls back to {@link E2eFailureReason#ERROR_UNKNOWN}
+     * when the failure path was reached without a recorded slot failure.
+     *
+     * @return the mapped failure reason
+     */
+    private E2eFailureReason resolveFailureReason() {
+        var dominant = skMsgFailure != null ? skMsgFailure : pkOrMsgFailure;
+        if (dominant == null) {
+            return E2eFailureReason.ERROR_UNKNOWN;
+        }
+        return switch (dominant.errorType) {
+            case SIGNAL_RETRYABLE -> E2eFailureReason.NO_SESSION_AVAILABLE;
+            case SIGNAL_DUPLICATE_MESSAGE -> E2eFailureReason.DUPLICATE_MESSAGE;
+            case UNKNOWN_DEVICE -> E2eFailureReason.NOT_IN_PENDING_DEVICES;
+            case DEVICE_SENT_MESSAGE -> E2eFailureReason.INVALID_DSM;
+            case INVALID_PROTOBUF -> E2eFailureReason.INVALID_PROTOCOL_BUFFER;
+            case HSM_MISMATCH -> E2eFailureReason.INVALID_HSM_ELEMENT;
+            case BROADCAST_EPH_SETTINGS -> E2eFailureReason.INVALID_BROADCAST_STANZA_ATTRIBUTE;
+            case UNKNOWN -> E2eFailureReason.DECRYPTION_FAILED;
+        };
+    }
+
+    /**
+     * Returns the metric's destination classification for the stanza's chat JID.
+     *
+     * <p>Distinguishes the status feed, groups and communities, channels, broadcast
+     * lists, and interop bridges; falls back to a one-to-one individual chat.
+     *
+     * @param chatJid the chat JID the message arrived in
+     * @return the destination classification
+     */
+    private static E2eDestination resolveDestination(Jid chatJid) {
+        if (chatJid.isStatusBroadcastAccount()) {
+            return E2eDestination.STATUS;
+        }
+        if (chatJid.hasGroupOrCommunityServer()) {
+            return E2eDestination.GROUP;
+        }
+        if (chatJid.hasNewsletterServer()) {
+            return E2eDestination.CHANNEL;
+        }
+        if (chatJid.hasBroadcastServer()) {
+            return E2eDestination.LIST;
+        }
+        if (chatJid.hasInteropServer()) {
+            return E2eDestination.INTEROP;
+        }
+        return E2eDestination.INDIVIDUAL;
+    }
+
+    /**
+     * Returns the metric's sender device classification for the stanza's sender JID.
+     *
+     * <p>Inbound messages are attributed to the peer account; the primary/companion
+     * split follows the sender JID device component and the hosted classification
+     * follows a hosted server. The metric therefore never reports one of the
+     * {@code MY_*} device types on the receive path.
+     *
+     * @param senderJid the sender JID of the message
+     * @return the sender device classification
+     */
+    private static E2eDeviceType resolveSenderType(Jid senderJid) {
+        if (senderJid.hasHostedServer() || senderJid.hasHostedLidServer()) {
+            return E2eDeviceType.OTHER_HOSTED_COMPANION;
+        }
+        return senderJid.isPrimaryDevice()
+                ? E2eDeviceType.OTHER_PRIMARY
+                : E2eDeviceType.OTHER_COMPANION;
+    }
+
+    /**
+     * Returns the addressing mode carried on the stanza's {@code addressing_mode}
+     * attribute.
+     *
+     * <p>Maps the {@code "lid"} wire value to {@link AddressingMode#LID} and every other
+     * value, including an absent attribute, to {@link AddressingMode#PN}.
+     *
+     * @param stanza the stanza whose addressing mode is read
+     * @return the addressing mode
+     */
+    private static AddressingMode resolveAddressingMode(MessageReceiveStanza stanza) {
+        return stanza.addressingMode()
+                .filter("lid"::equalsIgnoreCase)
+                .map(_ -> AddressingMode.LID)
+                .orElse(AddressingMode.PN);
+    }
+
+    /**
+     * Returns whether the stanza is LID-addressed for the metric's {@code isLid} flag.
+     *
+     * <p>Treats the message as LID-addressed when the stanza's addressing mode is
+     * {@link AddressingMode#LID} or when either the sender or chat JID sits on a LID
+     * server.
+     *
+     * @param stanza the stanza to classify
+     * @return {@code true} when the message is LID-addressed
+     */
+    private static boolean isLidAddressed(MessageReceiveStanza stanza) {
+        return resolveAddressingMode(stanza) == AddressingMode.LID
+                || stanza.senderJid().hasLidServer()
+                || stanza.chatJid().hasLidServer();
+    }
+
+    /**
+     * Returns the media class of the first enc that carried a {@code mediatype} tag, for
+     * the metric's {@code messageMediaType} field.
+     *
+     * <p>Returns {@link Optional#empty()} when no enc carried a media-type tag, in which
+     * case the field is left unset rather than reported as {@link MediaType#NONE}.
+     *
+     * @param stanza the stanza whose encs are scanned
+     * @return an {@link Optional} wrapping the mapped media type
+     */
+    private static Optional<MediaType> resolveMediaType(MessageReceiveStanza stanza) {
+        return stanza.encs()
+                .stream()
+                .map(MessageReceiveEncryptedPayload::encMediaType)
+                .flatMap(Optional::stream)
+                .findFirst()
+                .map(MessageDecryptionHandler::mapMediaType);
+    }
+
+    /**
+     * Maps an {@code <enc mediatype>} wire tag onto the metric's {@link MediaType}.
+     *
+     * <p>Recognises the common media tags carried on encrypted payloads and folds every
+     * unrecognised tag onto {@link MediaType#NONE}.
+     *
+     * @param mediaType the {@code mediatype} attribute value
+     * @return the corresponding media type
+     */
+    private static MediaType mapMediaType(String mediaType) {
+        return switch (mediaType) {
+            case "image" -> MediaType.PHOTO;
+            case "video" -> MediaType.VIDEO;
+            case "audio" -> MediaType.AUDIO;
+            case "ptt" -> MediaType.PTT;
+            case "document" -> MediaType.DOCUMENT;
+            case "sticker" -> MediaType.STICKER;
+            case "gif" -> MediaType.GIF;
+            case "url" -> MediaType.URL;
+            case "contact" -> MediaType.CONTACT;
+            case "GroupHistory" -> MediaType.GROUP_HISTORY;
+            default -> MediaType.NONE;
+        };
     }
 
     /**

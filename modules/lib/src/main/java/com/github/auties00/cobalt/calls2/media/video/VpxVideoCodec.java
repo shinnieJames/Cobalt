@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.calls2.media.video.vpx.bindings.CobaltVpx;
 import com.github.auties00.cobalt.calls2.stream.VideoFrame;
 import com.github.auties00.cobalt.calls2.stream.VideoPixelFormat;
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -270,7 +271,7 @@ public final class VpxVideoCodec implements VideoCodec {
                     "frame " + frame.width() + "x" + frame.height() + " does not match codec geometry "
                             + params.width() + "x" + params.height());
         }
-        var planar = frame.format() == VideoPixelFormat.I420 ? frame.pixels() : toI420Planar(frame);
+        var planar = frame.pixels();
         var pixels = encodeStagingFor(planar.length);
         MemorySegment.copy(planar, 0, pixels, ValueLayout.JAVA_BYTE, 0, planar.length);
         var keyFrameForced = forceKeyFrame || keyFrameRequested;
@@ -281,29 +282,6 @@ public final class VpxVideoCodec implements VideoCodec {
         }
         keyFrameRequested = false;
         return drainEncodedPackage(frame);
-    }
-
-    /**
-     * Repacks an {@link VideoPixelFormat#NV12 NV12} frame into planar I420 for libvpx.
-     *
-     * @param frame the NV12 source frame
-     * @return the planar I420 pixel bytes
-     */
-    private byte[] toI420Planar(VideoFrame frame) {
-        var width = frame.width();
-        var height = frame.height();
-        var src = frame.pixels();
-        var lumaSize = width * height;
-        var chromaSize = (width / 2) * (height / 2);
-        var out = new byte[lumaSize + 2 * chromaSize];
-        System.arraycopy(src, 0, out, 0, lumaSize);
-        var uBase = lumaSize;
-        var vBase = lumaSize + chromaSize;
-        for (var i = 0; i < chromaSize; i++) {
-            out[uBase + i] = src[lumaSize + i * 2];
-            out[vBase + i] = src[lumaSize + i * 2 + 1];
-        }
-        return out;
     }
 
     /**
@@ -325,7 +303,7 @@ public final class VpxVideoCodec implements VideoCodec {
             throw WhatsAppCallException.Vpx.fromErr("cobalt_vpx_encoder_get_packet", err);
         }
         var len = packetLenCell.get(CobaltVpx.C_INT, 0);
-        var payload = new byte[0];
+        var payload = DataUtils.EMPTY_BYTE_ARRAY;
         var keyFrame = false;
         if (len > 0) {
             var buf = packetBufCell.get(CobaltVpx.C_POINTER, 0).reinterpret(len);
@@ -353,6 +331,26 @@ public final class VpxVideoCodec implements VideoCodec {
      */
     @Override
     public VideoFrame decode(byte[] payload, long ptsMicros) {
+        return decode(payload, ptsMicros, null);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Packs the decoded picture into {@code reuse} when it exactly matches the decoded I420 byte
+     * count, so a steady-resolution stream produces no per-frame pixel allocation; a fresh buffer is
+     * minted on the first frame and after each resolution change.
+     *
+     * @param payload   {@inheritDoc}
+     * @param ptsMicros {@inheritDoc}
+     * @param reuse     {@inheritDoc}
+     * @return {@inheritDoc}
+     * @throws NullPointerException      if {@code payload} is {@code null}
+     * @throws IllegalStateException     if the codec is closed
+     * @throws WhatsAppCallException.Vpx if the libvpx decode call fails
+     */
+    @Override
+    public VideoFrame decode(byte[] payload, long ptsMicros, byte[] reuse) {
         ensureOpen();
         Objects.requireNonNull(payload, "payload cannot be null");
         var data = decodeInputFor(Math.max(1, payload.length));
@@ -369,7 +367,7 @@ public final class VpxVideoCodec implements VideoCodec {
         if (img.equals(MemorySegment.NULL)) {
             return null;
         }
-        var frame = copyDecodedImage(img, ptsMicros);
+        var frame = copyDecodedImage(img, ptsMicros, reuse);
         framesDecoded++;
         bytesDecoded += payload.length;
         return frame;
@@ -381,16 +379,19 @@ public final class VpxVideoCodec implements VideoCodec {
      *
      * @param img       the decoded picture handle from {@link CobaltVpx#cobalt_vpx_decoder_get_frame}
      * @param ptsMicros the timestamp to stamp on the produced frame
-     * @return the packed I420 frame
+     * @param reuse     a caller-owned buffer to pack the planes into when it exactly matches the decoded
+     *                  I420 byte count, or {@code null} to allocate a fresh buffer
+     * @return the packed I420 frame, wrapping {@code reuse} when it was adopted
      */
-    private VideoFrame copyDecodedImage(MemorySegment img, long ptsMicros) {
+    private VideoFrame copyDecodedImage(MemorySegment img, long ptsMicros, byte[] reuse) {
         var width = CobaltVpx.cobalt_vpx_img_width(img);
         var height = CobaltVpx.cobalt_vpx_img_height(img);
         var chromaWidth = width / 2;
         var chromaHeight = height / 2;
         var lumaSize = width * height;
         var chromaSize = chromaWidth * chromaHeight;
-        var out = new byte[lumaSize + 2 * chromaSize];
+        var needed = lumaSize + 2 * chromaSize;
+        var out = reuse != null && reuse.length == needed ? reuse : new byte[needed];
         copyPlane(CobaltVpx.cobalt_vpx_img_plane(img, CobaltVpx.COBALT_VPX_PLANE_Y()).reinterpret(Long.MAX_VALUE),
                 CobaltVpx.cobalt_vpx_img_stride(img, CobaltVpx.COBALT_VPX_PLANE_Y()), out, 0, width, height);
         copyPlane(CobaltVpx.cobalt_vpx_img_plane(img, CobaltVpx.COBALT_VPX_PLANE_U()).reinterpret(Long.MAX_VALUE),
@@ -411,6 +412,10 @@ public final class VpxVideoCodec implements VideoCodec {
      * @param rows    the number of rows in the plane
      */
     private void copyPlane(MemorySegment plane, int stride, byte[] dst, int dstBase, int rowSize, int rows) {
+        if (stride == rowSize) {
+            MemorySegment.copy(plane, ValueLayout.JAVA_BYTE, 0, dst, dstBase, rowSize * rows);
+            return;
+        }
         for (var row = 0; row < rows; row++) {
             MemorySegment.copy(plane, ValueLayout.JAVA_BYTE, (long) row * stride, dst, dstBase + row * rowSize, rowSize);
         }
@@ -441,6 +446,9 @@ public final class VpxVideoCodec implements VideoCodec {
     public void modify(VideoCodecParams params) {
         ensureOpen();
         Objects.requireNonNull(params, "params cannot be null");
+        if (params.equals(this.params)) {
+            return;
+        }
         if (params.codec() != codec) {
             throw new IllegalArgumentException("cannot change codec from " + codec + " to " + params.codec());
         }

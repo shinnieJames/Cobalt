@@ -157,7 +157,12 @@ public final class LpcInterpolator {
         for (int j = 0; j < numSubfr; j++) {
             float factor = interpol[j];
             if (factor == prevFactor) {
-                a[j] = a[j - 1].clone();
+                // Repeated factor reuses the prior subframe's filter and interpolated vector verbatim. Both
+                // rows are read-only downstream (ar16 reads the coefficients, genNoise reads only lsf[0]/lsf[1],
+                // and lpcOut takes its own clone) and are never pooled as scratch, so aliasing the prior rows
+                // is bit-identical to cloning them.
+                a[j] = a[j - 1];
+                lsfs[j] = lsfs[j - 1];
             } else {
                 if (factor == 1.0f) {
                     System.arraycopy(lsf, 0, ilsf, 0, LPC_ORDER);
@@ -171,9 +176,9 @@ public final class LpcInterpolator {
                     }
                 }
                 a[j] = nlsf2aStabilize(ilsf);
+                lsfs[j] = ilsf.clone();
             }
             prevFactor = factor;
-            lsfs[j] = ilsf.clone();
         }
         System.arraycopy(ilsf, 0, previousLsf, 0, LPC_ORDER);
         return new InterpolatedFrame(a, lsfs);

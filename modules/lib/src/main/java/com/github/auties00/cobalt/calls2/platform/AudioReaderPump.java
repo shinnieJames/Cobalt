@@ -143,7 +143,7 @@ public final class AudioReaderPump {
      * <p>Incremented whenever a drain finds fewer than one block buffered; used only to gate the periodic
      * log and as a diagnostic, never to alter behaviour beyond the back-off.
      */
-    private long underrunCount;
+    private volatile long underrunCount;
 
     /**
      * Whether the startup seed has been reached and steady-state draining has begun.
@@ -159,7 +159,7 @@ public final class AudioReaderPump {
      * <p>Retained so {@link #stop()} can interrupt and unpark it; the pump owns exactly one such thread
      * for its lifetime.
      */
-    private Thread thread;
+    private volatile Thread thread;
 
     /**
      * A consumer of one fixed-size block of captured PCM samples bound for the call engine.

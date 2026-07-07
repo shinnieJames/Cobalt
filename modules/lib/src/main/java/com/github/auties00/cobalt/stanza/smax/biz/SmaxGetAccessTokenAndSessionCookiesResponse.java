@@ -76,9 +76,9 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
      * Drives the happy-path branch of the verify-email-code modal: {@link #accessToken()} is a
      * {@code WAA}-type Graph API bearer token, {@link #sessionCookies()} is consumed by the Facebook
      * Ads Manager web UI, and {@link #businessPersonId()} is the Facebook business-person identifier
-     * the token is scoped to. When {@link #tokenType()} is present and not
-     * {@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG} the reply is treated as a failure
-     * even though it parsed cleanly.
+     * the token is scoped to. The optional {@link #tokenType()} records the token strength; a
+     * {@link SmaxGetAccessTokenAndSessionCookiesTokenType#WEAK} token is accepted and used as-is, so
+     * the strength is stored for the caller's inspection rather than gating success.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountGetAccessTokenAndSessionCookiesResponseSuccess")
     final class Success implements SmaxGetAccessTokenAndSessionCookiesResponse {
@@ -165,8 +165,9 @@ public sealed interface SmaxGetAccessTokenAndSessionCookiesResponse extends Smax
         /**
          * Returns the optional token-strength marker.
          * <p>
-         * When present and not {@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG} the reply
-         * is treated as a failure even though it parsed cleanly; absent on legacy relays.
+         * Records whether the relay minted a strong or weak token; both are accepted and used as-is,
+         * so the strength is stored for the caller's inspection rather than gating success. Absent on
+         * legacy relays.
          *
          * @return an {@link Optional} carrying the marker
          *         ({@link SmaxGetAccessTokenAndSessionCookiesTokenType#STRONG} or

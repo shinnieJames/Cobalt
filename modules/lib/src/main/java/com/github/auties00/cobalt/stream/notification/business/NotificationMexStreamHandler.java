@@ -6,12 +6,21 @@ import com.github.auties00.cobalt.stream.SocketStreamHandler;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
 import com.github.auties00.cobalt.ack.AckClass;
 import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.ack.NackReason;
 import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
+import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClientPasskeyAuthenticator;
+import com.github.auties00.cobalt.exception.WhatsAppIntegrityChallengeException;
 import com.github.auties00.cobalt.listener.linked.LinkedContactTextStatusListener;
+import com.github.auties00.cobalt.listener.linked.LinkedIntegrityChallengeListener;
+import com.github.auties00.cobalt.model.integrity.IntegrityChallenge;
+import com.github.auties00.cobalt.stanza.mex.json.misc.IntegrityChallengeResponseMexRequest;
+import com.github.auties00.cobalt.stanza.mex.json.misc.IntegrityChallengeResponseMexResponse;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
@@ -22,9 +31,16 @@ import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMetadataBuilder;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.MessageCappingEventBuilder;
+import com.github.auties00.cobalt.wam.type.MessageCappingActionType;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -81,6 +97,17 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
     private final AckSender ackSender;
 
     /**
+     * Answers passkey integrity challenges, or {@code null} when no authenticator is configured.
+     */
+    private final LinkedWhatsAppClientPasskeyAuthenticator passkeyAuthenticator;
+
+    /**
+     * Commits the {@link MessageCappingEventBuilder} telemetry when a new-chat message-capping info notification
+     * arrives.
+     */
+    private final WamService wamService;
+
+    /**
      * Constructs the handler with shared dependencies.
      *
      * <p>Called once by {@link NotificationBusinessDispatcher}.
@@ -88,11 +115,16 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
      * @param whatsapp            the client used for store reads, server queries, and acks
      * @param lidMigrationService the LID migration service used by {@link #handleLidChange(JSONObject)}
      * @param ackSender           the ack sender used for the success ack
+     * @param passkeyAuthenticator the passkey authenticator used to answer integrity challenges, or
+     *                            {@code null} when none is configured
+     * @param wamService          the telemetry service used by {@link #handleMessageCappingInfo(JSONObject)}
      */
-    NotificationMexStreamHandler(LinkedWhatsAppClient whatsapp, LidMigrationService lidMigrationService, AckSender ackSender) {
+    NotificationMexStreamHandler(LinkedWhatsAppClient whatsapp, LidMigrationService lidMigrationService, AckSender ackSender, LinkedWhatsAppClientPasskeyAuthenticator passkeyAuthenticator, WamService wamService) {
         this.whatsapp = whatsapp;
         this.lidMigrationService = lidMigrationService;
         this.ackSender = ackSender;
+        this.passkeyAuthenticator = passkeyAuthenticator;
+        this.wamService = wamService;
     }
 
     /**
@@ -161,8 +193,10 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
      *
      * <p>The payload is rejected with a {@link NackReason#PARSING_ERROR} ack when it carries a fatal extension error or
      * a {@code null} {@code data} member. The recognised op names map to newsletter, text-status, group,
-     * community-owner, and username/LID handlers; UI-only ops (brigading, limit sharing, reachout timelock, integrity
-     * challenge, message capping) are debug-logged because Cobalt has no equivalent UI surface; any other op name raises
+     * community-owner, and username/LID handlers; the integrity-challenge op is answered with the configured passkey
+     * authenticator; the message-capping-info op commits capping telemetry through
+     * {@link #handleMessageCappingInfo(JSONObject)}; remaining UI-only ops (brigading, limit sharing, reachout
+     * timelock) are debug-logged because Cobalt has no equivalent UI surface; any other op name raises
      * {@link MissingMexNotificationHandlerException}.
      *
      * @param operationName the Meta Exchange op name from the {@code op_name} attribute
@@ -230,12 +264,8 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
             case "NotificationUserReachoutTimelockUpdate" ->
                     LOGGER.log(System.Logger.Level.DEBUG,
                             "Ignoring reachout timelock update mex operation (UI-only feature)");
-            case "NotificationIntegrityChallengeRequest" ->
-                    LOGGER.log(System.Logger.Level.DEBUG,
-                            "Ignoring integrity challenge request mex operation (UI-only feature)");
-            case "MessageCappingInfoNotification" ->
-                    LOGGER.log(System.Logger.Level.DEBUG,
-                            "Ignoring message capping info mex operation (UI-only feature)");
+            case "NotificationIntegrityChallengeRequest" -> handleIntegrityChallenge(payload);
+            case "MessageCappingInfoNotification" -> handleMessageCappingInfo(payload);
             default -> throw new MissingMexNotificationHandlerException(operationName);
         }
 
@@ -526,6 +556,193 @@ final class NotificationMexStreamHandler extends SocketStreamHandler.Concurrent 
                 .ifPresent(contact -> contact.setLid(newLid.toUserJid()));
         whatsapp.store().chatStore().findChatByJid(oldLid)
                 .ifPresent(chat -> chat.setLid(newLid.toUserJid()));
+    }
+
+    /**
+     * Answers a server-pushed integrity checkpoint.
+     *
+     * <p>Parses the challenge, notifies {@link LinkedIntegrityChallengeListener} observers, and then
+     * attempts to satisfy it on a separate virtual thread so the transport ack is not blocked by the
+     * potentially slow assertion ceremony. A {@code PASSKEY} challenge is answered with the configured
+     * {@link LinkedWhatsAppClientPasskeyAuthenticator}; any other type, a missing authenticator, a
+     * server rejection, or a ceremony failure logs the session out.
+     *
+     * @param payload the parsed JSON payload
+     */
+    private void handleIntegrityChallenge(JSONObject payload) {
+        var data = payload.getJSONObject("data");
+        var root = data != null ? data.getJSONObject("xwa2_notify_integrity_challenge") : null;
+        if (root == null) {
+            root = payload.getJSONObject("xwa2_notify_integrity_challenge");
+        }
+        if (root == null) {
+            return;
+        }
+
+        var challenge = parseIntegrityChallenge(root);
+        if (challenge == null) {
+            return;
+        }
+
+        for (var listener : whatsapp.store().listeners()) {
+            if (listener instanceof LinkedIntegrityChallengeListener typed) {
+                Thread.startVirtualThread(() -> typed.onIntegrityChallenge(whatsapp, challenge));
+            }
+        }
+
+        Thread.startVirtualThread(() -> satisfyIntegrityChallenge(challenge));
+    }
+
+    /**
+     * Decodes the {@code xwa2_notify_integrity_challenge} envelope into a typed challenge.
+     *
+     * @param root the {@code xwa2_notify_integrity_challenge} JSON object
+     * @return the decoded challenge, or {@code null} when the required fields are absent or the type
+     *         is unknown
+     */
+    private IntegrityChallenge parseIntegrityChallenge(JSONObject root) {
+        var type = root.getString("challenge_type");
+        if ("PASSKEY".equals(type)) {
+            var passkeyChallenge = root.getJSONObject("passkey_challenge");
+            var base64 = passkeyChallenge != null ? passkeyChallenge.getString("challenge_base64") : null;
+            if (base64 == null) {
+                return null;
+            }
+            return new IntegrityChallenge(IntegrityChallenge.Type.PASSKEY,
+                    Base64.getUrlDecoder().decode(base64), null, null);
+        }
+        if ("CAPTCHA".equals(type)) {
+            var captchaChallenge = root.getJSONObject("captcha_challenge");
+            var siteKey = captchaChallenge != null ? captchaChallenge.getString("site_key") : null;
+            var challengeUrl = captchaChallenge != null ? captchaChallenge.getString("challenge_url") : null;
+            return new IntegrityChallenge(IntegrityChallenge.Type.CAPTCHA, null, siteKey, challengeUrl);
+        }
+        LOGGER.log(System.Logger.Level.WARNING, "Unknown integrity challenge type {0}", type);
+        return null;
+    }
+
+    /**
+     * Satisfies a passkey integrity challenge or logs the session out when it cannot.
+     *
+     * <p>Runs on its own virtual thread. When a {@link LinkedWhatsAppClientPasskeyAuthenticator} is
+     * configured and the challenge is a passkey challenge, it asserts the credential, submits the
+     * assertion through {@link IntegrityChallengeResponseMexRequest}, and treats anything other than a
+     * truthy {@code success} as a rejection. A missing authenticator, an unsupported challenge type, a
+     * rejection, or a thrown error logs the session out.
+     *
+     * @param challenge the challenge to satisfy
+     */
+    private void satisfyIntegrityChallenge(IntegrityChallenge challenge) {
+        var authenticator = passkeyAuthenticator;
+        if (challenge.type() != IntegrityChallenge.Type.PASSKEY || authenticator == null) {
+            whatsapp.handleFailure(new WhatsAppIntegrityChallengeException(authenticator == null
+                    ? "No passkey authenticator is configured to answer the integrity checkpoint"
+                    : "Cannot answer integrity challenge of type " + challenge.type()));
+            return;
+        }
+
+        try {
+            var request = new LinkedWhatsAppClientPasskeyAuthenticator.Request(
+                    LinkedWhatsAppClientPasskeyAuthenticator.Request.WHATSAPP_RP_ID,
+                    challenge.passkeyChallenge().orElseThrow(),
+                    List.of(),
+                    LinkedWhatsAppClientPasskeyAuthenticator.UserVerification.PREFERRED,
+                    Duration.ofMinutes(10),
+                    "whatsapp-challenge".getBytes(StandardCharsets.UTF_8),
+                    LinkedWhatsAppClientPasskeyAuthenticator.Request.WEB_ORIGIN);
+            var assertion = authenticator.assertCredential(request);
+            var signedChallenge = buildAssertionJson(assertion).getBytes(StandardCharsets.UTF_8);
+            var response = whatsapp.sendNode(new IntegrityChallengeResponseMexRequest(
+                    signedChallenge, assertion.prfOutput() != null));
+            var accepted = IntegrityChallengeResponseMexResponse.of(response)
+                    .flatMap(IntegrityChallengeResponseMexResponse::success)
+                    .orElse(false);
+            if (!accepted) {
+                whatsapp.handleFailure(new WhatsAppIntegrityChallengeException(
+                        "Server rejected the integrity challenge response"));
+            }
+        } catch (Throwable throwable) {
+            whatsapp.handleFailure(new WhatsAppIntegrityChallengeException(
+                    "Cannot satisfy the integrity checkpoint", throwable));
+        }
+    }
+
+    /**
+     * Serialises a WebAuthn assertion into the JSON shape the integrity submit mutation expects.
+     *
+     * <p>Every binary field is URL-safe base64 encoded without padding, {@code user_handle} becomes an
+     * empty string when absent, and {@code prf_output} is emitted as {@code null} when the PRF was not
+     * evaluated, matching the genuine client's assertion envelope.
+     *
+     * @param assertion the assertion to serialise
+     * @return the assertion JSON string
+     */
+    private String buildAssertionJson(LinkedWhatsAppClientPasskeyAuthenticator.Assertion assertion) {
+        var encoder = Base64.getUrlEncoder().withoutPadding();
+        var json = new JSONObject();
+        json.put("credential_id", encoder.encodeToString(assertion.credentialId()));
+        json.put("raw_id", encoder.encodeToString(assertion.credentialId()));
+        json.put("type", "public-key");
+        json.put("authenticator_data", encoder.encodeToString(assertion.authenticatorData()));
+        json.put("client_data_json", encoder.encodeToString(assertion.clientDataJson()));
+        json.put("signature", encoder.encodeToString(assertion.signature()));
+        json.put("user_handle", assertion.userHandle() != null
+                ? encoder.encodeToString(assertion.userHandle()) : "");
+        json.put("prf_output", assertion.prfOutput() != null
+                ? encoder.encodeToString(assertion.prfOutput()) : null);
+        return JSON.toJSONString(json, JSONWriter.Feature.WriteNulls);
+    }
+
+    /**
+     * Commits capping telemetry when a new-chat message-capping info notification arrives.
+     *
+     * <p>The server pushes the account's current messaging quota under the
+     * {@code xwa2_notify_new_chat_messages_capping_info_update} envelope. Cobalt has no capping UI and does not persist
+     * the quota state, so the notification is acknowledged and recorded as a single received-event: a
+     * {@link MessageCappingActionType#API} action targeting {@code capping_notification_received} whose
+     * {@code extraAttributes} carries the raw capping-info object under a {@code capping_info} key, matching the shape
+     * WhatsApp Web serialises.
+     *
+     * @implNote
+     * This implementation emits only the received-event; WhatsApp Web additionally logs a
+     * {@link MessageCappingActionType#DEBUG} {@code capping_info_not_saved_on_client} event when the incoming quota is
+     * staler than the client's persisted copy, which Cobalt cannot reproduce because it keeps no client-side capping
+     * record to compare against.
+     *
+     * @param payload the parsed JSON payload
+     */
+    @WhatsAppWebExport(moduleName = "WAWebNewChatMessageCappingNotificationHandler", exports = "mexHandleNewChatMessageCappingNotification", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void handleMessageCappingInfo(JSONObject payload) {
+        var cappingInfo = extractCappingInfo(payload);
+        var extraAttributes = new JSONObject();
+        if (cappingInfo != null) {
+            extraAttributes.put("capping_info", cappingInfo);
+        }
+        wamService.commit(new MessageCappingEventBuilder()
+                .messageCappingActionType(MessageCappingActionType.API)
+                .userActionTarget("capping_notification_received")
+                .extraAttributes(JSON.toJSONString(extraAttributes))
+                .build());
+    }
+
+    /**
+     * Reads the {@code xwa2_notify_new_chat_messages_capping_info_update} envelope from the notification payload.
+     *
+     * <p>The envelope sits under the {@code data} member the server wraps every Meta Exchange notification in; a
+     * top-level copy is accepted as a fallback for payloads delivered without the {@code data} wrapper.
+     *
+     * @param payload the parsed JSON payload
+     * @return the capping-info object, or {@code null} when absent
+     */
+    private JSONObject extractCappingInfo(JSONObject payload) {
+        var data = payload.getJSONObject("data");
+        var cappingInfo = data != null
+                ? data.getJSONObject("xwa2_notify_new_chat_messages_capping_info_update")
+                : null;
+        if (cappingInfo == null) {
+            cappingInfo = payload.getJSONObject("xwa2_notify_new_chat_messages_capping_info_update");
+        }
+        return cappingInfo;
     }
 
     /**

@@ -213,9 +213,6 @@ public final class AdaptiveComplexityController {
      * complexity and advances the hysteresis; the intermediate band only decays the overrun counter.
      */
     private void evaluate() {
-        if (windowAudioMillis <= 0) {
-            return;
-        }
         var avgMillisPerSecond = windowEncodeMicros / windowAudioMillis;
         if (avgMillisPerSecond < budgetMillisPerSecond * INCREASE_BUDGET_MULTIPLE) {
             increaseGateMillis += windowAudioMillis;

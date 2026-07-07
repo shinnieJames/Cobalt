@@ -80,6 +80,13 @@ public final class VoipCapabilities {
      * {@link #MASK_BYTES}-byte array. The map is iterated in descending key order during
      * {@link #serialize()} so the top version is written first.
      */
+    // TODO: replace this TreeMap<Integer,byte[]> with a byte[][] indexed by version (0..MAX_VERSION),
+    //  topVersion() scanning from the top for the highest non-null slot and serialize()/deserialize()
+    //  walking indices descending, to drop the boxed Integer keys and node overhead. Kept as a TreeMap
+    //  for now: serialize() relies on descending-key iteration (masks.descendingMap()) and topVersion()
+    //  on lastKey(), so the array rewrite must reproduce that order byte-for-byte across serialize,
+    //  deserialize, set, clear, contains and equals; deferred because this is a cold advertisement path,
+    //  not a per-packet one, so the boxing cost is negligible and the rewrite risk outweighs it.
     private final TreeMap<Integer, byte[]> masks;
 
     /**

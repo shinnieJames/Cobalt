@@ -64,6 +64,13 @@ final class MlowHbTables {
      */
     private static final String RESOURCE = "mlow_hb_tables.bin";
 
+    // TODO: flatten the fixed-index dimensions of the multi-dimensional tables below (LSF_* [voiced][lowRate]
+    //  and GAIN_* [framelen20][voiced][lowRate]) into single-dimension arrays keyed the same way GAIN_PWRS
+    //  already is (e.g. (framelen20 << 2) | (voiced << 1) | lowRate), preserving the value at every index.
+    //  Deferred: the high-band path is not wired into the low-band decode and is not exercised by the
+    //  MlowBitIdentityTest oracle, so a flatten here cannot be proven bit-identical by the golden and is held
+    //  back until the bandwidth-extension path (and its own bit-identity coverage) lands.
+
     /**
      * The LSF codebook sizes, the native {@code hb_lpc_vq_sizes[voiced][lowRate]}; the count of LSF vectors in
      * each codebook.

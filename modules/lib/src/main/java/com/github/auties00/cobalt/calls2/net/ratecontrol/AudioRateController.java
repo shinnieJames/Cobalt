@@ -90,13 +90,15 @@ public final class AudioRateController {
         var codecBps = (long) (budgetBps * (1.0 - fecFraction));
         codecBps = Math.clamp(codecBps, params.minBitrate(), params.maxBitrate());
 
+        // TODO: route AudioRateController.apply through packer.encoderPacketLossPercent(measuredLossPercent) as the intended in-band-FEC policy object (logic currently inlined)
         var lossPercent = Math.clamp((int) Math.round(plr * 100.0), MIN_PACKET_LOSS_PERCENT, 100);
         var fecEnabled = fecFraction > 0.0 || lossPercent > 0;
 
-        var updated = params
-                .withBitrate((int) codecBps)
-                .withPacketLossPercent(lossPercent)
-                .withInbandFec(fecEnabled);
+        var updated = new OpusCodecParams(params.sampleRate(), params.channels(), params.application(),
+                (int) codecBps, params.minBitrate(), params.maxBitrate(), params.variableBitrate(),
+                params.maxBandwidth(), params.complexity(), fecEnabled, lossPercent,
+                params.discontinuousTransmission(), params.forceChannels(), params.signalVoice(),
+                params.lsbDepth(), params.framesPerPacket(), params.frameMillis());
         return new AudioRateResult(updated, state, fecFraction);
     }
 

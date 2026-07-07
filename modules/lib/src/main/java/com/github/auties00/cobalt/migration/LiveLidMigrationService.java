@@ -25,6 +25,8 @@ import com.github.auties00.cobalt.store.linked.LinkedWhatsAppContactStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.Lid11MigrationLifecycleEventBuilder;
+import com.github.auties00.cobalt.wam.event.LidMigrationDailyEventBuilder;
+import com.github.auties00.cobalt.wam.type.LidMigrationSourceType;
 import com.github.auties00.cobalt.wam.type.MigrationStageEnum;
 import com.github.auties00.cobalt.wam.type.StageFailureReasonEnum;
 
@@ -947,6 +949,8 @@ public final class LiveLidMigrationService implements LidMigrationService {
                     .latestMappingCount(latestMappingCount)
                     .build());
 
+            emitLidMigrationDailyCensus(LidMigrationSourceType.PEER);
+
         } catch (WhatsAppLidMigrationException e) {
             wamService.commit(new Lid11MigrationLifecycleEventBuilder()
                     .migrationStage(MigrationStageEnum.COMPANION_LOCAL_MIGRATION_FAILED)
@@ -1633,6 +1637,127 @@ public final class LiveLidMigrationService implements LidMigrationService {
         LOGGER.log(System.Logger.Level.INFO,
                 "Bulk-registered LID mappings: {0} old, {1} latest",
                 oldMappings.size(), latestMappings.size());
+    }
+
+    /**
+     * Walks the chat store once and commits the daily LID-migration census that
+     * WhatsApp Web's background stats task reports for the account.
+     *
+     * <p>The census classifies every stored chat by its LID-mapping state and
+     * reports the aggregate counts: 1:1 user chats that still lack a LID mapping
+     * ({@code numberOfPnChatsWithoutMapping}), user chats without an account LID
+     * ({@code numberOfUserChatsWithoutAccountLid}, only when
+     * {@link #isLidMigrated()} is {@code true}), regular phone-number chats
+     * ({@code numberOfRegularPnChats}), groups partitioned by whether their
+     * {@link com.github.auties00.cobalt.model.chat.group.GroupMetadata#isLidAddressingMode()}
+     * is set ({@code numberOfLidGroups} vs {@code numberOfPnGroups}), and the
+     * click-to-WhatsApp phone-number-hiding threads partitioned by whether
+     * {@link #toPn(Jid)} can resolve their phone number
+     * ({@code numberOfPnhCtwaThreadsKnownMapping} vs
+     * {@code numberOfPnhCtwaThreadsMissingMapping}). The
+     * {@code completedMigrations} field carries the comma-joined list of
+     * completed sub-migrations, mirroring WhatsApp Web's marker order.
+     *
+     * @implNote
+     * WhatsApp Web emits this event once per day from a background stats task
+     * and derives {@code lidMigrationSource} from where the mappings were
+     * learned. Cobalt has no daily scheduler in this service, so it emits the
+     * census at the point the 1:1 thread migration completes, tagged with the
+     * source of the mappings that drove it. The {@code completedMigrations}
+     * string reproduces WhatsApp Web's always-complete baseline markers
+     * ({@code con}, {@code id}, {@code ss}, {@code sk}, {@code st_lid}) plus the
+     * {@code ch_jid} marker once {@link #isLidMigrated()} is {@code true}; the
+     * sub-migration markers WhatsApp Web additionally tracks for favourites,
+     * cart, labels, phone-number-hiding promotion, blocklist, inactive groups,
+     * and forced-history chats are omitted because Cobalt does not model those
+     * sub-migrations as independent flags. The five census fields WhatsApp Web's
+     * web census leaves unset ({@code numberOfChatsWithClientAssignedLid},
+     * {@code numberOfDeprecatedChats}, {@code numberOfLidBroadcastLists},
+     * {@code numberOfPnBroadcastLists}, {@code numberOfSplitThreads}) are left
+     * absent to mirror the reference payload exactly.
+     *
+     * @param lidMigrationSource whether the mappings that drove the migration
+     *                           were learned from a peer message or from history
+     *                           sync
+     */
+    @WhatsAppWebExport(moduleName = "WAWebTasksDailyStatsTask", exports = "getLidMigrationStatus",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitLidMigrationDailyCensus(LidMigrationSourceType lidMigrationSource) {
+        var pnChatsWithoutMapping = 0L;
+        var userChatsWithoutAccountLid = 0L;
+        var regularPnChats = 0L;
+        var pnhCtwaThreadsKnownMapping = 0L;
+        var pnhCtwaThreadsMissingMapping = 0L;
+        var pnGroups = 0L;
+        var lidGroups = 0L;
+
+        for (var chat : store.chatStore().chats()) {
+            var jid = chat.jid();
+
+            if (jid.hasGroupOrCommunityServer()) {
+                var lidAddressed = store.chatStore().findChatMetadata(jid)
+                        .map(metadata -> metadata.isLidAddressingMode())
+                        .orElse(false);
+                if (lidAddressed) {
+                    lidGroups++;
+                } else {
+                    pnGroups++;
+                }
+                continue;
+            }
+
+            if (jid.hasLidServer() && LID_ORIGIN_TYPE_PNH_CTWA.equals(chat.lidOriginType().orElse(null))) {
+                if (toPn(jid) == null) {
+                    pnhCtwaThreadsMissingMapping++;
+                } else {
+                    pnhCtwaThreadsKnownMapping++;
+                }
+            }
+
+            if (!LidMigrationService.isRegularUser(jid)) {
+                continue;
+            }
+
+            if (toLid(jid) == null) {
+                pnChatsWithoutMapping++;
+            }
+
+            if (chat.lid().isEmpty()) {
+                userChatsWithoutAccountLid++;
+            }
+
+            if (jid.hasUserServer()) {
+                regularPnChats++;
+            }
+        }
+
+        var completedMigrations = new ArrayList<String>();
+        completedMigrations.add("con");
+        completedMigrations.add("id");
+        completedMigrations.add("ss");
+        completedMigrations.add("sk");
+        if (isLidMigrated()) {
+            completedMigrations.add("ch_jid");
+        }
+        completedMigrations.add("st_lid");
+
+        var builder = new LidMigrationDailyEventBuilder()
+                .completedMigrations(String.join(",", completedMigrations))
+                .lidMigrationSource(lidMigrationSource)
+                .numberOfPnChatsWithoutMapping(pnChatsWithoutMapping)
+                .numberOfRegularPnChats(regularPnChats)
+                .numberOfPnhCtwaThreadsKnownMapping(pnhCtwaThreadsKnownMapping)
+                .numberOfPnhCtwaThreadsMissingMapping(pnhCtwaThreadsMissingMapping)
+                .numberOfPnGroups(pnGroups)
+                .numberOfLidGroups(lidGroups);
+        if (isLidMigrated()) {
+            builder.numberOfUserChatsWithoutAccountLid(userChatsWithoutAccountLid);
+        }
+        wamService.commit(builder.build());
+
+        LOGGER.log(System.Logger.Level.DEBUG,
+                "Committed LID migration daily census: {0} PN groups, {1} LID groups, {2} regular PN chats",
+                pnGroups, lidGroups, regularPnChats);
     }
 
     /**

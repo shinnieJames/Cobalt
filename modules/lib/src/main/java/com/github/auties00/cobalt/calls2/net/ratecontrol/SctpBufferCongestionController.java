@@ -51,6 +51,16 @@ public final class SctpBufferCongestionController {
     private static final int OCCUPANCY_WINDOW = 4;
 
     /**
+     * The least-squares abscissa sums {@code sum(i)} for {@code i} in {@code 0..n-1}, indexed by the live
+     * sample count {@code n}.
+     *
+     * <p>Tabled for the sample counts {@link #occupancySlope()} evaluates ({@code n} in {@code 2..4}); the
+     * abscissa is the fixed sample index, so this sum depends only on {@code n}. The unused {@code n < 2}
+     * slots are {@code 0}.
+     */
+    private static final long[] SUM_X_BY_N = {0, 0, 1, 3, 6};
+
+    /**
      * The fraction of the current target the rate is clamped to while congested.
      *
      * <p>On activation the reported clamp is this fraction of the target the encoder would otherwise
@@ -318,35 +328,33 @@ public final class SctpBufferCongestionController {
     }
 
     /**
-     * Returns the least-squares slope of the occupancy window, in bytes per sample.
+     * Returns a value with the same sign as the least-squares slope of the occupancy window.
      *
-     * <p>Fits a line over the live samples in arrival order with the sample index as the abscissa; a
-     * positive slope means the buffer is filling. Returns zero with fewer than two samples.
+     * <p>Fits a line over the live samples in arrival order with the sample index as the abscissa; the
+     * returned value is positive exactly when the buffer is filling. The least-squares denominator
+     * {@code n*sum(x*x) - sum(x)*sum(x)} is a strictly positive function of the sample count for the
+     * counts evaluated ({@code n} in {@code 2..4}), so the slope sign equals the numerator sign; the sole
+     * caller tests only the sign, so the constant positive-denominator division is elided and the
+     * numerator is returned directly from two long products ({@code n*sum(x*y)} against
+     * {@code sum(x)*sum(y)}). Returns zero with fewer than two samples.
      *
-     * @return the occupancy slope in bytes per sample, or {@code 0} when too few samples are present
+     * @return a sign-equivalent of the occupancy slope: positive when filling, zero when too few samples
+     *         are present
      */
     private double occupancySlope() {
         if (sampleCount < 2) {
             return 0.0;
         }
         var n = sampleCount;
-        var sumX = 0.0;
-        var sumY = 0.0;
-        var sumXy = 0.0;
-        var sumXx = 0.0;
+        var sumX = SUM_X_BY_N[n];
+        var sumY = 0L;
+        var sumXy = 0L;
         for (var i = 0; i < n; i++) {
             var index = (writeIndex - sampleCount + i + OCCUPANCY_WINDOW) % OCCUPANCY_WINDOW;
-            double x = i;
-            double y = occupancyWindow[index];
-            sumX += x;
+            var y = occupancyWindow[index];
             sumY += y;
-            sumXy += x * y;
-            sumXx += x * x;
+            sumXy += (long) i * y;
         }
-        var denominator = n * sumXx - sumX * sumX;
-        if (denominator == 0.0) {
-            return 0.0;
-        }
-        return (n * sumXy - sumX * sumY) / denominator;
+        return (double) (n * sumXy - sumX * sumY);
     }
 }

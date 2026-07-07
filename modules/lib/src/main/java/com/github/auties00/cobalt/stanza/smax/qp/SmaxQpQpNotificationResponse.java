@@ -21,7 +21,10 @@ import java.util.Optional;
  * relay from re-delivering the same push on the next reconnect. The notification's {@code id},
  * {@code from}, and {@code type} are retained as typed state so the ack can echo them without a
  * second lookup against the original stanza.
+ *
+ * @deprecated not wired: Quick Promotions surfaces have no headless consumer.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInQpSurfacesQPNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInQpSurfacesQPSurfacesMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInQpSurfacesServerNotificationMixin")

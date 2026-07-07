@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.calls2.net.transport;
 
 import com.github.auties00.cobalt.calls2.platform.VoipCryptoNative;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -206,7 +207,7 @@ public final class IceAgent {
         var roleType = controlling ? StunAttributeType.ICE_CONTROLLING : StunAttributeType.ICE_CONTROLLED;
         attributes.add(new StunMessage.Attribute(roleType, tiebreaker.clone()));
         if (nominate) {
-            attributes.add(new StunMessage.Attribute(StunAttributeType.USE_CANDIDATE, new byte[0]));
+            attributes.add(new StunMessage.Attribute(StunAttributeType.USE_CANDIDATE, DataUtils.EMPTY_BYTE_ARRAY));
             pair.nominate();
         }
 
@@ -277,10 +278,6 @@ public final class IceAgent {
             return Optional.empty();
         }
         if (parsed.magicCookie() != StunMessage.MAGIC_COOKIE) {
-            return Optional.empty();
-        }
-        var integrity = parsed.attribute(StunAttributeType.MESSAGE_INTEGRITY);
-        if (integrity.isEmpty()) {
             return Optional.empty();
         }
         var integrityOffset = locateIntegrityOffset(message);
@@ -414,11 +411,6 @@ public final class IceAgent {
      * @return the four-byte big-endian encoding
      */
     private static byte[] u32(long value) {
-        return new byte[]{
-                (byte) (value >>> 24),
-                (byte) (value >>> 16),
-                (byte) (value >>> 8),
-                (byte) value
-        };
+        return DataUtils.intToBytes((int) value, 4);
     }
 }

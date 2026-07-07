@@ -68,21 +68,30 @@ public record CallJid(Jid jid, CallJidDomainType domainType, CallJidUseCase useC
     }
 
     /**
-     * Returns a {@code CallJid} wrapping the given {@link Jid} with the default
-     * use-case, deriving its domain-type from the JID's server domain.
+     * Returns a {@code CallJid} wrapping the given {@link Jid}, deriving both its
+     * domain-type and its use-case from the JID.
      *
      * <p>The domain-type is resolved from the {@linkplain Jid#server() server}'s
-     * {@link JidServer#type() type} via {@link #domainOf(JidServer.Type)}. This is the
-     * canonical factory for adapting a model {@code Jid} into the call layer.
+     * {@link JidServer#type() type} via {@link #domainOf(JidServer.Type)}. The
+     * {@link CallJidUseCase use-case} is then classified from the domain-type and the
+     * presence of a {@linkplain Jid#hasDevice() device} component via
+     * {@link #useCaseOf(Jid, CallJidDomainType)}: a {@link CallJidDomainType#GROUP group}
+     * JID yields {@link CallJidUseCase#GROUP}, a {@link CallJidDomainType#NEWSLETTER
+     * newsletter} JID yields {@link CallJidUseCase#NEWSLETTER}, a device-callable JID
+     * carrying a device yields {@link CallJidUseCase#DEVICE}, and every other user-family
+     * JID yields {@link CallJidUseCase#USER}. This is the canonical factory for adapting a
+     * model {@code Jid} into the call layer.
      *
      * @param jid the addressing JID to wrap; never {@code null}
-     * @return a {@code CallJid} for the given JID with {@link #DEFAULT_USE_CASE}
+     * @return a {@code CallJid} for the given JID with its classified use-case
      * @throws NullPointerException     if {@code jid} is {@code null}
      * @throws IllegalArgumentException if the JID's server domain does not map to a
      *                                  callable {@link CallJidDomainType}
      */
     public static CallJid of(Jid jid) {
-        return of(jid, DEFAULT_USE_CASE);
+        Objects.requireNonNull(jid, "jid cannot be null");
+        var domainType = domainOf(jid.server().type());
+        return new CallJid(jid, domainType, useCaseOf(jid, domainType));
     }
 
     /**
@@ -126,6 +135,59 @@ public record CallJid(Jid jid, CallJidDomainType domainType, CallJidUseCase useC
             }
         }
         throw new IllegalArgumentException("server type " + type + " is not a callable voip domain");
+    }
+
+    /**
+     * Classifies the {@link CallJidUseCase} the native engine attaches to a parsed JID.
+     *
+     * <p>This reproduces the use-case branch the engine takes in
+     * {@code wa_call_jid_from_string}: a {@link CallJidDomainType#GROUP group} JID is a
+     * {@link CallJidUseCase#GROUP group} address, a {@link CallJidDomainType#NEWSLETTER
+     * newsletter} JID is a {@link CallJidUseCase#NEWSLETTER newsletter} address, a
+     * device-callable JID that carries a {@linkplain Jid#hasDevice() device} identifier is
+     * a {@link CallJidUseCase#DEVICE device} address, and every other user-family JID is a
+     * bare {@link CallJidUseCase#USER user} address. The {@link CallJidUseCase#GROUP_CALL}
+     * and {@link CallJidUseCase#EXTENSION} use-cases are never produced here: the engine
+     * assigns those only through its explicit call-session and call-link constructors, not
+     * by parsing an address string.
+     *
+     * @implNote This implementation gates the {@link CallJidUseCase#DEVICE} result on the
+     *           {@code 0xa28} device-domain mask (domain-types {@code 3} call, {@code 5}
+     *           lid, {@code 9} bot, {@code 0xb} hosted.lid) that
+     *           {@code wa_call_device_jid_create} enforces, so a {@code s.whatsapp.net}
+     *           JID stays {@link CallJidUseCase#USER} even when it carries a device. A
+     *           primary device (device id {@code 0}) is indistinguishable from a bare
+     *           account in the Cobalt {@link Jid} model, so it classifies as
+     *           {@link CallJidUseCase#USER}.
+     * @param jid        the addressing JID being classified; never {@code null}
+     * @param domainType the already-resolved domain-type of {@code jid}; never
+     *                   {@code null}
+     * @return the classified use-case
+     */
+    private static CallJidUseCase useCaseOf(Jid jid, CallJidDomainType domainType) {
+        return switch (domainType) {
+            case GROUP -> CallJidUseCase.GROUP;
+            case NEWSLETTER -> CallJidUseCase.NEWSLETTER;
+            default -> jid.hasDevice() && isDeviceCallable(domainType)
+                    ? CallJidUseCase.DEVICE
+                    : CallJidUseCase.USER;
+        };
+    }
+
+    /**
+     * Returns whether a JID in the given domain may be addressed as a specific device.
+     *
+     * @implNote This implementation enumerates the {@code 0xa28} device-domain mask of
+     *           {@code wa_call_device_jid_create} (domain-types {@code 3} call, {@code 5}
+     *           lid, {@code 9} bot, {@code 0xb} hosted.lid).
+     * @param domainType the domain-type to test; never {@code null}
+     * @return {@code true} if the domain is device-callable
+     */
+    private static boolean isDeviceCallable(CallJidDomainType domainType) {
+        return domainType == CallJidDomainType.CALL
+                || domainType == CallJidDomainType.LID
+                || domainType == CallJidDomainType.BOT
+                || domainType == CallJidDomainType.HOSTED_LID;
     }
 
     /**

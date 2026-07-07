@@ -220,6 +220,18 @@ public final class RateCalculator {
     }
 
     /**
+     * Returns the calculator to its uninitialized state so it can be reused in place.
+     *
+     * <p>Zeroes every bucket and the running total, collapses the head and tail to the same index, and
+     * marks the window uninitialized so the next {@link #update(long, long)} seeds a fresh window head,
+     * exactly as a newly constructed instance would. Reusing an existing calculator through this method
+     * avoids reallocating one on a stream reset.
+     */
+    public void clear() {
+        reset(0L);
+    }
+
+    /**
      * Clears the ring and opens a fresh window starting at the given time.
      *
      * <p>Zeroes every bucket and the running total, collapses the head and tail to the

@@ -1,9 +1,6 @@
 package com.github.auties00.cobalt.calls2.core;
 
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Enumerates the one hundred seventy-two events of the wa-voip in-call event bus.
@@ -928,11 +925,11 @@ public enum CallEventType {
     /**
      * Indexes the constants by their native event id for constant-time {@link #ofIndex(int)} lookup.
      *
-     * <p>The id space is dense and unique by construction, so the collector never observes a duplicate
-     * key.
+     * <p>The id space is dense and gap-free, so a constant's native id equals its {@link Enum#ordinal()}
+     * and {@link #values()} is already ordered by id: slot {@code i} holds the constant whose
+     * {@link #index()} is {@code i}.
      */
-    private static final Map<Integer, CallEventType> BY_INDEX = Stream.of(values())
-            .collect(Collectors.toUnmodifiableMap(CallEventType::index, type -> type));
+    private static final CallEventType[] BY_INDEX = values();
 
     /**
      * Holds the native event id the wa-voip dispatcher selects on.
@@ -995,6 +992,9 @@ public enum CallEventType {
      * @return the matching event type, or an empty result when no constant carries the id
      */
     public static Optional<CallEventType> ofIndex(int index) {
-        return Optional.ofNullable(BY_INDEX.get(index));
+        if (index < 0 || index >= BY_INDEX.length) {
+            return Optional.empty();
+        }
+        return Optional.of(BY_INDEX[index]);
     }
 }

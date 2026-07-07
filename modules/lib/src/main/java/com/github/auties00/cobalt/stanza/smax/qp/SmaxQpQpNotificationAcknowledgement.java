@@ -21,7 +21,10 @@ import java.util.Objects;
  * receipt. Callers obtain an instance from {@link #from(SmaxQpQpNotificationResponse)} when they
  * hold a typed projection, or from {@link #from(Stanza)} when they hold only the raw stanza, then
  * dispatch the {@link StanzaBuilder} produced by {@link #toStanza()}.
+ *
+ * @deprecated not wired: Quick Promotions surfaces have no headless consumer.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxOutQpSurfacesQPNotificationResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutQpSurfacesNotificationClientAckMixin")
 public final class SmaxQpQpNotificationAcknowledgement implements SmaxStanza.Request {

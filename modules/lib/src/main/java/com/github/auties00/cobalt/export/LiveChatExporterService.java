@@ -12,6 +12,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.FutureProofMessageType;
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.commerce.ProductMessage;
 import com.github.auties00.cobalt.model.message.contact.ContactMessage;
 import com.github.auties00.cobalt.model.message.contact.ContactsArrayMessage;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
@@ -30,8 +31,11 @@ import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.wam.WamMsgUtils;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.ChatExportEventBuilder;
+import com.github.auties00.cobalt.wam.event.WebcMessageQueryEventBuilder;
 import com.github.auties00.cobalt.wam.type.ExportModeType;
 import com.github.auties00.cobalt.wam.type.ExportResultType;
+import com.github.auties00.cobalt.wam.type.WebcChatType;
+import com.github.auties00.cobalt.wam.type.WebcMessageQueryDirection;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -170,9 +174,11 @@ public final class LiveChatExporterService implements ChatExporterService {
             var title = resolveTitle(chat, chatTitle);
 
             List<ChatMessageInfo> collected;
+            var queryStartMs = System.currentTimeMillis();
             try (var stream = chat.messages()) {
                 collected = stream.toList();
             }
+            commitMessageQuery(chat.jid(), collected, System.currentTimeMillis() - queryStartMs);
 
             var start = options.startDate().orElse(null);
             var end = options.endDate().orElse(null);
@@ -241,6 +247,121 @@ public final class LiveChatExporterService implements ChatExporterService {
                     .build());
             throw error;
         }
+    }
+
+    /**
+     * Commits one {@code WebcMessageQuery} telemetry metric measuring the
+     * message-store scan that loaded this chat's history.
+     *
+     * <p>The exporter loads a chat's messages with a single
+     * {@link Chat#messages()} scan; this measures that scan the way WhatsApp
+     * Web measures each of its paged message-store queries, right after the
+     * load resolves. The committed metric carries the real result count, the
+     * wall-clock query duration, the {@link WebcChatType} classification, and
+     * the per-type breakdown of the loaded messages. The direction is always
+     * {@link WebcMessageQueryDirection#LOAD_PREV} because a full-history export
+     * reads earlier messages, mirroring WhatsApp Web's {@code before} load
+     * path. The browser-only dimensions WhatsApp Web attaches (effective
+     * network type, storage-quota estimate, chat-list position, wire-response
+     * byte size) are inherently absent in a headless client and are therefore
+     * omitted.
+     *
+     * @param chatJid         the JID of the chat that was scanned
+     * @param results         the messages returned by the scan
+     * @param queryDurationMs the wall-clock duration of the scan, in
+     *                        milliseconds
+     */
+    @WhatsAppWebExport(moduleName = "WAWebChatLoadMessages", exports = "loadMsgsPromiseLoop", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void commitMessageQuery(Jid chatJid, List<ChatMessageInfo> results, long queryDurationMs) {
+        var query = new WebcMessageQueryEventBuilder()
+                .webcChatType(webcChatType(chatJid))
+                .webcMessageQueryType(WebcMessageQueryDirection.LOAD_PREV)
+                .webcMessageCount(results.size())
+                .webcQueryT(Instant.ofEpochMilli(queryDurationMs));
+        classifyQueryResult(results, query);
+        wamService.commit(query.build());
+    }
+
+    /**
+     * Classifies a chat JID into the WAM {@link WebcChatType} dimension.
+     *
+     * <p>Newsletter, group or community, and broadcast servers map to
+     * {@link WebcChatType#NEWSLETTER}, {@link WebcChatType#GROUP} and
+     * {@link WebcChatType#BROADCAST_LIST} respectively; every other server
+     * (user or LID) maps to {@link WebcChatType#INDIVIDUAL}. Communities are
+     * reported as {@link WebcChatType#GROUP} because a community and a plain
+     * group are indistinguishable from the JID server alone.
+     *
+     * @param chatJid the chat JID to classify
+     * @return the WAM chat-type classification, never {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebChatModel", exports = "getWebcChatType", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static WebcChatType webcChatType(Jid chatJid) {
+        if (chatJid.hasNewsletterServer()) {
+            return WebcChatType.NEWSLETTER;
+        }
+        if (chatJid.hasGroupOrCommunityServer()) {
+            return WebcChatType.GROUP;
+        }
+        if (chatJid.hasBroadcastServer()) {
+            return WebcChatType.BROADCAST_LIST;
+        }
+        return WebcChatType.INDIVIDUAL;
+    }
+
+    /**
+     * Tallies the per-type message counts of a query result onto the given
+     * {@code WebcMessageQuery} builder.
+     *
+     * <p>The buckets mirror WhatsApp Web's {@code logMessageCounts}: the text
+     * bucket absorbs plain text, location and contact payloads; the photo
+     * bucket absorbs images and product cards; audio and voice notes split on
+     * the push-to-talk flag; and every unclassified payload falls through to
+     * the other bucket.
+     *
+     * @param results the messages returned by the scan
+     * @param query   the builder accumulating the per-type counts
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMsgCountReporter", exports = "logMessageCounts", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static void classifyQueryResult(List<ChatMessageInfo> results, WebcMessageQueryEventBuilder query) {
+        var text = 0L;
+        var photo = 0L;
+        var video = 0L;
+        var audio = 0L;
+        var ptt = 0L;
+        var sticker = 0L;
+        var document = 0L;
+        var other = 0L;
+        for (var info : results) {
+            switch (info.message().content()) {
+                case ExtendedTextMessage ignored -> text++;
+                case LocationMessage ignored -> text++;
+                case LiveLocationMessage ignored -> text++;
+                case ContactMessage ignored -> text++;
+                case ContactsArrayMessage ignored -> text++;
+                case ImageMessage ignored -> photo++;
+                case ProductMessage ignored -> photo++;
+                case VideoMessage ignored -> video++;
+                case AudioMessage audioMessage -> {
+                    if (audioMessage.ptt()) {
+                        ptt++;
+                    } else {
+                        audio++;
+                    }
+                }
+                case StickerMessage ignored -> sticker++;
+                case DocumentMessage ignored -> document++;
+                case null, default -> other++;
+            }
+        }
+        query.webcTextMessageCount(text)
+                .webcPhotoMessageCount(photo)
+                .webcVideoMessageCount(video)
+                .webcAudioMessageCount(audio)
+                .webcPttMessageCount(ptt)
+                .webcStickerMessageCount(sticker)
+                .webcDocumentMessageCount(document)
+                .webcOtherMessageCount(other);
     }
 
     /**

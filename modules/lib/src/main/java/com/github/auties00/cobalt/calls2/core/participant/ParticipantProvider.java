@@ -100,8 +100,9 @@ public interface ParticipantProvider {
      *         is connected
      */
     default Optional<ParticipantView> firstConnectedPeer() {
+        var self = selfView();
         for (var view : views()) {
-            if (view.isConnectedPeer()) {
+            if (view.isConnectedPeer() && !isSameParticipant(view, self)) {
                 return Optional.of(view);
             }
         }

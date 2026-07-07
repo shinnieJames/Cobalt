@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessageBuilder;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
+import com.github.auties00.cobalt.wam.TestWamService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ class TextPipelineTest {
     void nullMessageNoOp() {
         var props = TestABPropsService.builder().build();
         var client = TestWhatsAppClient.create().withStore(store(false));
-        var service = new TextPipeline(client, props, TestMediaConnectionService.create());
+        var service = new TextPipeline(client, props, TestMediaConnectionService.create(), TestWamService.create(client));
         service.run(PEER, null);
     }
 
@@ -48,7 +49,7 @@ class TextPipelineTest {
         var props = TestABPropsService.builder().build();
         var store = store(true);
         var client = TestWhatsAppClient.create().withStore(store);
-        var service = new TextPipeline(client, props, TestMediaConnectionService.create());
+        var service = new TextPipeline(client, props, TestMediaConnectionService.create(), TestWamService.create(client));
 
         var msg = new ExtendedTextMessageBuilder().text("https://example.com").build();
         service.run(PEER, msg);
@@ -66,7 +67,7 @@ class TextPipelineTest {
     void plainTextNoUrlNoOp() {
         var props = TestABPropsService.builder().build();
         var client = TestWhatsAppClient.create().withStore(store(false));
-        var service = new TextPipeline(client, props, TestMediaConnectionService.create());
+        var service = new TextPipeline(client, props, TestMediaConnectionService.create(), TestWamService.create(client));
 
         var msg = new ExtendedTextMessageBuilder().text("hello world").build();
         service.run(PEER, msg);
@@ -82,7 +83,7 @@ class TextPipelineTest {
     void emptyTextNoOp() {
         var props = TestABPropsService.builder().build();
         var client = TestWhatsAppClient.create().withStore(store(false));
-        var service = new TextPipeline(client, props, TestMediaConnectionService.create());
+        var service = new TextPipeline(client, props, TestMediaConnectionService.create(), TestWamService.create(client));
 
         var msg = new ExtendedTextMessageBuilder().text("").build();
         service.run(PEER, msg);
@@ -94,7 +95,7 @@ class TextPipelineTest {
     void nullClientThrows() {
         var props = TestABPropsService.builder().build();
         Assertions.assertThrows(NullPointerException.class,
-                () -> new TextPipeline(null, props, TestMediaConnectionService.create()));
+                () -> new TextPipeline(null, props, TestMediaConnectionService.create(), TestWamService.create(TestWhatsAppClient.create())));
     }
 
     @Test
@@ -102,7 +103,7 @@ class TextPipelineTest {
     void nullAbPropsThrows() {
         var client = TestWhatsAppClient.create().withStore(store(false));
         Assertions.assertThrows(NullPointerException.class,
-                () -> new TextPipeline(client, null, TestMediaConnectionService.create()));
+                () -> new TextPipeline(client, null, TestMediaConnectionService.create(), TestWamService.create(client)));
     }
 
     @Test
@@ -110,7 +111,7 @@ class TextPipelineTest {
     void newsletterChatRespected() {
         var props = TestABPropsService.builder().build();
         var client = TestWhatsAppClient.create().withStore(store(false));
-        var service = new TextPipeline(client, props, TestMediaConnectionService.create());
+        var service = new TextPipeline(client, props, TestMediaConnectionService.create(), TestWamService.create(client));
         var msg = new ExtendedTextMessageBuilder().text("https://example.com").build();
         service.run(PEER, msg);
         // keeps the NEWSLETTER fixture referenced; the newsletter branch needs an HTTP stub to assert fully

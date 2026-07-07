@@ -43,7 +43,7 @@ public final class ComfortNoiseDecoder implements AudioDecoder {
     /**
      * Whether the decoder has been closed.
      */
-    private boolean closed;
+    private volatile boolean closed;
 
     /**
      * Constructs a comfort-noise decoder for the given output geometry.
@@ -55,7 +55,6 @@ public final class ComfortNoiseDecoder implements AudioDecoder {
         this.sampleRate = sampleRate;
         this.channels = channels;
         this.generator = new ComfortNoiseGenerator();
-        this.closed = false;
     }
 
     /**

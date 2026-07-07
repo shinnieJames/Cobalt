@@ -4,6 +4,10 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.util.DataUtils;
+import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.PsBufferUploadEventBuilder;
+import com.github.auties00.cobalt.wam.type.ApplicationState;
+import com.github.auties00.cobalt.wam.type.PsBufferUploadResult;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -38,6 +42,12 @@ import java.util.Objects;
  *
  * <p>Used by the WAM flush loop to ship each private-channel buffer one at a time after a successful
  * {@link WamPrivateStatsTokenIssuer#issue()}.
+ *
+ * <p>Every {@link #upload(byte[])} attempt additionally commits one {@code PsBufferUploadWamEvent} (id
+ * {@code 2244}) on the regular WAM channel through the bound {@link WamService}, mirroring the internal
+ * per-buffer metrics callback of the {@code WAWebUploadPrivateStatsBackend} module. The event reports the
+ * categorised result, the HTTP status, the measured upload duration, and the application foreground state; it
+ * rides the regular channel so it never recurses back into a private upload.
  *
  * @implNote
  * This implementation hand-assembles the multipart body because Java's {@link HttpClient} has no native
@@ -116,43 +126,60 @@ public final class WamPrivateStatsUploader {
     private final HttpClient httpClient;
 
     /**
-     * Constructs a new uploader bound to a token issuer and a default-configured {@link HttpClient}.
+     * The WAM service used to commit the per-attempt {@code PsBufferUploadWamEvent}.
      *
-     * @param issuer the token issuer
-     * @throws NullPointerException if {@code issuer} is {@code null}
+     * <p>Held so {@link #upload(byte[])} can account each buffer upload attempt on the regular WAM channel; the
+     * commit is fire-and-forget and never blocks the upload path.
      */
-    public WamPrivateStatsUploader(WamPrivateStatsTokenIssuer issuer) {
-        this(issuer, HttpClient.newHttpClient());
+    private final WamService wamService;
+
+    /**
+     * Constructs a new uploader bound to a token issuer, a WAM service, and a default-configured
+     * {@link HttpClient}.
+     *
+     * @param issuer     the token issuer
+     * @param wamService the WAM service used to commit the per-attempt {@code PsBufferUploadWamEvent}
+     * @throws NullPointerException if either argument is {@code null}
+     */
+    public WamPrivateStatsUploader(WamPrivateStatsTokenIssuer issuer, WamService wamService) {
+        this(issuer, HttpClient.newHttpClient(), wamService);
     }
 
     /**
-     * Constructs a new uploader bound to a token issuer and a caller-supplied HTTP client.
+     * Constructs a new uploader bound to a token issuer, a WAM service, and a caller-supplied HTTP client.
      *
      * <p>Intended for tests that drive the uploader with a recording {@link HttpClient} stub, or for embedders
      * that want to share a connection pool with other Cobalt subsystems.
      *
      * @param issuer     the token issuer
      * @param httpClient the HTTP client to use
-     * @throws NullPointerException if either argument is {@code null}
+     * @param wamService the WAM service used to commit the per-attempt {@code PsBufferUploadWamEvent}
+     * @throws NullPointerException if any argument is {@code null}
      */
-    public WamPrivateStatsUploader(WamPrivateStatsTokenIssuer issuer, HttpClient httpClient) {
+    public WamPrivateStatsUploader(WamPrivateStatsTokenIssuer issuer, HttpClient httpClient, WamService wamService) {
         this.issuer = Objects.requireNonNull(issuer, "issuer must not be null");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
+        this.wamService = Objects.requireNonNull(wamService, "wamService must not be null");
     }
 
     /**
      * Uploads one WAM private-stats buffer and returns the categorised outcome.
      *
      * <p>Acquires a fresh token via {@link WamPrivateStatsTokenIssuer#issue()}, authenticates the buffer with
-     * {@code HMAC-SHA256(sharedSecret, buffer)}, POSTs the multipart body, and reports the result. The caller
-     * owns retry policy; this method never retries.
+     * {@code HMAC-SHA256(sharedSecret, buffer)}, POSTs the multipart body, and reports the result. The elapsed
+     * wall-clock duration of the whole attempt is measured and, together with the categorised result and the HTTP
+     * status, committed as one {@code PsBufferUploadWamEvent} (id {@code 2244}) on the regular WAM channel via
+     * {@link #emitBufferUploadEvent(WamPrivateStatsUploadResult, long)}. The caller owns retry policy; this method
+     * never retries and emits exactly one event per invocation.
      *
      * @implNote
      * This implementation diverges from the WA Web {@code privateStatsUpload} dependency, which loops with
      * exponential backoff up to 12 attempts per buffer. Cobalt makes exactly one HTTP attempt; transport
      * exceptions and unmapped status codes collapse to {@link WamPrivateStatsUploadResult.Type#ERROR_OTHER}. A
      * token issuance failure short-circuits to {@link WamPrivateStatsUploadResult.Type#ERROR_CREDENTIAL} without
-     * contacting the HTTP layer.
+     * contacting the HTTP layer. Because Cobalt's retry loop lives one level up in the WAM flush pipeline, one
+     * event is committed per HTTP attempt rather than the one-per-buffer cadence WA reaches by retrying inside the
+     * opaque dependency.
      *
      * @param buffer the encoded WAM buffer to ship
      * @return the categorised upload outcome
@@ -161,7 +188,25 @@ public final class WamPrivateStatsUploader {
     @WhatsAppWebExport(moduleName = "WAWebUploadPrivateStatsBackend", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public WamPrivateStatsUploadResult upload(byte[] buffer) {
         Objects.requireNonNull(buffer, "buffer must not be null");
+        var startNanos = System.nanoTime();
+        var result = doUpload(buffer);
+        var uploadMillis = (System.nanoTime() - startNanos) / 1_000_000L;
+        emitBufferUploadEvent(result, uploadMillis);
+        return result;
+    }
 
+    /**
+     * Performs the single HTTP attempt underlying {@link #upload(byte[])} and returns its categorised outcome.
+     *
+     * <p>Issues a fresh token, assembles the multipart body, POSTs it, and maps the HTTP status onto a
+     * {@link WamPrivateStatsUploadResult.Type}. A token issuance failure returns
+     * {@link WamPrivateStatsUploadResult.Type#ERROR_CREDENTIAL} with an HTTP code of {@code -1}; a transport
+     * exception returns {@link WamPrivateStatsUploadResult.Type#ERROR_OTHER} with an HTTP code of {@code -1}.
+     *
+     * @param buffer the encoded WAM buffer to ship
+     * @return the categorised upload outcome
+     */
+    private WamPrivateStatsUploadResult doUpload(byte[] buffer) {
         WamPrivateStatsToken token;
         try {
             token = issuer.issue();
@@ -191,6 +236,66 @@ public final class WamPrivateStatsUploader {
         } catch (Throwable _) {
             return new WamPrivateStatsUploadResult(WamPrivateStatsUploadResult.Type.ERROR_OTHER, -1);
         }
+    }
+
+    /**
+     * Commits one {@code PsBufferUploadWamEvent} (id {@code 2244}) describing the outcome of a single upload
+     * attempt.
+     *
+     * <p>The event carries the four fields the {@code WAWebUploadPrivateStatsBackend} per-buffer metrics callback
+     * populates: the categorised {@link PsBufferUploadResult}, the measured upload duration as a
+     * {@link com.github.auties00.cobalt.wam.model.WamType#TIMER}, the HTTP status returned by the endpoint (or
+     * {@code -1} when the request never reached the server), and the application foreground state. It lands on the
+     * regular WAM channel, so committing it while draining a private buffer cannot recurse into another private
+     * upload.
+     *
+     * @implNote
+     * This implementation always reports {@link ApplicationState#FOREGROUND} because Cobalt runs headless as the
+     * sole active client and has no browser {@code document.visibilityState} to consult; WA Web reports
+     * {@code FOREGROUND} only when the tab is visible. The remaining nine event fields ({@code isFromWamsys},
+     * {@code isRealtime}, {@code isUserSampled}, {@code psBufferSequenceNumber}, {@code psDitheredT},
+     * {@code psForceUpload}, {@code psTokenNotReadyReason}, {@code psUploadReason}, and {@code waConnectedToChatd})
+     * are left unset because the {@code WAWebUploadPrivateStatsBackend} JavaScript callback does not populate them
+     * either; they are written only by the native {@code wamsys} uploader path that Cobalt does not run. The
+     * duration is stored as an {@link Instant} whose epoch-millisecond value is the elapsed milliseconds, matching
+     * the {@code TIMER} encoding used elsewhere in the WAM pipeline.
+     *
+     * @param result       the categorised upload outcome
+     * @param uploadMillis the measured wall-clock duration of the attempt, in milliseconds
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPsBufferUploadWamEvent", exports = "PsBufferUploadWamEvent", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitBufferUploadEvent(WamPrivateStatsUploadResult result, long uploadMillis) {
+        wamService.commit(new PsBufferUploadEventBuilder()
+                .psBufferUploadResult(mapResult(result.result()))
+                .psBufferUploadT(Instant.ofEpochMilli(uploadMillis))
+                .psBufferUploadHttpResponseCode(result.httpResponseCode())
+                .applicationState(ApplicationState.FOREGROUND)
+                .build());
+    }
+
+    /**
+     * Maps a {@link WamPrivateStatsUploadResult.Type} onto its wire {@link PsBufferUploadResult} constant.
+     *
+     * @implNote
+     * This implementation mirrors the internal {@code u} switch of {@code WAWebUploadPrivateStatsBackend}
+     * one-for-one. Cobalt's {@link WamPrivateStatsUploadResult.Type#ERROR_DECODING} is retained for parity even
+     * though {@link #doUpload(byte[])} folds every HTTP {@code 400} into
+     * {@link WamPrivateStatsUploadResult.Type#ERROR_PARSING} and therefore never produces it.
+     *
+     * @param type the internal result type
+     * @return the corresponding wire enum constant
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamEnumPsBufferUploadResult", exports = "PS_BUFFER_UPLOAD_RESULT", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static PsBufferUploadResult mapResult(WamPrivateStatsUploadResult.Type type) {
+        return switch (type) {
+            case SUCCESS -> PsBufferUploadResult.SUCCESS;
+            case ERROR_SERVER_OTHER -> PsBufferUploadResult.ERROR_SERVER_OTHER;
+            case ERROR_PARSING -> PsBufferUploadResult.ERROR_PARSING;
+            case ERROR_DECODING -> PsBufferUploadResult.ERROR_DECODING;
+            case ERROR_CREDENTIAL -> PsBufferUploadResult.ERROR_CREDENTIAL;
+            case ERROR_ACCESS_TOKEN -> PsBufferUploadResult.ERROR_ACCESS_TOKEN;
+            case ERROR_OTHER -> PsBufferUploadResult.ERROR_OTHER;
+        };
     }
 
     /**

@@ -166,7 +166,31 @@ public final class LsfQuantizer {
      * @return the selected indices, quantized LSF vector, and rate-distortion scalars
      */
     public QuantizedLsf quant(int surv, float[] a, float rdwAdj, int voiced, int lowRate) {
-        return quantCore(surv, a, rdwAdj, voiced, lowRate, null);
+        return quantCore(surv, a, null, rdwAdj, voiced, lowRate, null);
+    }
+
+    /**
+     * Quantizes one frame's LSF vector without conditioning on the previous frame, reusing a line-spectral
+     * frequency vector the caller already computed, the port of {@code smpl_lsf_quant}.
+     *
+     * <p>Behaves exactly like {@link #quant(int, float[], float, int, int)} but skips the internal
+     * {@link A2nlsfBridge#a2nlsf(float[])} call and uses the supplied {@code lsf}. The caller must pass the
+     * vector obtained by {@link A2nlsfBridge#a2nlsf(float[])} on the identical {@code a}; because that
+     * conversion is a pure function that does not mutate its input, the result is bit-identical to the
+     * non-threaded overload while transforming the filter to line spectral frequencies only once per frame.
+     *
+     * @param surv    the survivor count, the number of stage-1 candidates carried into stage two; at most
+     *                {@value #LPC_ORDER}
+     * @param a       the monic prediction filter, at least {@value #LPC_ORDER}{@code  + 1} entries with
+     *                {@code a[0] == 1}
+     * @param lsf     the precomputed line spectral frequencies of {@code a}, {@value #LPC_ORDER} entries
+     * @param rdwAdj  the rate-distortion weighting adjustment, {@code RDw_adj}
+     * @param voiced  {@code 0} for the unvoiced class, {@code 1} for the voiced class
+     * @param lowRate {@code 0} for high rate, {@code 1} for low rate
+     * @return the selected indices, quantized LSF vector, and rate-distortion scalars
+     */
+    public QuantizedLsf quant(int surv, float[] a, float[] lsf, float rdwAdj, int voiced, int lowRate) {
+        return quantCore(surv, a, lsf, rdwAdj, voiced, lowRate, null);
     }
 
     /**
@@ -188,6 +212,30 @@ public final class LsfQuantizer {
      * @return the selected indices, quantized LSF vector, and rate-distortion scalars
      */
     public QuantizedLsf quantCond(int surv, float[] a, float[] previousLsf, float rdwAdj, int voiced, int lowRate) {
+        return quantCond(surv, a, previousLsf, null, rdwAdj, voiced, lowRate);
+    }
+
+    /**
+     * Quantizes one frame's LSF vector conditioned on the previous frame, reusing a line-spectral frequency
+     * vector the caller already computed, the port of {@code smpl_lsf_quant_cond}.
+     *
+     * <p>Behaves exactly like {@link #quantCond(int, float[], float[], float, int, int)} but skips the internal
+     * {@link A2nlsfBridge#a2nlsf(float[])} call and uses the supplied {@code lsf}. The caller must pass the
+     * vector obtained by {@link A2nlsfBridge#a2nlsf(float[])} on the identical {@code a}; because that
+     * conversion is a pure function that does not mutate its input, the result is bit-identical to the
+     * non-threaded overload while transforming the filter to line spectral frequencies only once per frame.
+     *
+     * @param surv        the survivor count; at most {@value #LPC_ORDER}
+     * @param a           the monic prediction filter, at least {@value #LPC_ORDER}{@code  + 1} entries
+     * @param previousLsf the previous frame's reconstructed LSF vector, {@value #LPC_ORDER} entries
+     * @param lsf         the precomputed line spectral frequencies of {@code a}, {@value #LPC_ORDER} entries
+     * @param rdwAdj      the rate-distortion weighting adjustment, {@code RDw_adj}
+     * @param voiced      {@code 0} for unvoiced, {@code 1} for voiced
+     * @param lowRate     {@code 0} for high rate, {@code 1} for low rate
+     * @return the selected indices, quantized LSF vector, and rate-distortion scalars
+     */
+    public QuantizedLsf quantCond(int surv, float[] a, float[] previousLsf, float[] lsf, float rdwAdj,
+                                  int voiced, int lowRate) {
         Stage1 dec = codebook.stage1(voiced);
         LsfStage1 enc = search.stage1(voiced);
         float[] mean = dec.mean();
@@ -206,7 +254,7 @@ public final class LsfQuantizer {
 
         float bitsCond = enc.bitsCond()[CB_CENTROIDS];
         CondParams cond = new CondParams(st1CbHalf, st1CbCinv, st1We, st1Wie, bitsCond);
-        return quantCore(surv, a, rdwAdj, voiced, lowRate, cond);
+        return quantCore(surv, a, lsf, rdwAdj, voiced, lowRate, cond);
     }
 
     /**
@@ -236,19 +284,23 @@ public final class LsfQuantizer {
      * conditional centroid is appended as the {@value #CB_CENTROIDS}th stage-1 candidate and the conditional
      * stage-1 bit costs are used.
      *
-     * @param surv    the survivor count
-     * @param a       the monic prediction filter
-     * @param rdwAdj  the rate-distortion weighting adjustment
-     * @param voiced  {@code 0} for unvoiced, {@code 1} for voiced
-     * @param lowRate {@code 0} for high rate, {@code 1} for low rate
-     * @param cond    the conditional centroid parameters, or {@code null} for the non-conditional path
+     * @param surv           the survivor count
+     * @param a              the monic prediction filter
+     * @param precomputedLsf the line spectral frequencies of {@code a} if the caller already computed them, or
+     *                       {@code null} to convert {@code a} here; when non-{@code null} it must equal
+     *                       {@link A2nlsfBridge#a2nlsf(float[])} on the identical {@code a}
+     * @param rdwAdj         the rate-distortion weighting adjustment
+     * @param voiced         {@code 0} for unvoiced, {@code 1} for voiced
+     * @param lowRate        {@code 0} for high rate, {@code 1} for low rate
+     * @param cond           the conditional centroid parameters, or {@code null} for the non-conditional path
      * @return the selected indices, quantized LSF vector, and rate-distortion scalars
      */
-    private QuantizedLsf quantCore(int surv, float[] a, float rdwAdj, int voiced, int lowRate, CondParams cond) {
+    private QuantizedLsf quantCore(int surv, float[] a, float[] precomputedLsf, float rdwAdj, int voiced,
+                                   int lowRate, CondParams cond) {
         Stage1 dec = codebook.stage1(voiced);
         LsfStage1 enc = search.stage1(voiced);
 
-        float[] lsf = A2nlsfBridge.a2nlsf(a);
+        float[] lsf = precomputedLsf != null ? precomputedLsf : A2nlsfBridge.a2nlsf(a);
         float[] wlsf = spectralWeights(a, lsf);
 
         float qstep = search.qstep(voiced, lowRate);

@@ -6,6 +6,10 @@ import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.ack.AckSender;
+import com.github.auties00.cobalt.bot.BotCertificateRevocationService;
+import com.github.auties00.cobalt.bot.BotSignatureVerificationService;
+import com.github.auties00.cobalt.bot.LiveBotCertificateRevocationService;
+import com.github.auties00.cobalt.bot.LiveBotSignatureVerificationService;
 import com.github.auties00.cobalt.calls2.Calls2Service;
 import com.github.auties00.cobalt.calls2.LiveCalls2Service;
 import com.github.auties00.cobalt.calls2.core.Calls2EngineAssembler;
@@ -15,11 +19,13 @@ import com.github.auties00.cobalt.calls2.stream.VideoInput;
 import com.github.auties00.cobalt.calls2.stream.VideoOutput;
 import com.github.auties00.cobalt.calls2.sync.Calls2CallLogSync;
 import com.github.auties00.cobalt.client.WhatsAppClientDisconnectReason;
-import com.github.auties00.cobalt.device.DeviceService;
-import com.github.auties00.cobalt.device.LiveDeviceService;
 import com.github.auties00.cobalt.ctwa.CtwaConversionSignalService;
 import com.github.auties00.cobalt.ctwa.LiveCtwaConversionSignalService;
+import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.device.LiveDeviceService;
 import com.github.auties00.cobalt.exception.*;
+import com.github.auties00.cobalt.export.ChatExporterService;
+import com.github.auties00.cobalt.export.LiveChatExporterService;
 import com.github.auties00.cobalt.graphql.FacebookGraphQlClient;
 import com.github.auties00.cobalt.graphql.WhatsAppGraphQlClient;
 import com.github.auties00.cobalt.graphql.facebook.FacebookGraphQlOperation;
@@ -66,7 +72,9 @@ import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.migration.LiveInactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LiveLidMigrationService;
 import com.github.auties00.cobalt.model.bot.AiThreadTitleBuilder;
+import com.github.auties00.cobalt.model.bot.BotMetadata;
 import com.github.auties00.cobalt.model.bot.profile.*;
+import com.github.auties00.cobalt.model.bot.response.AIRichResponseUnifiedResponse;
 import com.github.auties00.cobalt.model.business.*;
 import com.github.auties00.cobalt.model.business.acs.AnonymousCredentialIssuance;
 import com.github.auties00.cobalt.model.business.acs.AnonymousCredentialIssuanceRequest;
@@ -92,7 +100,6 @@ import com.github.auties00.cobalt.model.business.order.BusinessOrder;
 import com.github.auties00.cobalt.model.business.order.BusinessOrderItem;
 import com.github.auties00.cobalt.model.business.order.OrderLifecycleStatus;
 import com.github.auties00.cobalt.model.business.order.OrderPaymentStatus;
-import com.github.auties00.cobalt.model.message.interactive.*;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerification;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerificationBuilder;
 import com.github.auties00.cobalt.model.business.postcode.BusinessPostcodeVerificationResult;
@@ -108,12 +115,14 @@ import com.github.auties00.cobalt.model.business.waa.*;
 import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSession;
 import com.github.auties00.cobalt.model.business.webgraphql.WhatsAppWebGraphQlSessionBuilder;
 import com.github.auties00.cobalt.model.call.*;
+import com.github.auties00.cobalt.model.call.CallLinkMedia;
 import com.github.auties00.cobalt.model.chat.*;
-import com.github.auties00.cobalt.export.ChatExporterService;
-import com.github.auties00.cobalt.export.LiveChatExporterService;
 import com.github.auties00.cobalt.model.chat.community.*;
 import com.github.auties00.cobalt.model.chat.group.*;
 import com.github.auties00.cobalt.model.contact.*;
+import com.github.auties00.cobalt.model.contact.UsernameState;
+import com.github.auties00.cobalt.model.device.DeviceProps;
+import com.github.auties00.cobalt.model.device.DevicePropsHistorySyncConfigBuilder;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload;
 import com.github.auties00.cobalt.model.error.DisconnectCode;
 import com.github.auties00.cobalt.model.federated.*;
@@ -121,39 +130,32 @@ import com.github.auties00.cobalt.model.jid.*;
 import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.media.SizedInputStream;
 import com.github.auties00.cobalt.model.message.*;
+import com.github.auties00.cobalt.model.message.bot.AIRichResponseMessage;
 import com.github.auties00.cobalt.model.message.call.ScheduledCallCreationMessage;
 import com.github.auties00.cobalt.model.message.call.ScheduledCallCreationMessageBuilder;
 import com.github.auties00.cobalt.model.message.call.ScheduledCallEditMessage;
 import com.github.auties00.cobalt.model.message.call.ScheduledCallEditMessageBuilder;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.context.ContextInfoBuilder;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessageBuilder;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessageNativeFlowMessageBuilder;
+import com.github.auties00.cobalt.model.message.interactive.NativeFlowMessageInteractiveMessageNativeFlowButtonBuilder;
 import com.github.auties00.cobalt.model.message.media.*;
 import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.poll.PollEncValueBuilder;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessageBuilder;
-import com.github.auties00.cobalt.model.message.status.StatusPSA;
-import com.github.auties00.cobalt.model.message.status.StatusAttribution;
-import com.github.auties00.cobalt.model.message.status.StatusAttributionBuilder;
-import com.github.auties00.cobalt.model.message.status.StatusAttributionStatusReshareBuilder;
-import com.github.auties00.cobalt.model.message.status.StatusReshareStatusAttributionMetadataBuilder;
-import com.github.auties00.cobalt.model.message.context.ContextInfoBuilder;
-import com.github.auties00.cobalt.model.message.text.ExtendedTextMessageBuilder;
+import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
+import com.github.auties00.cobalt.model.message.status.*;
 import com.github.auties00.cobalt.model.message.system.PinInChatMessage;
 import com.github.auties00.cobalt.model.message.system.PinInChatMessageBuilder;
-import com.github.auties00.cobalt.model.device.DeviceProps;
-import com.github.auties00.cobalt.model.device.DevicePropsHistorySyncConfigBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
 import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandConfigBuilder;
 import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandRequestMetadataBuilder;
-import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessage;
-import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageBuilder;
-import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageFullHistorySyncOnDemandRequestBuilder;
-import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageHistorySyncOnDemandRequestBuilder;
-import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessagePlaceholderMessageResendRequestBuilder;
-import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestType;
-import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
+import com.github.auties00.cobalt.model.message.system.peer.*;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessageBuilder;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessageBuilder;
 import com.github.auties00.cobalt.model.newsletter.*;
@@ -174,10 +176,10 @@ import com.github.auties00.cobalt.model.setting.privacy.OptOutListUpdate;
 import com.github.auties00.cobalt.model.setting.privacy.OptOutTarget;
 import com.github.auties00.cobalt.model.setting.push.PushConfig;
 import com.github.auties00.cobalt.model.signal.*;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.action.SyncActionMessageRangeBuilder;
 import com.github.auties00.cobalt.model.sync.action.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameAction;
 import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestAction;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
@@ -200,9 +202,25 @@ import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSet
 import com.github.auties00.cobalt.model.sync.action.setting.*;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.net.*;
+import com.github.auties00.vigil.ConnectivityMonitor;
+import com.github.auties00.cobalt.pairing.CompanionPairingService;
+import com.github.auties00.cobalt.pairing.LiveCompanionPairingService;
+import com.github.auties00.cobalt.pairing.LiveShortcakePairingService;
+import com.github.auties00.cobalt.pairing.ShortcakePairingService;
+import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
+import com.github.auties00.cobalt.privacy.TrustedContactTokenService;
+import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.props.LiveABPropsService;
+import com.github.auties00.cobalt.quarantine.LiveQuarantineService;
+import com.github.auties00.cobalt.quarantine.QuarantineService;
+import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
+import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
+import com.github.auties00.cobalt.socket.WhatsAppSocketStanza;
 import com.github.auties00.cobalt.stanza.Stanza;
 import com.github.auties00.cobalt.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.stanza.iq.IqStanza;
+import com.github.auties00.cobalt.stanza.iq.account.IqUnpairDeviceRequest;
+import com.github.auties00.cobalt.stanza.iq.account.IqUnpairDeviceResponse;
 import com.github.auties00.cobalt.stanza.iq.biz.*;
 import com.github.auties00.cobalt.stanza.iq.ctwa.IqQueryCtwaContextRequest;
 import com.github.auties00.cobalt.stanza.iq.ctwa.IqQueryCtwaContextResponse;
@@ -213,16 +231,18 @@ import com.github.auties00.cobalt.stanza.iq.dirty.IqClearDirtyBitsRequest;
 import com.github.auties00.cobalt.stanza.iq.dirty.IqClearDirtyBitsResponse;
 import com.github.auties00.cobalt.stanza.iq.disappearing.IqQueryDisappearingModeRequest;
 import com.github.auties00.cobalt.stanza.iq.disappearing.IqQueryDisappearingModeResponse;
+import com.github.auties00.cobalt.stanza.iq.disappearing.IqSetDisappearingModeRequest;
+import com.github.auties00.cobalt.stanza.iq.disappearing.IqSetDisappearingModeResponse;
 import com.github.auties00.cobalt.stanza.iq.encrypt.*;
 import com.github.auties00.cobalt.stanza.iq.group.*;
+import com.github.auties00.cobalt.stanza.iq.privacy.*;
 import com.github.auties00.cobalt.stanza.iq.profilepicture.IqSendProfilePictureRequest;
 import com.github.auties00.cobalt.stanza.iq.profilepicture.IqSendProfilePictureResponse;
 import com.github.auties00.cobalt.stanza.iq.push.IqGetPushServerSettingsRequest;
 import com.github.auties00.cobalt.stanza.iq.push.IqGetPushServerSettingsResponse;
 import com.github.auties00.cobalt.stanza.iq.stats.IqIssuePrivateStatsTokenRequest;
 import com.github.auties00.cobalt.stanza.iq.stats.IqIssuePrivateStatsTokenResponse;
-import com.github.auties00.cobalt.stanza.iq.status.IqSetAboutRequest;
-import com.github.auties00.cobalt.stanza.iq.status.IqSetAboutResponse;
+import com.github.auties00.cobalt.stanza.iq.status.*;
 import com.github.auties00.cobalt.stanza.iq.tos.*;
 import com.github.auties00.cobalt.stanza.mex.MexStanza;
 import com.github.auties00.cobalt.stanza.mex.json.MexGroupQueryContext;
@@ -260,6 +280,7 @@ import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModeActiveI
 import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModeActiveIQResponse;
 import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModePassiveIQRequest;
 import com.github.auties00.cobalt.stanza.smax.passivemode.SmaxPassiveModePassiveIQResponse;
+import com.github.auties00.cobalt.stanza.smax.pings.SmaxPingsClientRequest;
 import com.github.auties00.cobalt.stanza.smax.prekeys.SmaxPreKeysFetchKeyBundlesRequest;
 import com.github.auties00.cobalt.stanza.smax.prekeys.SmaxPreKeysFetchKeyBundlesResponse;
 import com.github.auties00.cobalt.stanza.smax.prekeys.SmaxPreKeysFetchMissingPreKeysRequest;
@@ -291,26 +312,6 @@ import com.github.auties00.cobalt.stanza.usync.*;
 import com.github.auties00.cobalt.stanza.usync.protocol.UsyncContactProtocol;
 import com.github.auties00.cobalt.stanza.usync.result.ContactResult;
 import com.github.auties00.cobalt.stanza.usync.result.UsyncProtocolError;
-import com.github.auties00.cobalt.pairing.CompanionPairingService;
-import com.github.auties00.cobalt.pairing.LiveCompanionPairingService;
-import com.github.auties00.cobalt.privacy.LiveTrustedContactTokenService;
-import com.github.auties00.cobalt.privacy.TrustedContactTokenService;
-import com.github.auties00.cobalt.props.ABPropsService;
-import com.github.auties00.cobalt.props.LiveABPropsService;
-import com.github.auties00.cobalt.tos.LiveTosService;
-import com.github.auties00.cobalt.quarantine.LiveQuarantineService;
-import com.github.auties00.cobalt.quarantine.QuarantineService;
-import com.github.auties00.cobalt.bot.BotCertificateRevocationService;
-import com.github.auties00.cobalt.bot.BotSignatureVerificationService;
-import com.github.auties00.cobalt.bot.LiveBotCertificateRevocationService;
-import com.github.auties00.cobalt.bot.LiveBotSignatureVerificationService;
-import com.github.auties00.cobalt.model.bot.BotMetadata;
-import com.github.auties00.cobalt.model.bot.response.AIRichResponseUnifiedResponse;
-import com.github.auties00.cobalt.model.message.bot.AIRichResponseMessage;
-import com.github.auties00.cobalt.tos.TosService;
-import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
-import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
-import com.github.auties00.cobalt.socket.WhatsAppSocketStanza;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppAccountStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppBusinessStore;
 import com.github.auties00.cobalt.store.linked.LinkedWhatsAppStore;
@@ -324,17 +325,18 @@ import com.github.auties00.cobalt.sync.handler.BusinessBroadcastAssociationHandl
 import com.github.auties00.cobalt.sync.handler.PinChatHandler;
 import com.github.auties00.cobalt.sync.handler.SyncdIndexUtils;
 import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
+import com.github.auties00.cobalt.tos.LiveTosService;
+import com.github.auties00.cobalt.tos.TosService;
 import com.github.auties00.cobalt.util.BusinessLabelConstants;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.util.RandomIdUtils;
-import com.github.auties00.cobalt.wam.LiveWamService;
-import com.github.auties00.cobalt.wam.WamMsgUtils;
-import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.*;
 import com.github.auties00.cobalt.wam.event.*;
 import com.github.auties00.cobalt.wam.threadlogging.LiveThreadLoggingService;
 import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingActivity;
 import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingMessages;
 import com.github.auties00.cobalt.wam.threadlogging.ThreadLoggingService;
+import com.github.auties00.cobalt.wam.synthetic.*;
 import com.github.auties00.cobalt.wam.type.*;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -362,6 +364,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
@@ -548,6 +551,23 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      */
     private final WamService wamService;
     /**
+     * A stable per-client application session identifier, formatted as a random
+     * UUID string, used to populate the {@code appSessionId} dimension of WAM
+     * user-journey events (label, favorites, pin-in-chat, group bulk removal)
+     * that WhatsApp Web derives from its per-tab session token. It is minted once
+     * at construction so every telemetry event committed during the life of this
+     * client shares one session id, matching WA Web's per-session grouping.
+     */
+    private final String wamAppSessionId = UUID.randomUUID().toString();
+    /**
+     * A monotonically increasing counter backing the {@code sequenceNumber} and
+     * {@code seqId} dimensions of ordered WAM journey events (business
+     * interaction, click-to-WhatsApp ad-creation journey). WhatsApp Web assigns
+     * each such event a strictly increasing sequence number within a session;
+     * this counter reproduces that ordering across every event this client emits.
+     */
+    private final AtomicLong wamJourneySequence = new AtomicLong();
+    /**
      * The service that writes chat export ZIP archives.
      */
     private final ChatExporterService chatExporterService;
@@ -564,6 +584,70 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      */
     private final CtwaConversionSignalService ctwaConversionSignalService;
     /**
+     * The synthetic-telemetry emitter that reports the business-account snapshot once per connect.
+     */
+    private final SyntheticBusinessTelemetry syntheticBusinessTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the messaging-subsystem snapshot once per connect.
+     */
+    private final SyntheticMessagingTelemetry syntheticMessagingTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the browser-performance snapshot once per connect.
+     */
+    private final SyntheticBrowserPerfTelemetry browserPerfTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the media-subsystem snapshot once per connect.
+     */
+    private final SyntheticMediaTelemetry syntheticMediaTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the privacy-and-safety snapshot once per connect.
+     */
+    private final SyntheticPrivacySafetyTelemetry syntheticPrivacySafetyTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the UI-interaction snapshot once per connect.
+     */
+    private final SyntheticUiInteractionTelemetry syntheticUiInteractionTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the group-and-community snapshot once per connect.
+     */
+    private final SyntheticGroupTelemetry syntheticGroupTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the settings snapshot once per connect.
+     */
+    private final SyntheticSettingsTelemetry settingsTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the channel snapshot once per connect.
+     */
+    private final SyntheticChannelTelemetry syntheticChannelTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the status snapshot once per connect.
+     */
+    private final SyntheticStatusTelemetry syntheticStatusTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the user-activity snapshot once per connect.
+     */
+    private final SyntheticUserActivityTelemetry userActivityTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the AI-bot snapshot once per connect.
+     */
+    private final SyntheticAiBotTelemetry syntheticAiBotTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the contacts snapshot once per connect.
+     */
+    private final SyntheticContactsTelemetry syntheticContactsTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the crash snapshot once per connect.
+     */
+    private final SyntheticCrashTelemetry syntheticCrashTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the voice-note snapshot once per connect.
+     */
+    private final SyntheticVoiceNoteTelemetry voiceNoteTelemetry;
+    /**
+     * The synthetic-telemetry emitter that reports the call snapshot once per connect.
+     */
+    private final SyntheticCallTelemetry syntheticCallTelemetry;
+    /**
      * The per-protocol backoff registry consulted before every USync
      * dispatch and updated when the relay returns an
      * {@code error_backoff} hint. Mirrors the {@code WAWebUsyncBackoff}
@@ -574,6 +658,18 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * The service that drives the web companion pairing ceremony.
      */
     private final CompanionPairingService companionPairingService;
+
+    /**
+     * The passkey authenticator used for passkey companion linking and the server-pushed integrity
+     * checkpoint, taken from the {@link LinkedWhatsAppClientVerificationHandler.Web.Passkey} handler,
+     * or {@code null} when the verification handler is not a passkey handler.
+     */
+    private final LinkedWhatsAppClientPasskeyAuthenticator passkeyAuthenticator;
+
+    /**
+     * The service that drives the Shortcake passkey companion-linking ceremony.
+     */
+    private final ShortcakePairingService shortcakePairingService;
     /**
      * The service that recovers app-state snapshots after a sync failure.
      */
@@ -831,7 +927,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * <p>Started in the constructor and shared across every connect cycle for
      * the client's lifetime; its event thread is a daemon.
      */
-    private final NetworkConnectivityMonitor connectivityMonitor;
+    private final ConnectivityMonitor connectivityMonitor;
     /**
      * Drives reconnection with capped exponential backoff on a dedicated
      * thread, gated by the {@link ConnectionState#TERMINATED} state so it idles
@@ -870,6 +966,19 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     private static final Duration TC_TOKEN_TIMEOUT = Duration.ofSeconds(5);
 
     /**
+     * Holds the bound on how long a disconnect waits for the final WAM telemetry flush before
+     * proceeding with the teardown.
+     *
+     * @implNote This implementation uses two seconds: a healthy connection ships the final
+     * {@code w:stats} buffer well within it, while a disconnect driven by an unresponsive or
+     * half-dead session (a logout the server never answers) is not held up. The flush runs on a
+     * daemon virtual thread joined with this bound, mirroring {@link #flushDirtyCollectionsWithTimeout()};
+     * if the join expires the upload is left to unblock when the socket is torn down a few lines later
+     * (its pending response future is completed in {@link #disconnect0(WhatsAppClientDisconnectReason, boolean)}).
+     */
+    private static final Duration WAM_CLOSE_TIMEOUT = Duration.ofSeconds(2);
+
+    /**
      * Maps a peer's user JID to the waiter of the call currently blocked in
      * {@link #queryTrustedContactToken(JidProvider, Duration)} for that peer.
      *
@@ -906,6 +1015,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     LiveLinkedWhatsAppClient(LinkedWhatsAppStore store, LinkedWhatsAppClientVerificationHandler.Web webVerificationHandler, WhatsAppLinkedClientErrorHandler errorHandler) {
         this.store = Objects.requireNonNull(store, "store cannot be null");
         this.errorHandler = Objects.requireNonNull(errorHandler, "errorHandler cannot be null");
+        this.passkeyAuthenticator = webVerificationHandler instanceof LinkedWhatsAppClientVerificationHandler.Web.Passkey passkeyHandler
+                ? passkeyHandler.authenticator(store)
+                : null;
         if ((store.accountStore().clientType() == LinkedWhatsAppClientType.WEB) == (webVerificationHandler == null)) {
             throw new IllegalArgumentException("webVerificationHandler cannot be null when client type is WEB");
         }
@@ -920,19 +1032,36 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         this.tosService = new LiveTosService(this, abPropsService);
         this.botCertificateRevocationService = new LiveBotCertificateRevocationService(this);
         this.trustedContactTokenService = new LiveTrustedContactTokenService(abPropsService);
-        this.mediaConnectionService = new LiveMediaConnectionService(abPropsService);
-        this.mediaTranscoderService = new LiveMediaTranscoderService(this, abPropsService, mediaConnectionService);
         this.wamService = new LiveWamService(this, abPropsService);
+        ((LiveABPropsService) abPropsService).setWamService(wamService);
+        this.mediaConnectionService = new LiveMediaConnectionService(abPropsService, wamService);
+        this.mediaTranscoderService = new LiveMediaTranscoderService(this, abPropsService, mediaConnectionService, wamService);
         this.chatExporterService = new LiveChatExporterService(this, wamService);
         this.dailyStatsService = new LiveDailyStatsService(this, wamService);
         this.threadLoggingService = new LiveThreadLoggingService(this, wamService);
         this.ctwaConversionSignalService = new LiveCtwaConversionSignalService(this, wamService, abPropsService);
+        this.syntheticBusinessTelemetry = new SyntheticBusinessTelemetry(this, wamService);
+        this.syntheticMessagingTelemetry = new SyntheticMessagingTelemetry(this, wamService);
+        this.browserPerfTelemetry = new SyntheticBrowserPerfTelemetry(this, wamService);
+        this.syntheticMediaTelemetry = new SyntheticMediaTelemetry(this, wamService);
+        this.syntheticPrivacySafetyTelemetry = new SyntheticPrivacySafetyTelemetry(this, wamService);
+        this.syntheticUiInteractionTelemetry = new SyntheticUiInteractionTelemetry(this, wamService);
+        this.syntheticGroupTelemetry = new SyntheticGroupTelemetry(this, wamService);
+        this.settingsTelemetry = new SyntheticSettingsTelemetry(this, wamService);
+        this.syntheticChannelTelemetry = new SyntheticChannelTelemetry(this, wamService);
+        this.syntheticStatusTelemetry = new SyntheticStatusTelemetry(this, wamService);
+        this.userActivityTelemetry = new SyntheticUserActivityTelemetry(this, wamService);
+        this.syntheticAiBotTelemetry = new SyntheticAiBotTelemetry(this, wamService);
+        this.syntheticContactsTelemetry = new SyntheticContactsTelemetry(this, wamService);
+        this.syntheticCrashTelemetry = new SyntheticCrashTelemetry(this, wamService);
+        this.voiceNoteTelemetry = new SyntheticVoiceNoteTelemetry(this, wamService);
+        this.syntheticCallTelemetry = new SyntheticCallTelemetry(this, wamService);
         this.botSignatureVerificationService = new LiveBotSignatureVerificationService(abPropsService, wamService, botCertificateRevocationService);
         this.quarantineService = new LiveQuarantineService(this, abPropsService, wamService);
         this.snapshotRecoveryService = new LiveSnapshotRecoveryService(this, abPropsService, wamService);
         this.lidMigrationService = new LiveLidMigrationService(this, abPropsService, wamService);
         this.webAppStateService = new LiveWebAppStateService(this, abPropsService, lidMigrationService, snapshotRecoveryService, wamService, mediaConnectionService);
-        this.pinChatMutationFactory = new PinChatMutationFactory();
+        this.pinChatMutationFactory = new PinChatMutationFactory(wamService);
         this.archiveChatMutationFactory = new ArchiveChatMutationFactory(pinChatMutationFactory);
         this.muteChatMutationFactory = new MuteChatMutationFactory(abPropsService);
         this.markChatAsReadMutationFactory = new MarkChatAsReadMutationFactory();
@@ -946,11 +1075,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         this.chatAssignmentMutationFactory = new ChatAssignmentMutationFactory();
         this.chatAssignmentOpenedStatusMutationFactory = new ChatAssignmentOpenedStatusMutationFactory();
         this.businessBroadcastListMutationFactory = new BusinessBroadcastListMutationFactory();
-        this.businessBroadcastCampaignMutationFactory = new BusinessBroadcastCampaignMutationFactory();
+        this.businessBroadcastCampaignMutationFactory = new BusinessBroadcastCampaignMutationFactory(wamService);
         this.favoriteStickerMutationFactory = new FavoriteStickerMutationFactory();
         this.removeRecentStickerMutationFactory = new RemoveRecentStickerMutationFactory();
-        this.botWelcomeRequestMutationFactory = new BotWelcomeRequestMutationFactory();
-        this.aiThreadRenameMutationFactory = new AiThreadRenameMutationFactory();
+        this.botWelcomeRequestMutationFactory = new BotWelcomeRequestMutationFactory(wamService);
+        this.aiThreadRenameMutationFactory = new AiThreadRenameMutationFactory(this, wamService);
         this.aiThreadDeleteMutationFactory = new AiThreadDeleteMutationFactory();
         this.favoritesMutationFactory = new FavoritesMutationFactory();
         this.noteEditMutationFactory = new NoteEditMutationFactory();
@@ -980,6 +1109,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         this.usyncBackoff = new UsyncBackoff();
         this.pendingSocketRequests = new ConcurrentHashMap<>();
         this.companionPairingService = new LiveCompanionPairingService(this, webVerificationHandler);
+        this.shortcakePairingService = new LiveShortcakePairingService(this, webVerificationHandler, passkeyAuthenticator);
         var calls2EventBus = new com.github.auties00.cobalt.calls2.core.LiveCallEventBus(this);
         var calls2Engine = Calls2EngineAssembler.assemble(this, messageEncryption, messageService, deviceService, store, abPropsService, calls2EventBus);
         this.calls2CallLogSync = new Calls2CallLogSync(this, callLogMutationFactory, webAppStateService);
@@ -988,17 +1118,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         this.calls2Service = liveCalls2Service;
         calls2Engine.bindResultSink(liveCalls2Service::recordCallResult);
         var ackSender = new AckSender(this);
-        this.nodeStreamService = new LiveNodeStreamService(this, calls2Service, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService, webAppStateService, companionPairingService, ackSender, mediaConnectionService, tosService, quarantineService);
+        this.nodeStreamService = new LiveNodeStreamService(this, calls2Service, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService, webAppStateService, companionPairingService, shortcakePairingService, ackSender, mediaConnectionService, tosService, quarantineService, passkeyAuthenticator);
         this.disconnecting = new AtomicBoolean();
         this.state = new AtomicReference<>(ConnectionState.ACTIVE);
-        this.connectivityMonitor = NetworkConnectivityMonitors.systemDefault();
+        this.connectivityMonitor = ConnectivityMonitor.create();
         this.reconnectSupervisor = new ReconnectSupervisor(this::reconnectAttempt, this::isConnected, () -> state.get() == ConnectionState.TERMINATED, connectivityMonitor, new Random());
         this.keepAliveService = new LiveKeepAliveService(this::sendPing, () -> disconnect(WhatsAppClientDisconnectReason.RECONNECTING));
         this.facebookGraphQlRefreshLock = new ReentrantLock();
         this.webGraphQlRefreshLock = new ReentrantLock();
         this.tcTokenWaiters = new ConcurrentHashMap<>();
         store.addListener((LinkedTrustedContactTokenListener) this::deliverTrustedContactToken);
-        connectivityMonitor.start(reconnectSupervisor::onConnectivityRegained);
+        connectivityMonitor.addListener(event -> {
+            if (event.wentOnline()) {
+                reconnectSupervisor.onConnectivityRegained();
+            }
+        });
+        connectivityMonitor.start();
     }
 
     /** {@inheritDoc} */
@@ -1099,6 +1234,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             // example the stream:error 515 that follows a successful pair-success) can race the
             // reader thread into nulling the field before we reach this WAM commit.
             emitWebcSocketConnectEvent(client, reason);
+            // WA Web's StreamModel transitions to MAIN once the socket is live; a null reason marks
+            // the initial (non-reconnect) connect, which is where WA Web aggregates the login journey.
+            emitWebcStreamModeChangeEvent(WebcStreamModeCode.MAIN);
+            if (reason == null) {
+                emitWebcLoginEvent();
+            }
         }
     }
 
@@ -1136,6 +1277,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         keepAliveService.start();
         dailyStatsService.start();
         threadLoggingService.start();
+        syntheticBusinessTelemetry.emitSessionTelemetry();
+        syntheticMessagingTelemetry.emitSessionTelemetry();
+        browserPerfTelemetry.emitSessionTelemetry();
+        syntheticMediaTelemetry.emitSessionTelemetry();
+        syntheticPrivacySafetyTelemetry.emitPrivacySafetyTelemetry();
+        syntheticUiInteractionTelemetry.emitSessionTelemetry();
+        syntheticGroupTelemetry.emitGroupTelemetry();
+        settingsTelemetry.emitSettingsTelemetry();
+        syntheticChannelTelemetry.emitSessionTelemetry();
+        syntheticStatusTelemetry.emitSessionTelemetry();
+        userActivityTelemetry.emitSessionTelemetry();
+        syntheticAiBotTelemetry.emitSessionTelemetry();
+        syntheticContactsTelemetry.emitSessionTelemetry();
+        syntheticCrashTelemetry.emitSessionTelemetry();
+        voiceNoteTelemetry.emitSessionTelemetry();
+        syntheticCallTelemetry.emitSessionTelemetry();
     }
 
     /**
@@ -1284,16 +1441,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             }
         }
 
+        // WA Web's StreamModel records an OFFLINE transition when the connection is torn down; only
+        // web sessions emit stream-mode telemetry, and reconnects are handled by the guard above.
+        if (store.accountStore().clientType() == LinkedWhatsAppClientType.WEB) {
+            emitWebcStreamModeChangeEvent(WebcStreamModeCode.OFFLINE);
+        }
+
         // Flush pending sentinel mutations before disconnecting so key expiration is
         // propagated; the wait is bounded so the logout cannot block indefinitely if a flush stalls.
         // When the failure path already marked the session terminal the flush sends fail fast
         // rather than writing to a stream the server has already ended.
         if (reason == WhatsAppClientDisconnectReason.LOGGED_OUT
-                || reason == WhatsAppClientDisconnectReason.DISCONNECTED) {
+            || reason == WhatsAppClientDisconnectReason.DISCONNECTED) {
             flushDirtyCollectionsWithTimeout();
         }
 
-        wamService.close();
+        closeWamServiceWithTimeout();
 
         if (reason != WhatsAppClientDisconnectReason.RECONNECTING) {
             state.set(ConnectionState.TERMINATED);
@@ -1408,6 +1571,47 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
     }
 
+    /**
+     * Closes the WAM telemetry service on a daemon virtual thread joined with {@link #WAM_CLOSE_TIMEOUT}
+     * so a final telemetry upload cannot stall the disconnect.
+     *
+     * <p>{@link WamService#close()} cancels the recurring schedulers and then attempts one final
+     * {@code w:stats} upload of any buffered events. That upload blocks on a server response, and on a
+     * disconnect the response future is only completed once the socket is torn down later in
+     * {@link #disconnect0(WhatsAppClientDisconnectReason, boolean)}, so running the close inline would
+     * make the teardown wait for the upload's own request timeout. Running it on a joined daemon thread
+     * bounds the wait: a healthy session finishes within the timeout, and a session whose server never
+     * answers proceeds anyway, the upload unblocking when its pending request is completed during the
+     * socket teardown. Exceptions from the close are swallowed because the disconnect must not be
+     * blocked by a telemetry failure.
+     */
+    private void closeWamServiceWithTimeout() {
+        var closeThread = Thread.ofVirtual()
+                .name("CobaltWamClose")
+                .unstarted(() -> {
+                    try {
+                        wamService.close();
+                    } catch (Exception _) {
+                        // Best-effort: don't let a telemetry-flush failure block disconnect
+                    }
+                });
+        closeThread.start();
+
+        try {
+            closeThread.join(WAM_CLOSE_TIMEOUT.toMillis());
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+
+        if (closeThread.isAlive()) {
+            System.getLogger(LiveLinkedWhatsAppClient.class.getName())
+                    .log(System.Logger.Level.WARNING,
+                            "WAM telemetry flush did not complete within {0}ms, proceeding with disconnect",
+                            WAM_CLOSE_TIMEOUT.toMillis());
+        }
+    }
+
     /** {@inheritDoc} */
     @Override
     public void sendNodeWithNoResponse(Stanza stanza) {
@@ -1508,12 +1712,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxOutPingsClientRequest", exports = "makeClientRequest",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private Stanza sendPing(Duration timeout) {
-        var iq = new StanzaBuilder()
-                .description("iq")
-                .attribute("type", "get")
-                .attribute("xmlns", "w:p")
-                .attribute("to", JidServer.user());
-        return sendNode(iq, null, timeout);
+        var request = new SmaxPingsClientRequest();
+        return sendNode(request.toStanza(), null, timeout);
     }
 
     /** {@inheritDoc} */
@@ -1579,42 +1779,144 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<WhatsAppWebGraphQlSession> refreshWhatsAppWebGraphQlSession() {
         webGraphQlRefreshLock.lock();
         try {
+            var deviceId = store.accountStore().jid().map(Jid::device).orElse(0);
             var existing = store.webSessionStore().whatsAppWebGraphQlSession().orElse(null);
-            if (existing == null || existing.canonicalAccessToken() == null) {
+            if (existing != null && existing.canonicalAccessToken() != null) {
+                return Optional.of(bootstrapAndExchange(existing.canonicalAccessToken(), existing.fbid(), deviceId));
+            }
+            var recovered = fetchCachedNonceToken().orElse(null);
+            if (recovered == null) {
+                // TODO: port WA's COMPANION_CANONICAL_USER_NONCE_FETCH peer-nonce fallback, which asks the
+                //  primary device for a fresh canonical nonce when the cached-nonce mutation yields nothing
                 throw new WhatsAppWebGraphQlException.SessionUnseeded();
             }
-            var deviceId = store.accountStore().jid().map(Jid::device).orElse(0);
-            var bootstrap = new WhatsAppWebGraphQlBootstrapClient();
-            String lsd;
-            try {
-                lsd = bootstrap.fetchLsd();
-            } catch (Exception exception) {
-                throw new WhatsAppWebGraphQlException.LsdFetchFailed(exception);
-            }
-            var credentials = new CanonicalCredentials(existing.canonicalAccessToken(), existing.fbid(), null, deviceId);
-            if (!bootstrap.exchange(credentials, lsd)) {
-                throw new WhatsAppWebGraphQlException.ExchangeFailed();
-            }
-            var refreshed = new WhatsAppWebGraphQlSessionBuilder()
-                    .sessionCookie(bootstrap.cookieHeader())
-                    .lsdToken(lsd)
-                    .canonicalAccessToken(existing.canonicalAccessToken())
-                    .fbid(existing.fbid())
-                    .build();
-            store.webSessionStore().setWhatsAppWebGraphQlSession(refreshed);
-            try {
-                store.save();
-            } catch (IOException ignored) {
-            }
-            for (var listener : store.listeners()) {
-                if (listener instanceof LinkedGraphQlSessionChangedListener typed) {
-                    Thread.startVirtualThread(() -> typed.onGraphQlSessionChanged(this, refreshed));
-                }
-            }
-            return Optional.of(refreshed);
+            return Optional.of(bootstrapAndExchange(recovered.accessToken(), recovered.fbid(), deviceId));
         } finally {
             webGraphQlRefreshLock.unlock();
         }
+    }
+
+    /**
+     * Runs the {@code /auth/token/} bootstrap exchange for the given canonical seed and persists the
+     * resulting WhatsApp Web GraphQL session.
+     *
+     * <p>Fetches the {@code lsd} anti-CSRF token, POSTs the canonical {@code access_token}/{@code fbid}
+     * pair to the {@code /auth/token/} route, and captures the returned session cookie into a fresh
+     * {@link WhatsAppWebGraphQlSession} carrying both the live cookie/{@code lsd} pair and the durable
+     * canonical seed. The new session is stored, a
+     * {@link CanonicalEntRecoveryCompanionEvent} is committed, the store is saved, and every registered
+     * {@link LinkedGraphQlSessionChangedListener} is notified on its own virtual thread. Callers hold
+     * {@link #webGraphQlRefreshLock} for the duration.
+     *
+     * @param canonicalAccessToken the durable canonical access token to exchange; never {@code null}
+     * @param fbid                 the Facebook account id the token authenticates
+     * @param deviceId             the companion device index stitched into the exchange credentials
+     * @return the freshly minted and persisted session
+     * @throws WhatsAppWebGraphQlException.LsdFetchFailed if the {@code lsd} bootstrap request fails
+     * @throws WhatsAppWebGraphQlException.ExchangeFailed if the server rejects the canonical exchange
+     */
+    private WhatsAppWebGraphQlSession bootstrapAndExchange(String canonicalAccessToken, long fbid, int deviceId) {
+        var bootstrap = new WhatsAppWebGraphQlBootstrapClient();
+        String lsd;
+        try {
+            lsd = bootstrap.fetchLsd();
+        } catch (Exception exception) {
+            throw new WhatsAppWebGraphQlException.LsdFetchFailed(exception);
+        }
+        var credentials = new CanonicalCredentials(canonicalAccessToken, fbid, null, deviceId);
+        if (!bootstrap.exchange(credentials, lsd)) {
+            throw new WhatsAppWebGraphQlException.ExchangeFailed();
+        }
+        var refreshed = new WhatsAppWebGraphQlSessionBuilder()
+                .sessionCookie(bootstrap.cookieHeader())
+                .lsdToken(lsd)
+                .canonicalAccessToken(canonicalAccessToken)
+                .fbid(fbid)
+                .build();
+        store.webSessionStore().setWhatsAppWebGraphQlSession(refreshed);
+        emitCredentialsStored(deviceId);
+        try {
+            store.save();
+        } catch (IOException ignored) {
+        }
+        for (var listener : store.listeners()) {
+            if (listener instanceof LinkedGraphQlSessionChangedListener typed) {
+                Thread.startVirtualThread(() -> typed.onGraphQlSessionChanged(this, refreshed));
+            }
+        }
+        return refreshed;
+    }
+
+    /**
+     * Recovers a canonical access token through the cached-nonce MEX mutation when no durable seed is
+     * present.
+     *
+     * <p>Mints a fresh RSA key pair, sends the
+     * {@code xwa2_ent_trade_canonical_nonce_for_access_tokens} mutation carrying the doubly
+     * base64-encoded public key and a random {@code request_id}, then decrypts the returned
+     * RSA-with-AES bundle with the retained private key. On success the recovered
+     * {@link CanonicalCredentials} carry a minted {@code access_token} and its {@code fbid}, ready to
+     * feed {@link #bootstrapAndExchange(String, long, int)}. Any transport failure, an absent bundle,
+     * or a decryption failure yields {@link Optional#empty()} so the caller can fall back to the
+     * unseeded-session path.
+     *
+     * @return the recovered credentials, or empty when the cached-nonce mutation could not seed them
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMexCachedTokenJob", exports = "fetchCachedNonceToken",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private Optional<CanonicalCredentials> fetchCachedNonceToken() {
+        try {
+            var keyPair = CachedTokenKeyPair.generate();
+            var request = new CachedTokenMexRequest(keyPair.clientPubKey(), UUID.randomUUID().toString());
+            var response = sendNode(request);
+            var bundle = CachedTokenMexResponse.of(response)
+                    .flatMap(CachedTokenMexResponse::encryptedAccessTokens)
+                    .orElse(null);
+            if (bundle == null) {
+                return Optional.empty();
+            }
+            return CachedTokenDecryptor.decrypt(keyPair.privateKey(), bundle);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Commits a {@link CanonicalEntRecoveryCompanionEvent} recording that a refreshed
+     * canonical WhatsApp Web session was stored, marking the successful completion of the
+     * credential recovery flow.
+     *
+     * <p>Invoked once {@link #refreshWhatsAppWebGraphQlSession()} has exchanged the seeded
+     * canonical access token for a fresh session cookie and persisted the new
+     * {@link WhatsAppWebGraphQlSession}. It mirrors the terminal
+     * {@link CanonicalEntRecoveryCompanionEventType#CREDENTIALS_STORED}/{@link CanonicalEntEventMarker#SUCCESS}
+     * companion event WhatsApp Web logs from {@code logCredentialsStored} once its token
+     * exchange reports success. The recovery metadata carries the fixed recovery purpose:
+     * {@snippet lang = "json":
+     * {"purpose":"recovery"}
+     *}
+     *
+     * @param deviceId the companion device index of the account whose session was recovered,
+     *                 rendered as the {@code deviceId} dimension
+     * @implNote This implementation populates only the fields WhatsApp Web's
+     * {@code CREDENTIALS_STORED} path sets (recovery event, marker, registration trace id,
+     * recovery metadata, device id, and an empty family device id); the request id, feature
+     * name, timeout, sequence number, and storage source dimensions stay unset because that
+     * path never supplies them. The registration trace id is a fresh {@link UUID} rather than
+     * a persisted value: Cobalt does not retain WhatsApp Web's cross-registration trace
+     * identifier, so a plausible per-emission id is fabricated in its place.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCanonicalEntRecoveryWam", exports = "logCredentialsStored",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitCredentialsStored(int deviceId) {
+        wamService.commit(new CanonicalEntRecoveryCompanionEventBuilder()
+                .canonicalEntRecoveryCompanionEvent(CanonicalEntRecoveryCompanionEventType.CREDENTIALS_STORED)
+                .canonicalEntEventCompanionMarker(CanonicalEntEventMarker.SUCCESS)
+                .canonicalEntRegistrationTraceId(UUID.randomUUID().toString())
+                .canonicalEntRecoveryEventMetadata("{\"purpose\":\"recovery\"}")
+                .deviceId(String.valueOf(deviceId))
+                .familyDeviceId("")
+                .build());
     }
 
     /** {@inheritDoc} */
@@ -1638,8 +1940,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public JSONObject sendGraphQl(FacebookGraphQlOperation.Request request, CtwaAccessTokenSession session) {
         Objects.requireNonNull(request, "request cannot be null");
         Objects.requireNonNull(session, "session cannot be null");
-        var locale = store.accountStore().locale().orElse("en_US");
-        return new FacebookGraphQlClient(graphqlHttpClient, session.accessToken(), locale).send(request);
+        try {
+            return sendFacebookGraphQl(request, session);
+        } catch (FacebookGraphQlClient.AuthException exception) {
+            throw new WhatsAppServerRuntimeException("Facebook GraphQL request for " + request.name() + " failed authentication", exception);
+        }
     }
 
     /** {@inheritDoc} */
@@ -1649,7 +1954,82 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var session = store.webSessionStore().facebookGraphQlSession()
                 .or(this::refreshFacebookGraphQlSession)
                 .orElseThrow(() -> new WhatsAppServerRuntimeException("Facebook GraphQL session not established; seed it via queryAccessTokenAndSessionCookies(code, jid)"));
-        return sendGraphQl(request, session);
+        try {
+            return sendFacebookGraphQl(request, session);
+        } catch (FacebookGraphQlClient.AuthException first) {
+            // WA invalidates and re-mints the CTWA token on a graph auth error, then retries once
+            // (FETCH_AD_ACCOUNT_TOKEN_MAX_RETRIES = 1); a second auth failure propagates.
+            store.webSessionStore().setFacebookGraphQlSession(null);
+            var refreshed = refreshFacebookGraphQlSession()
+                    .orElseThrow(WhatsAppFacebookGraphQlException.TokenExchangeFailed::new);
+            try {
+                return sendFacebookGraphQl(request, refreshed);
+            } catch (FacebookGraphQlClient.AuthException second) {
+                throw new WhatsAppServerRuntimeException("Facebook GraphQL request for " + request.name() + " still unauthorized after token re-mint", second);
+            }
+        }
+    }
+
+    /**
+     * Dispatches a Facebook GraphQL operation over the {@code http_comet} transport for the given
+     * session, applying the locale remap and the optional device-id header.
+     *
+     * <p>Reads the account locale, runs it through {@link #graphQLRemapLocale(String, String)} keyed by
+     * the {@link ABProp#GRAPHQL_LOCALE_REMAPPING} table, resolves the linked device id from the account
+     * JID, and hands all three to a {@link FacebookGraphQlClient}. A graph authentication failure
+     * surfaces as {@link FacebookGraphQlClient.AuthException} so the caller can decide whether to
+     * re-mint the token and retry.
+     *
+     * @param request the Facebook GraphQL operation to dispatch; never {@code null}
+     * @param session the Facebook GraphQL session supplying the access token; never {@code null}
+     * @return the unwrapped GraphQL {@code data} object
+     * @throws FacebookGraphQlClient.AuthException if the graph endpoint reports an authentication error
+     * @throws WhatsAppServerRuntimeException      if the transport fails or the response cannot be parsed
+     */
+    private JSONObject sendFacebookGraphQl(FacebookGraphQlOperation.Request request, CtwaAccessTokenSession session) {
+        var locale = store.accountStore().locale().orElse("en_US");
+        var remappedLocale = graphQLRemapLocale(locale, abPropsService.getString(ABProp.GRAPHQL_LOCALE_REMAPPING));
+        var deviceId = store.accountStore().jid().map(Jid::device).map(String::valueOf).orElse(null);
+        return new FacebookGraphQlClient(graphqlHttpClient, session.accessToken(), remappedLocale, deviceId).send(request);
+    }
+
+    /**
+     * Remaps a locale to its canonical form using the server-pushed {@code graphql_locale_remapping}
+     * table.
+     *
+     * <p>Normalizes the locale to the {@code language_REGION} shape (replacing {@code -} with
+     * {@code _}), parses {@code tableJson} as a JSON object mapping each canonical locale key to an
+     * array of variant locales, and returns the canonical key whose variant array contains the
+     * normalized locale. When the table is empty (the default {@code "{}"}), malformed, or lists no
+     * matching variant, the normalized locale is returned unchanged, so the remap is a no-op until the
+     * relay pushes a non-empty table.
+     *
+     * @param locale    the account locale, in {@code language_REGION} or {@code language-REGION} shape
+     * @param tableJson the {@code graphql_locale_remapping} table as a JSON object, may be empty
+     * @return the canonical locale, or the normalized input locale when no remap applies
+     */
+    @WhatsAppWebExport(moduleName = "WAWebGraphQLRemapLocale", exports = "graphQLRemapLocale",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String graphQLRemapLocale(String locale, String tableJson) {
+        if (locale == null) {
+            return null;
+        }
+        var normalized = locale.replace('-', '_');
+        try {
+            var table = JSON.parseObject(tableJson);
+            if (table == null) {
+                return normalized;
+            }
+            for (var canonical : table.keySet()) {
+                var variants = table.getJSONArray(canonical);
+                if (variants != null && variants.contains(normalized)) {
+                    return canonical;
+                }
+            }
+            return normalized;
+        } catch (RuntimeException exception) {
+            return normalized;
+        }
     }
 
     /** {@inheritDoc} */
@@ -1806,20 +2186,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var localJid = store.accountStore().jid();
         if (localJid.isEmpty()) {
             disconnect(WhatsAppClientDisconnectReason.LOGGED_OUT);
-        } else {
-            var device = new StanzaBuilder()
-                    .description("remove-companion-device")
-                    .attribute("jid", localJid.get())
-                    .attribute("reason", "user_initiated")
-                    .build();
-            var iqNode = new StanzaBuilder()
-                    .description("iq")
-                    .attribute("xmlns", "md")
-                    .attribute("to", JidServer.user())
-                    .attribute("type", "set")
-                    .content(device);
-            sendNode(iqNode);
+            return;
         }
+        dispatchUnpairDevice(localJid.get());
     }
 
     /** {@inheritDoc} */
@@ -1829,18 +2198,32 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void logoutCompanion(JidProvider companionProvider) {
         var companion = Objects.requireNonNull(companionProvider, "companion cannot be null").toJid();
-        var device = new StanzaBuilder()
-                .description("remove-companion-device")
-                .attribute("jid", companion)
-                .attribute("reason", "user_initiated")
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "md")
-                .attribute("to", JidServer.user())
-                .attribute("type", "set")
-                .content(device);
-        sendNode(iqNode);
+        dispatchUnpairDevice(companion);
+    }
+
+    /**
+     * Dispatches the {@code <iq xmlns="md" type="set">} {@code <remove-companion-device>} stanza
+     * that tears down the server-side pairing record for the supplied device, backing
+     * {@link #logout()} and {@link #logoutCompanion(JidProvider)}.
+     *
+     * <p>The reason is always {@code "user_initiated"}, matching WA Web's
+     * {@code WAWebUnpairDeviceJob.unpairDevice}. A relay-side rejection surfaces as a
+     * {@link WhatsAppServerRuntimeException} rather than being silently swallowed.
+     *
+     * @param device the companion-device JID to unpair; never {@code null}
+     */
+    private void dispatchUnpairDevice(Jid device) {
+        var request = new IqUnpairDeviceRequest(device, "user_initiated");
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqUnpairDeviceResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqUnpairDeviceResponse.Success ignored -> {}
+            case IqUnpairDeviceResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Unpair device rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqUnpairDeviceResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Unpair device server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> {}
+        }
     }
 
     /** {@inheritDoc} */
@@ -1914,7 +2297,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         // reader-loop onClose racing in behind the trailing xmlstreamend observes the state and
         // does not fire a competing RECONNECTING disconnect that would drop this teardown.
         if (exception instanceof WhatsAppSessionException.LoggedOut
-                || exception instanceof WhatsAppSessionException.Banned) {
+            || exception instanceof WhatsAppSessionException.Banned) {
             state.set(ConnectionState.TERMINATED);
         }
         if (exception instanceof WhatsAppWebAppStateSyncException syncdException) {
@@ -2008,7 +2391,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .isFatal(true);
         if (collection != null) {
             builder.collection(collection);
-            }
+        }
         wamService.commit(builder.build());
     }
 
@@ -2148,22 +2531,19 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .details(encodedDetails)
                 .signature(Curve25519.sign(store.signalStore().identityKeyPair().privateKey().toEncodedPoint(), encodedDetails))
                 .build();
-        var verifiedNameRequest = new StanzaBuilder()
-                .description("verified_name")
-                .attribute("v", 2)
-                .content(BusinessVerifiedNameCertificateSpec.encode(certificate))
-                .build();
-        var queryRequest = new StanzaBuilder()
-                .description("iq")
-                .attribute("to", Jid.userServer())
-                .attribute("type", "set")
-                .attribute("xmlns", "w:biz")
-                .content(verifiedNameRequest);
-        var verifiedName = sendNode(queryRequest)
-                .getChild("verified_name")
-                .flatMap(node -> node.getAttributeAsString("id"))
-                .orElse("");
-        store.accountStore().setVerifiedName(verifiedName);
+        var request = new IqSetVerifiedNameRequest(2, BusinessVerifiedNameCertificateSpec.encode(certificate));
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqSetVerifiedNameResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqSetVerifiedNameResponse.Success success ->
+                    store.accountStore().setVerifiedName(success.verifiedNameId().orElse(""));
+            case IqSetVerifiedNameResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Update verified name rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqSetVerifiedNameResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Update verified name server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null ->
+                    throw new WhatsAppServerRuntimeException("Update verified name: unexpected response");
+        }
     }
     /** {@inheritDoc} */
     @Override
@@ -2201,64 +2581,25 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void sendPreKeys(long keysCount) {
         keysCount = Math.max(keysCount, MIN_PRE_KEYS_COUNT);
         var startId = store.signalStore().hasPreKeys() ? store.signalStore().preKeys().getLast().id() + 1 : 1;
-        var listBody = new ArrayList<Stanza>();
         var preKeys = new ArrayList<SignalPreKeyPair>();
+        var requestPreKeys = new ArrayList<IqUploadPreKeysPreKey>();
         while (keysCount-- > 0) {
             var preKeyPair = SignalPreKeyPair.random(startId++);
             preKeys.add(preKeyPair);
-            var id = new StanzaBuilder()
-                    .description("id")
-                    .content(DataUtils.intToBytes(preKeyPair.id(), 3))
-                    .build();
-            var value = new StanzaBuilder()
-                    .description("value")
-                    .content(preKeyPair.publicKey().toEncodedPoint())
-                    .build();
-            var preKayNode = new StanzaBuilder()
-                    .description("key")
-                    .content(id, value)
-                    .build();
-            listBody.add(preKayNode);
+            requestPreKeys.add(new IqUploadPreKeysPreKey(preKeyPair.id(), preKeyPair.publicKey().toEncodedPoint()));
         }
-        var registration = new StanzaBuilder()
-                .description("registration")
-                .content(DataUtils.intToBytes(store.signalStore().registrationId(), 4))
-                .build();
-        var type = new StanzaBuilder()
-                .description("type")
-                .content(SIGNAL_KEY_TYPE)
-                .build();
-        var identity = new StanzaBuilder()
-                .description("identity")
-                .content(store.signalStore().identityKeyPair().publicKey().toEncodedPoint())
-                .build();
-        var list = new StanzaBuilder()
-                .description("list")
-                .content(listBody)
-                .build();
-        var skeyId = new StanzaBuilder()
-                .description("id")
-                .content(DataUtils.intToBytes(store.signalStore().signedKeyPair().id(), 3))
-                .build();
-        var skeyValue = new StanzaBuilder()
-                .description("value")
-                .content(store.signalStore().signedKeyPair().publicKey().toEncodedPoint())
-                .build();
-        var skeySignature = new StanzaBuilder()
-                .description("signature")
-                .content(store.signalStore().signedKeyPair().signature())
-                .build();
-        var skey = new StanzaBuilder()
-                .description("skey")
-                .content(skeyId, skeyValue, skeySignature)
-                .build();
-        var queryRequest = new StanzaBuilder()
-                .description("iq")
-                .attribute("to", JidServer.user())
-                .attribute("type", "set")
-                .attribute("xmlns", "encrypt")
-                .content(registration, type, identity, list, skey);
-        sendNode(queryRequest);
+        var signedKeyPair = store.signalStore().signedKeyPair();
+        var signedPreKey = new IqUploadPreKeysSignedPreKey(
+                signedKeyPair.id(),
+                signedKeyPair.publicKey().toEncodedPoint(),
+                signedKeyPair.signature());
+        var request = new IqUploadPreKeysRequest(
+                store.signalStore().registrationId(),
+                SIGNAL_KEY_TYPE[0],
+                store.signalStore().identityKeyPair().publicKey().toEncodedPoint(),
+                requestPreKeys,
+                signedPreKey);
+        sendNode(request);
         for (var preKey : preKeys) {
             store.signalStore().addPreKey(preKey);
         }
@@ -2294,17 +2635,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
         var jid = chat.toJid();
-        var body = new StanzaBuilder()
-                .description("query")
-                .attribute("request", "interactive")
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", jid)
-                .attribute("type", "get")
-                .content(body);
-        var response = sendNode(iqNode);
+        var request = new SmaxGroupsGetGroupInfoRequest(jid, null, "interactive", null, null, null);
+        var response = sendNode(request.toStanza());
         return handleChatMetadata(response);
     }
 
@@ -2491,16 +2823,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             var evolutionVersion = stanza.getChild("evolution_version")
                     .map(ev -> ev.getAttributeAsInt("value", null))
                     .orElse(null);
-            var linkedGroupsQueryBody = new StanzaBuilder()
-                    .description("linked_groups_participants")
-                    .build();
-            var linkedGroupsQueryRequest = new StanzaBuilder()
-                    .description("iq")
-                    .attribute("xmlns", "w:g2")
-                    .attribute("to", groupId)
-                    .attribute("type", "get")
-                    .content(linkedGroupsQueryBody);
-            var linkedGroupsResponse = sendNode(linkedGroupsQueryRequest);
+            var linkedGroupsRequest = new SmaxGroupsGetLinkedGroupsParticipantsRequest(groupId);
+            var linkedGroupsResponse = sendNode(linkedGroupsRequest.toStanza());
             var participants = linkedGroupsResponse
                     .streamChild("linked_groups_participants")
                     .flatMap(participantsNodeBody -> participantsNodeBody.streamChildren("participant"))
@@ -2676,6 +3000,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .websites(websites)
                 .categories(categories)
                 .automatedType(automatedType)
+                .coverPhoto(profile.coverPhoto()
+                        .map(cp -> new BusinessCoverPhotoBuilder().id(cp.id()).url(cp.url()).build())
+                        .orElse(null))
                 .build();
     }
 
@@ -2745,7 +3072,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .categories(categories.isEmpty() ? null : categories)
                 .businessHours(businessHours)
                 .build();
-        sendNode(request);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqEditBusinessProfileResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqEditBusinessProfileResponse.Success ignored -> emitEditBusinessProfileEvent(profile);
+            case IqEditBusinessProfileResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Edit business profile rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqEditBusinessProfileResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Edit business profile server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new WhatsAppServerRuntimeException("Edit business profile: unexpected response");
+        }
     }
 
     /**
@@ -2783,7 +3119,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob", exports = "updateCartEnabled",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void enableBusinessCart() {
-        sendNode(new IqUpdateCartEnabledRequest(true));
+        var request = new IqUpdateCartEnabledRequest(true);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqUpdateCartEnabledResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqUpdateCartEnabledResponse.Success ignored -> {}
+            case IqUpdateCartEnabledResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Enable business cart rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqUpdateCartEnabledResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Enable business cart server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new WhatsAppServerRuntimeException("Enable business cart: unexpected response");
+        }
     }
 
     /** {@inheritDoc} */
@@ -2791,7 +3137,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob", exports = "updateCartEnabled",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void disableBusinessCart() {
-        sendNode(new IqUpdateCartEnabledRequest(false));
+        var request = new IqUpdateCartEnabledRequest(false);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqUpdateCartEnabledResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqUpdateCartEnabledResponse.Success ignored -> {}
+            case IqUpdateCartEnabledResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Disable business cart rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqUpdateCartEnabledResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Disable business cart server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new WhatsAppServerRuntimeException("Disable business cart: unexpected response");
+        }
     }
 
     /** {@inheritDoc} */
@@ -2799,23 +3155,25 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob", exports = "deleteCoverPhoto",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void deleteBusinessCoverPhoto() {
-        var coverPhoto = new StanzaBuilder()
-                .description("cover_photo")
-                .attribute("op", "delete")
-                .build();
-        var businessProfile = new StanzaBuilder()
-                .description("business_profile")
-                .attribute("v", "3")
-                .attribute("mutation_type", "delta")
-                .content(coverPhoto)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:biz")
-                .attribute("to", JidServer.user())
-                .attribute("type", "set")
-                .content(businessProfile);
-        sendNode(iqNode);
+        // WA identifies the cover photo to detach by its current upload id (there is at most one),
+        // so resolve it from the own profile before issuing the typed delete.
+        var coverPhoto = queryBusinessProfile()
+                .flatMap(BusinessProfile::coverPhoto)
+                .orElse(null);
+        if (coverPhoto == null || coverPhoto.id().isBlank()) {
+            return;
+        }
+        var request = new IqDeleteCoverPhotoRequest(coverPhoto.id());
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqDeleteCoverPhotoResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqDeleteCoverPhotoResponse.Success ignored -> {}
+            case IqDeleteCoverPhotoResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Delete cover photo rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqDeleteCoverPhotoResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Delete cover photo server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> {}
+        }
     }
 
     /** {@inheritDoc} */
@@ -3127,53 +3485,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /** {@inheritDoc} */
     @Override
     public Optional<BotProfile> queryBotProfile(JidProvider botJid, String personaId) {
-        var profileQueryNode = new StanzaBuilder()
-                .description("profile")
-                .attribute("v", "1")
-                .build();
-        var botQueryNode = new StanzaBuilder()
-                .description("bot")
-                .content(profileQueryNode)
-                .build();
-        var queryNode = new StanzaBuilder()
-                .description("query")
-                .content(botQueryNode)
-                .build();
-
-        var userProfileNode = new StanzaBuilder()
-                .description("profile")
-                .attribute("persona_id", personaId)
-                .build();
-        var userBotNode = new StanzaBuilder()
-                .description("bot")
-                .content(userProfileNode)
-                .build();
-        var userNode = new StanzaBuilder()
-                .description("user")
-                .attribute("jid", botJid.toJid().toUserJid())
-                .content(userBotNode)
-                .build();
-        var listNode = new StanzaBuilder()
-                .description("list")
-                .content(userNode)
-                .build();
-
-        var usyncNode = new StanzaBuilder()
-                .description("usync")
-                .attribute("sid", RandomIdUtils.generateSid())
-                .attribute("mode", "query")
-                .attribute("last", "true")
-                .attribute("index", "0")
-                .attribute("context", "interactive")
-                .content(queryNode, listNode)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "usync")
-                .attribute("to", JidServer.user())
-                .attribute("type", "get")
-                .content(usyncNode);
-        var result = sendNode(iqNode);
+        var query = UsyncQuery.ofBotProfile()
+                .withUser(UsyncUser.byId(botJid.toJid().toUserJid()).withPersonaId(personaId));
+        var result = sendNode(query.toNode());
 
         return result.streamChildren("usync")
                 .flatMap(node -> node.streamChild("list"))
@@ -3786,7 +4100,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
         var timestamp = chat.tcTokenTimestamp().orElse(null);
         if (timestamp != null
-                && trustedContactTokenService.hasTokenExpired(timestamp, TrustedContactTokenService.TcTokenMode.RECEIVER)) {
+            && trustedContactTokenService.hasTokenExpired(timestamp, TrustedContactTokenService.TcTokenMode.RECEIVER)) {
             return null;
         }
         return token;
@@ -4092,20 +4406,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebGroupQueryJob", exports = "queryAllGroups",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void refreshGroups() {
-        var participantsMarker = new StanzaBuilder()
-                .description("participants")
-                .build();
-        var participatingNode = new StanzaBuilder()
-                .description("participating")
-                .content(participantsMarker)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", Jid.of(JidServer.groupOrCommunity()))
-                .attribute("type", "get")
-                .content(participatingNode);
-        var response = sendNode(iqNode);
+        var request = new SmaxGroupsGetParticipatingGroupsRequest(true, false);
+        var response = sendNode(request.toStanza());
         var groups = new LinkedHashSet<Chat>();
         response.streamChildren()
                 .flatMap(wrapper -> wrapper.hasDescription("group")
@@ -4261,29 +4563,23 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public GroupMetadata queryGroupInfoByInvite(GroupInvite invite) {
         Objects.requireNonNull(invite, "invite cannot be null");
-        var invitee = invite.invitee();
-        var sender = invite.sender();
-        var inviteTimestamp = invite.expiration();
-        var inviteCode = invite.inviteCode();
-        var addRequestNode = new StanzaBuilder()
-                .description("add_request")
-                .attribute("code", inviteCode)
-                .attribute("expiration", inviteTimestamp.getEpochSecond())
-                .attribute("admin", sender)
-                .attribute("invitee", invitee)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", sender)
-                .attribute("type", "get")
-                .content(addRequestNode);
-        var response = sendNode(iqNode);
-        var metadata = handleChatMetadata(response);
-        if (!(metadata instanceof GroupMetadata groupMetadata)) {
-            throw new NoSuchElementException("Expected a group metadata, got %s".formatted(metadata));
-        }
-        return groupMetadata;
+        var request = new IqQueryGroupInviteV4Request(invite);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        return switch (IqQueryGroupInviteV4Response.of(response, requestNode.build()).orElse(null)) {
+            case IqQueryGroupInviteV4Response.Success success -> {
+                var metadata = handleChatMetadata(success.group());
+                if (!(metadata instanceof GroupMetadata groupMetadata)) {
+                    throw new NoSuchElementException("Expected a group metadata, got %s".formatted(metadata));
+                }
+                yield groupMetadata;
+            }
+            case IqQueryGroupInviteV4Response.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Query group info by invite rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqQueryGroupInviteV4Response.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Query group info by invite server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new NoSuchElementException("Erroneous response to group invite v4 query: %s".formatted(response));
+        };
     }
 
     /** {@inheritDoc} */
@@ -4297,19 +4593,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!group.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var acceptNode = new StanzaBuilder()
-                .description("accept")
-                .attribute("code", "")
-                .attribute("expiration", inviteTimestamp.getEpochSecond())
-                .attribute("admin", target)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", group)
-                .attribute("type", "set")
-                .content(acceptNode);
-        sendNode(iqNode);
+        var request = new SmaxGroupsAcceptGroupAddRequest(group, "", inviteTimestamp.getEpochSecond(), target);
+        sendNode(request.toStanza());
     }
 
     /** {@inheritDoc} */
@@ -4322,16 +4607,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!group.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var membershipNode = new StanzaBuilder()
-                .description("membership_approval_requests")
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", group)
-                .attribute("type", "get")
-                .content(membershipNode);
-        var response = sendNode(iqNode);
+        var request = new SmaxGroupsGetMembershipApprovalRequestsRequest(group);
+        var response = sendNode(request.toStanza());
         var result = new ArrayList<Jid>();
         response.streamChildren()
                 .flatMap(wrapper -> wrapper.streamChildren("membership_approval_request"))
@@ -4424,25 +4701,21 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (!group.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var participantNode = new StanzaBuilder()
-                .description("participant")
-                .attribute("jid", applicant)
-                .build();
-        var actionNode = new StanzaBuilder()
-                .description(action)
-                .content(participantNode)
-                .build();
-        var membershipActionNode = new StanzaBuilder()
-                .description("membership_requests_action")
-                .content(actionNode)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", group)
-                .attribute("type", "set")
-                .content(membershipActionNode);
-        sendNode(iqNode);
+        var request = switch (action) {
+            case "approve" -> new SmaxGroupsMembershipRequestsActionRequest(group, List.of(applicant), List.of());
+            case "reject" -> new SmaxGroupsMembershipRequestsActionRequest(group, List.of(), List.of(applicant));
+            default -> throw new IllegalArgumentException("Unexpected membership action: " + action);
+        };
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (SmaxGroupsMembershipRequestsActionResponse.of(response, requestNode.build()).orElse(null)) {
+            case SmaxGroupsMembershipRequestsActionResponse.Success ignored -> {}
+            case SmaxGroupsMembershipRequestsActionResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Membership request action rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case SmaxGroupsMembershipRequestsActionResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Membership request action server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> {}
+        }
     }
 
     /**
@@ -4467,7 +4740,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
         var jid = group.toString();
         return jid.contains("-") ? "" : jid;
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -4698,8 +4971,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             // distinguish transport faults from a clean empty result.
             var top = result.topLevelError().orElse(null);
             throw new WhatsAppServerRuntimeException("hasWhatsapp rejected: code="
-                    + (top == null ? -1 : top.errorCode()) + ", text="
-                    + (top == null ? "" : top.errorText()));
+                                                     + (top == null ? -1 : top.errorCode()) + ", text="
+                                                     + (top == null ? "" : top.errorText()));
         }
 
         var results = new HashMap<Jid, Boolean>();
@@ -4880,8 +5153,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     .contactSyncFailureProtocol(requestProtocolBitmask)
                     .build());
             throw new WhatsAppServerRuntimeException("syncContacts rejected: code="
-                    + (top == null ? -1 : top.errorCode()) + ", text="
-                    + (top == null ? "" : top.errorText()));
+                                                     + (top == null ? -1 : top.errorCode()) + ", text="
+                                                     + (top == null ? "" : top.errorText()));
         }
 
         var mapping = new HashMap<Jid, Jid>();
@@ -5024,10 +5297,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var updates = new JSONObject();
         if (name != null) {
             updates.fluentPut("name", name);
-            }
+        }
         if (description != null) {
             updates.fluentPut("description", description);
-            }
+        }
         if (picture != null) {
             updates.fluentPut("picture", picture);
         }
@@ -5041,7 +5314,91 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             updates.fluentPut("settings", new JSONObject().fluentPut("reaction_codes", reactionCodes));
         }
         var request = new UpdateNewsletterMexRequest(newsletter.toString(), updates);
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        var parsed = UpdateNewsletterMexResponse.of(response)
+                .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing edit-newsletter response: %s".formatted(response)));
+        parsed.threadMetadata()
+                .ifPresent(threadMetadata -> applyEditedNewsletterMetadata(newsletter, threadMetadata));
+    }
+
+    /**
+     * Applies the relay-confirmed metadata from an edit-newsletter reply to the locally cached
+     * {@link Newsletter}.
+     *
+     * <p>Locates the newsletter in the chat store (adding a fresh entry when it is not yet known),
+     * ensures a {@link NewsletterMetadata} container exists, and overwrites each field the relay
+     * echoed under {@code thread_metadata}: the localised name and description, the full and preview
+     * pictures, the invite URL, the vanity handle, the verification badge, the creation timestamp,
+     * and the reaction-codes setting. Fields the relay omits are left untouched.
+     *
+     * @param newsletterJid  the edited newsletter JID
+     * @param threadMetadata the relay-confirmed post-edit metadata block
+     */
+    private void applyEditedNewsletterMetadata(Jid newsletterJid, UpdateNewsletterMexResponse.ThreadMetadata threadMetadata) {
+        var newsletter = store.chatStore().findNewsletterByJid(newsletterJid)
+                .orElseGet(() -> store.chatStore().addNewNewsletter(newsletterJid));
+        var metadata = newsletter.metadata().orElseGet(() -> {
+            var fresh = new NewsletterMetadataBuilder().build();
+            newsletter.setMetadata(fresh);
+            return fresh;
+        });
+        threadMetadata.name()
+                .filter(name -> name.id().isPresent() && name.text().isPresent())
+                .ifPresent(name -> metadata.setName(new NewsletterNameBuilder()
+                        .id(name.id().get())
+                        .text(name.text().get())
+                        .updateTime(name.updateTime().orElse(null))
+                        .build()));
+        threadMetadata.description()
+                .filter(description -> description.id().isPresent() && description.text().isPresent())
+                .ifPresent(description -> metadata.setDescription(new NewsletterDescriptionBuilder()
+                        .id(description.id().get())
+                        .text(description.text().get())
+                        .updateTimestamp(description.updateTime().orElse(null))
+                        .build()));
+        threadMetadata.picture()
+                .flatMap(picture -> toNewsletterPicture(picture.id(), picture.type(), picture.directPath()))
+                .ifPresent(metadata::setPicture);
+        threadMetadata.preview()
+                .flatMap(preview -> toNewsletterPicture(preview.id(), preview.type(), preview.directPath()))
+                .ifPresent(metadata::setPreviewPicture);
+        threadMetadata.invite().ifPresent(metadata::setInvite);
+        threadMetadata.handle().ifPresent(metadata::setHandle);
+        threadMetadata.verification().ifPresent(value -> metadata.setVerification(
+                "ON".equals(value) ? NewsletterVerification.enabled() : NewsletterVerification.disabled()));
+        threadMetadata.creationTime().ifPresent(metadata::setCreationTimestamp);
+        threadMetadata.settings()
+                .flatMap(UpdateNewsletterMexResponse.ThreadMetadata.Settings::reactionCodes)
+                .flatMap(UpdateNewsletterMexResponse.ThreadMetadata.Settings.ReactionCodes::value)
+                .ifPresent(value -> metadata.setSettings(new NewsletterSettingsBuilder()
+                        .reactionCodes(new NewsletterReactionSettingsBuilder()
+                                .value(NewsletterReactionSettings.Type.of(value))
+                                .build())
+                        .build()));
+    }
+
+    /**
+     * Builds a {@link NewsletterPicture} from three relay-echoed picture fields, requiring all three
+     * to be present.
+     *
+     * <p>The {@link NewsletterPicture} constructor rejects a {@code null} id, type, or direct path, so
+     * a picture missing any of the three yields {@link Optional#empty()} rather than a partially
+     * populated instance.
+     *
+     * @param id         the media handle
+     * @param type       the media-type marker
+     * @param directPath the direct download path
+     * @return the built picture, or empty when any component is absent
+     */
+    private static Optional<NewsletterPicture> toNewsletterPicture(Optional<String> id, Optional<String> type, Optional<String> directPath) {
+        if (id.isEmpty() || type.isEmpty() || directPath.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new NewsletterPictureBuilder()
+                .id(id.get())
+                .type(type.get())
+                .directPath(directPath.get())
+                .build());
     }
 
     /** {@inheritDoc} */
@@ -5055,7 +5412,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             return Optional.empty();
         }
         var request = new DeleteNewsletterMexRequest(newsletter.toString());
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        DeleteNewsletterMexResponse.of(response)
+                .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing delete-newsletter response: %s".formatted(response)));
         store.chatStore().removeNewsletter(newsletter);
         return existing;
     }
@@ -5067,7 +5426,18 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void joinNewsletter(JidProvider newsletterProvider) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new JoinNewsletterMexRequest(newsletter.toString());
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        var parsed = JoinNewsletterMexResponse.of(response)
+                .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing join-newsletter response: %s".formatted(response)));
+        var stateType = parsed.state()
+                .flatMap(JoinNewsletterMexResponse.State::type)
+                .orElse(null);
+        if ("DELETED".equals(stateType) || "NON_EXISTING".equals(stateType)) {
+            throw new WhatsAppServerRuntimeException("Join newsletter failed: newsletter deleted or non-existing (404)");
+        }
+        if ("SUSPENDED".equals(stateType)) {
+            throw new WhatsAppServerRuntimeException("Join newsletter failed: newsletter suspended (423)");
+        }
         store.chatStore().findNewsletterByJid(newsletter)
                 .orElseGet(() -> store.chatStore().addNewNewsletter(newsletter));
         wamService.commit(new ChannelCoreEventEventBuilder()
@@ -5088,7 +5458,23 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void leaveNewsletter(JidProvider newsletterProvider) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new LeaveNewsletterMexRequest(newsletter.toString());
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        // A 400 error code means the channel is already unfollowed; treat it as an idempotent success.
+        // Any other reply is validated for the DELETED/NON_EXISTING/SUSPENDED states.
+        var errorChild = response.getChild("error").orElse(null);
+        if (errorChild == null || errorChild.getAttributeAsInt("code").orElse(0) != 400) {
+            var parsed = LeaveNewsletterMexResponse.of(response)
+                    .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing leave-newsletter response: %s".formatted(response)));
+            var stateType = parsed.state()
+                    .flatMap(LeaveNewsletterMexResponse.State::type)
+                    .orElse(null);
+            if ("DELETED".equals(stateType) || "NON_EXISTING".equals(stateType)) {
+                throw new WhatsAppServerRuntimeException("Leave newsletter failed: newsletter deleted or non-existing (404)");
+            }
+            if ("SUSPENDED".equals(stateType)) {
+                throw new WhatsAppServerRuntimeException("Leave newsletter failed: newsletter suspended (423)");
+            }
+        }
         store.chatStore().removeNewsletter(newsletter);
         wamService.commit(new ChannelCoreEventEventBuilder()
                 .cid(newsletter.user())
@@ -5125,6 +5511,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param mute               {@code true} to mute, {@code false} to unmute
      * @throws NullPointerException            if {@code newsletterProvider} is {@code null}
      * @throws WhatsAppSessionException.Closed if the socket is closed
+     * @throws WhatsAppServerRuntimeException  if the relay omits the mutation result
      */
     private void setNewsletterMuted(JidProvider newsletterProvider, boolean mute) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
@@ -5132,7 +5519,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 newsletter.toString(),
                 "MUTE_ADMIN_ACTIVITY",
                 mute ? "ON" : "OFF");
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        var parsed = UpdateNewsletterUserSettingMexResponse.of(response)
+                .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing update-newsletter-user-setting response: %s".formatted(response)));
+        // A non-existing channel silently drops the update; a suspended one still applies it. Neither is
+        // a failure, so only a malformed reply (the orElseThrow above) fails.
+        var stateType = parsed.state()
+                .flatMap(UpdateNewsletterUserSettingMexResponse.State::type)
+                .orElse(null);
+        if ("NON_EXISTING".equals(stateType)) {
+            return;
+        }
         // Cobalt only toggles admin_activity so the list is always a single entry.
         wamService.commit(new ChannelCoreEventEventBuilder()
                 .cid(newsletter.user())
@@ -5144,23 +5541,52 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
-    @WhatsAppWebExport(moduleName = "WAWebNewsletterRevokeStatusAction", exports = "revokeNewsletterStatusAction",
-            adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterRevokeMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void revokeNewsletterMessage(JidProvider newsletterProvider, String serverMessageId) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         Objects.requireNonNull(serverMessageId, "serverMessageId cannot be null");
-        var adminRevokeNode = new StanzaBuilder()
-                .description("admin_revoke")
+        var target = store.chatStore().findNewsletterByJid(newsletter)
+                .flatMap(channel -> channel.getMessageById(serverMessageId))
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Cannot revoke an unknown newsletter message: " + serverMessageId));
+        var targetKey = target.key();
+        var protocol = new ProtocolMessageBuilder()
+                .key(targetKey)
+                .type(ProtocolMessage.Type.REVOKE)
+                .timestampMs(Instant.now())
+                .build();
+        var revokeInfo = new NewsletterMessageInfoBuilder()
+                .key(targetKey)
+                .serverId(target.serverId())
+                .timestamp(Instant.now())
+                .message(MessageContainer.of(protocol))
+                .status(MessageStatus.PENDING)
+                .build();
+        messageService.send(revokeInfo);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterRevokeStatusAction", exports = "revokeNewsletterStatusAction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterRevokeStatusQueryJob", exports = "queryRevokeNewsletterStatus",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WASmaxOutStatusPublishStatusNewsletterRevokeMixin", exports = "applyMixin",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public void revokeNewsletterStatus(JidProvider newsletterProvider, String statusId) {
+        var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
+        Objects.requireNonNull(statusId, "statusId cannot be null");
+        var plaintextNode = new StanzaBuilder()
+                .description("plaintext")
                 .build();
         var stanza = new StanzaBuilder()
-                .description("message")
-                .attribute("id", DataUtils.randomHex(5)) // 10 uppercase hex chars
+                .description("status")
                 .attribute("to", newsletter)
-                .attribute("server_id", serverMessageId)
-                .attribute("edit", "3")
-                .content(adminRevokeNode);
+                .attribute("id", statusId)
+                .attribute("type", "text")
+                .attribute("edit", "8")
+                .content(plaintextNode);
         sendNode(stanza);
     }
 
@@ -5171,7 +5597,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void acceptNewsletterAdminInvite(JidProvider newsletterProvider) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new AcceptNewsletterAdminInviteMexRequest(newsletter.toString());
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        AcceptNewsletterAdminInviteMexResponse.of(response)
+                .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing accept-newsletter-admin-invite response: %s".formatted(response)));
     }
 
     /** {@inheritDoc} */
@@ -5182,7 +5610,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var admin = Objects.requireNonNull(adminProvider, "admin cannot be null").toJid();
         var request = new RevokeNewsletterAdminInviteMexRequest(newsletter.toString(), admin.toString());
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        RevokeNewsletterAdminInviteMexResponse.of(response)
+                .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing revoke-newsletter-admin-invite response: %s".formatted(response)));
     }
 
     /** {@inheritDoc} */
@@ -5312,6 +5742,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .filter(FetchNewsletterDirectoryListMexResponse.PageInfo::hasNextPage)
                 .flatMap(FetchNewsletterDirectoryListMexResponse.PageInfo::endCursor)
                 .orElse(null);
+        emitChannelDirectoryEvent(false, ChannelDirectoryPillSelected.RECOMMENDED,
+                query.countryCodes().stream().findFirst().orElse(null));
         return new NewsletterDirectoryPageBuilder()
                 .entries(entries)
                 .nextCursor(nextCursor)
@@ -5335,13 +5767,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var name = threadMetadata == null
                 ? null
                 : threadMetadata.name()
-                        .flatMap(FetchNewsletterDirectoryListMexResponse.Result.ThreadMetadata.Name::text)
-                        .orElse(null);
+                .flatMap(FetchNewsletterDirectoryListMexResponse.Result.ThreadMetadata.Name::text)
+                .orElse(null);
         var description = threadMetadata == null
                 ? null
                 : threadMetadata.description()
-                        .flatMap(FetchNewsletterDirectoryListMexResponse.Result.ThreadMetadata.Description::text)
-                        .orElse(null);
+                .flatMap(FetchNewsletterDirectoryListMexResponse.Result.ThreadMetadata.Description::text)
+                .orElse(null);
         var picture = threadMetadata == null
                 ? null
                 : threadMetadata.picture().orElse(null);
@@ -5354,9 +5786,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .verification(threadMetadata == null
                         ? null
                         : threadMetadata.verification()
-                                .map("ON"::equals)
-                                .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
-                                .orElse(null))
+                        .map("ON"::equals)
+                        .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
+                        .orElse(null))
                 .subscribersCount(threadMetadata == null || threadMetadata.subscribersCount().isEmpty()
                         ? null
                         : threadMetadata.subscribersCount().getAsLong())
@@ -5396,6 +5828,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .filter(FetchNewsletterDirectorySearchResultsMexResponse.PageInfo::hasNextPage)
                 .flatMap(FetchNewsletterDirectorySearchResultsMexResponse.PageInfo::endCursor)
                 .orElse(null);
+        emitChannelDirectoryEvent(true, null, null);
         return new NewsletterDirectoryPageBuilder()
                 .entries(entries)
                 .nextCursor(nextCursor)
@@ -5419,13 +5852,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var name = threadMetadata == null
                 ? null
                 : threadMetadata.name()
-                        .flatMap(FetchNewsletterDirectorySearchResultsMexResponse.Result.ThreadMetadata.Name::text)
-                        .orElse(null);
+                .flatMap(FetchNewsletterDirectorySearchResultsMexResponse.Result.ThreadMetadata.Name::text)
+                .orElse(null);
         var description = threadMetadata == null
                 ? null
                 : threadMetadata.description()
-                        .flatMap(FetchNewsletterDirectorySearchResultsMexResponse.Result.ThreadMetadata.Description::text)
-                        .orElse(null);
+                .flatMap(FetchNewsletterDirectorySearchResultsMexResponse.Result.ThreadMetadata.Description::text)
+                .orElse(null);
         var picture = threadMetadata == null
                 ? null
                 : threadMetadata.picture().orElse(null);
@@ -5438,9 +5871,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .verification(threadMetadata == null
                         ? null
                         : threadMetadata.verification()
-                                .map("ON"::equals)
-                                .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
-                                .orElse(null))
+                        .map("ON"::equals)
+                        .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
+                        .orElse(null))
                 .subscribersCount(threadMetadata == null || threadMetadata.subscribersCount().isEmpty()
                         ? null
                         : threadMetadata.subscribersCount().getAsLong())
@@ -5504,13 +5937,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var name = threadMetadata == null
                 ? null
                 : threadMetadata.name()
-                        .flatMap(FetchNewsletterDirectoryCategoriesPreviewMexResponse.Result.Newsletters.ThreadMetadata.Name::text)
-                        .orElse(null);
+                .flatMap(FetchNewsletterDirectoryCategoriesPreviewMexResponse.Result.Newsletters.ThreadMetadata.Name::text)
+                .orElse(null);
         var description = threadMetadata == null
                 ? null
                 : threadMetadata.description()
-                        .flatMap(FetchNewsletterDirectoryCategoriesPreviewMexResponse.Result.Newsletters.ThreadMetadata.Description::text)
-                        .orElse(null);
+                .flatMap(FetchNewsletterDirectoryCategoriesPreviewMexResponse.Result.Newsletters.ThreadMetadata.Description::text)
+                .orElse(null);
         var picture = threadMetadata == null
                 ? null
                 : threadMetadata.picture().orElse(null);
@@ -5523,9 +5956,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .verification(threadMetadata == null
                         ? null
                         : threadMetadata.verification()
-                                .map("ON"::equals)
-                                .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
-                                .orElse(null))
+                        .map("ON"::equals)
+                        .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
+                        .orElse(null))
                 .subscribersCount(threadMetadata == null || threadMetadata.subscribersCount().isEmpty()
                         ? null
                         : threadMetadata.subscribersCount().getAsLong())
@@ -5579,13 +6012,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var name = threadMetadata == null
                 ? null
                 : threadMetadata.name()
-                        .flatMap(FetchRecommendedNewslettersMexResponse.Result.ThreadMetadata.Name::text)
-                        .orElse(null);
+                .flatMap(FetchRecommendedNewslettersMexResponse.Result.ThreadMetadata.Name::text)
+                .orElse(null);
         var description = threadMetadata == null
                 ? null
                 : threadMetadata.description()
-                        .flatMap(FetchRecommendedNewslettersMexResponse.Result.ThreadMetadata.Description::text)
-                        .orElse(null);
+                .flatMap(FetchRecommendedNewslettersMexResponse.Result.ThreadMetadata.Description::text)
+                .orElse(null);
         return new NewsletterDirectoryEntryBuilder()
                 .jid(Jid.of(id))
                 .name(name)
@@ -5595,9 +6028,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .verification(threadMetadata == null
                         ? null
                         : threadMetadata.verification()
-                                .map("ON"::equals)
-                                .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
-                                .orElse(null))
+                        .map("ON"::equals)
+                        .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
+                        .orElse(null))
                 .subscribersCount(threadMetadata == null || threadMetadata.subscribersCount().isEmpty()
                         ? null
                         : threadMetadata.subscribersCount().getAsLong())
@@ -5647,8 +6080,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var name = threadMetadata == null
                 ? null
                 : threadMetadata.name()
-                        .flatMap(FetchSimilarNewslettersMexResponse.Result.ThreadMetadata.Name::text)
-                        .orElse(null);
+                .flatMap(FetchSimilarNewslettersMexResponse.Result.ThreadMetadata.Name::text)
+                .orElse(null);
         var picture = threadMetadata == null
                 ? null
                 : threadMetadata.picture().orElse(null);
@@ -5658,9 +6091,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .verification(threadMetadata == null
                         ? null
                         : threadMetadata.verification()
-                                .map("ON"::equals)
-                                .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
-                                .orElse(null))
+                        .map("ON"::equals)
+                        .map(verified -> verified ? NewsletterVerification.enabled() : NewsletterVerification.disabled())
+                        .orElse(null))
                 .pictureId(picture == null ? null : picture.id().orElse(null))
                 .pictureDirectPath(picture == null ? null : picture.directPath().orElse(null))
                 .build();
@@ -6233,26 +6666,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      */
     @SuppressWarnings("unused")
     private Optional<String> queryAboutViaStatusIq(Jid jid) {
-        var userNode = new StanzaBuilder()
-                .description("user")
-                .attribute("jid", jid)
-                .build();
-        var statusQuery = new StanzaBuilder()
-                .description("status")
-                .content(userNode)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "status")
-                .attribute("to", JidServer.user())
-                .attribute("type", "get")
-                .content(statusQuery);
-        var response = sendNode(iqNode);
-        return response.getChild("status")
-                .flatMap(statusNode -> statusNode.getChild("user"))
-                .flatMap(userResp -> userResp.getChild("status"))
-                .flatMap(Stanza::toContentString)
-                .filter(s -> !s.isEmpty());
+        var request = new IqQueryAboutStatusRequest(jid);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        return switch (IqQueryAboutStatusResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqQueryAboutStatusResponse.Success success -> success.about();
+            case IqQueryAboutStatusResponse.ClientError ignored -> Optional.empty();
+            case IqQueryAboutStatusResponse.ServerError ignored -> Optional.empty();
+            case null -> Optional.empty();
+        };
     }
 
     /** {@inheritDoc} */
@@ -6279,6 +6701,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",
             adaptation = WhatsAppAdaptation.DIRECT)
     public boolean editUsername(String username) {
+        var hadUsername = store.accountStore().username().isPresent();
+        var journeyStartMs = System.currentTimeMillis();
         var request = new SetUsernameMexRequest(username, null, null, null);
         var response = sendNode(request);
         var success = SetUsernameMexResponse.of(response)
@@ -6288,6 +6712,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             store.accountStore()
                     .setUsername(username)
                     .setUsernameState(UsernameState.ACTIVE);
+            emitUsernameCreationActionEvent(hadUsername, System.currentTimeMillis() - journeyStartMs);
         }
         return success;
     }
@@ -7057,6 +7482,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         updateBlockList(true, contact);
         store.contactStore().addBlockedContact(contact);
         logBlockEvent(contact, BlockEventActionType.BLOCK);
+        logPsaRemoveIfApplicable(contact);
         for (var listener : store.listeners()) {
             if (listener instanceof LinkedContactBlockedListener typed) {
                 typed.onContactBlocked(this, contact);
@@ -7120,11 +7546,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case SmaxUpdateBlockListResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Block-list update rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case SmaxUpdateBlockListResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Block-list update server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             // Success variants: nothing to do
             case SmaxUpdateBlockListResponse.SuccessWithMatch _ -> { }
             case SmaxUpdateBlockListResponse.SuccessWithMismatch _ -> { }
@@ -7158,10 +7584,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             }
             case SmaxGetOptOutListResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException("Opt-out-list query rejected: code="
-                            + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+                                                             + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
             case SmaxGetOptOutListResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException("Opt-out-list query server error: code="
-                            + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+                                                             + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
         }
     }
 
@@ -7263,7 +7689,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             }
             case SmaxGetContactBlacklistResponse.Error error ->
                     throw new WhatsAppServerRuntimeException("Contact-blacklist query error: code="
-                            + error.errorCode() + ", text=" + error.errorText().orElse(null));
+                                                             + error.errorCode() + ", text=" + error.errorText().orElse(null));
         }
     }
 
@@ -7292,10 +7718,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case SmaxUpdateOptOutListResponse.SuccessWithMismatch _ -> { }
             case SmaxUpdateOptOutListResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException("Opt-out-list update rejected: code="
-                            + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+                                                             + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
             case SmaxUpdateOptOutListResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException("Opt-out-list update server error: code="
-                            + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+                                                             + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
         }
     }
 
@@ -7371,7 +7797,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case SmaxProfilePictureGetResponse.SuccessAvatarURLs _ -> Optional.empty();
             case SmaxProfilePictureGetResponse.SuccessPictureBlob _ -> Optional.empty();
             case SmaxProfilePictureGetResponse.Error error when error.errorCode() == 404
-                    || error.errorCode() == 401 -> Optional.empty();
+                                                                || error.errorCode() == 401 -> Optional.empty();
             case SmaxProfilePictureGetResponse.Error error ->
                     throw new WhatsAppServerRuntimeException("Profile picture get rejected: code=" + error.errorCode() + ", text=" + error.errorText().orElse(null));
         };
@@ -7410,6 +7836,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void editAbout(String aboutText) {
         Objects.requireNonNull(aboutText, "aboutText cannot be null");
+        var hadPreviousAbout = store.accountStore().selfTextStatus().isPresent();
+        var aboutStartMs = System.currentTimeMillis();
         var request = new IqSetAboutRequest(aboutText);
         var requestBuilder = request.toStanza();
         var response = sendNode(requestBuilder);
@@ -7420,6 +7848,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                         .text(aboutText)
                         .build();
                 store.accountStore().setSelfTextStatus(status);
+                emitAboutCreationEvent(aboutText, hadPreviousAbout, System.currentTimeMillis() - aboutStartMs);
             }
             case IqSetAboutResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException("Set about rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
@@ -7446,24 +7875,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .map(Jid::withoutData)
                 .orElseThrow(() -> new IllegalStateException("Missing self JID"));
         var thumbBytes = generatePreviewThumbnail(jpegBytes);
-        var fullPicture = new StanzaBuilder()
-                .description("picture")
-                .attribute("type", "image")
-                .content(jpegBytes)
-                .build();
-        var previewPicture = new StanzaBuilder()
-                .description("picture")
-                .attribute("type", "preview")
-                .content(thumbBytes)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:profile:picture")
-                .attribute("to", JidServer.user()) // S_WHATSAPP_NET
-                .attribute("target", selfJid)
-                .attribute("type", "set")
-                .content(List.of(fullPicture, previewPicture));
-        sendNode(iqNode);
+        var request = new IqSendProfilePictureRequest(selfJid,
+                SizedInputStream.of(jpegBytes), SizedInputStream.of(thumbBytes));
+        sendNode(request.toStanza());
     }
 
     /** {@inheritDoc} */
@@ -7666,8 +8080,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 : null;
         var viewOnce = container.futureProofContentType() == FutureProofMessageType.VIEW_ONCE;
         var reply = contextInfo != null
-                && contextInfo.quotedMessageId().isPresent()
-                && !jid.hasGroupOrCommunityServer();
+                    && contextInfo.quotedMessageId().isPresent()
+                    && !jid.hasGroupOrCommunityServer();
         var forwarded = contextInfo != null && contextInfo.forwardingScore().orElse(0) > 1;
         var commerce = ThreadLoggingMessages.isCommerceMessage(container);
         threadLoggingService.recordActivity(jid, new ThreadLoggingActivity.MessageSent(viewOnce, reply, forwarded, false, false, commerce));
@@ -7702,15 +8116,28 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(originalKey, "originalKey cannot be null");
         Objects.requireNonNull(newContent, "newContent cannot be null");
         var parentJid = originalKey.parentJid()
-        .orElseThrow(() -> new IllegalArgumentException("originalKey must carry a parentJid"));
+                .orElseThrow(() -> new IllegalArgumentException("originalKey must carry a parentJid"));
         var protocol = new ProtocolMessageBuilder()
-        .key(originalKey)
-        .type(ProtocolMessage.Type.MESSAGE_EDIT)
-        .editedMessageContainer(newContent)
-        .timestampMs(Instant.now())
-        .build();
+                .key(originalKey)
+                .type(ProtocolMessage.Type.MESSAGE_EDIT)
+                .editedMessageContainer(newContent)
+                .timestampMs(Instant.now())
+                .build();
         var wrapper = MessageContainer.of(protocol);
+        var editStartMs = System.currentTimeMillis();
         messageService.send(parentJid, wrapper);
+        var editBuilder = new EditMessageSendEventBuilder()
+                .editType(EditType.EDITED)
+                .messageType(WamMsgUtils.getWamMessageType(parentJid))
+                .mediaType(WamMsgUtils.getWamMediaType(newContent))
+                .editDuration(System.currentTimeMillis() - editStartMs)
+                .resendCount(0)
+                .retryCount(0);
+        originalKey.id().ifPresent(editBuilder::editedMessageId);
+        if (parentJid.hasGroupOrCommunityServer()) {
+            editBuilder.typeOfGroup(TypeOfGroupEnum.GROUP);
+        }
+        wamService.commit(editBuilder.build());
         threadLoggingService.recordActivity(parentJid, new ThreadLoggingActivity.MessageSent(false, false, false, true, false, false));
     }
 
@@ -7732,7 +8159,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(key, "key cannot be null");
         if (everyone) {
             var parentJid = key.parentJid()
-            .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
+                    .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
             // original messages before the revoke send mutates local state.
             // messageType/messageMediaType/revokeSendDelay before the send, because the local
             // state is replaced with the revoke marker afterwards.
@@ -7740,9 +8167,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             var originalInfo = messageIdForMedia == null
                     ? null
                     : store.chatStore().findMessageById(parentJid, messageIdForMedia)
-                            .filter(ChatMessageInfo.class::isInstance)
-                            .map(ChatMessageInfo.class::cast)
-                            .orElse(null);
+                    .filter(ChatMessageInfo.class::isInstance)
+                    .map(ChatMessageInfo.class::cast)
+                    .orElse(null);
             var mediaType = originalInfo == null
                     ? null
                     : WamMsgUtils.getWamMediaType(originalInfo);
@@ -7750,26 +8177,28 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             var revokeSendDelaySeconds = originalInfo == null
                     ? null
                     : originalInfo.timestamp()
-                            .map(t -> (int) (sendInstant.getEpochSecond() - t.getEpochSecond()))
-                            .orElse(null);
+                    .map(t -> (int) (sendInstant.getEpochSecond() - t.getEpochSecond()))
+                    .orElse(null);
             var protocol = new ProtocolMessageBuilder()
-            .key(key)
-            .type(ProtocolMessage.Type.REVOKE)
-            .timestampMs(sendInstant)
-            .build();
+                    .key(key)
+                    .type(ProtocolMessage.Type.REVOKE)
+                    .timestampMs(sendInstant)
+                    .build();
             var wrapper = MessageContainer.of(protocol);
+            var revokeStartMs = System.currentTimeMillis();
             var ack = messageService.send(parentJid, wrapper);
             emitMessageDeleteActionsEvent(parentJid, DeleteActionType.DELETE_FOR_EVERYONE, mediaType);
             if (ack != null && ack.isSuccess()) {
                 emitSendRevokeMessageEvent(parentJid, mediaType, revokeSendDelaySeconds);
+                emitRevokeMessageSendEvent(parentJid, System.currentTimeMillis() - revokeStartMs);
             }
             return;
         }
 
         var parentJid = key.parentJid()
-        .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
+                .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
         var messageId = key.id()
-        .orElseThrow(() -> new IllegalArgumentException("key must carry an id"));
+                .orElseThrow(() -> new IllegalArgumentException("key must carry an id"));
 
         // resolved before the in-memory message is removed, otherwise getWamMediaType cannot classify it.
         var mediaType = store.chatStore().findMessageById(parentJid, messageId)
@@ -7846,7 +8275,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void emitMessageDeleteActionsEvent(Jid chatJid, DeleteActionType deleteActionType, MediaType mediaType) {
         var builder = new MessageDeleteActionsEventBuilder()
-        .deleteActionType(deleteActionType)
+                .deleteActionType(deleteActionType)
                 .isAGroup(chatJid.hasGroupOrCommunityServer())
                 .messagesDeleted(1);
         if (mediaType != null) {
@@ -7899,15 +8328,882 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void emitSendRevokeMessageEvent(Jid chatJid, MediaType mediaType, Integer revokeSendDelaySeconds) {
         var builder = new SendRevokeMessageEventBuilder()
-        .messageType(WamMsgUtils.getWamMessageType(chatJid));
+                .messageType(WamMsgUtils.getWamMessageType(chatJid));
         if (mediaType != null) {
             builder.messageMediaType(mediaType);
-            }
+        }
         if (revokeSendDelaySeconds != null) {
             builder.revokeSendDelay(revokeSendDelaySeconds);
-            }
-        wamService.commit(builder.build());
         }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Returns a fresh pseudo-random session identifier for the {@code long}
+     * session-id dimensions of WAM journey events (channel-directory session,
+     * updates-tab session, status crosspost trace).
+     *
+     * <p>WhatsApp Web seeds these ids from a per-surface counter that Cobalt,
+     * being headless, does not maintain; a positive random {@code long} in the
+     * ten-digit range reproduces the shape WA Web stores in the event's
+     * {@code INTEGER} slots without colliding across events.
+     *
+     * @return a positive random session identifier
+     */
+    private static long nextWamSessionId() {
+        return ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L);
+    }
+
+    /**
+     * Returns a fresh unified-session (or flow) identifier for the string
+     * session-id dimensions of WAM journey events.
+     *
+     * <p>WhatsApp Web formats these as opaque UUID-shaped tokens shared across
+     * the steps of a single UI funnel; Cobalt mints one per emission because it
+     * has no multi-step UI funnel to correlate.
+     *
+     * @return a random UUID string
+     */
+    private static String nextWamUnifiedSessionId() {
+        return UUID.randomUUID().toString();
+    }
+
+    /**
+     * Commits an {@link EditBusinessProfileEvent} recording a successful save of
+     * the own-business-profile editor.
+     *
+     * <p>Adapts {@code WAWebEditFormLogEvents}' profile-field-save action:
+     * reports {@link EditProfileAction#ACTION_PROFILE_FIELD_SAVE} together with
+     * which profile fields the saved {@link BusinessProfile} populates. The
+     * per-field open/discard and cover-photo UI sub-actions have no headless
+     * analogue and are not emitted; {@code hasPaymentInfo} is reported as
+     * {@code false} because Cobalt's business-profile edit request carries no
+     * payment-info field.
+     *
+     * @param profile the business profile that was saved; must not be
+     *                {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebEditFormLogEvents", exports = "logProfileFieldSave",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitEditBusinessProfileEvent(BusinessProfile profile) {
+        wamService.commit(new EditBusinessProfileEventBuilder()
+                .editProfileAction(EditProfileAction.ACTION_PROFILE_FIELD_SAVE)
+                .hasAddress(profile.address().isPresent())
+                .hasCategory(!profile.categories().isEmpty())
+                .hasDescription(profile.description().isPresent())
+                .hasEmail(profile.email().isPresent())
+                .hasHours(profile.hours().isPresent())
+                .hasPaymentInfo(false)
+                .hasWebsite(!profile.websites().isEmpty())
+                .build());
+    }
+
+    /**
+     * Commits a {@link StatusRevokeEvent} for a status update the user just
+     * revoked.
+     *
+     * <p>Adapts {@code WAWebLogStatusRevoke.logStatusRevoke}: reports the revoked
+     * status id, its media type, and the elapsed lifetime ({@code statusLifeT})
+     * computed as the milliseconds between the status post timestamp and the
+     * revoke, together with the posting-session id reused as the status and
+     * updates-tab session dimensions. The media type and lifetime are resolved
+     * from the local status snapshot when it is still present.
+     *
+     * @param statusId               the id of the revoked status; must not be
+     *                               {@code null}
+     * @param statusPostingSessionId the posting-session id grouping the revoke
+     *                               with its sibling status metrics
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogStatusRevoke", exports = "logStatusRevoke",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStatusRevokeEvent(String statusId, int statusPostingSessionId) {
+        var builder = new StatusRevokeEventBuilder()
+                .statusId(statusId)
+                .statusSessionId(statusPostingSessionId)
+                .updatesTabSessionId(statusPostingSessionId)
+                .unifiedSessionId(nextWamUnifiedSessionId());
+        store.chatStore().findStatusById(statusId).ifPresent(status -> {
+            builder.mediaType(WamMsgUtils.getWamMediaType(status));
+            status.timestamp().ifPresent(posted ->
+                    builder.statusLifeT(Duration.between(posted, Instant.now()).toMillis()));
+        });
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link RevokeMessageSendEvent} for a completed delete-for-everyone
+     * (revoke) send whose protocol message round-tripped to the server.
+     *
+     * <p>Adapts {@code WAWebMessageSendReporter}'s revoke branch: reports the
+     * conversation {@code messageType}, the sender-initiated
+     * {@link RevokeType#SENDER}, and the wall-clock duration of the revoke send.
+     * Because Cobalt issues one revoke per {@link #deleteMessage(MessageKey, boolean)}
+     * call with no automatic resend, {@code resendCount} and {@code retryCount}
+     * are zero.
+     *
+     * @param chatJid          the chat JID of the revoked message; must not be
+     *                         {@code null}
+     * @param revokeDurationMs the wall-clock milliseconds spent dispatching the
+     *                         revoke send
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageSendReporter", exports = "reportRevokeMessageSend",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitRevokeMessageSendEvent(Jid chatJid, long revokeDurationMs) {
+        wamService.commit(new RevokeMessageSendEventBuilder()
+                .messageType(WamMsgUtils.getWamMessageType(chatJid))
+                .revokeType(RevokeType.SENDER)
+                .revokeDuration(revokeDurationMs)
+                .resendCount(0)
+                .retryCount(0)
+                .build());
+    }
+
+    /**
+     * Commits a {@link ChatLockActionEvent} for a chat lock or unlock action.
+     *
+     * <p>Adapts {@code WAWebChatLockWAMUtils.chatLockActionWAMEvent}: reports
+     * {@link ChatLockActionType#ADD_CHAT_LOCK} or
+     * {@link ChatLockActionType#REMOVE_CHAT_LOCK}, whether the target chat is a
+     * group, and the number of chats remaining in the locked folder after the
+     * action. The entry point defaults to {@link ActionEntryPoint#CHAT_INFO} and
+     * the auth type to {@link AuthType#SECRET_CODE}, matching the standard
+     * secret-code lock surface WA Web logs for a headless (non-biometric) toggle.
+     *
+     * @param chat   the chat JID being locked or unlocked; must not be
+     *               {@code null}
+     * @param locked {@code true} when the chat was locked, {@code false} when it
+     *               was unlocked
+     */
+    @WhatsAppWebExport(moduleName = "WAWebChatLockWAMUtils", exports = "chatLockActionWAMEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitChatLockActionEvent(Jid chat, boolean locked) {
+        var lockedFolderCount = store.chatStore().chats().stream()
+                .filter(Chat::locked)
+                .count();
+        wamService.commit(new ChatLockActionEventBuilder()
+                .chatLockActionType(locked ? ChatLockActionType.ADD_CHAT_LOCK : ChatLockActionType.REMOVE_CHAT_LOCK)
+                .chatLockIsGroup(chat.hasGroupOrCommunityServer())
+                .actionEntryPoint(ActionEntryPoint.CHAT_INFO)
+                .authType(AuthType.SECRET_CODE)
+                .actionFolderChatsCount(lockedFolderCount)
+                .build());
+    }
+
+    /**
+     * Commits a {@link LabelEventEvent} for a business-label operation.
+     *
+     * <p>Adapts {@code WAWebWamLabelEventReporter}: reports the label operation
+     * ({@link LabelOperations}) and its target ({@link LabelTargets}) along with
+     * the current label count and, for a resolvable label, its title and
+     * predefined number. Cobalt's label API carries no UI entry point or per-chat
+     * tagging counters, so those dimensions are left unset.
+     *
+     * @param operation the label operation performed; must not be {@code null}
+     * @param target    the label operation target; must not be {@code null}
+     * @param label     the label the operation acted on, or {@code null} when it
+     *                  is not resolvable (for example a reorder spanning many
+     *                  labels)
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamLabelEventReporter", exports = "reportLabelEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitLabelEvent(LabelOperations operation, LabelTargets target, Label label) {
+        var builder = new LabelEventEventBuilder()
+                .labelOperation(operation)
+                .labelTarget(target)
+                .labelCount(store.settingsStore().labels().size());
+        if (label != null) {
+            builder.customLabelTitle(label.name());
+            label.predefinedId().ifPresent(builder::predefinedLabelNumber);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link ListUpdateUserJourneyEvent} for a chat-list (label)
+     * create, rename, or delete.
+     *
+     * <p>Adapts {@code WAWebListsLogging.logListUpdateUserJorney}: reports the
+     * {@link ListAction}, the numeric list id, the resolved {@link ListType}, and,
+     * when the label maps to a predefined list, its predefined id. Cobalt's label
+     * API carries no UI entry point, so {@code updateEntryPoint} and the
+     * preset/custom list counts are left unset. Labels whose id is not numeric
+     * are skipped.
+     *
+     * @param action the list action performed; must not be {@code null}
+     * @param label  the label the action acted on; must not be {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebListsLogging", exports = "logListUpdateUserJorney",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitListUpdateUserJourneyEvent(ListAction action, Label label) {
+        var listId = parseLabelIdToListId(label.id());
+        if (listId == null) {
+            return;
+        }
+        var builder = new ListUpdateUserJourneyEventBuilder()
+                .listAction(action)
+                .listId(listId);
+        var listType = mapWamListType(label.type().orElse(null));
+        if (listType != null) {
+            builder.listType(listType);
+        }
+        label.predefinedId().ifPresent(builder::predefinedId);
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits an {@link SmbListEventEvent} for a small-business label/list
+     * operation.
+     *
+     * <p>Adapts {@code WAWebWamSmbListEventReporter}: reports the label operation
+     * and target, the SMB list feature and surface, the per-client app-session
+     * id, and the numeric list id/type when the label maps to a list. UI session
+     * dimensions (current list state, bulk-labeling flags) that WA Web derives
+     * from its lists UI are left unset because Cobalt is headless.
+     *
+     * @param operation   the label operation performed; must not be {@code null}
+     * @param target      the label operation target; must not be {@code null}
+     * @param featureName the SMB list feature the operation belongs to; must not
+     *                    be {@code null}
+     * @param label       the label the operation acted on, or {@code null} when
+     *                    unresolved
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamSmbListEventReporter", exports = "reportSmbListEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitSmbListEvent(LabelOperations operation, LabelTargets target, SmbListFeatureNameType featureName, Label label) {
+        var builder = new SmbListEventEventBuilder()
+                .labelOperation(operation)
+                .labelTarget(target)
+                .smbListFeatureName(featureName)
+                .smbListSurface(SmbListSurfaceType.MANAGE_LISTS)
+                .appSessionId(wamAppSessionId);
+        if (label != null) {
+            builder.customListTitle(label.name());
+            var listId = parseLabelIdToListId(label.id());
+            if (listId != null) {
+                builder.listId(listId);
+            }
+            var listType = mapWamListType(label.type().orElse(null));
+            if (listType != null) {
+                builder.listType(listType);
+            }
+            label.predefinedId().ifPresent(builder::predefinedId);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link CadminDemoteEvent} summarising the outcome of a
+     * community-admin (cadmin) demotion.
+     *
+     * <p>Adapts {@code WAWebCommunityLogEvents}' demote-confirmation path: reports
+     * the demote origin, the aggregate result derived from the per-participant
+     * status map ({@link CadminDemoteResultType#SUCCESS} when every target was
+     * demoted, otherwise {@link CadminDemoteResultType#FAILURE}), and whether the
+     * target was the last cadmin or creator. Cobalt cannot cheaply determine
+     * last-admin status from the demote response, so {@code isLastCadminOrCreator}
+     * is reported as {@code false}.
+     *
+     * @param result the per-participant demote status map; must not be
+     *               {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCommunityLogEvents", exports = "logCadminDemote",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitCadminDemoteEvent(Map<Jid, GroupParticipantStatus> result) {
+        var success = !result.isEmpty()
+                      && result.values().stream().allMatch(status -> status == GroupParticipantStatus.OK);
+        wamService.commit(new CadminDemoteEventBuilder()
+                .cadminDemoteOrigin(CadminDemoteOriginType.MEMBER_LIST)
+                .cadminDemoteResult(success ? CadminDemoteResultType.SUCCESS : CadminDemoteResultType.FAILURE)
+                .isLastCadminOrCreator(false)
+                .build());
+    }
+
+    /**
+     * Commits a {@link GroupBulkRemovalEvent} for a group member removal.
+     *
+     * <p>Adapts {@code WAWebLinkJoinedMembersUtils.logGroupBulkRemovalWamEvent}:
+     * reports the sanitized group id, the number of members removed, and the
+     * per-client app-session id. WA Web scopes this beacon to the link-joined
+     * bulk-removal drawer; Cobalt emits it for every successful participant
+     * removal because the underlying remove action is the same.
+     *
+     * @param group        the group the members were removed from; must not be
+     *                     {@code null}
+     * @param removedCount the number of members removed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLinkJoinedMembersUtils", exports = "logGroupBulkRemovalWamEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitGroupBulkRemovalEvent(Jid group, long removedCount) {
+        wamService.commit(new GroupBulkRemovalEventBuilder()
+                .bulkRemovalGroupId(sanitizeGroupJidForWam(group))
+                .removedMembersCount(removedCount)
+                .appSessionId(wamAppSessionId)
+                .build());
+    }
+
+    /**
+     * Commits an {@link MdChatAssignmentSecondaryActionEvent} for a secondary
+     * chat-assignment action following a primary assign/unassign.
+     *
+     * <p>Adapts {@code WAWebChatAssignmentLogEvents}' secondary-action path. The
+     * secondary-action enum is dominantly UI-render (system-message rendered,
+     * status ticker, tooltip); the one action with a headless analogue is
+     * {@link MdChatAssignmentSecondaryActionType#ACTION_SYSTEM_MESSAGE_ADDED_TO_CHAT_HISTORY},
+     * emitted here because assigning a chat appends an assignment system message
+     * to the chat history. The chat-type mapping mirrors
+     * {@link #emitChatAssignmentEvent(Jid, String, boolean)}.
+     *
+     * @param chat    the chat JID being assigned; must not be {@code null}
+     * @param agentId the target agent id, empty on unassign; must not be
+     *                {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebChatAssignmentLogEvents", exports = "logChatAssignmentSecondaryAction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitChatAssignmentSecondaryActionEvent(Jid chat, String agentId) {
+        MdChatAssignmentChatType chatType;
+        if (chat.hasUserServer() || chat.hasLidServer()) {
+            chatType = MdChatAssignmentChatType.INDIVIDUAL;
+        } else if (chat.hasGroupOrCommunityServer()) {
+            chatType = MdChatAssignmentChatType.GROUP;
+        } else if (chat.hasBroadcastServer()) {
+            chatType = MdChatAssignmentChatType.BROADCAST_LIST;
+        } else if (chat.hasNewsletterServer()) {
+            chatType = MdChatAssignmentChatType.CHANNEL;
+        } else {
+            chatType = null;
+        }
+        var meDeviceId = store.accountStore().jid().map(Jid::device).orElse(0);
+        wamService.commit(new MdChatAssignmentSecondaryActionEventBuilder()
+                .mdChatAssignmentSecondaryActionType(MdChatAssignmentSecondaryActionType.ACTION_SYSTEM_MESSAGE_ADDED_TO_CHAT_HISTORY)
+                .mdChatAssignmentSecondaryActionAssignmentType(agentId.isEmpty()
+                        ? MdChatAssignmentAssignmentType.UNASSIGNED
+                        : MdChatAssignmentAssignmentType.ASSIGNED)
+                .mdChatAssignmentSecondaryActionAgentId(agentId)
+                .mdChatAssignmentSecondaryActionChatType(chatType)
+                .mdChatAssignmentSecondaryActionSource(MdChatAssignmentSourceType.NONE)
+                .mdChatAssignmentSecondaryActionMdId(meDeviceId)
+                .mdChatAssignmentSecondaryActionBrowserId("")
+                .build());
+    }
+
+    /**
+     * Commits a {@link PsChannelPostForwardEvent} when a newsletter (channel)
+     * post is forwarded to a chat.
+     *
+     * <p>Adapts {@code WAWebLogNewsletterMessageForward.logNewsletterMessageForward}:
+     * emitted once per destination when the forwarded source is a
+     * {@link NewsletterMessageInfo}, carrying the source channel id (cid) and
+     * post id, the media type of the forwarded content, a second-order flag when
+     * the post was itself already forwarded, and the destination channel id when
+     * the forward target is another channel. Non-newsletter sources are ignored.
+     *
+     * @param source      the forwarded source message; must not be {@code null}
+     * @param destination the destination chat JID; must not be {@code null}
+     * @param forwarded   the forwarded message container; must not be
+     *                    {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLogNewsletterMessageForward", exports = "logNewsletterMessageForward",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitPsChannelPostForwardEvent(MessageInfo source, Jid destination, MessageContainer forwarded) {
+        if (!(source instanceof NewsletterMessageInfo newsletterSource)) {
+            return;
+        }
+        var builder = new PsChannelPostForwardEventBuilder()
+                .cid(newsletterJid(newsletterSource).toString())
+                .postId(String.valueOf(newsletterSource.serverId()))
+                .isSecondOrder(numTimesForwarded(source) > 1)
+                .mediaType(WamMsgUtils.getWamMediaType(forwarded));
+        if (destination.hasNewsletterServer()) {
+            builder.destinationChannelId(destination.toString());
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link ChatPsaReadEvent} when the read message belongs to the
+     * official WhatsApp PSA (public service announcement) account.
+     *
+     * <p>Adapts {@code WAWebWamChatPSALogger.logChatPSARead}: when the read
+     * message's parent is {@link Jid#announcementsAccount()}, reports its media
+     * type, PSA campaign id and message id under the {@link ReadEntryPoint#CHAT}
+     * entry point. Non-PSA reads are ignored.
+     *
+     * @param key the key of the message being marked read; must not be
+     *            {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamChatPSALogger", exports = "logChatPSARead",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void logPsaReadIfApplicable(MessageKey key) {
+        var parentJid = key.parentJid().orElse(null);
+        if (parentJid == null || !parentJid.equals(Jid.announcementsAccount())) {
+            return;
+        }
+        var messageId = key.id().orElse(null);
+        if (messageId == null) {
+            return;
+        }
+        store.chatStore().findMessageById(parentJid, messageId)
+                .filter(ChatMessageInfo.class::isInstance)
+                .map(ChatMessageInfo.class::cast)
+                .ifPresent(chatInfo -> {
+                    var campaignId = chatInfo.statusPsa()
+                            .map(StatusPSA::campaignId)
+                            .map(String::valueOf)
+                            .orElse(null);
+                    wamService.commit(new ChatPsaReadEventBuilder()
+                            .messageMediaType(WamMsgUtils.getWamMediaType(chatInfo))
+                            .psaCampaignId(campaignId)
+                            .psaMsgId(messageId)
+                            .readEntryPoint(ReadEntryPoint.CHAT)
+                            .build());
+                });
+    }
+
+    /**
+     * Commits a {@link ChatPsaRemoveEvent} when the contact being blocked is the
+     * official WhatsApp PSA account.
+     *
+     * <p>Adapts {@code WAWebWamChatPSALogger}'s remove/block path: when the
+     * blocked contact is {@link Jid#announcementsAccount()}, reports the block
+     * reason and the last received PSA message's media type, timestamp, id and
+     * campaign id, resolved from the PSA chat's newest message. Non-PSA blocks
+     * are ignored.
+     *
+     * @param contact the contact JID being blocked; must not be {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamChatPSALogger", exports = "logChatPSARemove",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void logPsaRemoveIfApplicable(Jid contact) {
+        if (!contact.equals(Jid.announcementsAccount())) {
+            return;
+        }
+        var builder = new ChatPsaRemoveEventBuilder()
+                .psaBlockReason(PsaBlockReason.TOO_MANY_MESSAGES);
+        store.chatStore().findChatByJid(contact)
+                .flatMap(Chat::newestMessage)
+                .ifPresent(last -> {
+                    builder.lastReceivedMediaType(WamMsgUtils.getWamMediaType(last));
+                    last.key().id().ifPresent(builder::lastReceivedMsgId);
+                    last.timestamp().ifPresent(builder::lastReceivedMessageTs);
+                    last.statusPsa()
+                            .map(StatusPSA::campaignId)
+                            .map(String::valueOf)
+                            .ifPresent(builder::psaCampaignId);
+                });
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link QbmMessageReadEvent} when a read receipt is sent for a
+     * message from a business contact.
+     *
+     * <p>Adapts {@code WAWebQbmMessageReadLogEvent}: WhatsApp Web attaches a rich
+     * business-read beacon to read receipts sent to business-initiated threads.
+     * Most of its dimensions (CAPI/ads-manager provenance, decision-service
+     * flags, rolling thread/message counts) are only available to a business
+     * client, so Cobalt reports the subset it can derive as a consumer: the
+     * business contact and folder classification, the read source, the thread's
+     * muted state, and the business-intent flag. The event is only emitted for
+     * chats whose counterparty carries a verified business name, matching WA
+     * Web's business-initiated-message guard.
+     *
+     * @param key the key of the message being marked read; must not be
+     *            {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebQbmMessageReadLogEvent", exports = "logQbmMessageRead",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitQbmMessageReadIfApplicable(MessageKey key) {
+        var chat = key.parentJid().orElse(null);
+        if (chat == null || store.contactStore().findVerifiedBusinessName(chat).isEmpty()) {
+            return;
+        }
+        var muted = store.chatStore().findChatByJid(chat)
+                .map(model -> model.mute().map(ChatMute::isMuted).orElse(false))
+                .orElse(false);
+        wamService.commit(new QbmMessageReadEventBuilder()
+                .contactType(ContactType.SMB)
+                .chatsFolderType(ChatsFolderType.INBOX)
+                .readSource(ReadSource.MARK_AS_READ)
+                .readReceiptsEnabled(true)
+                .isMuted(muted)
+                .isBizIntent(true)
+                .qbmFlag(QbmFlag.OTHER)
+                .threadCreationTime(ThreadCreationTime.LESS_THAN_7_DAYS_AGO)
+                .build());
+    }
+
+    /**
+     * Commits a {@link StickerLatencyEvent} measuring the download latency of a
+     * sticker media transfer.
+     *
+     * <p>Adapts {@code WAWebMediaMmsV4Download}'s sticker-latency measurement:
+     * emitted only when the downloaded provider is a {@link StickerMessage},
+     * reporting the sticker's decrypted size and the wall-clock milliseconds
+     * spent establishing the media connection and download. Non-sticker
+     * downloads are ignored.
+     *
+     * @param provider   the media provider that was downloaded; must not be
+     *                   {@code null}
+     * @param ttActionMs the wall-clock milliseconds spent on the download
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaMmsV4Download", exports = "logStickerLatency",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStickerLatencyIfApplicable(MediaProvider provider, long ttActionMs) {
+        if (!(provider instanceof StickerMessage sticker)) {
+            return;
+        }
+        wamService.commit(new StickerLatencyEventBuilder()
+                .size(sticker.mediaSize().orElse(0))
+                .stickerLatencyTtAction(ttActionMs)
+                .build());
+    }
+
+    /**
+     * Commits a {@link MessagingUserJourneyEvent} for a pin or unpin action from
+     * the message menu.
+     *
+     * <p>Adapts {@code WAWebMessagingUserJourneyLogger}'s pin/unpin funnel:
+     * reports {@link ActionType#CLICK_PIN} or {@link ActionType#CLICK_UNPIN} on
+     * the {@link TsSurface#MESSAGE_MENU} surface, the thread type, whether the
+     * pinned message is the user's own, and the pin expiry seconds on a pin. The
+     * media type is resolved from the pinned message when it is present locally.
+     * The pin-replacement/expiration dialog and banner UI sub-surfaces WA Web
+     * also logs have no headless counterpart.
+     *
+     * @param chat   the chat JID of the pinned message; must not be {@code null}
+     * @param msgKey the key of the message being pinned or unpinned; must not be
+     *               {@code null}
+     * @param pin    {@code true} for a pin, {@code false} for an unpin
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessagingUserJourneyLogger", exports = "logPinInChatUserJourney",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitPinMessageUserJourneyEvent(Jid chat, MessageKey msgKey, boolean pin) {
+        var builder = new MessagingUserJourneyEventBuilder()
+                .messagingActionType(pin ? ActionType.CLICK_PIN : ActionType.CLICK_UNPIN)
+                .uiSurface(TsSurface.MESSAGE_MENU)
+                .threadType(chat.hasGroupOrCommunityServer() ? ThreadType.GROUP : ThreadType.INDIVIDUAL)
+                .userRole(UserRoleType.MEMBER)
+                .isSelfPin(msgKey.fromMe())
+                .appSessionId(wamAppSessionId)
+                .unifiedSessionId(nextWamUnifiedSessionId())
+                .userJourneyFunnelId(nextWamUnifiedSessionId());
+        if (pin) {
+            builder.pinInChatExpirySecs(604800);
+        }
+        msgKey.id()
+                .flatMap(id -> store.chatStore().findMessageById(chat, id))
+                .filter(ChatMessageInfo.class::isInstance)
+                .map(ChatMessageInfo.class::cast)
+                .ifPresent(info -> builder.mediaType(WamMsgUtils.getWamMediaType(info)));
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link UsernameCreationActionEvent} for a successful username
+     * claim or change.
+     *
+     * <p>Adapts {@code WAWebUsernameCreationActionLogger}: reports the username
+     * source ({@link UsernameSource#USER_INPUT}), the link type
+     * ({@link UsernameLinkType#NEW} for a first username, otherwise
+     * {@link UsernameLinkType#EXISTING}), and the elapsed journey milliseconds.
+     * FB/IG linking is unavailable to a headless client, so
+     * {@code eligibleToLink} is {@code false} and the linked-account counts are
+     * zero. The multi-screen UI flow dimensions have no headless analogue.
+     *
+     * @param hadExistingUsername whether the account already had a username
+     *                            before this change
+     * @param journeyMs           the elapsed milliseconds of the claim request
+     */
+    @WhatsAppWebExport(moduleName = "WAWebUsernameCreationActionLogger", exports = "logUsernameCreationAction",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitUsernameCreationActionEvent(boolean hadExistingUsername, long journeyMs) {
+        wamService.commit(new UsernameCreationActionEventBuilder()
+                .usernameSource(UsernameSource.USER_INPUT)
+                .usernameLinkType(hadExistingUsername ? UsernameLinkType.EXISTING : UsernameLinkType.NEW)
+                .eligibleToLink(false)
+                .linkedAccountsFb(0)
+                .linkedAccountsIg(0)
+                .userJourneyEventMs(journeyMs)
+                .build());
+    }
+
+    /**
+     * Commits a {@link MessagingFavoritesUpdateEvent} for an add or remove of a
+     * chat to the messaging favorites list.
+     *
+     * <p>Adapts {@code WAWebFavoritesLogging}: reports the contact and group
+     * favorite counts before and after the change and the update entry point.
+     * The counts are split by whether each favorited JID has a group/community
+     * server.
+     *
+     * @param before the favorites list before the change; must not be
+     *               {@code null}
+     * @param after  the favorites list after the change; must not be
+     *               {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebFavoritesLogging", exports = "logMessagingFavoritesUpdate",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitMessagingFavoritesUpdateEvent(List<Jid> before, List<Jid> after) {
+        wamService.commit(new MessagingFavoritesUpdateEventBuilder()
+                .contactFavCountBeforeUpdate(before.stream().filter(jid -> !jid.hasGroupOrCommunityServer()).count())
+                .contactFavCountAfterUpdate(after.stream().filter(jid -> !jid.hasGroupOrCommunityServer()).count())
+                .groupFavCountBeforeUpdate(before.stream().filter(Jid::hasGroupOrCommunityServer).count())
+                .groupFavCountAfterUpdate(after.stream().filter(Jid::hasGroupOrCommunityServer).count())
+                .favoritesUpdateEntryPoint(FavoritesUpdateEntryPoint.CONTACT_INFO)
+                .build());
+    }
+
+    /**
+     * Commits a {@link CtwaAdCreationAndManagementJourneyEvent} for a step of the
+     * click-to-WhatsApp (LWI) ad creation/management flow.
+     *
+     * <p>Adapts {@code WAWebBizNativeAdsEntryTapLogger}: reports the LWI surface,
+     * a per-flow id, and a per-session sequence id. WA Web derives the ad-account
+     * id and finer entry/sub-entry points from the UI; Cobalt sets the ad-account
+     * id when the caller supplies one and leaves the UI-only dimensions unset.
+     *
+     * @param surface     the LWI surface for this journey step; must not be
+     *                    {@code null}
+     * @param flowId      the LWI flow id correlating this step with its siblings;
+     *                    must not be {@code null}
+     * @param adAccountId the WhatsApp ad-account id, or {@code null} when unknown
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBizNativeAdsEntryTapLogger", exports = "logCtwaAdCreationAndManagementJourney",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitCtwaAdJourneyEvent(LwiSurface surface, String flowId, String adAccountId) {
+        var builder = new CtwaAdCreationAndManagementJourneyEventBuilder()
+                .lwiSurface(surface)
+                .lwiFlowId(flowId)
+                .seqId(wamJourneySequence.incrementAndGet());
+        if (adAccountId != null) {
+            builder.waAdAccountId(adAccountId);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits an {@link SmbQpCallHealthEvent} recording the health of a Quick
+     * Promotions fetch call.
+     *
+     * <p>Adapts {@code WAWebSmbQpCallHealthLogger}: reports the GraphQL fetch
+     * mechanism and whether the fetch succeeded or threw, carrying the exception
+     * message on failure.
+     *
+     * @param result           the fetch outcome; must not be {@code null}
+     * @param exceptionMessage the exception message on failure, or {@code null}
+     *                         on success
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSmbQpCallHealthLogger", exports = "logSmbQpCallHealth",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitSmbQpCallHealthEvent(FetchResultEnum result, String exceptionMessage) {
+        var builder = new SmbQpCallHealthEventBuilder()
+                .fetchMechanism(FetchMechanismEnum.GRAPHQL)
+                .fetchResult(result);
+        if (exceptionMessage != null) {
+            builder.fetchExceptionMessage(exceptionMessage);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits an {@link AboutCreationEvent} for a successful profile about-text
+     * edit.
+     *
+     * <p>Adapts {@code WAWebAboutWamLogger}: reports the about request type
+     * (create/update/clear, derived from whether a previous about existed and
+     * whether the new text is blank), the settings entry point, the new about
+     * length and the current locale, and the elapsed edit duration. The UI
+     * prompt/preset dimensions are unset because the headless edit is
+     * user-authored free text rather than a picked prompt or preset.
+     *
+     * @param aboutText        the new about text; must not be {@code null}
+     * @param hadPreviousAbout whether the account already had an about text
+     * @param durationMs       the elapsed milliseconds of the edit request
+     */
+    @WhatsAppWebExport(moduleName = "WAWebAboutWamLogger", exports = "logAboutCreation",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitAboutCreationEvent(String aboutText, boolean hadPreviousAbout, long durationMs) {
+        AboutRequestType requestType;
+        if (aboutText.isBlank()) {
+            requestType = AboutRequestType.CLEAR_EXISTING;
+        } else if (hadPreviousAbout) {
+            requestType = AboutRequestType.UPDATE_EXISTING;
+        } else {
+            requestType = AboutRequestType.CREATE_NEW;
+        }
+        wamService.commit(new AboutCreationEventBuilder()
+                .aboutRequestType(requestType)
+                .aboutEntrypoint(AboutEntrypointType.SETTINGS)
+                .aboutLength(aboutText.length())
+                .aboutLocale(java.util.Locale.getDefault().toLanguageTag())
+                .aboutPresetSelected(false)
+                .aboutDuration(durationMs)
+                .aboutOverallT(Instant.ofEpochMilli(durationMs))
+                .build());
+    }
+
+    /**
+     * Commits a {@link ChannelDirectoryEvent} for a channel-directory browse or
+     * search.
+     *
+     * <p>Adapts {@code WAWebNewsletterDirectoryFunnelLogging}: reports whether the
+     * funnel is in search mode, the impression reason, and fresh directory and
+     * updates-tab session ids. The optional pill and country selectors are set
+     * when the caller resolves them from the query. Impression/scroll/pill UI
+     * sub-actions have no headless counterpart.
+     *
+     * @param searchMode      {@code true} for a directory search, {@code false}
+     *                        for a browse/list
+     * @param pill            the selected directory pill, or {@code null}
+     * @param countrySelector the selected country code, or {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebNewsletterDirectoryFunnelLogging", exports = "logChannelDirectory",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitChannelDirectoryEvent(boolean searchMode, ChannelDirectoryPillSelected pill, String countrySelector) {
+        var builder = new ChannelDirectoryEventBuilder()
+                .searchMode(searchMode)
+                .impReason(searchMode ? ChannelDirectoryImpReason.NOT_APPLICABLE : ChannelDirectoryImpReason.PILL_SELECTION)
+                .channelDirectorySessionId(nextWamSessionId())
+                .updatesTabSessionId(nextWamSessionId())
+                .unifiedSessionId(nextWamUnifiedSessionId());
+        if (pill != null) {
+            builder.pillSelected(pill);
+        }
+        if (countrySelector != null) {
+            builder.countrySelector(countrySelector);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link StatusCrosspostRequestEvent} for a status crosspost
+     * eligibility/request to an external Meta surface.
+     *
+     * <p>Adapts {@code WAWebCrosspostingHelper}: reports the crosspost origin, a
+     * fresh trace id, the elapsed journey milliseconds, and, when available, the
+     * crosspost session id and the target status id. Cobalt models the request as
+     * a non-auto crosspost from the contextual share icon.
+     *
+     * @param sessionId the crosspost session id, or {@code null}
+     * @param statusId  the id of the status being crossposted, or {@code null}
+     * @param journeyMs the elapsed milliseconds of the request
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCrosspostingHelper", exports = "logStatusCrosspostRequest",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStatusCrosspostRequestEvent(String sessionId, String statusId, long journeyMs) {
+        var builder = new StatusCrosspostRequestEventBuilder()
+                .crosspostOrigin(CrosspostOriginType.CONTEXTUAL_SHARE_ICON)
+                .isAutoCrossposted(false)
+                .statusCrosspostTraceId(nextWamSessionId())
+                .userJourneyEventMs(journeyMs);
+        if (sessionId != null) {
+            builder.cacSessionId(sessionId);
+        }
+        if (statusId != null) {
+            builder.statusId(statusId);
+        }
+        wamService.commit(builder.build());
+    }
+
+    /**
+     * Commits a {@link StatusReportingEventsEvent} for a submitted status report.
+     *
+     * <p>Adapts {@code WAWebWamStatusReportingEventsLogger}: reports the
+     * report-interaction type ({@link StatusReportInteraction#CLICK_SUBMIT_REPORT})
+     * and the poster contact type, derived from the reported status: a channel
+     * post yields {@link StatusPosterContactType#CHANNEL}; an individual status
+     * from a known contact yields {@link StatusPosterContactType#CONTACT},
+     * otherwise {@link StatusPosterContactType#UNKNOWN}.
+     *
+     * @param status the reported status message; must not be {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamStatusReportingEventsLogger", exports = "logStatusReportingEvent",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStatusReportingEvent(MessageInfo status) {
+        StatusPosterContactType posterType;
+        switch (status) {
+            case NewsletterMessageInfo _ -> posterType = StatusPosterContactType.CHANNEL;
+            case ChatMessageInfo chat -> {
+                var owner = chat.senderJid().orElse(null);
+                posterType = owner != null && store.contactStore().findContactByJid(owner).isPresent()
+                        ? StatusPosterContactType.CONTACT
+                        : StatusPosterContactType.UNKNOWN;
+            }
+            default -> posterType = StatusPosterContactType.UNKNOWN;
+        }
+        wamService.commit(new StatusReportingEventsEventBuilder()
+                .statusReportInteraction(StatusReportInteraction.CLICK_SUBMIT_REPORT)
+                .statusPosterContactType(posterType)
+                .build());
+    }
+
+    /**
+     * Commits a {@link StickerAddToFavoriteEvent} when a sticker is favorited.
+     *
+     * <p>Adapts {@code WAWebFavoriteStickerAction}: WhatsApp Web reads the
+     * favorited sticker's traits (animated, first-party, premium, giphy/tenor/
+     * klipy/text origin) from the sticker model. Cobalt's favorite API carries
+     * only the sticker hash, so the traits default to a static first-party
+     * sticker, the common case for a favorited sticker.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebFavoriteStickerAction", exports = "addStickerToFavorites",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitStickerAddToFavoriteEvent() {
+        wamService.commit(new StickerAddToFavoriteEventBuilder()
+                .stickerIsFirstParty(true)
+                .stickerIsAnimated(false)
+                .stickerIsAi(false)
+                .stickerIsAvatar(false)
+                .stickerIsGiphy(false)
+                .stickerIsKlipy(false)
+                .stickerIsPremium(false)
+                .stickerIsTenor(false)
+                .stickerIsText(false)
+                .build());
+    }
+
+    /**
+     * Commits a {@link WebcStreamModeChangeEvent} recording a transition of the
+     * client's connection/stream mode.
+     *
+     * <p>Adapts {@code WAWebStreamModel.logModeChange}: WhatsApp Web commits this
+     * event on every stream-mode transition. Cobalt emits it at the two lifecycle
+     * transitions it can observe headlessly: entering
+     * {@link WebcStreamModeCode#MAIN} once the socket is (re)opened and active,
+     * and {@link WebcStreamModeCode#OFFLINE} when the connection is torn down.
+     *
+     * @param mode the stream mode being entered; must not be {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebStreamModel", exports = "logModeChange",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitWebcStreamModeChangeEvent(WebcStreamModeCode mode) {
+        wamService.commit(new WebcStreamModeChangeEventBuilder()
+                .webcStreamMode(mode)
+                .build());
+    }
+
+    /**
+     * Commits a {@link WebcLoginEvent} summarising the web-companion login
+     * journey on the initial connect.
+     *
+     * <p>Adapts {@code WAWebWamLoginReporter}: WhatsApp Web aggregates login and
+     * initial history-sync metrics after a successful companion login. Cobalt
+     * emits it once on the initial web connect, reporting the persistent-login
+     * flag (Cobalt always persists its session), a single displayed QR code, and
+     * the history-sync chat and contact counts read from the store; the browser
+     * storage-quota and network-type dimensions have no headless equivalent and
+     * are left unset.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamLoginReporter", exports = "reportWebcLogin",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitWebcLoginEvent() {
+        wamService.commit(new WebcLoginEventBuilder()
+                .webcPersistentLoginEnabled(true)
+                .webcQrCodes(1)
+                .webcSyncChatCount(store.chatStore().chats().size())
+                .webcSyncContactCount(store.contactStore().contacts().size())
+                .build());
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -8117,7 +9413,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case StickerMessage _ -> StatusContentType.GIF;
             case AudioMessage _ -> StatusContentType.VOICE;
             default -> StatusContentType.PHOTO;
-            };
+        };
     }
 
     /**
@@ -8159,10 +9455,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .senderJid(selfJid)
                 .build();
         var protocol = new ProtocolMessageBuilder()
-        .key(originalKey)
-        .type(ProtocolMessage.Type.REVOKE)
-        .timestampMs(Instant.now())
-        .build();
+                .key(originalKey)
+                .type(ProtocolMessage.Type.REVOKE)
+                .timestampMs(Instant.now())
+                .build();
         var wrapper = MessageContainer.of(protocol);
         var statusPostingSessionId = newStatusPostingSessionId();
         wamService.commit(new StatusPosterActionsEventBuilder()
@@ -8183,6 +9479,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .statusEventType(StatusEventType.DELETE_STATUS_SUCCESS)
                 .statusPostingSessionId(statusPostingSessionId)
                 .build());
+        emitStatusRevokeEvent(statusId, statusPostingSessionId);
     }
 
     /** {@inheritDoc} */
@@ -8201,53 +9498,42 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             return;
         }
         var receipt = new StanzaBuilder()
-        .description("receipt")
+                .description("receipt")
                 .attribute("id", statusId)
                 .attribute("type", "read")
+                .attribute("class", "status")
                 .attribute("to", Jid.statusBroadcastAccount())
                 .attribute("participant", statusAuthor)
                 .build();
         sendNodeWithNoResponse(receipt);
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUserPrefsStatus", exports = "getStatusPrivacySetting",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void refreshStatusPrivacy() {
-        var privacyQuery = new StanzaBuilder()
-                .description("privacy")
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "status") // task spec: xmlns="status"
-                .attribute("to", JidServer.user()) // task spec: to="s.whatsapp.net"
-                .attribute("type", "get")
-                .content(privacyQuery);
-        var response = sendNode(iqNode);
-        var privacyNode = response.getChild("privacy")
-                .orElseThrow(() -> new NoSuchElementException("Missing <privacy> in status privacy response"));
-        var modeAttr = privacyNode.getAttributeAsString("list") // WA Web: list="contacts" | "contact_whitelist" | "contact_blacklist"
-                .or(() -> privacyNode.getAttributeAsString("type"))
-                .orElse("contacts");
-        var mode = switch (modeAttr) {
-            case "contacts" -> StatusPrivacyMode.CONTACTS;
-            case "contact_whitelist", "allowlist", "whitelist" -> StatusPrivacyMode.WHITELIST;
-            case "contact_blacklist", "denylist", "blacklist" -> StatusPrivacyMode.CONTACTS_EXCEPT;
-            default -> StatusPrivacyMode.CONTACTS;
-        };
-        var jids = privacyNode.streamChildren("user")
-                .flatMap(userNode -> userNode.streamAttributeAsJid("jid"))
-                .toList();
-        var setting = new StatusPrivacySettingBuilder()
-                .mode(mode)
-                .jids(jids)
-                .build();
-        store.settingsStore().setStatusPrivacy(setting);
-        for (var listener : store.listeners()) {
-            if (listener instanceof LinkedStatusPrivacyChangedListener typed) {
-                typed.onStatusPrivacyChanged(this, setting);
+        var request = new IqQueryStatusPrivacyRequest();
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqQueryStatusPrivacyResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqQueryStatusPrivacyResponse.Success success -> {
+                var setting = new StatusPrivacySettingBuilder()
+                        .mode(success.mode())
+                        .jids(success.jids())
+                        .build();
+                store.settingsStore().setStatusPrivacy(setting);
+                for (var listener : store.listeners()) {
+                    if (listener instanceof LinkedStatusPrivacyChangedListener typed) {
+                        typed.onStatusPrivacyChanged(this, setting);
+                    }
+                }
             }
+            case IqQueryStatusPrivacyResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Refresh status privacy rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqQueryStatusPrivacyResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Refresh status privacy server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new NoSuchElementException("Missing <privacy> in status privacy response");
         }
     }
 
@@ -8258,50 +9544,34 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void editStatusPrivacy(StatusPrivacyMode mode, Collection<? extends JidProvider> jidsProvider) {
         var jids = Objects.requireNonNull(jidsProvider, "jids cannot be null").stream().map(JidProvider::toJid).toList();
         Objects.requireNonNull(mode, "mode cannot be null");
-        var jidList = jids == null ? List.<Jid>of() : List.copyOf(jids);
+        var jidList = List.copyOf(jids);
 
-        var listAttr = switch (mode) {
-            case CONTACTS -> "contacts";
-            case WHITELIST -> "contact_whitelist";
-            case CONTACTS_EXCEPT -> "contact_blacklist";
-        };
-        var userChildren = new ArrayList<Stanza>(jidList.size());
-        for (var jid : jidList) {
-            if (jid == null) {
-                continue;
+        var request = new IqSetStatusPrivacyRequest(mode, jidList);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqSetStatusPrivacyResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqSetStatusPrivacyResponse.Success ignored -> {
+                var protoMode = switch (mode) {
+                    case CONTACTS -> StatusPrivacyAction.StatusDistributionMode.CONTACTS;
+                    case WHITELIST -> StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST;
+                    case CONTACTS_EXCEPT -> StatusPrivacyAction.StatusDistributionMode.DENY_LIST;
+                };
+                var mutation = statusPrivacyMutationFactory.getStatusPrivacyMutation(Instant.now(), protoMode, jidList);
+                webAppStateService.pushPatches(
+                        StatusPrivacyAction.COLLECTION_NAME,
+                        List.of(mutation));
+
+                store.settingsStore().setStatusPrivacy(new StatusPrivacySettingBuilder()
+                        .mode(mode)
+                        .jids(jidList)
+                        .build());
             }
-            userChildren.add(new StanzaBuilder()
-                    .description("user")
-                    .attribute("jid", jid)
-                    .build());
+            case IqSetStatusPrivacyResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Edit status privacy rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqSetStatusPrivacyResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Edit status privacy server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new WhatsAppServerRuntimeException("Edit status privacy: unexpected response");
         }
-        var privacyNode = new StanzaBuilder()
-                .description("privacy")
-                .attribute("list", listAttr)
-                .content(userChildren)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "status") // task spec: xmlns="status"
-                .attribute("to", JidServer.user()) // task spec: to="s.whatsapp.net"
-                .attribute("type", "set")
-                .content(privacyNode);
-        sendNode(iqNode);
-
-        var protoMode = switch (mode) {
-            case CONTACTS -> StatusPrivacyAction.StatusDistributionMode.CONTACTS;
-            case WHITELIST -> StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST;
-            case CONTACTS_EXCEPT -> StatusPrivacyAction.StatusDistributionMode.DENY_LIST;
-        };
-        var mutation = statusPrivacyMutationFactory.getStatusPrivacyMutation(Instant.now(), protoMode, jidList);
-        webAppStateService.pushPatches(
-                StatusPrivacyAction.COLLECTION_NAME,
-                List.of(mutation));
-
-        store.settingsStore().setStatusPrivacy(new StatusPrivacySettingBuilder()
-                .mode(mode)
-                .jids(jidList)
-                .build());
     }
 
     /** {@inheritDoc} */
@@ -8314,14 +9584,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var destination = Objects.requireNonNull(destinationProvider, "destination cannot be null").toJid();
         Objects.requireNonNull(sourceKey, "sourceKey cannot be null");
         var parentJid = sourceKey.parentJid()
-        .orElseThrow(() -> new IllegalArgumentException("sourceKey must carry a parentJid"));
+                .orElseThrow(() -> new IllegalArgumentException("sourceKey must carry a parentJid"));
         var messageId = sourceKey.id()
-        .orElseThrow(() -> new IllegalArgumentException("sourceKey must carry an id"));
+                .orElseThrow(() -> new IllegalArgumentException("sourceKey must carry an id"));
         var source = store.chatStore().findMessageById(parentJid, messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Source message not found in local store: " + messageId));
         var container = source.message();
         logPsaActionIfApplicable(source, PsaMessageActionType.FORWARD);
         emitForwardSendEvent(source, destination, container);
+        emitPsChannelPostForwardEvent(source, destination, container);
         messageService.send(destination, container);
         threadLoggingService.recordActivity(destination, new ThreadLoggingActivity.MessageSent(false, false, true, false, false, false));
     }
@@ -8342,7 +9613,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var resolvedSources = new ArrayList<MessageInfo>();
         for (var sourceKey : sourceKeys) {
             sourceKey.parentJid()
-            .flatMap(parent -> sourceKey.id()
+                    .flatMap(parent -> sourceKey.id()
                             .flatMap(id -> store.chatStore().findMessageById(parent, id)))
                     .ifPresent(resolvedSources::add);
         }
@@ -8356,6 +9627,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             for (var source : resolvedSources) {
                 var container = source.message();
                 emitForwardSendEvent(source, destination, container);
+                emitPsChannelPostForwardEvent(source, destination, container);
                 messageService.send(destination, container);
                 threadLoggingService.recordActivity(destination, new ThreadLoggingActivity.MessageSent(false, false, true, false, false, false));
             }
@@ -8376,7 +9648,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebBotSignatureVerificationPostProcessor", exports = "verifyForwardedBotMessage", adaptation = WhatsAppAdaptation.ADAPTED)
     private void maybeVerifyForwardedBotMessage(ChatMessageInfo info) {
         if (!botSignatureVerificationService.isForwardVerificationEnabled()
-                || !(info.message().content() instanceof AIRichResponseMessage richResponse)) {
+            || !(info.message().content() instanceof AIRichResponseMessage richResponse)) {
             return;
         }
         var digest = richResponse.unifiedResponse().flatMap(AIRichResponseUnifiedResponse::data).orElse(null);
@@ -8402,16 +9674,16 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(messageKey, "messageKey cannot be null");
         Objects.requireNonNull(emoji, "emoji cannot be null");
         var parentJid = messageKey.parentJid()
-        .orElseThrow(() -> new IllegalArgumentException("messageKey must carry a parentJid"));
+                .orElseThrow(() -> new IllegalArgumentException("messageKey must carry a parentJid"));
         if (parentJid.hasNewsletterServer()) {
             reactToNewsletterMessage(parentJid, messageKey, emoji);
             return;
         }
         var reaction = new ReactionMessageBuilder()
-        .key(messageKey)
-        .text(emoji)
-        .senderTimestampMs(Instant.now())
-        .build();
+                .key(messageKey)
+                .text(emoji)
+                .senderTimestampMs(Instant.now())
+                .build();
         // The preparer auto converts to EncReactionMessage for CAG groups.
         messageService.send(parentJid, MessageContainer.of(reaction));
         threadLoggingService.recordActivity(parentJid, new ThreadLoggingActivity.MessageSent(false, false, false, false, true, false));
@@ -8420,37 +9692,26 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     /**
      * Posts, updates or revokes an emoji reaction on a newsletter message.
      *
-     * <p>Resolves the target's server id from the cached
-     * {@link NewsletterMessageInfo} keyed by {@code messageKey}, then sends a
-     * {@code <message server_id=...>} stanza carrying a {@code <reaction>}
-     * child for a non-empty {@code emoji} or a {@code <reaction_revoke>} child
-     * to clear the existing reaction.
+     * <p>Builds a {@link ReactionMessage} keyed by {@code messageKey} (the
+     * parent newsletter message) and dispatches it through the newsletter send
+     * pipeline. The newsletter sender resolves the parent's server id and emits
+     * the {@code <message type="reaction" server_id=...>} stanza with a fresh id
+     * for the reaction itself; an empty {@code emoji} yields the
+     * {@code edit="7"} reaction-revoke shape.
      *
      * @param newsletter the newsletter JID hosting the message; never {@code null}
      * @param messageKey the key of the newsletter message being reacted to; never {@code null}
-     * @param emoji      the reaction emoji to set, or {@code null}/empty to revoke
-     * @throws NoSuchElementException if no cached newsletter message matches {@code messageKey}
+     * @param emoji      the reaction emoji to set, or empty to revoke
      */
     @WhatsAppWebExport(moduleName = "WAWebNewsletterSendReactionAction", exports = "sendNewsletterReaction",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishContentTypeReactionMixin", exports = "applyMixin",
-            adaptation = WhatsAppAdaptation.ADAPTED)
     private void reactToNewsletterMessage(Jid newsletter, MessageKey messageKey, String emoji) {
-        var serverId = store.chatStore().findMessageByKey(messageKey)
-                .filter(NewsletterMessageInfo.class::isInstance)
-                .map(NewsletterMessageInfo.class::cast)
-                .map(NewsletterMessageInfo::serverId)
-                .orElseThrow(() -> new NoSuchElementException("No cached newsletter message for key " + messageKey));
-        var reactionNode = (emoji == null || emoji.isEmpty())
-                ? new StanzaBuilder().description("reaction_revoke").build()
-                : new StanzaBuilder().description("reaction").attribute("code", emoji).build();
-        var stanza = new StanzaBuilder()
-                .description("message")
-                .attribute("id", DataUtils.randomHex(5)) // 10 uppercase hex chars
-                .attribute("to", newsletter)
-                .attribute("server_id", serverId)
-                .content(reactionNode);
-        sendNode(stanza);
+        var reaction = new ReactionMessageBuilder()
+                .key(messageKey)
+                .text(emoji)
+                .senderTimestampMs(Instant.now())
+                .build();
+        messageService.send(newsletter, MessageContainer.of(reaction));
     }
 
     /** {@inheritDoc} */
@@ -8481,7 +9742,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void unstarMessage(MessageKey key) {
         Objects.requireNonNull(key, "key cannot be null");
         pushStarMutation(key, false);
-        }
+    }
 
     /**
      * Builds and dispatches the {@link StarAction} sync mutation for the
@@ -8510,9 +9771,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void pushStarMutation(MessageKey key, boolean starred) {
         var parentJid = key.parentJid()
-        .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
+                .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
         var messageId = key.id()
-        .orElseThrow(() -> new IllegalArgumentException("key must carry an id"));
+                .orElseThrow(() -> new IllegalArgumentException("key must carry an id"));
 
         // JID serializer and the !remote.isUser() && !fromMe participant gate.
         var keySegments = SyncdIndexUtils.constructMsgKeySegmentsFromMsgKey(key);
@@ -8521,8 +9782,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .starred(starred)
                 .build();
         var value = new SyncActionValueBuilder()
-        .timestamp(Instant.now())
-        .starAction(action)
+                .timestamp(Instant.now())
+                .starAction(action)
                 .build();
         var indexJson = SyncdIndexUtils.buildIndex(
                 StarAction.ACTION_NAME,
@@ -8570,7 +9831,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var parentJid = key.parentJid().orElse(null);
         if (parentJid == null || !parentJid.equals(Jid.announcementsAccount())) {
             return;
-            }
+        }
         var messageId = key.id().orElse(null);
         if (messageId == null) {
             return;
@@ -8872,6 +10133,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 chatModel.setArchived(false);
             }
         });
+        if (pin) {
+            pinChatMutationFactory.emitPinnedChats(this, chat);
+        }
     }
 
     /** {@inheritDoc} */
@@ -8894,15 +10158,20 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     .muteChatType(muteChatType);
             if (muteEndSeconds == 0L) {
                 eventBuilder.actionConducted(ActionConducted.UNMUTE);
-                } else {
+            } else {
                 eventBuilder.actionConducted(ActionConducted.MUTE)
-                .muteDuration(Instant.ofEpochSecond(muteEndSeconds));
-                }
+                        .muteDuration(Instant.ofEpochSecond(muteEndSeconds));
+            }
             if (isGroup) {
                 var groupSize = store.chatStore().findChatByJid(chat)
                         .map(c -> c.participant().size())
                         .orElse(0);
                 eventBuilder.muteGroupSize(groupSize);
+            }
+            // The official WhatsApp PSA chat is muted through the same path; WA Web tags it via
+            // WAWebWamChatPSALogger.logChatPSAMute so the beacon carries the PSA account name.
+            if (chat.equals(Jid.announcementsAccount())) {
+                eventBuilder.waOfficialAccountName(WaOfficialAccountName.WHATSAPP_CHATPSA);
             }
             wamService.commit(eventBuilder.build());
         }
@@ -8926,7 +10195,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void unmuteChat(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         muteChat(chat, null);
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -8935,7 +10204,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void markChatAsRead(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         pushMarkChatAsReadMutation(chat, true);
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -8944,7 +10213,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void markChatAsUnread(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         pushMarkChatAsReadMutation(chat, false);
-        }
+    }
 
     /**
      * Builds and dispatches the read-state mutation for the target chat.
@@ -8968,10 +10237,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                     threadLoggingService.recordActivity(chat, new ThreadLoggingActivity.MessagesRead(unreadCount));
                 }
                 chatModel.setMarkedAsUnread(false);
-            chatModel.setUnreadCount(0);
+                chatModel.setUnreadCount(0);
             } else {
                 chatModel.setMarkedAsUnread(true);
-            chatModel.setUnreadCount(-1);
+                chatModel.setUnreadCount(-1);
             }
         }
     }
@@ -9030,7 +10299,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void lockChat(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         pushLockMutation(chat, true);
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -9039,7 +10308,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void unlockChat(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         pushLockMutation(chat, false);
-        }
+    }
 
     /**
      * Builds and dispatches the lock-state mutation set for the target chat.
@@ -9057,11 +10326,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         webAppStateService.pushPatches(LockChatAction.COLLECTION_NAME, mutations);
         if (chatModel != null) {
             chatModel.setLocked(locked);
-        if (locked) {
-            chatModel.setArchived(false);
-        chatModel.setPinnedTimestamp(null);
+            if (locked) {
+                chatModel.setArchived(false);
+                chatModel.setPinnedTimestamp(null);
+            }
         }
-        }
+        emitChatLockActionEvent(chat, locked);
     }
 
     /** {@inheritDoc} */
@@ -9074,15 +10344,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var colorIndex = create.colorIndex();
         var timestamp = Instant.now();
         var nextId = store.settingsStore().labels().stream()
-                .map(Label::id)
-                .mapToInt(id -> {
-                    try { return Integer.parseInt(id); }
-                    catch (NumberFormatException e) {
-                        throw new IllegalStateException("getNextLabelId: Invalid label id " + id, e);
-                    }
-                })
-                .max()
-                .orElse(0) + 1;
+                             .map(Label::id)
+                             .mapToInt(id -> {
+                                 try { return Integer.parseInt(id); }
+                                 catch (NumberFormatException e) {
+                                     throw new IllegalStateException("getNextLabelId: Invalid label id " + id, e);
+                                 }
+                             })
+                             .max()
+                             .orElse(0) + 1;
         var labelId = String.valueOf(nextId);
         var predefinedLabelId = BusinessLabelConstants.mapLabelNameToPredefinedId(name)
                 .stream()
@@ -9097,7 +10367,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         );
         webAppStateService.pushPatches(LabelEditAction.COLLECTION_NAME, List.of(mutation));
         var label = new LabelBuilder()
-        .id(labelId)
+                .id(labelId)
                 .name(name)
                 .color(colorIndex)
                 .predefinedId(predefinedLabelId)
@@ -9112,6 +10382,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .listId(nextId)
                 .listType(ListType.CUSTOM)
                 .build());
+        emitLabelEvent(LabelOperations.ADD, LabelTargets.LABEL, label);
+        emitListUpdateUserJourneyEvent(ListAction.CREATE, label);
+        emitSmbListEvent(LabelOperations.ADD, LabelTargets.LABEL, SmbListFeatureNameType.LISTS_CREATION, label);
         return labelId;
     }
 
@@ -9132,9 +10405,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var predefinedId = existing.predefinedId().isPresent()
                 ? existing.predefinedId().getAsInt()
                 : null;
-                var type = existing.type().orElse(null);
-                var isActive = existing.isActive().orElse(Boolean.FALSE);
-                var mutation = labelEditMutationFactory.getLabelMutation(                labelId,
+        var type = existing.type().orElse(null);
+        var isActive = existing.isActive().orElse(Boolean.FALSE);
+        var mutation = labelEditMutationFactory.getLabelMutation(                labelId,
                 name,
                 colorIndex,
                 false,                predefinedId,
@@ -9157,8 +10430,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 var builder = new ListUpdateEventBuilder()
                         .listAction(ListAction.RENAME)
                         .listId(listIdNumber);
-                        var wamListType = mapWamListType(existing.type().orElse(null));
-                        if (wamListType != null) {
+                var wamListType = mapWamListType(existing.type().orElse(null));
+                if (wamListType != null) {
                     builder.listType(wamListType);
                 }
                 if (existing.predefinedId().isPresent()) {
@@ -9166,6 +10439,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 }
                 wamService.commit(builder.build());
             }
+        }
+        emitLabelEvent(LabelOperations.EDIT, LabelTargets.LABEL, existing);
+        if (renamed) {
+            emitListUpdateUserJourneyEvent(ListAction.RENAME, existing);
         }
         return Optional.of(existing);
     }
@@ -9207,8 +10484,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             var builder = new ListUpdateEventBuilder()
                     .listAction(ListAction.DELETE)
                     .listId(listIdNumber);
-                    var wamListType = mapWamListType(existing.type().orElse(null));
-                    if (wamListType != null) {
+            var wamListType = mapWamListType(existing.type().orElse(null));
+            if (wamListType != null) {
                 builder.listType(wamListType);
             }
             if (existing.predefinedId().isPresent()) {
@@ -9216,6 +10493,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             }
             wamService.commit(builder.build());
         }
+        emitLabelEvent(LabelOperations.DELETE, LabelTargets.LABEL, existing);
+        emitListUpdateUserJourneyEvent(ListAction.DELETE, existing);
         return Optional.of(existing);
     }
 
@@ -9252,6 +10531,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 }
             });
         }
+        emitLabelEvent(LabelOperations.REORDER, LabelTargets.LABELS_SCREEN, null);
     }
 
     /** {@inheritDoc} */
@@ -9264,7 +10544,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         pushLabelAssociationMutation(labelId, chat, true);
         store.settingsStore().findLabel(labelId)
                 .ifPresent(label -> ctwaConversionSignalService.emitLabelConversion(chat, label));
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -9281,7 +10561,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         Objects.requireNonNull(labelId, "labelId cannot be null");
         pushLabelAssociationMutation(labelId, chat, false);
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -9350,10 +10630,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         store.settingsStore().findLabel(labelId).ifPresent(label -> {
             if (labeled) {
                 label.addAssignment(target);
-                } else {
+            } else {
                 label.removeAssignment(target);
-                }
+            }
         });
+        var assocTarget = target.hasGroupOrCommunityServer() ? LabelTargets.GROUP : LabelTargets.CONTACT;
+        var assocLabel = store.settingsStore().findLabel(labelId).orElse(null);
+        var assocOperation = labeled ? LabelOperations.ADD : LabelOperations.DELETE;
+        emitLabelEvent(assocOperation, assocTarget, assocLabel);
+        emitSmbListEvent(assocOperation, assocTarget, SmbListFeatureNameType.LIST_APPLICATION, assocLabel);
     }
 
     /** {@inheritDoc} */
@@ -9366,9 +10651,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var timestamp = Instant.now();
         // Cobalt derives the next id as max(existing numeric user parts) + 1.
         var nextId = store.businessStore().businessBroadcastLists().stream()
-                .mapToLong(list -> { try { return Long.parseLong(list.id()); } catch (NumberFormatException _) { return 0L; } })
-                .max()
-                .orElse(0L) + 1;
+                             .mapToLong(list -> { try { return Long.parseLong(list.id()); } catch (NumberFormatException _) { return 0L; } })
+                             .max()
+                             .orElse(0L) + 1;
         var listId = String.valueOf(nextId);
         var listJid = Jid.of(listId, JidServer.broadcast());
         var participants = buildBroadcastParticipants(recipients);
@@ -9517,14 +10802,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         webAppStateService.pushPatches(ChatAssignmentAction.COLLECTION_NAME, List.of(mutation));
         if (agentId.isEmpty()) {
             store.businessStore().removeChatAssignment(chat);
-            } else {
+        } else {
             store.businessStore().putChatAssignment(new ChatAssignmentBuilder()
-            .chatJid(chat)
+                    .chatJid(chat)
                     .agentId(agentId)
                     .opened(existingAssignment != null && existingAssignment.opened())
                     .build());
         }
         emitChatAssignmentEvent(chat, agentId, hadPreviousAssignment);
+        emitChatAssignmentSecondaryActionEvent(chat, agentId);
     }
 
     /**
@@ -9621,7 +10907,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public void unassignChatFromAgent(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
         assignChatToAgent(chat, "");
-        }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -9688,11 +10974,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqQueryDisappearingModeResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Disappearing-mode query rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqQueryDisappearingModeResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Disappearing-mode query server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
         };
         store.settingsStore().setDisappearingMode(mode);
         for (var listener : store.listeners()) {
@@ -9741,34 +11027,21 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 }
                 case SmaxGroupsSetPropertyResponse.ClientError clientError ->
                         throw new WhatsAppServerRuntimeException("Change group ephemeral timer rejected: code="
-                                + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+                                                                 + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
                 case SmaxGroupsSetPropertyResponse.ServerError serverError ->
                         throw new WhatsAppServerRuntimeException("Change group ephemeral timer server error: code="
-                                + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+                                                                 + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
             }
         } else {
-            // The typed IqSetDisappearingModeRequest targets S_WHATSAPP_NET
-            // (global default), so we build the chat-addressed IQ inline and
-            // validate the relay reply by checking for the canonical <error>
-            // child.
-            var disappearing = new StanzaBuilder()
-                    .description("disappearing_mode")
-                    .attribute("duration", seconds)
-                    .build();
-            var iqNode = new StanzaBuilder()
-                    .description("iq")
-                    .attribute("xmlns", "disappearing_mode")
-                    .attribute("to", chat)
-                    .attribute("type", "set")
-                    .content(disappearing);
-            var response = sendNode(iqNode);
+            var request = new IqSetDisappearingModeRequest(Duration.ofSeconds(seconds), chat);
+            var response = sendNode(request.toStanza());
             // Validate result: the relay replies with type="result" on success or type="error" + <error code text/> on failure
             var errorChild = response.getChild("error").orElse(null);
             if (errorChild != null) {
                 var errorCode = errorChild.getAttributeAsInt("code").orElse(0);
                 var errorText = errorChild.getAttributeAsString("text").orElse(null);
                 throw new WhatsAppServerRuntimeException("Change chat ephemeral timer rejected: code="
-                        + errorCode + ", text=" + errorText);
+                                                         + errorCode + ", text=" + errorText);
             }
         }
         var chatModelOpt = store.chatStore().findChatByJid(chat);
@@ -9929,39 +11202,218 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebQueryPrivacySettingsJob", exports = "getPrivacySettings",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Map<PrivacySettingType<?>, PrivacySettingValue> refreshPrivacySettings() {
-        var privacyQuery = new StanzaBuilder()
-                .description("privacy")
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "privacy")
-                .attribute("to", JidServer.user())
-                .attribute("type", "get")
-                .content(privacyQuery);
-        var response = sendNode(iqNode);
-        var privacyNode = response.getChild("privacy")
-                .orElseThrow(() -> new NoSuchElementException("Missing <privacy> in privacy settings response"));
+        var mode = abPropsService.getInt(ABProp.MEX_GET_PRIVACY_SETTINGS_MODE);
+        var meDeviceLid = meDevicePrivacyLid().orElse(null);
+        return switch (mode) {
+            case 1 -> meDeviceLid == null
+                    ? refreshPrivacySettingsViaIq()
+                    : refreshPrivacySettingsViaMex(meDeviceLid, true);
+            case 2 -> {
+                Map<PrivacySettingType<?>, PrivacySettingValue> shadow = null;
+                if (meDeviceLid != null) {
+                    try {
+                        shadow = refreshPrivacySettingsViaMex(meDeviceLid, false);
+                    } catch (RuntimeException exception) {
+                        System.getLogger(LiveLinkedWhatsAppClient.class.getName())
+                                .log(System.Logger.Level.WARNING,
+                                        "MEX privacy-settings shadow read failed: {0}", exception.getMessage());
+                    }
+                }
+                var authoritative = refreshPrivacySettingsViaIq();
+                if (shadow != null && !shadow.equals(authoritative)) {
+                    System.getLogger(LiveLinkedWhatsAppClient.class.getName())
+                            .log(System.Logger.Level.WARNING,
+                                    "MEX privacy-settings shadow result diverged from IQ result: mex={0}, iq={1}",
+                                    shadow, authoritative);
+                }
+                yield authoritative;
+            }
+            default -> refreshPrivacySettingsViaIq();
+        };
+    }
+
+    /**
+     * Reads the privacy settings through the classic {@code <iq xmlns="privacy" type="get">} query and
+     * applies them to the local store.
+     *
+     * <p>This is the {@code mex_get_privacy_settings_mode == 0} branch and the fallback for both other
+     * modes: it is always available and remains the authoritative source of truth. Each returned
+     * category is resolved through {@link #collectPrivacySetting} which drops any category or value the
+     * typed {@link PrivacySettingType} registry does not recognise. A relay {@code 4xx}/{@code 5xx}
+     * rejection surfaces as a {@link WhatsAppServerRuntimeException}.
+     *
+     * @return an unmodifiable map of every resolved setting to its value, empty when the reply is
+     *         missing or carries no recognised category
+     */
+    private Map<PrivacySettingType<?>, PrivacySettingValue> refreshPrivacySettingsViaIq() {
+        var request = new IqQueryPrivacySettingsRequest();
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        var parsed = IqQueryPrivacySettingsResponse.of(response, requestNode.build()).orElse(null);
+        return switch (parsed) {
+            case null -> Map.of();
+            case IqQueryPrivacySettingsResponse.Success success -> {
+                var result = new LinkedHashMap<PrivacySettingType<?>, PrivacySettingValue>();
+                success.categories().forEach((category, visibility) ->
+                        collectPrivacySetting(result, category.wire(), visibility.wire(), true));
+                yield Collections.unmodifiableMap(result);
+            }
+            case IqQueryPrivacySettingsResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Query privacy settings rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqQueryPrivacySettingsResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Query privacy settings server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+        };
+    }
+
+    /**
+     * Reads the privacy settings through the MEX {@code fetchPrivacySettings} query.
+     *
+     * <p>This is the {@code mex_get_privacy_settings_mode == 1} path, also invoked in the {@code == 2}
+     * shadow branch with {@code apply} set to {@code false}. The reply's first (and only) user record
+     * is walked and each {@code (feature, setting)} pair is mapped through
+     * {@link #mexPrivacyFeatureToWire} and {@link #normalizeMexPrivacyValue} before being resolved by
+     * the shared {@link #collectPrivacySetting} helper, which drops any feature or value the typed
+     * {@link PrivacySettingType} registry does not recognise (for example the {@code STICKERS} feature
+     * WhatsApp Web also requests). When {@code apply} is {@code true} each resolved value is persisted
+     * to the local store exactly as the IQ path does.
+     *
+     * @param meDeviceLid the caller's device-addressed LID passed as the {@code query_input[0].jid}
+     * @param apply whether to persist each resolved value to the local store
+     * @return an unmodifiable map of every resolved setting to its value, empty when the reply is
+     *         missing or carries no recognised feature
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacySetting", exports = "fetchPrivacySettings",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private Map<PrivacySettingType<?>, PrivacySettingValue> refreshPrivacySettingsViaMex(Jid meDeviceLid, boolean apply) {
+        var request = new GetPrivacySettingsMexRequest(meDeviceLid, GetPrivacySettingsMexRequest.DEFAULT_PRIVACY_FEATURES);
+        var response = sendNode(request);
+        var parsed = GetPrivacySettingsMexResponse.of(response).orElse(null);
+        if (parsed == null) {
+            return Map.of();
+        }
+        var privacySettings = parsed.items().stream()
+                .findFirst()
+                .flatMap(GetPrivacySettingsMexResponse.Item::privacySettings)
+                .orElse(null);
+        if (privacySettings == null) {
+            return Map.of();
+        }
         var result = new LinkedHashMap<PrivacySettingType<?>, PrivacySettingValue>();
-        for (var category : privacyNode.getChildren("category")) {
-            var name = category.getAttributeAsString("name").orElse(null);
-            var value = category.getAttributeAsString("value").orElse(null);
-            if (name == null || value == null) {
+        for (var setting : privacySettings.settings()) {
+            var feature = setting.feature().orElse(null);
+            var value = setting.setting().orElse(null);
+            if (feature == null || value == null) {
                 continue;
             }
-            // Cobalt drops unknown settings because the typed registry is the public API surface.
-            var type = PrivacySettingType.of(name).orElse(null);
-            if (type == null) {
+            var categoryWire = mexPrivacyFeatureToWire(feature);
+            if (categoryWire == null) {
                 continue;
             }
-            var audience = type.parse(value, List.of()).orElse(null);
-            if (audience == null) {
-                continue;
-            }
-            result.put(type, audience);
-            // subsequent reads via store.findPrivacySetting hit a warm value.
-            applyPrivacySetting(audience);
+            collectPrivacySetting(result, categoryWire, normalizeMexPrivacyValue(value), apply);
         }
         return Collections.unmodifiableMap(result);
+    }
+
+    /**
+     * Resolves a privacy category wire token and value token into a typed value, records it in the
+     * result map, and optionally persists it.
+     *
+     * <p>Shared by the IQ and MEX read paths so both drop unrecognised categories and values
+     * identically: an unknown category token, or a value token the resolved {@link PrivacySettingType}
+     * does not accept, is silently skipped because the typed registry is the public API surface. When
+     * {@code apply} is {@code true} the resolved value is written back through
+     * {@link #applyPrivacySetting(PrivacySettingValue)} so subsequent
+     * {@code store.settingsStore().findPrivacySetting} reads hit a warm value.
+     *
+     * @param result the accumulating map the resolved value is inserted into
+     * @param categoryWire the category wire token, for example {@code "last"} or {@code "defense"}
+     * @param valueToken the value wire token, for example {@code "all"} or {@code "contact_blacklist"}
+     * @param apply whether to persist the resolved value to the local store
+     */
+    private void collectPrivacySetting(Map<PrivacySettingType<?>, PrivacySettingValue> result,
+                                       String categoryWire, String valueToken, boolean apply) {
+        var type = PrivacySettingType.of(categoryWire).orElse(null);
+        if (type == null) {
+            return;
+        }
+        var audience = type.parse(valueToken, List.of()).orElse(null);
+        if (audience == null) {
+            return;
+        }
+        result.put(type, audience);
+        if (apply) {
+            applyPrivacySetting(audience);
+        }
+    }
+
+    /**
+     * Maps a MEX {@code privacy_settings} feature enum token to the Cobalt category wire token.
+     *
+     * <p>The mapping is the identity for every feature except {@code ABOUT}, which maps to the
+     * {@code status} category ({@link PrivacySettingType#ABOUT}) because WhatsApp Web names the
+     * about-text visibility {@code ABOUT} in the MEX schema but {@code status} on the classic IQ
+     * surface. Features with no Cobalt privacy-setting counterpart (such as {@code STICKERS},
+     * {@code PIX}, {@code LINKED_PROFILES}, and the {@code DEPENDENT_*} family) return {@code null} so
+     * the caller drops them.
+     *
+     * @param feature the MEX feature enum token
+     * @return the Cobalt category wire token, or {@code null} when the feature has no counterpart
+     */
+    private static String mexPrivacyFeatureToWire(String feature) {
+        return switch (feature) {
+            case "LAST" -> "last";
+            case "ONLINE" -> "online";
+            case "PROFILE" -> "profile";
+            case "ABOUT" -> "status";
+            case "READRECEIPTS" -> "readreceipts";
+            case "GROUPADD" -> "groupadd";
+            case "CALLADD" -> "calladd";
+            case "MESSAGES" -> "messages";
+            case "DEFENSE" -> "defense";
+            default -> null;
+        };
+    }
+
+    /**
+     * Normalizes a MEX {@code privacy_settings} value enum token to the Cobalt value wire token.
+     *
+     * <p>The MEX schema reports value tokens in uppercase enum form, so this lowercases the token and
+     * additionally rewrites {@code MYCONTACTS} to {@code contacts} and {@code MYCONTACTSEXCEPT} to
+     * {@code contact_blacklist}. Plain lowercasing already carries the remaining tokens ({@code ALL} to
+     * {@code all}, {@code NONE} to {@code none}, {@code MATCH_LAST_SEEN}, {@code KNOWN}, {@code OFF},
+     * {@code ON_STANDARD}) onto the tokens {@link PrivacySettingType#parse(String, List)} accepts.
+     *
+     * @param setting the MEX value enum token
+     * @return the Cobalt value wire token
+     */
+    private static String normalizeMexPrivacyValue(String setting) {
+        return switch (setting.toUpperCase(Locale.ROOT)) {
+            case "MYCONTACTS" -> "contacts";
+            case "MYCONTACTSEXCEPT" -> "contact_blacklist";
+            default -> setting.toLowerCase(Locale.ROOT);
+        };
+    }
+
+    /**
+     * Resolves the caller's device-addressed LID used as the {@code query_input[0].jid} of the MEX
+     * privacy-settings query.
+     *
+     * <p>WhatsApp Web reads this from {@code getMeDeviceLidOrThrow}. Cobalt composes it from the
+     * account LID carrying the device index of the currently paired PN JID, mirroring
+     * {@link #callCreatorSelfJid()}. Returns {@link Optional#empty()} when the session is not logged in
+     * or no LID has been assigned yet, in which case the MEX path is unavailable and the caller falls
+     * back to the IQ path.
+     *
+     * @return the device-addressed self LID, or empty when it cannot be composed
+     */
+    private Optional<Jid> meDevicePrivacyLid() {
+        var selfPn = store.accountStore().jid().orElse(null);
+        if (selfPn == null) {
+            return Optional.empty();
+        }
+        return store.accountStore().lid()
+                .map(Jid::toUserJid)
+                .map(lid -> selfPn.hasDevice() ? lid.withDevice(selfPn.device()) : lid);
     }
 
     /**
@@ -9981,83 +11433,55 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var excluded = value.excluded();
         var hasList = !excluded.isEmpty();
         var lidAware = LID_AWARE_PRIVACY_SETTINGS.contains(type);
+        var category = IqQueryPrivacySettingsCategoryName.fromWire(type.wire())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown privacy category: " + type.wire()));
+        var visibility = IqQueryPrivacySettingsVisibility.fromWire(value.token())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown privacy value: " + value.token()));
 
-        Stanza privacyStanza;
         if (!hasList) {
-            var category = new StanzaBuilder()
-                    .description("category")
-                    .attribute("name", type.wire())
-                    .attribute("value", value.token())
-                    .build();
-            privacyStanza = new StanzaBuilder()
-                    .description("privacy")
-                    .content(category)
-                    .build();
-        } else if (lidAware) {
-            List<Stanza> userChildren;
+            dispatchPrivacyIq(new IqSetPrivacyRequest(category, visibility, List.of(),
+                    IqSetPrivacyAddressingMode.PN, null), value);
+            return;
+        }
+        if (lidAware) {
+            List<IqSetPrivacyUserEntry> userEntries;
             try {
-                userChildren = buildLidPrivacyUsers(excluded, "add");
+                userEntries = buildLidPrivacyEntries(excluded);
             } catch (Throwable throwable) {
-                userChildren = buildPnPrivacyUsers(excluded, "add");
-                var category = new StanzaBuilder()
-                        .description("category")
-                        .attribute("name", type.wire())
-                        .attribute("value", value.token())
-                        .attribute("dhash", "none")
-                        .content(userChildren)
-                        .build();
-                privacyStanza = new StanzaBuilder()
-                        .description("privacy")
-                        .content(category)
-                        .build();
-                dispatchPrivacyIq(privacyStanza, value);
+                dispatchPrivacyIq(new IqSetPrivacyRequest(category, visibility,
+                        buildPnPrivacyEntries(excluded), IqSetPrivacyAddressingMode.PN, null), value);
                 return;
             }
-            var category = new StanzaBuilder()
-                    .description("category")
-                    .attribute("name", type.wire())
-                    .attribute("value", value.token())
-                    .attribute("dhash", "none")
-                    .content(userChildren)
-                    .build();
-            privacyStanza = new StanzaBuilder()
-                    .description("privacy")
-                    .attribute("addressing_mode", "lid")
-                    .content(category)
-                    .build();
-        } else {
-            var userChildren = buildPnPrivacyUsers(excluded, "add");
-            var category = new StanzaBuilder()
-                    .description("category")
-                    .attribute("name", type.wire())
-                    .attribute("value", value.token())
-                    .attribute("dhash", "none")
-                    .content(userChildren)
-                    .build();
-            privacyStanza = new StanzaBuilder()
-                    .description("privacy")
-                    .content(category)
-                    .build();
+            dispatchPrivacyIq(new IqSetPrivacyRequest(category, visibility, userEntries,
+                    IqSetPrivacyAddressingMode.LID, null), value);
+            return;
         }
-
-        dispatchPrivacyIq(privacyStanza, value);
+        dispatchPrivacyIq(new IqSetPrivacyRequest(category, visibility,
+                buildPnPrivacyEntries(excluded), IqSetPrivacyAddressingMode.PN, null), value);
     }
 
     /**
-     * Sends the privacy IQ and refreshes the local store value on success.
+     * Sends the typed privacy IQ and refreshes the local store value on success.
      *
-     * @param privacyStanza the already-built {@code <privacy>} content stanza
-     * @param value         the newly selected privacy value persisted locally on success
+     * <p>A relay-side {@code 4xx}/{@code 5xx} rejection surfaces as a
+     * {@link WhatsAppServerRuntimeException}; on acceptance (or an undocumented
+     * reply shape) the newly selected value is persisted locally via
+     * {@link #applyPrivacySetting(PrivacySettingValue)}.
+     *
+     * @param request the typed privacy-set request
+     * @param value   the newly selected privacy value persisted locally on success
      */
-    private void dispatchPrivacyIq(Stanza privacyStanza, PrivacySettingValue value) {
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "privacy")
-                .attribute("to", JidServer.user())
-                .attribute("type", "set")
-                .content(privacyStanza);
-        sendNode(iqNode);
-        applyPrivacySetting(value);
+    private void dispatchPrivacyIq(IqSetPrivacyRequest request, PrivacySettingValue value) {
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqSetPrivacyResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqSetPrivacyResponse.Success ignored -> applyPrivacySetting(value);
+            case IqSetPrivacyResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Set privacy rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqSetPrivacyResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Set privacy server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> applyPrivacySetting(value);
+        }
     }
 
     /**
@@ -10079,7 +11503,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             return;
         }
         if (previous instanceof DefenseModePrivacyValue.OnStandard
-                && !(value instanceof DefenseModePrivacyValue.OnStandard)) {
+            && !(value instanceof DefenseModePrivacyValue.OnStandard)) {
             quarantineService.restoreAll();
         }
         for (var listener : store.listeners()) {
@@ -10101,23 +11525,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     /**
-     * Builds the LID-addressed {@code <user>} child nodes for a privacy IQ.
+     * Resolves the LID-addressed {@code <user>} entries for a privacy IQ.
      *
-     * <p>Each entry is mapped to a {@code <user jid=LID pn_jid=PN action=...>}
-     * element, mirroring {@code WAWebSetPrivacyJob.h}. The first participant
-     * whose LID cannot be resolved aborts the whole list so the caller can
-     * fall back to the pure-PN branch.
+     * <p>Each entry is mapped to an {@link IqSetPrivacyUserEntry} carrying the
+     * contact's LID as the primary JID and phone-number JID as the {@code pn_jid}
+     * fallback under the {@code add} action, mirroring {@code WAWebSetPrivacyJob.h}.
+     * The first participant whose LID cannot be resolved aborts the whole list so
+     * the caller can fall back to the pure-PN branch.
      *
-     * @param users  the contacts to serialise, must be non-{@code null} and
-     *               non-empty
-     * @param action {@code "add"} or {@code "remove"}
-     * @return the list of {@code <user>} nodes, never {@code null}
+     * @param users the contacts to serialise, must be non-{@code null}
+     * @return the list of LID-addressed user entries, never {@code null}
      * @throws IllegalStateException if any participant has no known LID, in
      *                               which case WA Web falls back to the
      *                               non-LID branch
      */
-    private List<Stanza> buildLidPrivacyUsers(Collection<Jid> users, String action) {
-        var result = new ArrayList<Stanza>(users.size());
+    private List<IqSetPrivacyUserEntry> buildLidPrivacyEntries(Collection<Jid> users) {
+        var result = new ArrayList<IqSetPrivacyUserEntry>(users.size());
         for (var raw : users) {
             if (raw == null) {
                 continue;
@@ -10130,39 +11553,29 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             if (pn == null) {
                 throw new IllegalStateException("createLidUserNode: unknown-username-and-pn-for-privacy-list-contact " + raw);
             }
-            result.add(new StanzaBuilder()
-                    .description("user")
-                    .attribute("action", action)
-                    .attribute("jid", lid)
-                    .attribute("pn_jid", pn)
-                    .build());
+            result.add(new IqSetPrivacyUserEntry(IqSetPrivacyUserAction.ADD, lid, null, pn));
         }
         return result;
     }
 
     /**
-     * Builds the PN-addressed {@code <user>} child nodes for a privacy IQ.
+     * Builds the PN-addressed {@code <user>} entries for a privacy IQ.
      *
-     * <p>Each contact is serialised as a {@code <user jid action/>} element,
-     * matching {@code WAWebSetPrivacyJob.g}. Entries whose JID is
-     * {@code null} are silently skipped.
+     * <p>Each contact is mapped to an {@link IqSetPrivacyUserEntry} carrying its
+     * phone-number JID under the {@code add} action, matching
+     * {@code WAWebSetPrivacyJob.g}. Entries whose JID is {@code null} are silently
+     * skipped.
      *
-     * @param users  the contacts to serialise, must be non-{@code null} and
-     *               non-empty
-     * @param action {@code "add"} or {@code "remove"}
-     * @return the list of {@code <user>} nodes, never {@code null}
+     * @param users the contacts to serialise, must be non-{@code null}
+     * @return the list of PN-addressed user entries, never {@code null}
      */
-    private List<Stanza> buildPnPrivacyUsers(Collection<Jid> users, String action) {
-        var result = new ArrayList<Stanza>(users.size());
+    private List<IqSetPrivacyUserEntry> buildPnPrivacyEntries(Collection<Jid> users) {
+        var result = new ArrayList<IqSetPrivacyUserEntry>(users.size());
         for (var raw : users) {
             if (raw == null) {
                 continue;
             }
-            result.add(new StanzaBuilder()
-                    .description("user")
-                    .attribute("action", action)
-                    .attribute("jid", raw)
-                    .build());
+            result.add(new IqSetPrivacyUserEntry(IqSetPrivacyUserAction.ADD, raw, null, null));
         }
         return result;
     }
@@ -10194,28 +11607,24 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (tokenTypes.isEmpty()) {
             throw new IllegalArgumentException("tokenTypes must not be empty");
         }
-        var tokenNodes = new ArrayList<Stanza>(tokenTypes.size());
-        var timestampValue = Long.toString(timestamp.getEpochSecond());
+        var mappedTypes = new ArrayList<IqSetPrivacyTokensTokenType>(tokenTypes.size());
         for (var tokenType : tokenTypes) {
             Objects.requireNonNull(tokenType, "tokenTypes element cannot be null");
-            tokenNodes.add(new StanzaBuilder()
-                    .description("token")
-                    .attribute("jid", userJid)
-                    .attribute("t", timestampValue)
-                    .attribute("type", tokenType.wireValue())
-                    .build());
+            mappedTypes.add(switch (tokenType) {
+                case TRUSTED_CONTACT -> IqSetPrivacyTokensTokenType.TRUSTED_CONTACT;
+            });
         }
-        var tokensContainer = new StanzaBuilder()
-                .description("tokens")
-                .content(tokenNodes)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "privacy")
-                .attribute("to", JidServer.user())
-                .attribute("type", "set")
-                .content(tokensContainer);
-        sendNode(iqNode);
+        var request = new IqSetPrivacyTokensRequest(userJid, timestamp.getEpochSecond(), mappedTypes);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqSetPrivacyTokensResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqSetPrivacyTokensResponse.Success ignored -> {}
+            case IqSetPrivacyTokensResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Issue privacy tokens rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqSetPrivacyTokensResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Issue privacy tokens server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> {}
+        }
     }
 
     /**
@@ -10347,7 +11756,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var success = parsed.success().orElse(Boolean.FALSE);
         if (!success) {
             throw new WhatsAppServerRuntimeException("Passkey integrity challenge rejected: "
-                    + parsed.errorMessage().orElse(null));
+                                                     + parsed.errorMessage().orElse(null));
         }
     }
 
@@ -10398,9 +11807,9 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMexUsync", exports = "mexUsyncQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
     Optional<UsyncMexResponse> executeUsyncMex(Boolean includeAboutStatus,
-                                                Boolean includeCountryCode,
-                                                Boolean includeUsername,
-                                                String input) {
+                                               Boolean includeCountryCode,
+                                               Boolean includeUsername,
+                                               String input) {
         var request = new UsyncMexRequest(includeAboutStatus, includeCountryCode, includeUsername, input);
         var response = sendNode(request);
         return UsyncMexResponse.of(response);
@@ -10492,20 +11901,18 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.DIRECT)
     public void editDefaultDisappearingMode(ChatEphemeralTimer timer) {
         Objects.requireNonNull(timer, "timer cannot be null");
-        var seconds = timer.periodSeconds(); // ChatEphemeralTimer.periodSeconds: duration in seconds
-        var disappearing = new StanzaBuilder()
-                .description("disappearing_mode")
-                .attribute("duration", seconds)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "disappearing_mode")
-                .attribute("to", JidServer.user())
-                .attribute("type", "set")
-                .content(disappearing);
-        sendNode(iqNode);
-        store.settingsStore().setNewChatsEphemeralTimer(timer);
+        var request = new IqSetDisappearingModeRequest(Duration.ofSeconds(timer.periodSeconds()));
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (IqSetDisappearingModeResponse.of(response, requestNode.build()).orElse(null)) {
+            case IqSetDisappearingModeResponse.Success ignored -> store.settingsStore().setNewChatsEphemeralTimer(timer);
+            case IqSetDisappearingModeResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Edit default disappearing mode rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case IqSetDisappearingModeResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Edit default disappearing mode server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new WhatsAppServerRuntimeException("Edit default disappearing mode: unexpected response");
         }
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -10527,38 +11934,42 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (participants.isEmpty()) {
             throw new IllegalArgumentException("At least one participant is required");
         }
-        var createChildren = new ArrayList<Stanza>(participants.size() + 1);
-        for (var participant : participants) {
-            createChildren.add(new StanzaBuilder()
-                    .description("participant")
-                    .attribute("jid", participant)
-                    .build());
-        }
         var ephemeralSeconds = ephemeralTimer.periodSeconds();
+        var builder = SmaxGroupsCreateRequest.builder()
+                .subject(subject);
+        for (var participant : participants) {
+            builder.addParticipant(new SmaxGroupsCreateRequest.RequestParticipant(participant, null, null, null));
+        }
         if (ephemeralSeconds != 0) {
-            createChildren.add(new StanzaBuilder()
-                    .description("ephemeral")
-                    .attribute("expiration", ephemeralSeconds)
-                    .build());
+            builder.ephemeralExpiration(ephemeralSeconds);
         }
-        var createNode = new StanzaBuilder()
-                .description("create")
-                .attribute("subject", subject)
-                .content(createChildren)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", Jid.of(JidServer.groupOrCommunity()))
-                .attribute("type", "set")
-                .content(createNode);
-        var response = sendNode(iqNode);
-        var metadata = handleChatMetadata(response);
-        if (!(metadata instanceof GroupMetadata groupMetadata)) {
-            throw new NoSuchElementException("Expected a group metadata, got %s".formatted(metadata));
-        }
-        wamService.commit(new GroupCreateCEventBuilder().build());
-        return groupMetadata;
+        var request = builder.build();
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        return switch (SmaxGroupsCreateResponse.of(response, requestNode.build()).orElse(null)) {
+            case SmaxGroupsCreateResponse.Success success -> {
+                // Reuse the canonical group-metadata parser + store writes on the echoed <group/> sub-stanza.
+                var metadata = handleChatMetadata(success.group());
+                if (!(metadata instanceof GroupMetadata created)) {
+                    throw new NoSuchElementException("Expected a group metadata, got %s".formatted(metadata));
+                }
+                wamService.commit(new GroupCreateCEventBuilder().build());
+                wamService.commit(new GroupCreateEventBuilder()
+                        .ephemeralityDuration(ephemeralSeconds)
+                        .hasGroupName(!subject.isBlank())
+                        .build());
+                yield created;
+            }
+            // Dedup path: the relay returned an existing group instead of creating one; surface it.
+            case SmaxGroupsCreateResponse.GroupAlreadyExists exists ->
+                    queryGroupInfo(exists.groupJid())
+                            .orElseThrow(() -> new NoSuchElementException("Group already exists but its metadata could not be fetched: " + exists.groupJid()));
+            case SmaxGroupsCreateResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Create group rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case SmaxGroupsCreateResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Create group server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> throw new NoSuchElementException("Unexpected create-group response: " + response);
+        };
     }
 
     /** {@inheritDoc} */
@@ -10927,44 +12338,26 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var name = create.name();
         var description = create.description().orElse(null);
         var ephemeralTimer = create.ephemeralTimer();
-        var createChildren = new ArrayList<Stanza>(4);
+        var requestBuilder = SmaxGroupsCreateRequest.builder()
+                .subject(name)
+                .parentDefaultMembershipApprovalMode(true);
         if (description != null && !description.isEmpty()) {
-            createChildren.add(new StanzaBuilder()
-                    .description("description")
-                    .attribute("id", RandomIdUtils.generateSid())
-                    .content(new StanzaBuilder()
-                            .description("body")
-                            .content(description.getBytes(StandardCharsets.UTF_8))
-                            .build())
-                    .build());
+            requestBuilder.descriptionId(RandomIdUtils.generateSid())
+                    .descriptionBody(description);
         }
-        createChildren.add(new StanzaBuilder()
-                .description("parent")
-                .attribute("default_membership_approval_mode", "request_required")
-                .build());
         var ephemeralSeconds = ephemeralTimer.periodSeconds();
-        if (ephemeralSeconds != 0) { // ephemeralArgs OPTIONAL_CHILD is only emitted when a non-zero timer is requested
-            createChildren.add(new StanzaBuilder()
-                    .description("ephemeral")
-                    .attribute("expiration", ephemeralSeconds)
-                    .build());
+        if (ephemeralSeconds != 0) { // ephemeral child is only emitted when a non-zero timer is requested
+            requestBuilder.ephemeralExpiration(ephemeralSeconds);
         }
-        var createNode = new StanzaBuilder()
-                .description("create")
-                .attribute("subject", name)
-                .content(createChildren)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", Jid.of(JidServer.groupOrCommunity()))
-                .attribute("type", "set")
-                .content(createNode);
-        var response = sendNode(iqNode);
+        var requestNode = requestBuilder.build().toStanza();
+        var response = sendNode(requestNode);
         var metadata = handleChatMetadata(response);
         if (!(metadata instanceof CommunityMetadata communityMetadata)) {
             throw new NoSuchElementException("Expected community metadata, got %s".formatted(metadata));
         }
+        wamService.commit(new CommunityCreationEventBuilder()
+                .communityId(communityMetadata.jid().toString())
+                .build());
         return communityMetadata;
     }
 
@@ -11025,11 +12418,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (newOwner.hasGroupOrCommunityServer()) {
             throw new IllegalArgumentException("Expected a user JID for newOwner");
         }
-        var input = JSON.toJSONString(Map.of(                "group_id", community.toString(),
+        var input = JSON.toJSONString(Map.of(
+                "group_id", community.toString(),
                 "new_owner_id", newOwner.toString()
         ));
         var request = new TransferCommunityOwnershipMexRequest(input);
-        sendNodeWithNoResponse(request);
+        var response = sendNode(request);
+        var parsed = TransferCommunityOwnershipMexResponse.of(response)
+                .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing transfer-community-ownership response: %s".formatted(response)));
+        // Refresh the parent-group metadata when the transfer reports a LID addressing mode and a group id.
+        var hasAddressingMode = parsed.lidMigrationState()
+                .flatMap(TransferCommunityOwnershipMexResponse.LidMigrationState::addressingMode)
+                .isPresent();
+        var groupId = parsed.groupId().orElse(null);
+        if (hasAddressingMode && groupId != null && !groupId.isEmpty()) {
+            queryChatMetadata(Jid.of(groupId));
+        }
     }
 
     /** {@inheritDoc} */
@@ -11193,6 +12597,35 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
 
     /** {@inheritDoc} */
     @Override
+    @WhatsAppWebExport(moduleName = "WAWebMexGroupStoreInviteSmsJob", exports = "mexGroupStoreInviteSms",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public Map<Jid, OptionalLong> storeGroupInviteSms(JidProvider groupProvider, Collection<? extends JidProvider> inviteesProvider) {
+        var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
+        if (!group.hasGroupOrCommunityServer()) {
+            throw new IllegalArgumentException("Expected a group/community");
+        }
+        var invitees = Objects.requireNonNull(inviteesProvider, "invitees cannot be null")
+                .stream().map(JidProvider::toJid).toList();
+        if (invitees.isEmpty()) {
+            throw new IllegalArgumentException("At least one invitee is required");
+        }
+        var participants = invitees.stream().map(Jid::toString).toList();
+        var request = new GroupStoreInviteSmsMexRequest(group.toString(), participants);
+        var response = sendNode(request);
+        var parsed = GroupStoreInviteSmsMexResponse.of(response).orElse(null);
+        if (parsed == null) {
+            return Map.of();
+        }
+        var responses = parsed.participantResponses();
+        var result = new LinkedHashMap<Jid, OptionalLong>();
+        for (var i = 0; i < invitees.size(); i++) {
+            result.put(invitees.get(i), i < responses.size() ? responses.get(i).errorCode() : OptionalLong.empty());
+        }
+        return Collections.unmodifiableMap(result);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public Map<Jid, GroupParticipantStatus> removeGroupParticipants(JidProvider groupProvider, Collection<? extends JidProvider> toRemoveProvider) {
         var toRemove = Objects.requireNonNull(toRemoveProvider, "toRemove cannot be null").stream().map(JidProvider::toJid).toList();
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
@@ -11226,6 +12659,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                             .orElse(GroupParticipantStatus.OK);
                     result.put(entry.jid(), status);
                 }
+                var removedOk = result.values().stream()
+                        .filter(status -> status == GroupParticipantStatus.OK)
+                        .count();
+                emitGroupBulkRemovalEvent(group, removedOk);
                 yield Map.copyOf(result);
             }
             case SmaxGroupsRemoveParticipantsResponse.ClientError clientError ->
@@ -11256,29 +12693,32 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         if (group.hasNewsletterServer()) {
             for (var admin : toDemote) {
-                sendNodeWithNoResponse(new DemoteNewsletterAdminMexRequest(group.toString(), admin.toString()));
+                var request = new DemoteNewsletterAdminMexRequest(group.toString(), admin.toString());
+                var response = sendNode(request);
+                DemoteNewsletterAdminMexResponse.of(response)
+                        .orElseThrow(() -> new WhatsAppServerRuntimeException("Missing demote-newsletter-admin response: %s".formatted(response)));
             }
             return;
         }
-        modifyGroupParticipants(group, toDemote, "demote");
+        var demoteResult = modifyGroupParticipants(group, toDemote, "demote");
+        emitCadminDemoteEvent(demoteResult);
     }
 
     /**
-     * Sends a participant-modification IQ to the given group and parses
-     * the per-participant response codes.
+     * Sends a participant-modification IQ to the given group and folds the
+     * per-participant response codes into a {@link GroupParticipantStatus} map.
      *
      * <p>This private helper backs {@link #addGroupParticipants(JidProvider, Collection)},
      * {@link #promoteGroupParticipants(JidProvider, Collection)} and
-     * {@link #demoteGroupParticipants(JidProvider, Collection)}. The action name
-     * is used as the body child description
-     * ({@code "add"}/{@code "promote"}/{@code "demote"}) per WA Web's
-     * {@code WASmaxOutGroups*Request} modules. Removal flows through the
-     * SMAX-typed {@code WASmaxGroupsRemoveParticipantsRPC} via
-     * {@link #removeGroupParticipants(JidProvider, Collection, boolean)} instead.
+     * {@link #demoteGroupParticipants(JidProvider, Collection)} by dispatching the
+     * SMAX-typed {@link SmaxGroupsAddParticipantsRequest} ({@code "add"}) or
+     * {@link SmaxGroupsPromoteDemoteRequest} ({@code "promote"}/{@code "demote"}).
+     * Removal flows through the SMAX-typed {@code WASmaxGroupsRemoveParticipantsRPC}
+     * via {@link #removeGroupParticipants(JidProvider, Collection, boolean)} instead.
      *
      * @param group         the target group JID
      * @param participants  the participants to modify
-     * @param action        the body child name
+     * @param action        {@code "add"}, {@code "promote"}, or {@code "demote"}
      * @return a map from participant JID to the server-assigned status
      */
     private Map<Jid, GroupParticipantStatus> modifyGroupParticipants(Jid group, Collection<Jid> participants, String action) {
@@ -11290,52 +12730,92 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         if (participants.isEmpty()) {
             throw new IllegalArgumentException("At least one participant is required");
         }
-        var participantNodes = new ArrayList<Stanza>(participants.size());
-        for (var participant : participants) {
-            participantNodes.add(new StanzaBuilder()
-                    .description("participant")
-                    .attribute("jid", participant)
-                    .build());
-        }
-        var actionNode = new StanzaBuilder()
-                .description(action)
-                .content(participantNodes)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", group)
-                .attribute("type", "set")
-                .content(actionNode);
-        var response = sendNode(iqNode);
-        return parseParticipantStatus(response);
+        var participantList = List.copyOf(participants);
+        return switch (action) {
+            case "add" -> dispatchAddParticipants(group, participantList);
+            case "promote" -> dispatchPromoteDemote(group, participantList, List.of());
+            case "demote" -> dispatchPromoteDemote(group, List.of(), participantList);
+            default -> throw new IllegalArgumentException("Unexpected participant action: " + action);
+        };
     }
 
     /**
-     * Extracts a map of JID to {@link GroupParticipantStatus} from a
-     * participant-modification response.
+     * Dispatches the SMAX-typed add-participants IQ and folds the per-participant
+     * reply rows into a {@link GroupParticipantStatus} map keyed by participant JID.
      *
-     * <p>Iterates the {@code <participant>} descendants of the response,
-     * reading each one's {@code jid} attribute as the map key and its
-     * {@code error} attribute (defaulted to {@code 200}) as the map
-     * value.
+     * <p>A rejected candidate carries its rejection code in the {@code non_registered_wa_user}
+     * payload; an accepted candidate defaults to {@link GroupParticipantStatus#OK}. A
+     * relay-level rejection surfaces as a {@link WhatsAppServerRuntimeException}.
      *
-     * @param response the server response stanza
-     * @return a map from participant JID to parsed status
+     * @param group        the target group JID
+     * @param participants the participants to add
+     * @return a map from participant JID to the server-assigned status
      */
-    private Map<Jid, GroupParticipantStatus> parseParticipantStatus(Stanza response) {
-        var result = new LinkedHashMap<Jid, GroupParticipantStatus>();
-        response.streamChildren()
-                .flatMap(entry -> entry.streamChildren("participant"))
-                .forEach(participantNode -> {
-                    var jid = participantNode.getAttributeAsJid("jid", null);
-                    if (jid == null) {
-                        return;
-                    }
-                    var code = (int) participantNode.getAttributeAsLong("error", GroupParticipantStatus.OK.code());
-                    result.put(jid, GroupParticipantStatus.of(code));
-                });
-        return result;
+    private Map<Jid, GroupParticipantStatus> dispatchAddParticipants(Jid group, List<Jid> participants) {
+        var request = new SmaxGroupsAddParticipantsRequest(group, participants);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        var parsed = SmaxGroupsAddParticipantsResponse.of(response, requestNode.build()).orElse(null);
+        return switch (parsed) {
+            case null -> new LinkedHashMap<Jid, GroupParticipantStatus>();
+            case SmaxGroupsAddParticipantsResponse.Success success -> {
+                var result = new LinkedHashMap<Jid, GroupParticipantStatus>();
+                for (var entry : success.participants()) {
+                    var code = entry.nonRegisteredUser()
+                            .map(SmaxGroupsAddParticipantsResponse.Success.AddParticipantResult.NonRegisteredWaUser::errorCode)
+                            .orElse(GroupParticipantStatus.OK.code());
+                    result.put(entry.jid(), GroupParticipantStatus.of(code));
+                }
+                yield result;
+            }
+            case SmaxGroupsAddParticipantsResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Add participants rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case SmaxGroupsAddParticipantsResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Add participants server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+        };
+    }
+
+    /**
+     * Dispatches the SMAX-typed promote/demote IQ and folds the per-participant
+     * reply rows into a {@link GroupParticipantStatus} map keyed by participant JID.
+     *
+     * <p>Exactly one of {@code toPromote}/{@code toDemote} is populated per call; the
+     * relay answers with the matching {@code SuccessPromote} or {@code SuccessDemote}
+     * variant. A rejected participant carries its rejection code, an accepted one
+     * defaults to {@link GroupParticipantStatus#OK}, and a relay-level rejection surfaces
+     * as a {@link WhatsAppServerRuntimeException}.
+     *
+     * @param group     the target group JID
+     * @param toPromote the participants to promote, or an empty list
+     * @param toDemote  the participants to demote, or an empty list
+     * @return a map from participant JID to the server-assigned status
+     */
+    private Map<Jid, GroupParticipantStatus> dispatchPromoteDemote(Jid group, List<Jid> toPromote, List<Jid> toDemote) {
+        var request = new SmaxGroupsPromoteDemoteRequest(group, toPromote, toDemote);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        var parsed = SmaxGroupsPromoteDemoteResponse.of(response, requestNode.build()).orElse(null);
+        return switch (parsed) {
+            case null -> new LinkedHashMap<Jid, GroupParticipantStatus>();
+            case SmaxGroupsPromoteDemoteResponse.SuccessPromote success -> {
+                var result = new LinkedHashMap<Jid, GroupParticipantStatus>();
+                for (var entry : success.participants()) {
+                    result.put(entry.jid(), GroupParticipantStatus.of(entry.errorCode().orElse(GroupParticipantStatus.OK.code())));
+                }
+                yield result;
+            }
+            case SmaxGroupsPromoteDemoteResponse.SuccessDemote success -> {
+                var result = new LinkedHashMap<Jid, GroupParticipantStatus>();
+                for (var entry : success.participants()) {
+                    result.put(entry.jid(), GroupParticipantStatus.of(entry.errorCode().orElse(GroupParticipantStatus.OK.code())));
+                }
+                yield result;
+            }
+            case SmaxGroupsPromoteDemoteResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Modify group admins rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case SmaxGroupsPromoteDemoteResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Modify group admins server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+        };
     }
 
     /** {@inheritDoc} */
@@ -11346,6 +12826,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(stickerHash, "stickerHash cannot be null");
         var mutation = favoriteStickerMutationFactory.getFavoriteStickerMutation(stickerHash, true);
         webAppStateService.pushPatches(StickerAction.COLLECTION_NAME, List.of(mutation));
+        emitStickerAddToFavoriteEvent();
     }
 
     /** {@inheritDoc} */
@@ -11431,7 +12912,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 .pollOptionsCount(optionsCount)
                 .pollCreationDs(pollCreationDsFromInstant(creationInstant))
                 .chatType(WamMsgUtils.getWamChatType(chatJid));
-                if (chatJid.hasGroupOrCommunityServer()) {
+        if (chatJid.hasGroupOrCommunityServer()) {
             var metadata = store.chatStore().findChatMetadata(chatJid).orElse(null);
             if (metadata instanceof GroupMetadata group) {
                 var participantCount = group.participants().size();
@@ -11439,13 +12920,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 var selfJid = store.accountStore().jid().orElse(null);
                 if (selfJid != null) {
                     builder.isAdmin(pollsWamIsAdmin(group, selfJid));
-                    }
+                }
                 // because every poll-action call site in WA Web operates on a chat that also
                 builder.typeOfGroup(pollsWamTypeOfGroup(group));
             }
         }
         wamService.commit(builder.build());
-        }
+    }
 
     /**
      * Truncates the given instant to the start of the UTC day and returns the
@@ -11698,7 +13179,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         Objects.requireNonNull(newName, "newName cannot be null");
         if (newName.isBlank()) {
             throw new IllegalArgumentException("newName cannot be blank");
-            }
+        }
         var jid = Jid.of(chatJid);
         var mutation = aiThreadRenameMutationFactory.getAiThreadRenameMutation(jid, threadId, newName);
         webAppStateService.pushPatches(AiThreadRenameAction.COLLECTION_NAME, List.of(mutation));
@@ -11726,6 +13207,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void favoriteChat(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
+        var before = List.copyOf(store.chatStore().favoriteChats());
         var current = new ArrayList<>(store.chatStore().favoriteChats());
         if (!current.contains(chat)) {
             current.add(chat);
@@ -11734,6 +13216,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         webAppStateService.pushPatches(FavoritesAction.COLLECTION_NAME, List.of(mutation));
         // Apply locally for eager consistency
         store.chatStore().setFavoriteChats(current);
+        emitMessagingFavoritesUpdateEvent(before, current);
     }
 
     /** {@inheritDoc} */
@@ -11742,11 +13225,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void unfavoriteChat(JidProvider chatProvider) {
         var chat = Objects.requireNonNull(chatProvider, "chat cannot be null").toJid();
+        var before = List.copyOf(store.chatStore().favoriteChats());
         var current = new ArrayList<>(store.chatStore().favoriteChats());
         current.remove(chat);
         var mutation = favoritesMutationFactory.getFavoritesMutation(current, Instant.now());
         webAppStateService.pushPatches(FavoritesAction.COLLECTION_NAME, List.of(mutation));
         store.chatStore().setFavoriteChats(current);
+        emitMessagingFavoritesUpdateEvent(before, current);
     }
 
     /** {@inheritDoc} */
@@ -11794,12 +13279,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var parentJid = msgKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("msgKey must carry a parentJid"));
         var pin = new PinInChatMessageBuilder()
-        .key(msgKey)
+                .key(msgKey)
                 .type(PinInChatMessage.Type.PIN_FOR_ALL)
                 .senderTimestampMs(Instant.now())
                 .build();
         messageService.send(parentJid, MessageContainer.of(pin));
         commitPinInChatMessageSendEvent(parentJid, msgKey, PinInChatType.PIN_FOR_ALL, null);
+        emitPinMessageUserJourneyEvent(parentJid, msgKey, true);
     }
 
     /** {@inheritDoc} */
@@ -11818,6 +13304,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         messageService.send(parentJid, MessageContainer.of(pin));
         // Cobalt does not model an active-pin table with a TTL, so timeRemainingToExpirySecs is omitted rather than fabricated.
         commitPinInChatMessageSendEvent(parentJid, msgKey, PinInChatType.UNPIN_FOR_ALL, null);
+        emitPinMessageUserJourneyEvent(parentJid, msgKey, false);
     }
 
     /**
@@ -11882,7 +13369,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 var selfJid = store.accountStore().jid().orElse(null);
                 if (selfJid != null) {
                     builder.groupRole(pinWamGroupRole(metadata, selfJid));
-                    }
+                }
             }
         }
         store.chatStore().findMessageByKey(parentMsgKey).ifPresent(parentMessage -> {
@@ -12680,14 +14167,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             payload = new SmaxMessagePublishNewsletterPayload.WithServerId(
                     request.stanzaId(), targetServerId, plaintext);
         } else {
-            var originMarker = request.originTag()
-                    .map(tag -> new StanzaBuilder().description("meta").attribute("origin", tag).build())
-                    .orElse(null);
-            var mediaSenderTag = request.mediaContentId()
-                    .map(id -> new StanzaBuilder().description("plaintext").attribute("mediatype", "url").attribute("content_id", id).build())
-                    .orElse(null);
             payload = new SmaxMessagePublishNewsletterPayload.WithClientIdOnly(
-                    request.stanzaId(), originMarker, mediaSenderTag, plaintext);
+                    request.stanzaId(),
+                    request.originTag().orElse(null),
+                    request.mediaContentId().orElse(null),
+                    plaintext);
         }
         var smaxRequest = new SmaxMessagePublishNewsletterRequest(newsletterJid, payload);
         var requestNode = smaxRequest.toStanza();
@@ -12930,11 +14414,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqClearDirtyBitsResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Clear dirty bits rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqClearDirtyBitsResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Clear dirty bits server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> throw new WhatsAppServerRuntimeException(
                     "Clear dirty bits: response did not match any documented variant");
         }
@@ -12975,8 +14459,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WAWebMmsClient", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public InputStream downloadMedia(MediaProvider provider) {
+        var downloadStartNanos = System.nanoTime();
         try {
-            return mediaConnectionService.download(provider);
+            var stream = mediaConnectionService.download(provider);
+            emitStickerLatencyIfApplicable(provider, (System.nanoTime() - downloadStartNanos) / 1_000_000L);
+            return stream;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new WhatsAppMediaException.Connection("Interrupted while awaiting media connection", interrupted);
@@ -12998,11 +14485,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqDeleteTosResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Delete tos notice rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqDeleteTosResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Delete tos notice server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> throw new WhatsAppServerRuntimeException(
                     "Delete tos notice: response did not match any documented variant");
         }
@@ -13023,11 +14510,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqUpdateTosResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Update tos rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqUpdateTosResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Update tos server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> throw new WhatsAppServerRuntimeException(
                     "Update tos: response did not match any documented variant");
         }
@@ -13046,11 +14533,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqDigestKeyResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Digest key rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqDigestKeyResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Digest key server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> Optional.empty();
         };
     }
@@ -13095,11 +14582,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqGetIdentityKeysResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Fetch identity keys rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqGetIdentityKeysResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Fetch identity keys server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> List.of();
         };
     }
@@ -13119,11 +14606,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqRotateKeyResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Rotate key rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqRotateKeyResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Rotate key server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> throw new WhatsAppServerRuntimeException(
                     "Rotate key: response did not match any documented variant");
         }
@@ -13149,11 +14636,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqUploadPreKeysResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Upload pre-keys rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqUploadPreKeysResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Upload pre-keys server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> throw new WhatsAppServerRuntimeException(
                     "Upload pre-keys: response did not match any documented variant");
         }
@@ -13179,11 +14666,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqUploadPrekeysForRegResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Upload registration pre-keys rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqUploadPrekeysForRegResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Upload registration pre-keys server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> throw new WhatsAppServerRuntimeException(
                     "Upload registration pre-keys: response did not match any documented variant");
         }
@@ -13210,11 +14697,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case IqIssuePrivateStatsTokenResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException(
                             "Issue private stats token rejected: code=" + clientError.errorCode()
-                                    + ", text=" + clientError.errorText().orElse(null));
+                            + ", text=" + clientError.errorText().orElse(null));
             case IqIssuePrivateStatsTokenResponse.ServerError serverError ->
                     throw new WhatsAppServerRuntimeException(
                             "Issue private stats token server error: code=" + serverError.errorCode()
-                                    + ", text=" + serverError.errorText().orElse(null));
+                            + ", text=" + serverError.errorText().orElse(null));
             case null -> Optional.empty();
         };
     }
@@ -13292,6 +14779,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var chat = messageKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("messageKey must carry a parentJid"));
         sendReceipt(id, chat, "read");
+        logPsaReadIfApplicable(messageKey);
+        emitQbmMessageReadIfApplicable(messageKey);
     }
 
     /** {@inheritDoc} */
@@ -13408,6 +14897,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     }
 
     public LinkedWhatsAppClient addAboutChangedListener(LinkedAboutChangedListener listener) {
+        Objects.requireNonNull(listener, "listener cannot be null");
+        addListener(listener);
+        return this;
+    }
+
+    @Override
+    public LinkedWhatsAppClient addIntegrityChallengeListener(LinkedIntegrityChallengeListener listener) {
         Objects.requireNonNull(listener, "listener cannot be null");
         addListener(listener);
         return this;
@@ -13697,7 +15193,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             case COMMUNITY -> ListType.COMMUNITY;
             case SERVER_ASSIGNED -> ListType.SERVER_ASSIGNED;
             default -> null;
-            };
+        };
     }
 
     // stanza/smax/groups/ or stanza/smax/newsletters/, blocks for the
@@ -13847,7 +15343,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxGroupsCreateSubGroupSuggestionRPC", exports = "sendCreateSubGroupSuggestionRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public SubgroupSuggestionResult suggestExistingSubgroups(JidProvider communityProvider,
-                                                              Collection<? extends JidProvider> candidateGroupsProvider) {
+                                                             Collection<? extends JidProvider> candidateGroupsProvider) {
         var candidateGroups = Objects.requireNonNull(candidateGroupsProvider, "candidateGroups cannot be null").stream().map(JidProvider::toJid).toList();
         var community = Objects.requireNonNull(communityProvider, "community cannot be null").toJid();
         if (candidateGroups.isEmpty()) {
@@ -13880,7 +15376,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      *                                         the documented variants
      */
     private SubgroupSuggestionResult dispatchSubgroupSuggestion(Jid community,
-                                                                 SmaxGroupsCreateSubGroupSuggestionSuggestion suggestion) {
+                                                                SmaxGroupsCreateSubGroupSuggestionSuggestion suggestion) {
         var request = new SmaxGroupsCreateSubGroupSuggestionRequest(community, suggestion);
         var requestNode = request.toStanza();
         var response = sendNode(requestNode);
@@ -14260,9 +15756,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var parsed = SmaxGroupsReportMessagesResponse.of(response, requestNode.build()).orElse(null);
         switch (parsed) {
             case null -> throw new WhatsAppServerRuntimeException("Report messages: unparseable response");
-            case SmaxGroupsReportMessagesResponse.Success _ -> {
-                // No payload to surface: the relay only echoes the IQ envelope.
-            }
+            case SmaxGroupsReportMessagesResponse.Success _ ->
+                    wamService.commit(new ReportToAdminEventsEventBuilder()
+                            .rtaGroupId(sanitizeGroupJidForWam(group))
+                            .build());
             case SmaxGroupsReportMessagesResponse.ClientError clientError ->
                     throw new WhatsAppServerRuntimeException("Report messages rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
             case SmaxGroupsReportMessagesResponse.ServerError serverError ->
@@ -14422,11 +15919,11 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      */
     private static boolean hasAnyGroupSettingsFlag(GroupMetadataEdit edit) {
         return edit.editInfoPolicy().isPresent()
-                || edit.sendMessagePolicy().isPresent()
-                || edit.frequentlyForwardedAllowed().isPresent()
-                || edit.adminReportsAllowed().isPresent()
-                || edit.groupHistoryShared().isPresent()
-                || edit.membershipApprovalRequired().isPresent();
+               || edit.sendMessagePolicy().isPresent()
+               || edit.frequentlyForwardedAllowed().isPresent()
+               || edit.adminReportsAllowed().isPresent()
+               || edit.groupHistoryShared().isPresent()
+               || edit.membershipApprovalRequired().isPresent();
     }
 
     /**
@@ -14439,17 +15936,17 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param newSubject the new subject text; never {@code null}
      */
     private void sendGroupSubjectIq(Jid group, String newSubject) {
-        var subjectNode = new StanzaBuilder()
-                .description("subject")
-                .content(newSubject)
-                .build();
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", group)
-                .attribute("type", "set")
-                .content(subjectNode);
-        sendNode(iqNode);
+        var request = new SmaxGroupsSetSubjectRequest(group, newSubject);
+        var requestNode = request.toStanza();
+        var response = sendNode(requestNode);
+        switch (SmaxGroupsSetSubjectResponse.of(response, requestNode.build()).orElse(null)) {
+            case SmaxGroupsSetSubjectResponse.Success ignored -> {}
+            case SmaxGroupsSetSubjectResponse.ClientError clientError ->
+                    throw new WhatsAppServerRuntimeException("Set group subject rejected: code=" + clientError.errorCode() + ", text=" + clientError.errorText().orElse(null));
+            case SmaxGroupsSetSubjectResponse.ServerError serverError ->
+                    throw new WhatsAppServerRuntimeException("Set group subject server error: code=" + serverError.errorCode() + ", text=" + serverError.errorText().orElse(null));
+            case null -> {}
+        }
     }
 
     /**
@@ -14465,24 +15962,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @param delete {@code true} to clear the description
      */
     private void sendGroupDescriptionIq(Jid group, String body, boolean delete) {
-        var descriptionBuilder = new StanzaBuilder()
-                .description("description");
-        if (!delete) {
-            var bodyNode = new StanzaBuilder()
-                    .description("body")
-                    .content(body)
-                    .build();
-            descriptionBuilder.content(bodyNode);
-        } else {
-            descriptionBuilder.attribute("delete", "true");
-            }
-        var iqNode = new StanzaBuilder()
-                .description("iq")
-                .attribute("xmlns", "w:g2")
-                .attribute("to", group)
-                .attribute("type", "set")
-                .content(descriptionBuilder.build());
-        sendNode(iqNode);
+        var request = new SmaxGroupsSetDescriptionRequest(group, null, null, delete, delete ? null : body);
+        sendNode(request.toStanza());
     }
 
     /**
@@ -14499,13 +15980,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      */
     private void sendGroupPictureIq(Jid group, SizedInputStream picture) {
         if (picture == null) {
-            var iqBuilder = new StanzaBuilder()
-                    .description("iq")
-                    .attribute("xmlns", "w:profile:picture")
-                    .attribute("to", JidServer.user())
-                    .attribute("target", group)
-                    .attribute("type", "set");
-            sendNode(iqBuilder);
+            var clearRequest = new IqSendProfilePictureRequest(group, null);
+            sendNode(clearRequest.toStanza());
             return;
         }
         var request = new IqSendProfilePictureRequest(group, picture);
@@ -14793,8 +16269,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @return the message-history page; never {@code null}
      */
     private NewsletterMessageHistory dispatchNewsletterMessagesPage(int count,
-                                                                     SmaxNewslettersGetNewsletterMessagesQueryParams queryParams,
-                                                                     NewsletterHistoryDirection direction) {
+                                                                    SmaxNewslettersGetNewsletterMessagesQueryParams queryParams,
+                                                                    NewsletterHistoryDirection direction) {
         var request = new SmaxNewslettersGetNewsletterMessagesRequest(count, queryParams, toWireMessagesDirection(direction));
         var requestNode = request.toStanza();
         var response = sendNode(requestNode);
@@ -14841,8 +16317,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxNewslettersGetNewsletterResponsesRPC", exports = "sendGetNewsletterResponsesRPC",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public List<NewsletterQuestionResponse> queryNewsletterResponses(JidProvider newsletterProvider, long questionResponsesServerId,
-                                                                      int questionResponsesCount, String questionResponsesBefore,
-                                                                      NewsletterResponsesFilter filter, String searchText) {
+                                                                     int questionResponsesCount, String questionResponsesBefore,
+                                                                     NewsletterResponsesFilter filter, String searchText) {
         var newsletter = Objects.requireNonNull(newsletterProvider, "newsletter cannot be null").toJid();
         var request = new SmaxNewslettersGetNewsletterResponsesRequest(newsletter, questionResponsesServerId,
                 questionResponsesCount, questionResponsesBefore, toWireResponsesFilter(filter), searchText);
@@ -14952,8 +16428,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @return the status-history page; never {@code null}
      */
     private NewsletterStatusHistory dispatchNewsletterStatusesPage(int count,
-                                                                    SmaxNewslettersGetNewsletterMessagesQueryParams queryParams,
-                                                                    NewsletterHistoryDirection direction) {
+                                                                   SmaxNewslettersGetNewsletterMessagesQueryParams queryParams,
+                                                                   NewsletterHistoryDirection direction) {
         var request = new SmaxNewslettersGetNewsletterStatusesRequest(count, queryParams, toWireStatusesDirection(direction));
         var requestNode = request.toStanza();
         var response = sendNode(requestNode);
@@ -15032,7 +16508,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
      * @return the domain history slice; never {@code null}
      */
     private NewsletterStatusHistory toStatusHistory(Long highWaterMark,
-                                                     List<SmaxNewslettersGetNewsletterStatusesResponse.NewsletterStatus> wireStatuses) {
+                                                    List<SmaxNewslettersGetNewsletterStatusesResponse.NewsletterStatus> wireStatuses) {
         var entries = wireStatuses.stream()
                 .map(status -> {
                     var raw = status.raw();
@@ -15148,7 +16624,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxAbPropsGetExperimentConfigRPC",
             exports = "sendGetExperimentConfigRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<AbPropsBundle> queryExperimentConfig(String propsHash,
-                                                          Integer propsRefreshId) {
+                                                         Integer propsRefreshId) {
         var request = new SmaxAbPropsGetExperimentConfigRequest(propsHash, propsRefreshId);
         var requestNode = request.toStanza();
         var response = sendNode(requestNode);
@@ -15209,7 +16685,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxAbPropsGetGroupExperimentConfigRPC",
             exports = "sendGetGroupExperimentConfigRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<AbPropsBundle> queryGroupExperimentConfig(JidProvider groupProvider,
-                                                               String propsHash) {
+                                                              String propsHash) {
         var group = Objects.requireNonNull(groupProvider, "group cannot be null").toJid();
         var request = new SmaxAbPropsGetGroupExperimentConfigRequest(group, propsHash);
         var requestNode = request.toStanza();
@@ -15534,7 +17010,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxPrivatestatsSignCredentialRPC",
             exports = "sendSignCredentialRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<SignedAttributionCredential> signAnonymousAttributionCredential(byte[] blindedCredentialElementValue,
-                                                                                     String projectNameElementValue) {
+                                                                                    String projectNameElementValue) {
         Objects.requireNonNull(blindedCredentialElementValue, "blindedCredentialElementValue cannot be null");
         Objects.requireNonNull(projectNameElementValue, "projectNameElementValue cannot be null");
         var request = new SmaxPrivatestatsSignCredentialRequest(blindedCredentialElementValue, projectNameElementValue);
@@ -15712,13 +17188,13 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                             success.responseMessageElementValue()));
             case SmaxContactFormResponse.ContactFormResponseRetryableError retryable ->
                     throw new WhatsAppServerRuntimeException("Contact-form retryable error: code="
-                            + retryable.responseErrorCode()
-                            + ", next_retry_ts=" + retryable.responseNextRetryTs().orElse(null));
+                                                             + retryable.responseErrorCode()
+                                                             + ", next_retry_ts=" + retryable.responseNextRetryTs().orElse(null));
             case SmaxContactFormResponse.ContactFormResponseError error ->
                     throw new WhatsAppServerRuntimeException("Contact-form rejected: code="
-                            + error.errorCode()
-                            + ", text=" + error.errorText().orElse(null)
-                            + ", tos_version=" + error.tosVersion().orElse(null));
+                                                             + error.errorCode()
+                                                             + ", text=" + error.errorText().orElse(null)
+                                                             + ", tos_version=" + error.tosVersion().orElse(null));
         };
     }
 
@@ -15731,19 +17207,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var target = report.target();
         var spamFlow = report.spamFlow();
         var isKnownChat = report.isKnownChat().orElse(null);
-        var reportedMessageIds = report.reportedMessageIds();
         var builder = SmaxIndividualReportRequest.builder()
                 .spamListJid(target)
-                .spamListSpamFlow(spamFlow);
+                .spamListSpamFlow(spamFlow)
+                .reportedMessageIds(report.reportedMessageIds());
         if (isKnownChat != null) {
             builder.spamListIsKnownChat(isKnownChat);
-        }
-        for (var messageId : reportedMessageIds) {
-            Objects.requireNonNull(messageId, "reportedMessageIds entries cannot be null");
-            builder.addMessageChild(new StanzaBuilder()
-                    .description("message")
-                    .attribute("id", messageId)
-                    .build());
         }
         var request = builder.build();
         var requestNode = request.toStanza();
@@ -15765,10 +17234,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var spamFlow = report.spamFlow();
         var subject = report.subject().orElse(null);
         var isKnownChat = report.isKnownChat().orElse(null);
-        var reportedMessageIds = report.reportedMessageIds();
         var builder = SmaxGroupReportRequest.builder()
                 .spamListJid(group)
-                .spamListSpamFlow(spamFlow);
+                .spamListSpamFlow(spamFlow)
+                .reportedMessageIds(report.reportedMessageIds());
         if (adder != null) {
             builder.spamListSource(adder);
         }
@@ -15777,13 +17246,6 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         }
         if (isKnownChat != null) {
             builder.spamListIsKnownChat(isKnownChat);
-        }
-        for (var messageId : reportedMessageIds) {
-            Objects.requireNonNull(messageId, "reportedMessageIds entries cannot be null");
-            builder.addMessageChild(new StanzaBuilder()
-                    .description("message")
-                    .attribute("id", messageId)
-                    .build());
         }
         var request = builder.build();
         var requestNode = request.toStanza();
@@ -15868,6 +17330,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 }
             }
         }
+        emitStatusReportingEvent(status);
     }
 
     /** {@inheritDoc} */
@@ -16127,7 +17590,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxWaffleWFPingRPC",
             exports = "sendWFPingRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<FederatedIdentityPing> sendFederatedIdentityPing(FederatedRsaEncryption encryption,
-                                                                      Instant timestamp, byte[] fbid) {
+                                                                     Instant timestamp, byte[] fbid) {
         Objects.requireNonNull(encryption, "encryption cannot be null");
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         Objects.requireNonNull(fbid, "fbid cannot be null");
@@ -16152,8 +17615,8 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxWaffleGetCertificateRPC",
             exports = "sendGetCertificateRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<FederatedIdentityCertificate> queryFederatedIdentityCertificate(Instant timestamp,
-                                                                                     boolean hasPayloadEncCertificates,
-                                                                                     boolean hasPasswordPem) {
+                                                                                    boolean hasPayloadEncCertificates,
+                                                                                    boolean hasPasswordPem) {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         var request = new SmaxWaffleGetCertificateRequest(timestamp.getEpochSecond(), hasPayloadEncCertificates, hasPasswordPem);
         var requestNode = request.toStanza();
@@ -16194,7 +17657,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxWaffleRefreshAccessTokensRPC",
             exports = "sendRefreshAccessTokensRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<FederatedAccessTokenRefresh> refreshFederatedIdentityAccessTokens(FederatedRsaEncryption encryption,
-                                                                                       Instant timestamp, byte[] fbid) {
+                                                                                      Instant timestamp, byte[] fbid) {
         Objects.requireNonNull(encryption, "encryption cannot be null");
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         Objects.requireNonNull(fbid, "fbid cannot be null");
@@ -16219,7 +17682,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     @WhatsAppWebExport(moduleName = "WASmaxWaffleEncryptedPayloadRequestRPC",
             exports = "sendEncryptedPayloadRequestRPC", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<FederatedEncryptedAction> sendFederatedIdentityEncryptedPayload(FederatedRsaEncryption encryption,
-                                                                                     Instant timestamp, byte[] fbid, byte[] action) {
+                                                                                    Instant timestamp, byte[] fbid, byte[] action) {
         Objects.requireNonNull(encryption, "encryption cannot be null");
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
         Objects.requireNonNull(fbid, "fbid cannot be null");
@@ -18080,10 +19543,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var relayTypes = feedbackTypes == null
                 ? null
                 : feedbackTypes.stream()
-                        .map(kind -> kind == null
-                                ? null
-                                : SupportMessageFeedbackSubmitWhatsAppGraphQlRequest.FeedbackType.of(kind.wireValue()).orElse(null))
-                        .toList();
+                .map(kind -> kind == null
+                        ? null
+                        : SupportMessageFeedbackSubmitWhatsAppGraphQlRequest.FeedbackType.of(kind.wireValue()).orElse(null))
+                .toList();
         var request = new SupportMessageFeedbackSubmitWhatsAppGraphQlRequest(messageId, relayTypes);
         var response = sendGraphQl(request);
         return SupportMessageFeedbackSubmitWhatsAppGraphQlResponse.of(response)
@@ -18130,14 +19593,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<CrossPostingEligibility> checkCrossPostingEligibility(CrossPostingEligibilityQuery query) {
         Objects.requireNonNull(query, "query cannot be null");
+        var crosspostStartMs = System.currentTimeMillis();
         var relayDestinations = query.destinations().stream()
                 .map(dest -> dest == null
                         ? null
                         : new WaffleXeWhatsAppGraphQlRequest.WaffleXas(
-                                dest.application()
-                                        .flatMap(app -> WaffleXeWhatsAppGraphQlRequest.WaffleXan.of(app.wireValue()))
-                                        .orElse(null),
-                                dest.surface().orElse(null)))
+                        dest.application()
+                                .flatMap(app -> WaffleXeWhatsAppGraphQlRequest.WaffleXan.of(app.wireValue()))
+                                .orElse(null),
+                        dest.surface().orElse(null)))
                 .toList();
         var request = new WaffleXeWhatsAppGraphQlRequest(
                 query.expirationTimes(),
@@ -18146,6 +19610,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 relayDestinations,
                 query.sessionId().orElse(null));
         var response = sendGraphQl(request);
+        emitStatusCrosspostRequestEvent(
+                query.sessionId().orElse(null),
+                query.uniqueIds().stream().findFirst().orElse(null),
+                System.currentTimeMillis() - crosspostStartMs);
         return WaffleXeWhatsAppGraphQlResponse.of(response)
                 .map(WaffleXeWhatsAppGraphQlResponse::eligibility);
     }
@@ -18263,6 +19731,10 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 options.fromExternalApp().orElse(null),
                 options.partnerToken().orElse(null));
         var response = sendGraphQl(request);
+        options.recipient().ifPresent(recipient -> wamService.commit(new BusinessInteractionEventBuilder()
+                .businessJid(recipient.toString())
+                .sequenceNumber(wamJourneySequence.incrementAndGet())
+                .build()));
         return ExternalCtxAuthoriseWaChatWhatsAppGraphQlResponse.of(response)
                 .map(ExternalCtxAuthoriseWaChatWhatsAppGraphQlResponse::authorization);
     }
@@ -18374,15 +19846,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var relayContext = triggerContext == null
                 ? null
                 : new FetchQuickPromotionsWhatsAppGraphQlRequest.TriggerContext(
-                        triggerContext.fromBusinessApp().orElse(null),
-                        triggerContext.appVersion().orElse(null),
-                        triggerContext.country().orElse(null),
-                        triggerContext.locale().orElse(null));
+                triggerContext.fromBusinessApp().orElse(null),
+                triggerContext.appVersion().orElse(null),
+                triggerContext.country().orElse(null),
+                triggerContext.locale().orElse(null));
         var request = new FetchQuickPromotionsWhatsAppGraphQlRequest(surfaceIds, relayContext);
-        var response = sendGraphQl(request);
-        return FetchQuickPromotionsWhatsAppGraphQlResponse.of(response)
-                .map(FetchQuickPromotionsWhatsAppGraphQlResponse::batches)
-                .orElseGet(List::of);
+        try {
+            var response = sendGraphQl(request);
+            var batches = FetchQuickPromotionsWhatsAppGraphQlResponse.of(response)
+                    .map(FetchQuickPromotionsWhatsAppGraphQlResponse::batches)
+                    .orElseGet(List::of);
+            emitSmbQpCallHealthEvent(FetchResultEnum.SUCCESS, null);
+            return batches;
+        } catch (RuntimeException error) {
+            emitSmbQpCallHealthEvent(FetchResultEnum.EXCEPTION, error.getMessage());
+            throw error;
+        }
     }
 
     /** {@inheritDoc} */
@@ -18393,15 +19872,22 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var relayContext = triggerContext == null
                 ? null
                 : new ConsumerFetchQuickPromotionsWhatsAppGraphQlRequest.TriggerContext(
-                        triggerContext.fromBusinessApp().orElse(null),
-                        triggerContext.appVersion().orElse(null),
-                        triggerContext.country().orElse(null),
-                        triggerContext.locale().orElse(null));
+                triggerContext.fromBusinessApp().orElse(null),
+                triggerContext.appVersion().orElse(null),
+                triggerContext.country().orElse(null),
+                triggerContext.locale().orElse(null));
         var request = new ConsumerFetchQuickPromotionsWhatsAppGraphQlRequest(surfaceIds, relayContext);
-        var response = sendGraphQl(request);
-        return ConsumerFetchQuickPromotionsWhatsAppGraphQlResponse.of(response)
-                .map(ConsumerFetchQuickPromotionsWhatsAppGraphQlResponse::batches)
-                .orElseGet(List::of);
+        try {
+            var response = sendGraphQl(request);
+            var batches = ConsumerFetchQuickPromotionsWhatsAppGraphQlResponse.of(response)
+                    .map(ConsumerFetchQuickPromotionsWhatsAppGraphQlResponse::batches)
+                    .orElseGet(List::of);
+            emitSmbQpCallHealthEvent(FetchResultEnum.SUCCESS, null);
+            return batches;
+        } catch (RuntimeException error) {
+            emitSmbQpCallHealthEvent(FetchResultEnum.EXCEPTION, error.getMessage());
+            throw error;
+        }
     }
 
     /** {@inheritDoc} */
@@ -18499,6 +19985,12 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
         var jid = groupJid == null ? null : groupJid.toJid();
         var request = new GroupSuspensionAppealWhatsAppGraphQlRequest(jid, appealReason, clientDebugBundle);
         var response = sendGraphQl(request);
+        var appealBuilder = new GroupSuspensionAppealEventsEventBuilder()
+                .isAdmin(true);
+        if (jid != null) {
+            appealBuilder.groupJid(sanitizeGroupJidForWam(jid));
+        }
+        wamService.commit(appealBuilder.build());
         return GroupSuspensionAppealWhatsAppGraphQlResponse.of(response)
                 .map(GroupSuspensionAppealWhatsAppGraphQlResponse::appeal);
     }
@@ -18971,6 +20463,15 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
                 query.pageId().orElse(null),
                 query.instagramUserIdDoubleWriteEnabled());
         var response = sendGraphQl(request);
+        var lwiFlowId = nextWamUnifiedSessionId();
+        wamService.commit(new LwiEntryTapEventBuilder()
+                .lwiEntryPoint(LwiEntryPoint.SMB_BUSINESS_TOOLS_TAB_ADVERTISE)
+                .lwiSubEntryPoint(LwiSubEntryPoint.SMB_HOME_SCREEN_BIZ_HOME_TAB)
+                .lwiFlowId(lwiFlowId)
+                .webFlowType(WebFlowType.NATIVE_WEB)
+                .userHasLinkedFbPage(query.facebookAccountLinked())
+                .build());
+        emitCtwaAdJourneyEvent(LwiSurface.AD_DESIGN, lwiFlowId, query.pageId().orElse(null));
         return BizAdCreationRootFacebookGraphQlResponse.of(response)
                 .map(BizAdCreationRootFacebookGraphQlResponse::screen);
     }
@@ -19000,6 +20501,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BusinessAdCreationSummary> queryAdCreationSummaryContent(String assetId, String budgetJson) {
         var request = new BizAdCreationSummaryContentFacebookGraphQlRequest(assetId, budgetJson);
         var response = sendGraphQl(request);
+        emitCtwaAdJourneyEvent(LwiSurface.AD_DESIGN, nextWamUnifiedSessionId(), null);
         return BizAdCreationSummaryContentFacebookGraphQlResponse.of(response)
                 .flatMap(BizAdCreationSummaryContentFacebookGraphQlResponse::summary);
     }
@@ -19011,6 +20513,7 @@ final class LiveLinkedWhatsAppClient implements LinkedWhatsAppClient {
     public Optional<BusinessAdSuccessScreen> queryAdCreationSuccessModal(String assetId, Long budget) {
         var request = new BizAdCreationSuccessModalFacebookGraphQlRequest(assetId, budget);
         var response = sendGraphQl(request);
+        emitCtwaAdJourneyEvent(LwiSurface.ACCOUNT_MANAGEMENT, nextWamUnifiedSessionId(), null);
         return BizAdCreationSuccessModalFacebookGraphQlResponse.of(response)
                 .flatMap(BizAdCreationSuccessModalFacebookGraphQlResponse::screen);
     }

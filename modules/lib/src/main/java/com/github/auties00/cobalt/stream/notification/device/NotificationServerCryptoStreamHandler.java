@@ -8,14 +8,22 @@ import com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient;
 import com.github.auties00.cobalt.listener.linked.LinkedDeviceIdentityChangedListener;
 import com.github.auties00.cobalt.listener.linked.LinkedRegistrationCodeListener;
 import com.github.auties00.cobalt.listener.WhatsAppListener;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.media.MediaRetryNotificationSpec;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
+import com.github.auties00.cobalt.wam.event.SenderKeyExpiredEvent;
+import com.github.auties00.cobalt.wam.event.SenderKeyExpiredEventBuilder;
 import com.github.auties00.cobalt.wam.event.WaOldCodeEventBuilder;
+import com.github.auties00.cobalt.wam.type.ExpiryReason;
+import com.github.auties00.cobalt.wam.type.MessageChatType;
+import com.github.auties00.cobalt.wam.type.SizeBucket;
 
 import javax.crypto.Cipher;
 import javax.crypto.KDF;
@@ -235,10 +243,11 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
      * When a {@code lid} attribute is present it is registered as a LID-PN mapping, and the
      * {@code display_name} attribute, when non-blank, updates the contact's chosen name. The handler
      * then marks the identity change, cleans up the Signal session, clears the sender-key
-     * distribution for the participant, marks the user for key rotation, re-issues the local user's
-     * trusted-contact token to the peer (so its rotated identity keeps a valid token), and fires
-     * {@link LinkedDeviceIdentityChangedListener#onDeviceIdentityChanged} so the embedder can drive the
-     * equivalent UI.
+     * distribution for the participant, marks the user for key rotation, commits the
+     * {@link SenderKeyExpiredEvent} telemetry recording the sender-key reset, re-issues the local
+     * user's trusted-contact token to the peer (so its rotated identity keeps a valid token), and
+     * fires {@link LinkedDeviceIdentityChangedListener#onDeviceIdentityChanged} so the embedder can
+     * drive the equivalent UI.
      *
      * @param stanza the {@code <notification type="encrypt"/>} stanza with an {@code <identity/>} child
      */
@@ -277,6 +286,7 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
         whatsapp.store().signalStore().cleanupSignalSessions(deviceJid);
         whatsapp.store().signalStore().clearSenderKeyDistributionForParticipant(deviceJid);
         whatsapp.store().signalStore().markKeyRotation(userJid);
+        emitSenderKeyExpired(userJid);
         // Re-hand our trusted-contact token to the peer whose device identity just changed, matching
         // WAWebHandleIdentityChange, so the peer's rotated identity keeps a valid token to validate our
         // future offers and messages. Fire-and-forget on a virtual thread; the reciprocal is not needed.
@@ -284,6 +294,94 @@ final class NotificationServerCryptoStreamHandler extends SocketStreamHandler.Co
         Thread.ofVirtual().name("tc-token-identity-" + userJid)
                 .start(() -> whatsapp.issueTrustedContactToken(tokenPeer));
         fireListeners(LinkedDeviceIdentityChangedListener.class, listener -> listener.onDeviceIdentityChanged(whatsapp, userJid, Set.of(deviceJid)));
+    }
+
+    /**
+     * Commits the {@link SenderKeyExpiredEvent} telemetry for a group sender-key reset forced by a
+     * remote device identity change.
+     *
+     * <p>The chat type is reported as {@link MessageChatType#GROUP} because sender keys exist only
+     * for group-fanout messaging; the expiry reason is {@link ExpiryReason#IDENTITY_CHANGE} because
+     * the reset was triggered by the peer's rotated identity; and the device size bucket is derived
+     * from the number of devices in the peer's cached {@link DeviceList}, which is the recipient set
+     * the discarded sender key spanned. Invoked by {@link #handleIdentityChange(Stanza)} at the point
+     * the participant's sender-key distribution has just been cleared.
+     *
+     * @implNote This implementation reads the peer device count from the contact store's cached
+     * {@link DeviceList} and falls back to a single device when no list is cached, since the
+     * identity-changed device is itself always a recipient; the {@link #sizeBucketFor(int)} bucket
+     * boundaries match WA Web's {@code WAWebWamNumberToSizeBucket}.
+     *
+     * @param userJid the user whose device identity changed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPostSenderKeyExpiredMetric", exports = "postSenderKeyExpiredMetric", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void emitSenderKeyExpired(Jid userJid) {
+        var deviceCount = whatsapp.store().contactStore()
+                .findDeviceList(userJid)
+                .map(DeviceList::size)
+                .filter(size -> size > 0)
+                .orElse(1);
+        wamService.commit(new SenderKeyExpiredEventBuilder()
+                .chatType(MessageChatType.GROUP)
+                .deviceSizeBucket(sizeBucketFor(deviceCount))
+                .expiryReason(ExpiryReason.IDENTITY_CHANGE)
+                .build());
+    }
+
+    /**
+     * Maps a device count onto the {@link SizeBucket} half-open interval it falls into.
+     *
+     * <p>Reproduces WA Web's {@code WAWebWamNumberToSizeBucket} bucket boundaries exactly, including
+     * its use of {@link SizeBucket#LT1024} (not {@link SizeBucket#LT1000}) for counts below
+     * {@code 1024} and {@link SizeBucket#LARGEST_BUCKET} for counts of {@code 5000} or more.
+     *
+     * @param deviceCount the number of devices in the sender-key recipient set
+     * @return the matching size bucket
+     */
+    private static SizeBucket sizeBucketFor(int deviceCount) {
+        if (deviceCount < 32) {
+            return SizeBucket.LT32;
+        }
+        if (deviceCount < 64) {
+            return SizeBucket.LT64;
+        }
+        if (deviceCount < 128) {
+            return SizeBucket.LT128;
+        }
+        if (deviceCount < 256) {
+            return SizeBucket.LT256;
+        }
+        if (deviceCount < 512) {
+            return SizeBucket.LT512;
+        }
+        if (deviceCount < 1024) {
+            return SizeBucket.LT1024;
+        }
+        if (deviceCount < 1500) {
+            return SizeBucket.LT1500;
+        }
+        if (deviceCount < 2000) {
+            return SizeBucket.LT2000;
+        }
+        if (deviceCount < 2500) {
+            return SizeBucket.LT2500;
+        }
+        if (deviceCount < 3000) {
+            return SizeBucket.LT3000;
+        }
+        if (deviceCount < 3500) {
+            return SizeBucket.LT3500;
+        }
+        if (deviceCount < 4000) {
+            return SizeBucket.LT4000;
+        }
+        if (deviceCount < 4500) {
+            return SizeBucket.LT4500;
+        }
+        if (deviceCount < 5000) {
+            return SizeBucket.LT5000;
+        }
+        return SizeBucket.LARGEST_BUCKET;
     }
 
     /**

@@ -111,7 +111,7 @@ public final class SmaxWaffleRsaEncryptionMetadata {
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleRSAEncryptionMetadataMixin",
             exports = "mergeRSAEncryptionMetadataMixin", adaptation = WhatsAppAdaptation.DIRECT)
-    public Stanza toNode() {
+    public Stanza toStanza() {
         var encryptedKeyNode = new StanzaBuilder()
                 .description("encrypted_key")
                 .content(encryptedKey)

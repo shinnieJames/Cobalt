@@ -118,7 +118,8 @@ public final class VideoRateController {
         var keyFecRatio = Math.clamp(plr * 2.0, 0.0, MAX_KEY_FEC_RATIO);
         var deltaFecRatio = Math.clamp(plr, 0.0, MAX_DELTA_FEC_RATIO);
 
-        var updated = params.withTargetBitrate((int) targetBps);
+        var newTarget = (int) targetBps;
+        var updated = newTarget == params.targetBitrate() ? params : params.withTargetBitrate(newTarget);
         return new VideoRateResult(updated, keyFecRatio, deltaFecRatio, sctpBufferController.isCongested());
     }
 

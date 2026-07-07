@@ -26,7 +26,10 @@ import java.util.Optional;
  * the parser can be diffed line by line against the upstream source, and validates the
  * {@code from} attribute against the {@code s.whatsapp.net} server domain to mirror the
  * upstream domain-JID literal.
+ *
+ * @deprecated companion-pairing notify handled inline by {@code IqStreamHandler}.
  */
+@Deprecated
 @WhatsAppWebModule(moduleName = "WASmaxInMdPrimaryHelloNotifyCompanionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMdServerNotificationMixin")
 public final class SmaxMdPrimaryHelloNotifyCompanionResponse implements SmaxStanza.Response {
