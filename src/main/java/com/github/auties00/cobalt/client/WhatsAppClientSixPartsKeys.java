@@ -1,6 +1,8 @@
 
 package com.github.auties00.cobalt.client;
 
+import com.github.auties00.cobalt.model.auth.SignedDeviceIdentity;
+import com.github.auties00.cobalt.model.auth.SignedDeviceIdentitySpec;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
 import com.github.auties00.libsignal.key.SignalIdentityPrivateKey;
 import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
@@ -8,6 +10,7 @@ import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Represents the six-part authentication keys used for WhatsApp mobile client connections.
@@ -38,6 +41,7 @@ public final class WhatsAppClientSixPartsKeys {
     private final SignalIdentityKeyPair noiseKeyPair;
     private final SignalIdentityKeyPair identityKeyPair;
     private final byte[] identityId;
+    private final SignedDeviceIdentity deviceIdentity;
 
     /**
      * Constructs a new WhatsappSixPartsKeys instance with the specified components.
@@ -48,10 +52,15 @@ public final class WhatsAppClientSixPartsKeys {
      * @param identityId       the unique identity identifier for this account
      */
     public WhatsAppClientSixPartsKeys(long phoneNumber, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, byte[] identityId) {
+        this(phoneNumber, noiseKeyPair, identityKeyPair, identityId, null);
+    }
+
+    public WhatsAppClientSixPartsKeys(long phoneNumber, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, byte[] identityId, SignedDeviceIdentity deviceIdentity) {
         this.phoneNumber = phoneNumber;
         this.noiseKeyPair = noiseKeyPair;
         this.identityKeyPair = identityKeyPair;
         this.identityId = identityId;
+        this.deviceIdentity = deviceIdentity;
     }
 
     /**
@@ -79,8 +88,8 @@ public final class WhatsAppClientSixPartsKeys {
         Objects.requireNonNull(sixParts, "Invalid six parts");
         var parts = sixParts.trim()
                 .replaceAll("\n", "")
-                .split(",", 6);
-        if (parts.length != 6) {
+                .split(",");
+        if (parts.length != 6 && parts.length != 7) {
             throw new IllegalArgumentException("Malformed six parts: " + sixParts);
         }
         var phoneNumber = parsePhoneNumber(parts);
@@ -89,9 +98,12 @@ public final class WhatsAppClientSixPartsKeys {
         var identityPublicKey = SignalIdentityPublicKey.ofDirect(Base64.getDecoder().decode(parts[3]));
         var identityPrivateKey = SignalIdentityPrivateKey.ofDirect(Base64.getDecoder().decode(parts[4]));
         var identityId = Base64.getDecoder().decode(parts[5]);
+        var deviceIdentity = parts.length == 7 && !parts[6].isBlank()
+                ? SignedDeviceIdentitySpec.decode(Base64.getDecoder().decode(parts[6]))
+                : null;
         var noiseKeyPair = new SignalIdentityKeyPair(noisePublicKey, noisePrivateKey);
         var identityKeyPair = new SignalIdentityKeyPair(identityPublicKey, identityPrivateKey);
-        return new WhatsAppClientSixPartsKeys(phoneNumber, noiseKeyPair, identityKeyPair, identityId);
+        return new WhatsAppClientSixPartsKeys(phoneNumber, noiseKeyPair, identityKeyPair, identityId, deviceIdentity);
     }
 
     /**
@@ -123,7 +135,7 @@ public final class WhatsAppClientSixPartsKeys {
      */
     @Override
     public String toString() {
-        return String.valueOf(phoneNumber) +
+        var result = String.valueOf(phoneNumber) +
                 ',' +
                 Base64.getEncoder().encodeToString(noiseKeyPair.publicKey().toEncodedPoint()) +
                 ',' +
@@ -134,6 +146,10 @@ public final class WhatsAppClientSixPartsKeys {
                 Base64.getEncoder().encodeToString(identityKeyPair.privateKey().toEncodedPoint()) +
                 ',' +
                 Base64.getEncoder().encodeToString(identityId);
+        if (deviceIdentity != null) {
+            result += ',' + Base64.getEncoder().encodeToString(SignedDeviceIdentitySpec.encode(deviceIdentity));
+        }
+        return result;
     }
 
     /**
@@ -181,6 +197,10 @@ public final class WhatsAppClientSixPartsKeys {
         return identityId;
     }
 
+    public Optional<SignedDeviceIdentity> deviceIdentity() {
+        return Optional.ofNullable(deviceIdentity);
+    }
+
     /**
      * Compares this WhatsappSixPartsKeys instance with another object for equality.
      * <p>
@@ -196,7 +216,8 @@ public final class WhatsAppClientSixPartsKeys {
                 && Objects.equals(phoneNumber, that.phoneNumber) &&
                 Objects.equals(noiseKeyPair, that.noiseKeyPair) &&
                 Objects.equals(identityKeyPair, that.identityKeyPair) &&
-                Objects.deepEquals(identityId, that.identityId);
+                Objects.deepEquals(identityId, that.identityId) &&
+                Objects.equals(deviceIdentity, that.deviceIdentity);
     }
 
     /**
@@ -206,6 +227,6 @@ public final class WhatsAppClientSixPartsKeys {
      */
     @Override
     public int hashCode() {
-        return Objects.hash(phoneNumber, noiseKeyPair, identityKeyPair, Arrays.hashCode(identityId));
+        return Objects.hash(phoneNumber, noiseKeyPair, identityKeyPair, Arrays.hashCode(identityId), deviceIdentity);
     }
 }

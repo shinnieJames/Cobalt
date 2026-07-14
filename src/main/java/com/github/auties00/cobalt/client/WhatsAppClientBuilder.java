@@ -283,7 +283,9 @@ public sealed class WhatsAppClientBuilder {
                     return new Options.Web(serialized.get());
                 }
 
-                var store = newStore(null, sixParts.phoneNumber(), WhatsAppClientType.WEB, sixParts.identityKeyPair(), sixParts.noiseKeyPair(), true, sixParts.identityId());
+                var store = newStore(null, sixParts.phoneNumber(), WhatsAppClientType.WEB, sixParts.identityKeyPair(), sixParts.noiseKeyPair(), false, sixParts.identityId());
+                sixParts.deviceIdentity()
+                        .ifPresent(store::setCompanionIdentity);
                 return new Options.Web(store);
             }
 
@@ -397,6 +399,8 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 var store = newStore(null, sixParts.phoneNumber(), WhatsAppClientType.MOBILE, sixParts.identityKeyPair(), sixParts.noiseKeyPair(), true, sixParts.identityId());
+                sixParts.deviceIdentity()
+                        .ifPresent(store::setCompanionIdentity);
                 return new Options.Mobile(store);
             }
 

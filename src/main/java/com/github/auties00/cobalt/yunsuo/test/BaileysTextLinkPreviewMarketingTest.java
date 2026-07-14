@@ -42,6 +42,11 @@ public class BaileysTextLinkPreviewMarketingTest {
         System.out.println("Enter the six parts segment: ");
         var scanner = new Scanner(System.in);
         var sixParts = scanner.nextLine().trim();
+        System.out.println("Enter proxy in the format Region|Host|Port|Username|Password|ExpireTime: ");
+        var proxyInfo = scanner.nextLine().trim().split("\\|");
+        if (proxyInfo.length != 6) {
+            throw new IllegalStateException("Unexpected proxy format: " + proxyInfo.length);
+        }
         System.out.println("Select if the account is business or personal:\n(1) Business (2) Personal");
         var business = switch (scanner.nextInt()) {
             case 1 -> true;
@@ -49,7 +54,7 @@ public class BaileysTextLinkPreviewMarketingTest {
             default -> throw new IllegalStateException("Unexpected value: " + scanner.nextInt());
         };
 
-        var proxyUri = URI.create("socks5://cfchgwfs:rc97cfzd5e42@92.113.231.117:7202");
+        var proxyUri = URI.create("socks5://%s:%s@%s:%s".formatted(proxyInfo[3], proxyInfo[4], proxyInfo[1], proxyInfo[2]));
         var imagePath = "/Users/admin/Documents/data/gg/pic/djy.jpg";
         var targetPhone = 60102619686L;
 //        var targetPhone = 85254849927L;
@@ -64,7 +69,8 @@ public class BaileysTextLinkPreviewMarketingTest {
                 .proxy(proxyUri)
                 .device(JidCompanion.ios(business))
                 .name("yunsuo");
-        mobileBuilder.messagePreviewHandler(_ -> {});
+        mobileBuilder.messagePreviewHandler(_ -> {
+        });
 
         WhatsAppClient whatsapp = mobileBuilder
                 .registered()

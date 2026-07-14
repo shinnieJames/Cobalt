@@ -1,11 +1,16 @@
 package com.github.auties00.cobalt.message;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClientType;
 import com.github.auties00.cobalt.message.signal.SignalMessageEncoder;
 import com.github.auties00.cobalt.message.rcat.MessageRcatEncoder;
 import com.github.auties00.cobalt.device.hash.DevicePhashEncoder;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.media.MediaConnection;
+import com.github.auties00.cobalt.model.auth.ADVEncryptionType;
+import com.github.auties00.cobalt.model.auth.DeviceIdentity;
+import com.github.auties00.cobalt.model.auth.DeviceIdentitySpec;
+import com.github.auties00.cobalt.model.auth.SignedDeviceIdentity;
 import com.github.auties00.cobalt.model.auth.SignedDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.chat.ChatParticipant;
 import com.github.auties00.cobalt.model.chat.ChatRole;
@@ -24,6 +29,8 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.util.Clock;
+import com.github.auties00.cobalt.util.SecureBytes;
+import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
 
@@ -40,6 +47,8 @@ public final class MessageSenderService {
     private static final String ENC_VERSION = "2";
     private static final int RESEND_TIMEOUT_SECONDS = 600; // 10 minutes
     private static final int ERROR_STALE_ADDRESSING_MODE = 421;
+    private static final byte[] E2EE_ACCOUNT_SIGNATURE_HEADER = {6, 0};
+    private static final byte[] E2EE_DEVICE_SIGNATURE_HEADER = {6, 1};
 
     private final WhatsAppClient whatsapp;
     private final WhatsAppStore store;
@@ -94,6 +103,10 @@ public final class MessageSenderService {
      * @return true if the JID is a group JID
      */
     private void enrichTextLinkPreview(MessageInfo info) {
+        if (!Boolean.parseBoolean(System.getProperty("cobalt.textLinkPreviewUpload", "true"))) {
+            return;
+        }
+
         var content = info.message().content();
         if (!(content instanceof TextMessage textMessage)) {
             return;
@@ -165,14 +178,22 @@ public final class MessageSenderService {
         // Query devices from server (this also ensures sessions exist)
         var devices = deviceService.queryDevices(jidsToQuery);
 
+        var deliveryDevices = devices.stream()
+                .filter(device -> !store.hasJid(device))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (deliveryDevices.isEmpty()) {
+            throw new IllegalArgumentException("Cannot send message to " + recipientJid + ": no remote devices found");
+        }
+
         // Send to all devices and handle response
-        var ownDevices = devices.stream()
+        var ownDevices = deliveryDevices.stream()
                 .filter(device -> device.user().equals(senderJid.user()) && device.device() != senderJid.device())
                 .collect(Collectors.toUnmodifiableSet());
-        var response = sendToDevices(info, attributes, recipientJid, devices, ownDevices, false);
+        var response = sendToDevices(info, attributes, recipientJid, deliveryDevices, ownDevices, false);
+        validateSendResponse(response, info);
 
         // Handle phash mismatch if needed
-        handleIndividualPhashMismatch(response, info, attributes, devices, Clock.nowSeconds());
+        handleIndividualPhashMismatch(response, info, attributes, deliveryDevices, Clock.nowSeconds());
     }
 
     /**
@@ -226,6 +247,10 @@ public final class MessageSenderService {
                 .attribute("to", recipientJid)
                 .attribute("type", getMessageType(info.message()));
 
+        if (devices.size() > 1) {
+            messageBuilder.attribute("phash", DevicePhashEncoder.calculatePhash(devices));
+        }
+
         // Add additional attributes
         attributes.forEach((key, value) -> {
             if(value == null) {
@@ -247,11 +272,7 @@ public final class MessageSenderService {
                 .build();
         messageBuilder.content(participantsNode);
 
-        // Add device identity if any pre-key messages
-        if (hasPreKeyMessage) {
-            buildDeviceIdentityNode()
-                    .ifPresent(messageBuilder::content);
-        }
+        appendDeviceIdentityIfRequired(messageBuilder, hasPreKeyMessage);
 
         // Send the message
         return whatsapp.sendNode(messageBuilder);
@@ -356,14 +377,11 @@ public final class MessageSenderService {
         var skmsgNode = buildEncNode(groupEncResult, getMediaType(info.message()));
         messageBuilder.content(skmsgNode);
 
-        // Add device identity if any pre-key messages
-        if (hasPreKeyMessage) {
-            buildDeviceIdentityNode()
-                    .ifPresent(messageBuilder::content);
-        }
+        appendDeviceIdentityIfRequired(messageBuilder, hasPreKeyMessage);
 
         // Send the message
         var response = whatsapp.sendNode(messageBuilder);
+        validateSendResponse(response, info);
 
         // Handle phash mismatch and 421 errors
         handleGroupMessageResponse(response, info, attributes, phash, devices, Clock.nowSeconds());
@@ -472,11 +490,7 @@ public final class MessageSenderService {
         });
 
 
-        // Add device identity if any pre-key messages
-        if (hasPreKeyMessage) {
-            buildDeviceIdentityNode()
-                    .ifPresent(messageBuilder::content);
-        }
+        appendDeviceIdentityIfRequired(messageBuilder, hasPreKeyMessage);
 
         // Add sender content binding node
         var senderContentBinding = contentBindings.get(senderJid.toUserJid().toString());
@@ -490,6 +504,7 @@ public final class MessageSenderService {
 
         // Send the message
         var response = whatsapp.sendNode(messageBuilder);
+        validateSendResponse(response, info);
 
         // Handle phash mismatch (broadcast uses direct fanout, similar to individual)
         handleIndividualPhashMismatch(response, info, attributes, allDevices, Clock.nowSeconds());
@@ -525,7 +540,8 @@ public final class MessageSenderService {
      * Builds the device identity node for pre-key messages.
      */
     private Optional<Node> buildDeviceIdentityNode() {
-        var companionIdentity = store.companionIdentity();
+        var companionIdentity = store.companionIdentity()
+                .or(this::buildPrimaryMobileDeviceIdentity);
         if(companionIdentity.isEmpty()) {
             return Optional.empty();
         } else {
@@ -534,6 +550,72 @@ public final class MessageSenderService {
                     .content(SignedDeviceIdentitySpec.encode(companionIdentity.get()))
                     .build();
             return Optional.of(result);
+        }
+    }
+
+    private Optional<SignedDeviceIdentity> buildPrimaryMobileDeviceIdentity() {
+        if (store.clientType() != WhatsAppClientType.MOBILE || !Boolean.getBoolean("cobalt.mobileAdvFallback")) {
+            return Optional.empty();
+        }
+
+        var identityKeyPair = store.identityKeyPair();
+        var identityPublicKey = identityKeyPair.publicKey()
+                .toEncodedPoint();
+        var identityPrivateKey = identityKeyPair.privateKey()
+                .toEncodedPoint();
+        var details = DeviceIdentitySpec.encode(new DeviceIdentity(
+                store.registrationId(),
+                Clock.nowSeconds(),
+                0,
+                ADVEncryptionType.E2EE,
+                ADVEncryptionType.E2EE
+        ));
+        var accountSignatureMessage = SecureBytes.concat(E2EE_ACCOUNT_SIGNATURE_HEADER, details, identityPublicKey);
+        var accountSignature = Curve25519.sign(identityPrivateKey, accountSignatureMessage);
+        var deviceSignatureMessage = SecureBytes.concat(E2EE_DEVICE_SIGNATURE_HEADER, details, identityPublicKey, identityPublicKey);
+        var deviceSignature = Curve25519.sign(identityPrivateKey, deviceSignatureMessage);
+        var deviceIdentity = new SignedDeviceIdentity(details, identityPublicKey, accountSignature, deviceSignature);
+        store.setCompanionIdentity(deviceIdentity);
+        return Optional.of(deviceIdentity);
+    }
+
+    private void appendDeviceIdentityIfRequired(NodeBuilder messageBuilder, boolean hasPreKeyMessage) {
+        if (!hasPreKeyMessage) {
+            return;
+        }
+
+        if (shouldSkipDeviceIdentityForPrimaryMobile()) {
+            return;
+        }
+
+        var deviceIdentity = buildDeviceIdentityNode()
+                .orElseThrow(() -> new IllegalStateException("Cannot send pre-key message without ADV device identity. Provide a seven-part key whose last part is a Base64-encoded ADVSignedDeviceIdentity."));
+        messageBuilder.content(deviceIdentity);
+    }
+
+    private boolean shouldSkipDeviceIdentityForPrimaryMobile() {
+        if (!Boolean.getBoolean("cobalt.mobilePrimarySkipDeviceIdentity")) {
+            return false;
+        }
+
+        if (store.clientType() != WhatsAppClientType.MOBILE) {
+            return false;
+        }
+
+        return store.jid()
+                .map(jid -> jid.device() == 0)
+                .orElse(false);
+    }
+
+    private void validateSendResponse(Node response, MessageInfo info) {
+        var error = response.getAttributeAsLong("error");
+        if (error.isPresent()) {
+            throw new IllegalStateException("Message " + info.id() + " was rejected by the server with ack error " + error.getAsLong());
+        }
+
+        var code = response.getAttributeAsLong("code");
+        if (code.isPresent() && code.getAsLong() != ERROR_STALE_ADDRESSING_MODE) {
+            throw new IllegalStateException("Message " + info.id() + " was rejected by the server with code " + code.getAsLong());
         }
     }
 
@@ -728,10 +810,7 @@ public final class MessageSenderService {
             }
         });
 
-        if (hasPreKeyMessage) {
-            buildDeviceIdentityNode()
-                    .ifPresent(messageBuilder::content);
-        }
+        appendDeviceIdentityIfRequired(messageBuilder, hasPreKeyMessage);
 
         // Send the message
         whatsapp.sendNode(messageBuilder);
@@ -798,11 +877,7 @@ public final class MessageSenderService {
                 .attribute("device_fanout", "false") // Indicate this is a resend
                 .content(participantsNode);
 
-        // Add device identity if this is a pre-key message
-        if (encResult.isPreKeyMessage()) {
-            buildDeviceIdentityNode()
-                    .ifPresent(messageBuilder::content);
-        }
+        appendDeviceIdentityIfRequired(messageBuilder, encResult.isPreKeyMessage());
 
         // Send the retry
         whatsapp.sendNode(messageBuilder);

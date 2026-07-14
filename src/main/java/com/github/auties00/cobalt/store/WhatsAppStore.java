@@ -1245,6 +1245,9 @@ public final class WhatsAppStore implements SignalProtocolStore {
         }
         var normalizedPhone = phoneJid.withoutData();
         var normalizedLid = lidJid.withoutData();
+        if (!normalizedPhone.hasServer(JidServer.user()) || !normalizedLid.hasServer(JidServer.lid())) {
+            return;
+        }
         lidToPhoneMappings.put(normalizedLid, normalizedPhone);
         phoneToLidMappings.put(normalizedPhone, normalizedLid);
     }

@@ -28,10 +28,9 @@ public final class SocketStream {
     public SocketStream(WhatsAppClient whatsapp, DeviceService deviceService, MessageReceiverService messageReceiverService, LidMigrationService lidMigrationService, WhatsAppClientVerificationHandler.Web webVerificationHandler) {
         SocketPhonePairing pairingCode = null;
         if (whatsapp.store().clientType() == com.github.auties00.cobalt.client.WhatsAppClientType.WEB) {
-            pairingCode = switch (webVerificationHandler) {
-                case WhatsAppClientVerificationHandler.Web.PairingCode ignored -> new SocketPhonePairing();
-                case WhatsAppClientVerificationHandler.Web.QrCode ignored -> null;
-            };
+            pairingCode = webVerificationHandler instanceof WhatsAppClientVerificationHandler.Web.PairingCode
+                    ? new SocketPhonePairing()
+                    : null;
         }
 
         var result = new HashMap<String, SequencedCollection<Handler>>();

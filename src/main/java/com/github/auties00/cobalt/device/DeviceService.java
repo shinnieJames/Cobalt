@@ -111,9 +111,12 @@ public final class DeviceService {
                 .description("devices")
                 .attribute("version", "2")
                 .build();
+        var lidNode = new NodeBuilder()
+                .description("lid")
+                .build();
         var queryNode = new NodeBuilder()
                 .description("query")
-                .content(devicesNode)
+                .content(devicesNode, lidNode)
                 .build();
         var listNode = new NodeBuilder()
                 .description("list")
@@ -140,9 +143,12 @@ public final class DeviceService {
 
         try {
             var response = client.sendNode(iqNode);
-            var devices = response.streamChildren("usync")
+            var users = response.streamChildren("usync")
                     .flatMap(node -> node.streamChild("list"))
                     .flatMap(node -> node.streamChildren("user"))
+                    .toList();
+            users.forEach(this::parseAndCacheLidMapping);
+            var devices = users.stream()
                     .flatMap(this::parseDevice)
                     .collect(Collectors.toCollection(LinkedHashSet::new));
             cacheDevices(devices);
@@ -183,6 +189,26 @@ public final class DeviceService {
                         return userJid.get().withDevice(deviceId);
                     });
         }
+    }
+
+    private void parseAndCacheLidMapping(Node user) {
+        var userJid = user.getAttributeAsJid("jid").orElse(null);
+        var lidJid = parseLid(user).orElse(null);
+        if (userJid == null
+                || lidJid == null
+                || !userJid.hasServer(JidServer.user())
+                || !lidJid.hasServer(JidServer.lid())) {
+            return;
+        }
+
+        client.store()
+                .registerLidMapping(userJid, lidJid);
+    }
+
+    private java.util.Optional<Jid> parseLid(Node user) {
+        return user.getChild("lid")
+                .flatMap(lid -> lid.getAttributeAsJid("val")
+                        .or(() -> lid.getAttributeAsJid("jid")));
     }
 
     private void fetchPreKeysAndCreateSessions(Set<? extends Jid> devices) {

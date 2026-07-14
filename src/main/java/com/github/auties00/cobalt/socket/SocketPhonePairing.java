@@ -47,11 +47,11 @@ public final class SocketPhonePairing {
                     new IvParameterSpec(randomIv)
             );
             var encoded = companionPublicKey.toEncodedPoint();
-            cipher.update(encoded);
-            var result = new byte[salt.length + randomIv.length + cipher.getOutputSize(encoded.length)];
+            var encrypted = cipher.doFinal(encoded);
+            var result = new byte[salt.length + randomIv.length + encrypted.length];
             System.arraycopy(salt, 0, result, 0, salt.length);
             System.arraycopy(randomIv, 0, result, salt.length, randomIv.length);
-            cipher.doFinal(result, salt.length + randomIv.length);
+            System.arraycopy(encrypted, 0, result, salt.length + randomIv.length, encrypted.length);
             return result;
         } catch (GeneralSecurityException exception) {
             throw new RuntimeException("Cannot cipher link code pairing key", exception);

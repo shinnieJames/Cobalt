@@ -10,5 +10,9 @@ public record DeviceIdentity(@ProtobufProperty(index = 1, type = ProtobufType.UI
                              @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
                              long timestamp,
                              @ProtobufProperty(index = 3, type = ProtobufType.UINT32)
-                             int keyIndex) {
+                             int keyIndex,
+                             @ProtobufProperty(index = 4, type = ProtobufType.ENUM)
+                             ADVEncryptionType accountType,
+                             @ProtobufProperty(index = 5, type = ProtobufType.ENUM)
+                             ADVEncryptionType deviceType) {
 }

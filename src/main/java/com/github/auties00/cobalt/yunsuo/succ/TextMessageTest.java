@@ -12,6 +12,8 @@ import java.util.Scanner;
 public class TextMessageTest {
 
     public static void main(String[] args) throws IOException {
+        // 首次会话会触发 pre-key message；mobile primary 用本地自签 ADV identity（对齐 whalibmob 做法）
+        System.setProperty("cobalt.mobileAdvFallback", "true");
 
         System.out.println("Enter the six parts segment: ");
         var scanner = new Scanner(System.in);

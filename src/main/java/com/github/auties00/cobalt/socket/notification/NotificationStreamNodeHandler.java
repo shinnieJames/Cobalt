@@ -573,18 +573,16 @@ public final class NotificationStreamNodeHandler extends SocketStream.Handler {
                     .addIKM(new SecretKeySpec(companionSharedKey, "AES"))
                     .thenExpand("link_code_pairing_key_bundle_encryption_key".getBytes(StandardCharsets.UTF_8), 32);
             var secretKey = secretKeyHkdf.deriveKey("AES", secretKeyHkdfParams);
+            var nonce = SecureBytes.random(12);
             var cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(
                     Cipher.ENCRYPT_MODE,
                     secretKey,
-                    new GCMParameterSpec(128, SecureBytes.random(12))
+                    new GCMParameterSpec(128, nonce)
             );
             var identityPublicKey = whatsapp.store().identityKeyPair().publicKey().toEncodedPoint();
-            cipher.update(identityPublicKey);
-            cipher.update(primaryIdentityPublicKey);
-            cipher.update(random);
-            var encrypted = cipher.doFinal();
-            var encryptedPayload = SecureBytes.concat(linkCodeSalt, SecureBytes.random(12), encrypted);
+            var encrypted = cipher.doFinal(SecureBytes.concat(identityPublicKey, primaryIdentityPublicKey, random));
+            var encryptedPayload = SecureBytes.concat(linkCodeSalt, nonce, encrypted);
             var identitySharedKey = Curve25519.sharedKey(whatsapp.store().identityKeyPair().privateKey().toEncodedPoint(), primaryIdentityPublicKey);
             var identityPayload = SecureBytes.concat(companionSharedKey, identitySharedKey, random);
             var companionKeyHkdf = KDF.getInstance("HKDF-SHA256");
