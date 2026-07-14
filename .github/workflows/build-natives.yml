@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-natives
+  cancel-in-progress: false
+
 jobs:
   build:
     strategy:
@@ -75,7 +79,7 @@ jobs:
             mingw-w64-${{ matrix.msys_pkg }}-lld
 
       - name: Build natives
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        shell: ${{ contains(matrix.os, 'windows') && 'msys2 {0}' || 'bash' }}
         run: bash .github/scripts/build-natives.sh
 
       - name: Upload binaries
@@ -83,6 +87,7 @@ jobs:
         with:
           name: natives-${{ matrix.classifier }}
           path: modules/lib/natives/bin/${{ matrix.classifier }}/
+          if-no-files-found: error
 
       - name: Upload vendored headers (linux-x86_64 only)
         if: matrix.classifier == 'linux-x86_64'
@@ -90,6 +95,7 @@ jobs:
         with:
           name: vendored-headers
           path: modules/lib/dependencies/*/headers/
+          if-no-files-found: error
 
   commit:
     needs: build
@@ -157,21 +163,32 @@ jobs:
           JEXTRACT_HOME: ${{ github.workspace }}/tools/jextract
         run: bash .github/scripts/regenerate-bindings.sh
 
-      - name: Regenerate manifest
-        run: bash .github/scripts/regenerate-manifest.sh
-
-      - name: Commit and push
+      - name: Commit binaries and bindings
+        id: commit-binaries
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A \
             modules/lib/dependencies \
             modules/lib/natives \
-            modules/lib/src/main/java \
-            modules/lib/src/main/resources/META-INF/native-checksums.json
+            modules/lib/src/main/java
           if git diff --staged --quiet; then
             echo "no native or bindings changes to commit"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "Rebuild native dependencies + regenerate bindings [skip ci]"
-            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Regenerate manifest
+        if: steps.commit-binaries.outputs.changed == 'true'
+        run: bash .github/scripts/regenerate-manifest.sh
+
+      - name: Commit manifest and push
+        if: steps.commit-binaries.outputs.changed == 'true'
+        run: |
+          git add modules/lib/src/main/resources/META-INF/native-checksums.json
+          if ! git diff --staged --quiet; then
+            git commit -m "Update native checksums manifest [skip ci]"
+          fi
+          git push
