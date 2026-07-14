@@ -23,10 +23,16 @@ case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) OS=windows ;;
     *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
-case "$(uname -m)" in
-    x86_64|amd64)  ARCH=x86_64 ;;
-    aarch64|arm64) ARCH=aarch64 ;;
-    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+case "$(${CC:-cc} -dumpmachine 2>/dev/null)" in
+    aarch64*|arm64*) ARCH=aarch64 ;;
+    x86_64*|amd64*)  ARCH=x86_64 ;;
+    *)
+        case "$(uname -m)" in
+            x86_64|amd64)  ARCH=x86_64 ;;
+            aarch64|arm64) ARCH=aarch64 ;;
+            *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+        esac
+        ;;
 esac
 CLASSIFIER="$OS-$ARCH"
 
@@ -527,11 +533,12 @@ write_export_file() {
 # Log an archive's .text total (from size -t) and on-disk size. Pre-gc-sections,
 # so a proxy for each library's contribution, not its exact slice of the DLL.
 log_footprint() {
-    local label="$1" path="$2" text
+    local label="$1" path="$2" text=""
     [ -f "$path" ] || return 0
-    text=$(size -t "$path" 2>/dev/null | awk 'END{print $1}')
+    text=$(size "$path" 2>/dev/null | awk '$1 ~ /^[0-9]+$/ { sum += $1 } END { print sum + 0 }') || text=""
+    case "$text" in ''|*[!0-9]*) text=0 ;; esac
     printf '[build-natives] footprint %-18s text=%7d KiB  archive=%7d KiB\n' \
-        "$label" "$(( ${text:-0} / 1024 ))" "$(( $(wc -c < "$path") / 1024 ))"
+        "$label" "$(( text / 1024 ))" "$(( $(wc -c < "$path") / 1024 ))"
 }
 
 build_combined() {
