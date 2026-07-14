@@ -239,7 +239,13 @@ build_libvpx() {
     esac
     local b="$BUILD/build-libvpx"
     rm -rf "$b" && mkdir -p "$b"
+    # The arm64-win64 target disables NEON by default; force it back on (intrinsics).
+    local vpx_extra=""
+    if [ "$OS" = windows ] && [ "$ARCH" = aarch64 ]; then
+        vpx_extra="--enable-neon"
+    fi
     # Bindings cover VP8 and VP9 encode/decode, so enable both families.
+    # shellcheck disable=SC2086
     ( cd "$b" && CC="${CC:-cc}" CXX="${CXX:-c++}" CFLAGS="${CFLAGS:-} $C_CODEC_EXTRA_CFLAGS" \
         "$LIBVPX_SRC/configure" \
         --target="$target" --prefix="$b/inst" \
@@ -247,7 +253,8 @@ build_libvpx() {
         --enable-vp8 --enable-vp8-encoder --enable-vp8-decoder \
         --enable-vp9 --enable-vp9-encoder --enable-vp9-decoder \
         --enable-runtime-cpu-detect --enable-small \
-        --disable-examples --disable-tools --disable-docs --disable-unit-tests )
+        --disable-examples --disable-tools --disable-docs --disable-unit-tests \
+        $vpx_extra )
     make -C "$b" -j "$JOBS"
     make -C "$b" install
     # Vendor headers for compiling the shim; Java binds the shim header.
@@ -305,10 +312,19 @@ build_rav1e() {
     ensure_src RAV1E_SRC "$RAV1E_REPO" "$RAV1E_REF" rav1e
     local b="$BUILD/build-rav1e"
     rm -rf "$b"
+    # rav1e's aarch64 asm compiles through cc-rs; versions before the LLVM 19 fix
+    # pass a gnullvm triple clang rejects, so refresh cc-rs on Windows-on-ARM. Keep
+    # asm for SIMD; drop only git_version so libgit2 (unused) is not built.
+    local rav1e_features=""
+    if [ "$OS" = windows ] && [ "$ARCH" = aarch64 ]; then
+        ( cd "$RAV1E_SRC" && cargo update -p cc )
+        rav1e_features="--no-default-features --features=asm,threading,capi"
+    fi
     # Install librav1e.a, rav1e.h, and rav1e.pc under $b/inst. Override rav1e's
     # release profile: fat LTO + one codegen unit and no debug info shrink the
     # archive; panic=abort drops landing pads (panics never cross the FFI). opt-level
     # stays at the default 3 so the encoder is not slowed.
+    # shellcheck disable=SC2086
     ( cd "$RAV1E_SRC" && \
       CARGO_TARGET_DIR="$b/target" \
       CARGO_PROFILE_RELEASE_LTO=fat \
@@ -317,6 +333,7 @@ build_rav1e() {
       CARGO_PROFILE_RELEASE_DEBUG=false \
       CARGO_PROFILE_RELEASE_INCREMENTAL=false \
       cargo cinstall --release \
+        $rav1e_features \
         --library-type=staticlib \
         --prefix="$b/inst" --libdir=lib --includedir=include )
     # Vendor the generated C API header for compiling the shim.
