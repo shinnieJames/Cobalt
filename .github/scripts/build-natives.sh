@@ -239,13 +239,7 @@ build_libvpx() {
     esac
     local b="$BUILD/build-libvpx"
     rm -rf "$b" && mkdir -p "$b"
-    # The arm64-win64 target disables NEON by default; force it back on (intrinsics).
-    local vpx_extra=""
-    if [ "$OS" = windows ] && [ "$ARCH" = aarch64 ]; then
-        vpx_extra="--enable-neon"
-    fi
     # Bindings cover VP8 and VP9 encode/decode, so enable both families.
-    # shellcheck disable=SC2086
     ( cd "$b" && CC="${CC:-cc}" CXX="${CXX:-c++}" CFLAGS="${CFLAGS:-} $C_CODEC_EXTRA_CFLAGS" \
         "$LIBVPX_SRC/configure" \
         --target="$target" --prefix="$b/inst" \
@@ -253,8 +247,7 @@ build_libvpx() {
         --enable-vp8 --enable-vp8-encoder --enable-vp8-decoder \
         --enable-vp9 --enable-vp9-encoder --enable-vp9-decoder \
         --enable-runtime-cpu-detect --enable-small \
-        --disable-examples --disable-tools --disable-docs --disable-unit-tests \
-        $vpx_extra )
+        --disable-examples --disable-tools --disable-docs --disable-unit-tests )
     make -C "$b" -j "$JOBS"
     make -C "$b" install
     # Vendor headers for compiling the shim; Java binds the shim header.
