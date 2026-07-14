@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Per-classifier natives bundle assembly — packs the single combined
+  Per-classifier natives bundle assembly. Packs the single combined
   native library under
   `${project.basedir}/natives/bin/${natives.classifier}/`
   into
@@ -26,7 +26,7 @@
     <includeBaseDirectory>false</includeBaseDirectory>
     <fileSets>
         <!--
-            Single fileset, single file — build-natives.sh links every
+            Single fileset, single file. build-natives.sh links every
             native dependency into one `libcobalt-native` per classifier
             under `natives/bin/<classifier>/`. A missing
             file is silently skipped, so a partial cut (e.g. only Linux)

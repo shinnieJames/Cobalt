@@ -157,7 +157,7 @@ By default, nothing ships in the jar: the right binary for the host is downloade
 If you want to have the native libraries bundled in the JAR, add the vendored bundle for each platform you target. The bundles are classified artifacts of `cobalt-lib`, one per target. Expand the block for your platform to get the Maven and Gradle snippets:
 
 <details>
-<summary><b>Windows x86-64</b> &mdash; <code>natives-windows-x86_64</code></summary>
+<summary><b>Windows x86-64</b></summary>
 
 **Maven**
 
@@ -186,7 +186,7 @@ runtimeOnly 'com.github.auties00:cobalt-lib:0.1.0:natives-windows-x86_64'
 </details>
 
 <details>
-<summary><b>Windows ARM64</b> &mdash; <code>natives-windows-aarch64</code></summary>
+<summary><b>Windows ARM64</b></summary>
 
 **Maven**
 
@@ -215,7 +215,7 @@ runtimeOnly 'com.github.auties00:cobalt-lib:0.1.0:natives-windows-aarch64'
 </details>
 
 <details>
-<summary><b>Linux x86-64</b> &mdash; <code>natives-linux-x86_64</code></summary>
+<summary><b>Linux x86-64</b></summary>
 
 **Maven**
 
@@ -244,7 +244,7 @@ runtimeOnly 'com.github.auties00:cobalt-lib:0.1.0:natives-linux-x86_64'
 </details>
 
 <details>
-<summary><b>Linux ARM64</b> &mdash; <code>natives-linux-aarch64</code></summary>
+<summary><b>Linux ARM64</b></summary>
 
 **Maven**
 
@@ -273,7 +273,7 @@ runtimeOnly 'com.github.auties00:cobalt-lib:0.1.0:natives-linux-aarch64'
 </details>
 
 <details>
-<summary><b>macOS Intel</b> &mdash; <code>natives-darwin-x86_64</code></summary>
+<summary><b>macOS Intel</b></summary>
 
 **Maven**
 
@@ -302,7 +302,7 @@ runtimeOnly 'com.github.auties00:cobalt-lib:0.1.0:natives-darwin-x86_64'
 </details>
 
 <details>
-<summary><b>macOS Apple Silicon</b> &mdash; <code>natives-darwin-aarch64</code></summary>
+<summary><b>macOS Apple Silicon</b></summary>
 
 **Maven**
 

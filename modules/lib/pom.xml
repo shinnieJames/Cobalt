@@ -80,7 +80,211 @@
                                 <configuration>
                                     <appendAssemblyId>true</appendAssemblyId>
                                     <descriptors>
-                                        <descriptor>${project.basedir}/src/main/assembly/natives.xml</descriptor>
+                                        <descriptor>${project.basedir}/src/main/assembly/natives-only.xml</descriptor>
+                                    </descriptors>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+            Self-contained per-platform uber JARs — a fat JAR that bundles the
+            full runtime dependency closure (like the `uber-jar` profile above)
+            AND the platform's combined native library, so the artifact runs
+            with no transitive Maven deps and no runtime GitHub download of the
+            binary.
+
+            Each profile only sets `${natives.classifier}`; the shared
+            src/main/assembly/uber-jar-natives.xml descriptor packs the native
+            under the repo-relative path the loader probes on the classpath and
+            names the output `cobalt-lib-${project.version}-uber-<classifier>.jar`.
+
+                mvn -Puber-jar-linux-x86_64    package
+                mvn -Puber-jar-linux-aarch64   package
+                mvn -Puber-jar-darwin-x86_64   package
+                mvn -Puber-jar-darwin-aarch64  package
+                mvn -Puber-jar-windows-x86_64  package
+                mvn -Puber-jar-windows-aarch64 package
+
+            The native for a classifier must be present under
+            natives/bin/<classifier>/ (built by .github/scripts/build-natives.sh);
+            when absent the descriptor still produces a JAR, but binary-free,
+            and the loader falls back to its runtime download.
+        -->
+        <profile>
+            <id>uber-jar-linux-x86_64</id>
+            <properties>
+                <natives.classifier>linux-x86_64</natives.classifier>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>uber-jar-natives</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <descriptors>
+                                        <descriptor>${project.basedir}/src/main/assembly/uber-jar-natives.xml</descriptor>
+                                    </descriptors>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>uber-jar-linux-aarch64</id>
+            <properties>
+                <natives.classifier>linux-aarch64</natives.classifier>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>uber-jar-natives</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <descriptors>
+                                        <descriptor>${project.basedir}/src/main/assembly/uber-jar-natives.xml</descriptor>
+                                    </descriptors>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>uber-jar-darwin-x86_64</id>
+            <properties>
+                <natives.classifier>darwin-x86_64</natives.classifier>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>uber-jar-natives</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <descriptors>
+                                        <descriptor>${project.basedir}/src/main/assembly/uber-jar-natives.xml</descriptor>
+                                    </descriptors>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>uber-jar-darwin-aarch64</id>
+            <properties>
+                <natives.classifier>darwin-aarch64</natives.classifier>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>uber-jar-natives</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <descriptors>
+                                        <descriptor>${project.basedir}/src/main/assembly/uber-jar-natives.xml</descriptor>
+                                    </descriptors>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>uber-jar-windows-x86_64</id>
+            <properties>
+                <natives.classifier>windows-x86_64</natives.classifier>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>uber-jar-natives</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <descriptors>
+                                        <descriptor>${project.basedir}/src/main/assembly/uber-jar-natives.xml</descriptor>
+                                    </descriptors>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>uber-jar-windows-aarch64</id>
+            <properties>
+                <natives.classifier>windows-aarch64</natives.classifier>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>uber-jar-natives</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <descriptors>
+                                        <descriptor>${project.basedir}/src/main/assembly/uber-jar-natives.xml</descriptor>
                                     </descriptors>
                                 </configuration>
                             </execution>
