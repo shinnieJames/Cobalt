@@ -237,7 +237,7 @@ build_libvpx() {
     local b="$BUILD/build-libvpx"
     rm -rf "$b" && mkdir -p "$b"
     # Bindings cover VP8 and VP9 encode/decode, so enable both families.
-    ( cd "$b" && CFLAGS="${CFLAGS:-} $C_CODEC_EXTRA_CFLAGS" \
+    ( cd "$b" && CC="${CC:-cc}" CXX="${CXX:-c++}" CFLAGS="${CFLAGS:-} $C_CODEC_EXTRA_CFLAGS" \
         "$LIBVPX_SRC/configure" \
         --target="$target" --prefix="$b/inst" \
         --disable-shared --enable-static --enable-pic \
