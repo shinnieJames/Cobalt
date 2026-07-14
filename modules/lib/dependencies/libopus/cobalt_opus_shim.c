@@ -18,6 +18,8 @@
 
 #include "cobalt_opus_shim.h"
 
+#include <stddef.h>
+
 #include "opus/opus.h"
 
 int32_t cobalt_opus_encoder_create(int32_t fs, int32_t channels, int32_t application, void **outEnc) {
