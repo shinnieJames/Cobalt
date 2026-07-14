@@ -150,11 +150,17 @@ build_opus() {
     [ -x "$OPUS_SRC/configure" ] || ( cd "$OPUS_SRC" && autoreconf -isf )
     local b="$BUILD/build-opus"
     rm -rf "$b" && mkdir -p "$b"
+    # Windows-on-ARM has no opus RTCD backend; NEON is baseline on ARMv8.
+    local opus_extra=()
+    if [ "$OS" = windows ] && [ "$ARCH" = aarch64 ]; then
+        opus_extra+=(--disable-rtcd)
+    fi
     ( cd "$b" && CFLAGS="${CFLAGS:-} $C_CODEC_EXTRA_CFLAGS" \
         "$OPUS_SRC/configure" --prefix="$b/inst" \
         --disable-shared --enable-static --with-pic \
         --disable-doc --disable-extra-programs \
-        --disable-deep-plc --disable-dred )
+        --disable-deep-plc --disable-dred \
+        "${opus_extra[@]}" )
     make -C "$b" -j "$JOBS"
     make -C "$b" install
     # Vendor headers for compiling the shim; Java binds the shim header.
@@ -439,7 +445,8 @@ build_webrtc_apm() {
     local export_hdr
     export_hdr=$(find "$WEBRTC_APM_SRC" -name rtc_export.h -type f | head -1)
     if [ -n "$export_hdr" ]; then
-        sed -i 's/__declspec(dllexport)//g; s/__declspec(dllimport)//g' "$export_hdr"
+        sed 's/__declspec(dllexport)//g; s/__declspec(dllimport)//g' "$export_hdr" > "$export_hdr.tmp" \
+            && mv "$export_hdr.tmp" "$export_hdr"
         log "neutralized dllexport in $export_hdr"
     else
         log "WARN: rtc_export.h not found; relying on -fvisibility=hidden + --exclude-all-symbols"
@@ -453,6 +460,16 @@ build_webrtc_apm() {
         --buildtype=release \
         -Db_staticpic=true \
         -Dcpp_args="${CXXFLAGS:-} $EXTRA_CFLAGS $CXX_HIDDEN_CFLAGS $CXX_LEAN_CFLAGS -include cstdint -include cstddef"
+    if [ "$OS" = windows ]; then
+        # abseil's NTDDI_WIN10_NI branch enables WinRT calls undeclared under MinGW.
+        local tzsrc
+        tzsrc=$(find "$WEBRTC_APM_SRC/subprojects" -path '*/absl/time/internal/cctz/src/time_zone_lookup.cc' -type f | head -1)
+        if [ -n "$tzsrc" ]; then
+            sed 's/defined(NTDDI_WIN10_NI) && NTDDI_VERSION >= NTDDI_WIN10_NI/& \&\& !defined(__MINGW32__)/' \
+                "$tzsrc" > "$tzsrc.tmp" && mv "$tzsrc.tmp" "$tzsrc"
+            log "patched abseil time_zone_lookup.cc for MinGW"
+        fi
+    fi
     ninja -C "$b"
     ninja -C "$b" install
     # Build the C++ wrapper that exports cobalt_webrtc_apm_* symbols.
