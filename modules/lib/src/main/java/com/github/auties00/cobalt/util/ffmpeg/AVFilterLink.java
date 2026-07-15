@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -75,7 +79,7 @@ public class AVFilterLink {
         return src$LAYOUT;
     }
 
-    private static final long src$OFFSET = $LAYOUT.byteOffset(groupElement("src"));
+    private static final long src$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -119,7 +123,7 @@ public class AVFilterLink {
         return srcpad$LAYOUT;
     }
 
-    private static final long srcpad$OFFSET = $LAYOUT.byteOffset(groupElement("srcpad"));
+    private static final long srcpad$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -163,7 +167,7 @@ public class AVFilterLink {
         return dst$LAYOUT;
     }
 
-    private static final long dst$OFFSET = $LAYOUT.byteOffset(groupElement("dst"));
+    private static final long dst$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -207,7 +211,7 @@ public class AVFilterLink {
         return dstpad$LAYOUT;
     }
 
-    private static final long dstpad$OFFSET = $LAYOUT.byteOffset(groupElement("dstpad"));
+    private static final long dstpad$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -251,7 +255,7 @@ public class AVFilterLink {
         return type$LAYOUT;
     }
 
-    private static final long type$OFFSET = $LAYOUT.byteOffset(groupElement("type"));
+    private static final long type$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -295,7 +299,7 @@ public class AVFilterLink {
         return format$LAYOUT;
     }
 
-    private static final long format$OFFSET = $LAYOUT.byteOffset(groupElement("format"));
+    private static final long format$OFFSET = 36;
 
     /**
      * Offset for field:
@@ -339,7 +343,7 @@ public class AVFilterLink {
         return w$LAYOUT;
     }
 
-    private static final long w$OFFSET = $LAYOUT.byteOffset(groupElement("w"));
+    private static final long w$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -383,7 +387,7 @@ public class AVFilterLink {
         return h$LAYOUT;
     }
 
-    private static final long h$OFFSET = $LAYOUT.byteOffset(groupElement("h"));
+    private static final long h$OFFSET = 44;
 
     /**
      * Offset for field:
@@ -427,7 +431,7 @@ public class AVFilterLink {
         return sample_aspect_ratio$LAYOUT;
     }
 
-    private static final long sample_aspect_ratio$OFFSET = $LAYOUT.byteOffset(groupElement("sample_aspect_ratio"));
+    private static final long sample_aspect_ratio$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -471,7 +475,7 @@ public class AVFilterLink {
         return colorspace$LAYOUT;
     }
 
-    private static final long colorspace$OFFSET = $LAYOUT.byteOffset(groupElement("colorspace"));
+    private static final long colorspace$OFFSET = 56;
 
     /**
      * Offset for field:
@@ -515,7 +519,7 @@ public class AVFilterLink {
         return color_range$LAYOUT;
     }
 
-    private static final long color_range$OFFSET = $LAYOUT.byteOffset(groupElement("color_range"));
+    private static final long color_range$OFFSET = 60;
 
     /**
      * Offset for field:
@@ -559,7 +563,7 @@ public class AVFilterLink {
         return sample_rate$LAYOUT;
     }
 
-    private static final long sample_rate$OFFSET = $LAYOUT.byteOffset(groupElement("sample_rate"));
+    private static final long sample_rate$OFFSET = 64;
 
     /**
      * Offset for field:
@@ -603,7 +607,7 @@ public class AVFilterLink {
         return ch_layout$LAYOUT;
     }
 
-    private static final long ch_layout$OFFSET = $LAYOUT.byteOffset(groupElement("ch_layout"));
+    private static final long ch_layout$OFFSET = 72;
 
     /**
      * Offset for field:
@@ -647,7 +651,7 @@ public class AVFilterLink {
         return time_base$LAYOUT;
     }
 
-    private static final long time_base$OFFSET = $LAYOUT.byteOffset(groupElement("time_base"));
+    private static final long time_base$OFFSET = 96;
 
     /**
      * Offset for field:
@@ -691,7 +695,7 @@ public class AVFilterLink {
         return incfg$LAYOUT;
     }
 
-    private static final long incfg$OFFSET = $LAYOUT.byteOffset(groupElement("incfg"));
+    private static final long incfg$OFFSET = 104;
 
     /**
      * Offset for field:
@@ -735,7 +739,7 @@ public class AVFilterLink {
         return outcfg$LAYOUT;
     }
 
-    private static final long outcfg$OFFSET = $LAYOUT.byteOffset(groupElement("outcfg"));
+    private static final long outcfg$OFFSET = 144;
 
     /**
      * Offset for field:

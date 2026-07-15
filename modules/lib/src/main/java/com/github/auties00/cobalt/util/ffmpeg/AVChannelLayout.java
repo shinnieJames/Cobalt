@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -53,7 +57,7 @@ public class AVChannelLayout {
         return order$LAYOUT;
     }
 
-    private static final long order$OFFSET = $LAYOUT.byteOffset(groupElement("order"));
+    private static final long order$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -97,7 +101,7 @@ public class AVChannelLayout {
         return nb_channels$LAYOUT;
     }
 
-    private static final long nb_channels$OFFSET = $LAYOUT.byteOffset(groupElement("nb_channels"));
+    private static final long nb_channels$OFFSET = 4;
 
     /**
      * Offset for field:
@@ -144,7 +148,7 @@ public class AVChannelLayout {
         }
 
         private static final GroupLayout $LAYOUT = MemoryLayout.unionLayout(
-            Ffmpeg.C_LONG_LONG.withName("mask"),
+            Ffmpeg.C_LONG.withName("mask"),
             Ffmpeg.C_POINTER.withName("map")
         ).withName("$anon$328:5");
 
@@ -167,7 +171,7 @@ public class AVChannelLayout {
             return mask$LAYOUT;
         }
 
-        private static final long mask$OFFSET = $LAYOUT.byteOffset(groupElement("mask"));
+        private static final long mask$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -211,7 +215,7 @@ public class AVChannelLayout {
             return map$LAYOUT;
         }
 
-        private static final long map$OFFSET = $LAYOUT.byteOffset(groupElement("map"));
+        private static final long map$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -303,7 +307,7 @@ public class AVChannelLayout {
         return u$LAYOUT;
     }
 
-    private static final long u$OFFSET = $LAYOUT.byteOffset(groupElement("u"));
+    private static final long u$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -356,7 +360,7 @@ public class AVChannelLayout {
         return opaque$LAYOUT;
     }
 
-    private static final long opaque$OFFSET = $LAYOUT.byteOffset(groupElement("opaque"));
+    private static final long opaque$OFFSET = 16;
 
     /**
      * Offset for field:

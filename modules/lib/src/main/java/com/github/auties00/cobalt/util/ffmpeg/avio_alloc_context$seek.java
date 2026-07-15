@@ -4,15 +4,22 @@ package com.github.auties00.cobalt.util.ffmpeg;
 
 import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
+import java.util.function.*;
+import java.util.stream.*;
+
+import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.MemoryLayout.PathElement.*;
 
 /**
  * {@snippet lang=c :
  * int64_t (*seek)(void *, int64_t, int)
  * }
  */
-public final class avio_alloc_context$seek {
+public class avio_alloc_context$seek {
 
-    private avio_alloc_context$seek() {
+    avio_alloc_context$seek() {
         // Should not be called directly
     }
 
@@ -24,9 +31,9 @@ public final class avio_alloc_context$seek {
     }
 
     private static final FunctionDescriptor $DESC = FunctionDescriptor.of(
-        Ffmpeg.C_LONG_LONG,
+        Ffmpeg.C_LONG,
         Ffmpeg.C_POINTER,
-        Ffmpeg.C_LONG_LONG,
+        Ffmpeg.C_LONG,
         Ffmpeg.C_INT
     );
 
@@ -52,11 +59,9 @@ public final class avio_alloc_context$seek {
     /**
      * Invoke the upcall stub {@code funcPtr}, with given parameters
      */
-    public static long invoke(MemorySegment funcPtr, MemorySegment _x0, long _x1, int _x2) {
+    public static long invoke(MemorySegment funcPtr,MemorySegment _x0, long _x1, int _x2) {
         try {
             return (long) DOWN$MH.invokeExact(funcPtr, _x0, _x1, _x2);
-        } catch (Error | RuntimeException ex) {
-            throw ex;
         } catch (Throwable ex$) {
             throw new AssertionError("should not reach here", ex$);
         }

@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -57,7 +61,7 @@ public class AVInputFormat {
         return name$LAYOUT;
     }
 
-    private static final long name$OFFSET = $LAYOUT.byteOffset(groupElement("name"));
+    private static final long name$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -101,7 +105,7 @@ public class AVInputFormat {
         return long_name$LAYOUT;
     }
 
-    private static final long long_name$OFFSET = $LAYOUT.byteOffset(groupElement("long_name"));
+    private static final long long_name$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -145,7 +149,7 @@ public class AVInputFormat {
         return flags$LAYOUT;
     }
 
-    private static final long flags$OFFSET = $LAYOUT.byteOffset(groupElement("flags"));
+    private static final long flags$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -189,7 +193,7 @@ public class AVInputFormat {
         return extensions$LAYOUT;
     }
 
-    private static final long extensions$OFFSET = $LAYOUT.byteOffset(groupElement("extensions"));
+    private static final long extensions$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -233,7 +237,7 @@ public class AVInputFormat {
         return codec_tag$LAYOUT;
     }
 
-    private static final long codec_tag$OFFSET = $LAYOUT.byteOffset(groupElement("codec_tag"));
+    private static final long codec_tag$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -277,7 +281,7 @@ public class AVInputFormat {
         return priv_class$LAYOUT;
     }
 
-    private static final long priv_class$OFFSET = $LAYOUT.byteOffset(groupElement("priv_class"));
+    private static final long priv_class$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -321,7 +325,7 @@ public class AVInputFormat {
         return mime_type$LAYOUT;
     }
 
-    private static final long mime_type$OFFSET = $LAYOUT.byteOffset(groupElement("mime_type"));
+    private static final long mime_type$OFFSET = 48;
 
     /**
      * Offset for field:

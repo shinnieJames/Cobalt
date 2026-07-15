@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -67,7 +71,7 @@ public class AVOption {
         return name$LAYOUT;
     }
 
-    private static final long name$OFFSET = $LAYOUT.byteOffset(groupElement("name"));
+    private static final long name$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -111,7 +115,7 @@ public class AVOption {
         return help$LAYOUT;
     }
 
-    private static final long help$OFFSET = $LAYOUT.byteOffset(groupElement("help"));
+    private static final long help$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -155,7 +159,7 @@ public class AVOption {
         return offset$LAYOUT;
     }
 
-    private static final long offset$OFFSET = $LAYOUT.byteOffset(groupElement("offset"));
+    private static final long offset$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -199,7 +203,7 @@ public class AVOption {
         return type$LAYOUT;
     }
 
-    private static final long type$OFFSET = $LAYOUT.byteOffset(groupElement("type"));
+    private static final long type$OFFSET = 20;
 
     /**
      * Offset for field:
@@ -249,7 +253,7 @@ public class AVOption {
         }
 
         private static final GroupLayout $LAYOUT = MemoryLayout.unionLayout(
-            Ffmpeg.C_LONG_LONG.withName("i64"),
+            Ffmpeg.C_LONG.withName("i64"),
             Ffmpeg.C_DOUBLE.withName("dbl"),
             Ffmpeg.C_POINTER.withName("str"),
             AVRational.layout().withName("q"),
@@ -275,7 +279,7 @@ public class AVOption {
             return i64$LAYOUT;
         }
 
-        private static final long i64$OFFSET = $LAYOUT.byteOffset(groupElement("i64"));
+        private static final long i64$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -319,7 +323,7 @@ public class AVOption {
             return dbl$LAYOUT;
         }
 
-        private static final long dbl$OFFSET = $LAYOUT.byteOffset(groupElement("dbl"));
+        private static final long dbl$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -363,7 +367,7 @@ public class AVOption {
             return str$LAYOUT;
         }
 
-        private static final long str$OFFSET = $LAYOUT.byteOffset(groupElement("str"));
+        private static final long str$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -407,7 +411,7 @@ public class AVOption {
             return q$LAYOUT;
         }
 
-        private static final long q$OFFSET = $LAYOUT.byteOffset(groupElement("q"));
+        private static final long q$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -451,7 +455,7 @@ public class AVOption {
             return arr$LAYOUT;
         }
 
-        private static final long arr$OFFSET = $LAYOUT.byteOffset(groupElement("arr"));
+        private static final long arr$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -546,7 +550,7 @@ public class AVOption {
         return default_val$LAYOUT;
     }
 
-    private static final long default_val$OFFSET = $LAYOUT.byteOffset(groupElement("default_val"));
+    private static final long default_val$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -608,7 +612,7 @@ public class AVOption {
         return min$LAYOUT;
     }
 
-    private static final long min$OFFSET = $LAYOUT.byteOffset(groupElement("min"));
+    private static final long min$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -652,7 +656,7 @@ public class AVOption {
         return max$LAYOUT;
     }
 
-    private static final long max$OFFSET = $LAYOUT.byteOffset(groupElement("max"));
+    private static final long max$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -696,7 +700,7 @@ public class AVOption {
         return flags$LAYOUT;
     }
 
-    private static final long flags$OFFSET = $LAYOUT.byteOffset(groupElement("flags"));
+    private static final long flags$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -740,7 +744,7 @@ public class AVOption {
         return unit$LAYOUT;
     }
 
-    private static final long unit$OFFSET = $LAYOUT.byteOffset(groupElement("unit"));
+    private static final long unit$OFFSET = 56;
 
     /**
      * Offset for field:

@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -51,7 +55,7 @@ public class AVStreamGroupLCEVC {
         return av_class$LAYOUT;
     }
 
-    private static final long av_class$OFFSET = $LAYOUT.byteOffset(groupElement("av_class"));
+    private static final long av_class$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -95,7 +99,7 @@ public class AVStreamGroupLCEVC {
         return lcevc_index$LAYOUT;
     }
 
-    private static final long lcevc_index$OFFSET = $LAYOUT.byteOffset(groupElement("lcevc_index"));
+    private static final long lcevc_index$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -139,7 +143,7 @@ public class AVStreamGroupLCEVC {
         return width$LAYOUT;
     }
 
-    private static final long width$OFFSET = $LAYOUT.byteOffset(groupElement("width"));
+    private static final long width$OFFSET = 12;
 
     /**
      * Offset for field:
@@ -183,7 +187,7 @@ public class AVStreamGroupLCEVC {
         return height$LAYOUT;
     }
 
-    private static final long height$OFFSET = $LAYOUT.byteOffset(groupElement("height"));
+    private static final long height$OFFSET = 16;
 
     /**
      * Offset for field:

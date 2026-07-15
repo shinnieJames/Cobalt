@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -87,7 +91,7 @@ public class AVFilterContext {
         return av_class$LAYOUT;
     }
 
-    private static final long av_class$OFFSET = $LAYOUT.byteOffset(groupElement("av_class"));
+    private static final long av_class$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -131,7 +135,7 @@ public class AVFilterContext {
         return filter$LAYOUT;
     }
 
-    private static final long filter$OFFSET = $LAYOUT.byteOffset(groupElement("filter"));
+    private static final long filter$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -175,7 +179,7 @@ public class AVFilterContext {
         return name$LAYOUT;
     }
 
-    private static final long name$OFFSET = $LAYOUT.byteOffset(groupElement("name"));
+    private static final long name$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -219,7 +223,7 @@ public class AVFilterContext {
         return input_pads$LAYOUT;
     }
 
-    private static final long input_pads$OFFSET = $LAYOUT.byteOffset(groupElement("input_pads"));
+    private static final long input_pads$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -263,7 +267,7 @@ public class AVFilterContext {
         return inputs$LAYOUT;
     }
 
-    private static final long inputs$OFFSET = $LAYOUT.byteOffset(groupElement("inputs"));
+    private static final long inputs$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -307,7 +311,7 @@ public class AVFilterContext {
         return nb_inputs$LAYOUT;
     }
 
-    private static final long nb_inputs$OFFSET = $LAYOUT.byteOffset(groupElement("nb_inputs"));
+    private static final long nb_inputs$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -351,7 +355,7 @@ public class AVFilterContext {
         return output_pads$LAYOUT;
     }
 
-    private static final long output_pads$OFFSET = $LAYOUT.byteOffset(groupElement("output_pads"));
+    private static final long output_pads$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -395,7 +399,7 @@ public class AVFilterContext {
         return outputs$LAYOUT;
     }
 
-    private static final long outputs$OFFSET = $LAYOUT.byteOffset(groupElement("outputs"));
+    private static final long outputs$OFFSET = 56;
 
     /**
      * Offset for field:
@@ -439,7 +443,7 @@ public class AVFilterContext {
         return nb_outputs$LAYOUT;
     }
 
-    private static final long nb_outputs$OFFSET = $LAYOUT.byteOffset(groupElement("nb_outputs"));
+    private static final long nb_outputs$OFFSET = 64;
 
     /**
      * Offset for field:
@@ -483,7 +487,7 @@ public class AVFilterContext {
         return priv$LAYOUT;
     }
 
-    private static final long priv$OFFSET = $LAYOUT.byteOffset(groupElement("priv"));
+    private static final long priv$OFFSET = 72;
 
     /**
      * Offset for field:
@@ -527,7 +531,7 @@ public class AVFilterContext {
         return graph$LAYOUT;
     }
 
-    private static final long graph$OFFSET = $LAYOUT.byteOffset(groupElement("graph"));
+    private static final long graph$OFFSET = 80;
 
     /**
      * Offset for field:
@@ -571,7 +575,7 @@ public class AVFilterContext {
         return thread_type$LAYOUT;
     }
 
-    private static final long thread_type$OFFSET = $LAYOUT.byteOffset(groupElement("thread_type"));
+    private static final long thread_type$OFFSET = 88;
 
     /**
      * Offset for field:
@@ -615,7 +619,7 @@ public class AVFilterContext {
         return nb_threads$LAYOUT;
     }
 
-    private static final long nb_threads$OFFSET = $LAYOUT.byteOffset(groupElement("nb_threads"));
+    private static final long nb_threads$OFFSET = 92;
 
     /**
      * Offset for field:
@@ -659,7 +663,7 @@ public class AVFilterContext {
         return command_queue$LAYOUT;
     }
 
-    private static final long command_queue$OFFSET = $LAYOUT.byteOffset(groupElement("command_queue"));
+    private static final long command_queue$OFFSET = 96;
 
     /**
      * Offset for field:
@@ -703,7 +707,7 @@ public class AVFilterContext {
         return enable_str$LAYOUT;
     }
 
-    private static final long enable_str$OFFSET = $LAYOUT.byteOffset(groupElement("enable_str"));
+    private static final long enable_str$OFFSET = 104;
 
     /**
      * Offset for field:
@@ -747,7 +751,7 @@ public class AVFilterContext {
         return enable$LAYOUT;
     }
 
-    private static final long enable$OFFSET = $LAYOUT.byteOffset(groupElement("enable"));
+    private static final long enable$OFFSET = 112;
 
     /**
      * Offset for field:
@@ -791,7 +795,7 @@ public class AVFilterContext {
         return var_values$LAYOUT;
     }
 
-    private static final long var_values$OFFSET = $LAYOUT.byteOffset(groupElement("var_values"));
+    private static final long var_values$OFFSET = 120;
 
     /**
      * Offset for field:
@@ -835,7 +839,7 @@ public class AVFilterContext {
         return is_disabled$LAYOUT;
     }
 
-    private static final long is_disabled$OFFSET = $LAYOUT.byteOffset(groupElement("is_disabled"));
+    private static final long is_disabled$OFFSET = 128;
 
     /**
      * Offset for field:
@@ -879,7 +883,7 @@ public class AVFilterContext {
         return hw_device_ctx$LAYOUT;
     }
 
-    private static final long hw_device_ctx$OFFSET = $LAYOUT.byteOffset(groupElement("hw_device_ctx"));
+    private static final long hw_device_ctx$OFFSET = 136;
 
     /**
      * Offset for field:
@@ -923,7 +927,7 @@ public class AVFilterContext {
         return ready$LAYOUT;
     }
 
-    private static final long ready$OFFSET = $LAYOUT.byteOffset(groupElement("ready"));
+    private static final long ready$OFFSET = 144;
 
     /**
      * Offset for field:
@@ -967,7 +971,7 @@ public class AVFilterContext {
         return extra_hw_frames$LAYOUT;
     }
 
-    private static final long extra_hw_frames$OFFSET = $LAYOUT.byteOffset(groupElement("extra_hw_frames"));
+    private static final long extra_hw_frames$OFFSET = 148;
 
     /**
      * Offset for field:

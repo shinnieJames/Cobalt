@@ -4,7 +4,10 @@ package com.github.auties00.cobalt.util.ffmpeg;
 
 import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -85,7 +88,7 @@ public class AVFilter {
         return name$LAYOUT;
     }
 
-    private static final long name$OFFSET = $LAYOUT.byteOffset(groupElement("name"));
+    private static final long name$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -129,7 +132,7 @@ public class AVFilter {
         return description$LAYOUT;
     }
 
-    private static final long description$OFFSET = $LAYOUT.byteOffset(groupElement("description"));
+    private static final long description$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -173,7 +176,7 @@ public class AVFilter {
         return inputs$LAYOUT;
     }
 
-    private static final long inputs$OFFSET = $LAYOUT.byteOffset(groupElement("inputs"));
+    private static final long inputs$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -217,7 +220,7 @@ public class AVFilter {
         return outputs$LAYOUT;
     }
 
-    private static final long outputs$OFFSET = $LAYOUT.byteOffset(groupElement("outputs"));
+    private static final long outputs$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -261,7 +264,7 @@ public class AVFilter {
         return priv_class$LAYOUT;
     }
 
-    private static final long priv_class$OFFSET = $LAYOUT.byteOffset(groupElement("priv_class"));
+    private static final long priv_class$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -305,7 +308,7 @@ public class AVFilter {
         return flags$LAYOUT;
     }
 
-    private static final long flags$OFFSET = $LAYOUT.byteOffset(groupElement("flags"));
+    private static final long flags$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -349,7 +352,7 @@ public class AVFilter {
         return nb_inputs$LAYOUT;
     }
 
-    private static final long nb_inputs$OFFSET = $LAYOUT.byteOffset(groupElement("nb_inputs"));
+    private static final long nb_inputs$OFFSET = 44;
 
     /**
      * Offset for field:
@@ -393,7 +396,7 @@ public class AVFilter {
         return nb_outputs$LAYOUT;
     }
 
-    private static final long nb_outputs$OFFSET = $LAYOUT.byteOffset(groupElement("nb_outputs"));
+    private static final long nb_outputs$OFFSET = 45;
 
     /**
      * Offset for field:
@@ -437,7 +440,7 @@ public class AVFilter {
         return formats_state$LAYOUT;
     }
 
-    private static final long formats_state$OFFSET = $LAYOUT.byteOffset(groupElement("formats_state"));
+    private static final long formats_state$OFFSET = 46;
 
     /**
      * Offset for field:
@@ -474,9 +477,9 @@ public class AVFilter {
      * int (*preinit)(AVFilterContext *)
      * }
      */
-    public final static class preinit {
+    public static class preinit {
 
-        private preinit() {
+        preinit() {
             // Should not be called directly
         }
 
@@ -514,11 +517,9 @@ public class AVFilter {
         /**
          * Invoke the upcall stub {@code funcPtr}, with given parameters
          */
-        public static int invoke(MemorySegment funcPtr, MemorySegment _x0) {
+        public static int invoke(MemorySegment funcPtr,MemorySegment _x0) {
             try {
                 return (int) DOWN$MH.invokeExact(funcPtr, _x0);
-            } catch (Error | RuntimeException ex) {
-                throw ex;
             } catch (Throwable ex$) {
                 throw new AssertionError("should not reach here", ex$);
             }
@@ -537,7 +538,7 @@ public class AVFilter {
         return preinit$LAYOUT;
     }
 
-    private static final long preinit$OFFSET = $LAYOUT.byteOffset(groupElement("preinit"));
+    private static final long preinit$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -574,9 +575,9 @@ public class AVFilter {
      * int (*init)(AVFilterContext *)
      * }
      */
-    public final static class init {
+    public static class init {
 
-        private init() {
+        init() {
             // Should not be called directly
         }
 
@@ -614,11 +615,9 @@ public class AVFilter {
         /**
          * Invoke the upcall stub {@code funcPtr}, with given parameters
          */
-        public static int invoke(MemorySegment funcPtr, MemorySegment _x0) {
+        public static int invoke(MemorySegment funcPtr,MemorySegment _x0) {
             try {
                 return (int) DOWN$MH.invokeExact(funcPtr, _x0);
-            } catch (Error | RuntimeException ex) {
-                throw ex;
             } catch (Throwable ex$) {
                 throw new AssertionError("should not reach here", ex$);
             }
@@ -637,7 +636,7 @@ public class AVFilter {
         return init$LAYOUT;
     }
 
-    private static final long init$OFFSET = $LAYOUT.byteOffset(groupElement("init"));
+    private static final long init$OFFSET = 56;
 
     /**
      * Offset for field:
@@ -674,9 +673,9 @@ public class AVFilter {
      * void (*uninit)(AVFilterContext *)
      * }
      */
-    public final static class uninit {
+    public static class uninit {
 
-        private uninit() {
+        uninit() {
             // Should not be called directly
         }
 
@@ -713,11 +712,9 @@ public class AVFilter {
         /**
          * Invoke the upcall stub {@code funcPtr}, with given parameters
          */
-        public static void invoke(MemorySegment funcPtr, MemorySegment _x0) {
+        public static void invoke(MemorySegment funcPtr,MemorySegment _x0) {
             try {
                  DOWN$MH.invokeExact(funcPtr, _x0);
-            } catch (Error | RuntimeException ex) {
-                throw ex;
             } catch (Throwable ex$) {
                 throw new AssertionError("should not reach here", ex$);
             }
@@ -736,7 +733,7 @@ public class AVFilter {
         return uninit$LAYOUT;
     }
 
-    private static final long uninit$OFFSET = $LAYOUT.byteOffset(groupElement("uninit"));
+    private static final long uninit$OFFSET = 64;
 
     /**
      * Offset for field:
@@ -807,9 +804,9 @@ public class AVFilter {
          * int (*query_func)(AVFilterContext *)
          * }
          */
-        public final static class query_func {
+        public static class query_func {
 
-            private query_func() {
+            query_func() {
                 // Should not be called directly
             }
 
@@ -847,11 +844,9 @@ public class AVFilter {
             /**
              * Invoke the upcall stub {@code funcPtr}, with given parameters
              */
-            public static int invoke(MemorySegment funcPtr, MemorySegment _x0) {
+            public static int invoke(MemorySegment funcPtr,MemorySegment _x0) {
                 try {
                     return (int) DOWN$MH.invokeExact(funcPtr, _x0);
-                } catch (Error | RuntimeException ex) {
-                    throw ex;
                 } catch (Throwable ex$) {
                     throw new AssertionError("should not reach here", ex$);
                 }
@@ -870,7 +865,7 @@ public class AVFilter {
             return query_func$LAYOUT;
         }
 
-        private static final long query_func$OFFSET = $LAYOUT.byteOffset(groupElement("query_func"));
+        private static final long query_func$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -907,9 +902,9 @@ public class AVFilter {
          * int (*query_func2)(const AVFilterContext *, struct AVFilterFormatsConfig **, struct AVFilterFormatsConfig **)
          * }
          */
-        public final static class query_func2 {
+        public static class query_func2 {
 
-            private query_func2() {
+            query_func2() {
                 // Should not be called directly
             }
 
@@ -949,11 +944,9 @@ public class AVFilter {
             /**
              * Invoke the upcall stub {@code funcPtr}, with given parameters
              */
-            public static int invoke(MemorySegment funcPtr, MemorySegment _x0, MemorySegment _x1, MemorySegment _x2) {
+            public static int invoke(MemorySegment funcPtr,MemorySegment _x0, MemorySegment _x1, MemorySegment _x2) {
                 try {
                     return (int) DOWN$MH.invokeExact(funcPtr, _x0, _x1, _x2);
-                } catch (Error | RuntimeException ex) {
-                    throw ex;
                 } catch (Throwable ex$) {
                     throw new AssertionError("should not reach here", ex$);
                 }
@@ -972,7 +965,7 @@ public class AVFilter {
             return query_func2$LAYOUT;
         }
 
-        private static final long query_func2$OFFSET = $LAYOUT.byteOffset(groupElement("query_func2"));
+        private static final long query_func2$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -1016,7 +1009,7 @@ public class AVFilter {
             return pixels_list$LAYOUT;
         }
 
-        private static final long pixels_list$OFFSET = $LAYOUT.byteOffset(groupElement("pixels_list"));
+        private static final long pixels_list$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -1060,7 +1053,7 @@ public class AVFilter {
             return samples_list$LAYOUT;
         }
 
-        private static final long samples_list$OFFSET = $LAYOUT.byteOffset(groupElement("samples_list"));
+        private static final long samples_list$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -1104,7 +1097,7 @@ public class AVFilter {
             return pix_fmt$LAYOUT;
         }
 
-        private static final long pix_fmt$OFFSET = $LAYOUT.byteOffset(groupElement("pix_fmt"));
+        private static final long pix_fmt$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -1148,7 +1141,7 @@ public class AVFilter {
             return sample_fmt$LAYOUT;
         }
 
-        private static final long sample_fmt$OFFSET = $LAYOUT.byteOffset(groupElement("sample_fmt"));
+        private static final long sample_fmt$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -1244,7 +1237,7 @@ public class AVFilter {
         return formats$LAYOUT;
     }
 
-    private static final long formats$OFFSET = $LAYOUT.byteOffset(groupElement("formats"));
+    private static final long formats$OFFSET = 72;
 
     /**
      * Offset for field:
@@ -1309,7 +1302,7 @@ public class AVFilter {
         return priv_size$LAYOUT;
     }
 
-    private static final long priv_size$OFFSET = $LAYOUT.byteOffset(groupElement("priv_size"));
+    private static final long priv_size$OFFSET = 80;
 
     /**
      * Offset for field:
@@ -1353,7 +1346,7 @@ public class AVFilter {
         return flags_internal$LAYOUT;
     }
 
-    private static final long flags_internal$OFFSET = $LAYOUT.byteOffset(groupElement("flags_internal"));
+    private static final long flags_internal$OFFSET = 84;
 
     /**
      * Offset for field:
@@ -1390,9 +1383,9 @@ public class AVFilter {
      * int (*process_command)(AVFilterContext *, const char *, const char *, char *, int, int)
      * }
      */
-    public final static class process_command {
+    public static class process_command {
 
-        private process_command() {
+        process_command() {
             // Should not be called directly
         }
 
@@ -1435,11 +1428,9 @@ public class AVFilter {
         /**
          * Invoke the upcall stub {@code funcPtr}, with given parameters
          */
-        public static int invoke(MemorySegment funcPtr, MemorySegment _x0, MemorySegment _x1, MemorySegment _x2, MemorySegment _x3, int _x4, int _x5) {
+        public static int invoke(MemorySegment funcPtr,MemorySegment _x0, MemorySegment _x1, MemorySegment _x2, MemorySegment _x3, int _x4, int _x5) {
             try {
                 return (int) DOWN$MH.invokeExact(funcPtr, _x0, _x1, _x2, _x3, _x4, _x5);
-            } catch (Error | RuntimeException ex) {
-                throw ex;
             } catch (Throwable ex$) {
                 throw new AssertionError("should not reach here", ex$);
             }
@@ -1458,7 +1449,7 @@ public class AVFilter {
         return process_command$LAYOUT;
     }
 
-    private static final long process_command$OFFSET = $LAYOUT.byteOffset(groupElement("process_command"));
+    private static final long process_command$OFFSET = 88;
 
     /**
      * Offset for field:
@@ -1495,9 +1486,9 @@ public class AVFilter {
      * int (*activate)(AVFilterContext *)
      * }
      */
-    public final static class activate {
+    public static class activate {
 
-        private activate() {
+        activate() {
             // Should not be called directly
         }
 
@@ -1535,11 +1526,9 @@ public class AVFilter {
         /**
          * Invoke the upcall stub {@code funcPtr}, with given parameters
          */
-        public static int invoke(MemorySegment funcPtr, MemorySegment _x0) {
+        public static int invoke(MemorySegment funcPtr,MemorySegment _x0) {
             try {
                 return (int) DOWN$MH.invokeExact(funcPtr, _x0);
-            } catch (Error | RuntimeException ex) {
-                throw ex;
             } catch (Throwable ex$) {
                 throw new AssertionError("should not reach here", ex$);
             }
@@ -1558,7 +1547,7 @@ public class AVFilter {
         return activate$LAYOUT;
     }
 
-    private static final long activate$OFFSET = $LAYOUT.byteOffset(groupElement("activate"));
+    private static final long activate$OFFSET = 96;
 
     /**
      * Offset for field:

@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -48,7 +52,7 @@ public class AVOptionRanges {
         return range$LAYOUT;
     }
 
-    private static final long range$OFFSET = $LAYOUT.byteOffset(groupElement("range"));
+    private static final long range$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -92,7 +96,7 @@ public class AVOptionRanges {
         return nb_ranges$LAYOUT;
     }
 
-    private static final long nb_ranges$OFFSET = $LAYOUT.byteOffset(groupElement("nb_ranges"));
+    private static final long nb_ranges$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -136,7 +140,7 @@ public class AVOptionRanges {
         return nb_components$LAYOUT;
     }
 
-    private static final long nb_components$OFFSET = $LAYOUT.byteOffset(groupElement("nb_components"));
+    private static final long nb_components$OFFSET = 12;
 
     /**
      * Offset for field:

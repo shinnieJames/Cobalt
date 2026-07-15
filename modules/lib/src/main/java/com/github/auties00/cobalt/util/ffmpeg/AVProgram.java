@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -47,9 +51,9 @@ public class AVProgram {
         Ffmpeg.C_INT.withName("pmt_pid"),
         Ffmpeg.C_INT.withName("pcr_pid"),
         Ffmpeg.C_INT.withName("pmt_version"),
-        Ffmpeg.C_LONG_LONG.withName("start_time"),
-        Ffmpeg.C_LONG_LONG.withName("end_time"),
-        Ffmpeg.C_LONG_LONG.withName("pts_wrap_reference"),
+        Ffmpeg.C_LONG.withName("start_time"),
+        Ffmpeg.C_LONG.withName("end_time"),
+        Ffmpeg.C_LONG.withName("pts_wrap_reference"),
         Ffmpeg.C_INT.withName("pts_wrap_behavior"),
         MemoryLayout.paddingLayout(4)
     ).withName("AVProgram");
@@ -73,7 +77,7 @@ public class AVProgram {
         return id$LAYOUT;
     }
 
-    private static final long id$OFFSET = $LAYOUT.byteOffset(groupElement("id"));
+    private static final long id$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -117,7 +121,7 @@ public class AVProgram {
         return flags$LAYOUT;
     }
 
-    private static final long flags$OFFSET = $LAYOUT.byteOffset(groupElement("flags"));
+    private static final long flags$OFFSET = 4;
 
     /**
      * Offset for field:
@@ -161,7 +165,7 @@ public class AVProgram {
         return discard$LAYOUT;
     }
 
-    private static final long discard$OFFSET = $LAYOUT.byteOffset(groupElement("discard"));
+    private static final long discard$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -205,7 +209,7 @@ public class AVProgram {
         return stream_index$LAYOUT;
     }
 
-    private static final long stream_index$OFFSET = $LAYOUT.byteOffset(groupElement("stream_index"));
+    private static final long stream_index$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -249,7 +253,7 @@ public class AVProgram {
         return nb_stream_indexes$LAYOUT;
     }
 
-    private static final long nb_stream_indexes$OFFSET = $LAYOUT.byteOffset(groupElement("nb_stream_indexes"));
+    private static final long nb_stream_indexes$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -293,7 +297,7 @@ public class AVProgram {
         return metadata$LAYOUT;
     }
 
-    private static final long metadata$OFFSET = $LAYOUT.byteOffset(groupElement("metadata"));
+    private static final long metadata$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -337,7 +341,7 @@ public class AVProgram {
         return program_num$LAYOUT;
     }
 
-    private static final long program_num$OFFSET = $LAYOUT.byteOffset(groupElement("program_num"));
+    private static final long program_num$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -381,7 +385,7 @@ public class AVProgram {
         return pmt_pid$LAYOUT;
     }
 
-    private static final long pmt_pid$OFFSET = $LAYOUT.byteOffset(groupElement("pmt_pid"));
+    private static final long pmt_pid$OFFSET = 44;
 
     /**
      * Offset for field:
@@ -425,7 +429,7 @@ public class AVProgram {
         return pcr_pid$LAYOUT;
     }
 
-    private static final long pcr_pid$OFFSET = $LAYOUT.byteOffset(groupElement("pcr_pid"));
+    private static final long pcr_pid$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -469,7 +473,7 @@ public class AVProgram {
         return pmt_version$LAYOUT;
     }
 
-    private static final long pmt_version$OFFSET = $LAYOUT.byteOffset(groupElement("pmt_version"));
+    private static final long pmt_version$OFFSET = 52;
 
     /**
      * Offset for field:
@@ -513,7 +517,7 @@ public class AVProgram {
         return start_time$LAYOUT;
     }
 
-    private static final long start_time$OFFSET = $LAYOUT.byteOffset(groupElement("start_time"));
+    private static final long start_time$OFFSET = 56;
 
     /**
      * Offset for field:
@@ -557,7 +561,7 @@ public class AVProgram {
         return end_time$LAYOUT;
     }
 
-    private static final long end_time$OFFSET = $LAYOUT.byteOffset(groupElement("end_time"));
+    private static final long end_time$OFFSET = 64;
 
     /**
      * Offset for field:
@@ -601,7 +605,7 @@ public class AVProgram {
         return pts_wrap_reference$LAYOUT;
     }
 
-    private static final long pts_wrap_reference$OFFSET = $LAYOUT.byteOffset(groupElement("pts_wrap_reference"));
+    private static final long pts_wrap_reference$OFFSET = 72;
 
     /**
      * Offset for field:
@@ -645,7 +649,7 @@ public class AVProgram {
         return pts_wrap_behavior$LAYOUT;
     }
 
-    private static final long pts_wrap_behavior$OFFSET = $LAYOUT.byteOffset(groupElement("pts_wrap_behavior"));
+    private static final long pts_wrap_behavior$OFFSET = 80;
 
     /**
      * Offset for field:

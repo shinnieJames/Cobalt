@@ -4,7 +4,10 @@ package com.github.auties00.cobalt.util.ffmpeg;
 
 import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -51,7 +54,7 @@ public class AVPanScan {
         return id$LAYOUT;
     }
 
-    private static final long id$OFFSET = $LAYOUT.byteOffset(groupElement("id"));
+    private static final long id$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -95,7 +98,7 @@ public class AVPanScan {
         return width$LAYOUT;
     }
 
-    private static final long width$OFFSET = $LAYOUT.byteOffset(groupElement("width"));
+    private static final long width$OFFSET = 4;
 
     /**
      * Offset for field:
@@ -139,7 +142,7 @@ public class AVPanScan {
         return height$LAYOUT;
     }
 
-    private static final long height$OFFSET = $LAYOUT.byteOffset(groupElement("height"));
+    private static final long height$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -183,7 +186,7 @@ public class AVPanScan {
         return position$LAYOUT;
     }
 
-    private static final long position$OFFSET = $LAYOUT.byteOffset(groupElement("position"));
+    private static final long position$OFFSET = 12;
 
     /**
      * Offset for field:
@@ -235,7 +238,7 @@ public class AVPanScan {
      * }
      */
     public static short position(MemorySegment struct, long index0, long index1) {
-        return (short)position$ELEM_HANDLE.get(struct, position$OFFSET, index0, index1);
+        return (short)position$ELEM_HANDLE.get(struct, 0L, index0, index1);
     }
 
     /**
@@ -245,7 +248,7 @@ public class AVPanScan {
      * }
      */
     public static void position(MemorySegment struct, long index0, long index1, short fieldValue) {
-        position$ELEM_HANDLE.set(struct, position$OFFSET, index0, index1, fieldValue);
+        position$ELEM_HANDLE.set(struct, 0L, index0, index1, fieldValue);
     }
 
     /**

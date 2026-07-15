@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -26,10 +30,10 @@ public class AVChapter {
     }
 
     private static final GroupLayout $LAYOUT = MemoryLayout.structLayout(
-        Ffmpeg.C_LONG_LONG.withName("id"),
+        Ffmpeg.C_LONG.withName("id"),
         AVRational.layout().withName("time_base"),
-        Ffmpeg.C_LONG_LONG.withName("start"),
-        Ffmpeg.C_LONG_LONG.withName("end"),
+        Ffmpeg.C_LONG.withName("start"),
+        Ffmpeg.C_LONG.withName("end"),
         Ffmpeg.C_POINTER.withName("metadata")
     ).withName("AVChapter");
 
@@ -52,7 +56,7 @@ public class AVChapter {
         return id$LAYOUT;
     }
 
-    private static final long id$OFFSET = $LAYOUT.byteOffset(groupElement("id"));
+    private static final long id$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -96,7 +100,7 @@ public class AVChapter {
         return time_base$LAYOUT;
     }
 
-    private static final long time_base$OFFSET = $LAYOUT.byteOffset(groupElement("time_base"));
+    private static final long time_base$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -140,7 +144,7 @@ public class AVChapter {
         return start$LAYOUT;
     }
 
-    private static final long start$OFFSET = $LAYOUT.byteOffset(groupElement("start"));
+    private static final long start$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -184,7 +188,7 @@ public class AVChapter {
         return end$LAYOUT;
     }
 
-    private static final long end$OFFSET = $LAYOUT.byteOffset(groupElement("end"));
+    private static final long end$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -228,7 +232,7 @@ public class AVChapter {
         return metadata$LAYOUT;
     }
 
-    private static final long metadata$OFFSET = $LAYOUT.byteOffset(groupElement("metadata"));
+    private static final long metadata$OFFSET = 32;
 
     /**
      * Offset for field:

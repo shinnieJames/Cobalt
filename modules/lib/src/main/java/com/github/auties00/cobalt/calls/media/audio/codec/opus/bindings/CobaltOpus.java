@@ -12,17 +12,62 @@ import java.util.stream.*;
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
 
-public class CobaltOpus extends CobaltOpus$shared {
+public class CobaltOpus {
 
     CobaltOpus() {
         // Should not be called directly
     }
 
     static final Arena LIBRARY_ARENA = Arena.ofAuto();
+    static final boolean TRACE_DOWNCALLS = Boolean.getBoolean("jextract.trace.downcalls");
+
+    static void traceDowncall(String name, Object... args) {
+         String traceArgs = Arrays.stream(args)
+                       .map(Object::toString)
+                       .collect(Collectors.joining(", "));
+         System.out.printf("%s(%s)\n", name, traceArgs);
+    }
+
+    static MemorySegment findOrThrow(String symbol) {
+        return SYMBOL_LOOKUP.find(symbol)
+            .orElseThrow(() -> new UnsatisfiedLinkError("unresolved symbol: " + symbol));
+    }
+
+    static MethodHandle upcallHandle(Class<?> fi, String name, FunctionDescriptor fdesc) {
+        try {
+            return MethodHandles.lookup().findVirtual(fi, name, fdesc.toMethodType());
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    static MemoryLayout align(MemoryLayout layout, long align) {
+        return switch (layout) {
+            case PaddingLayout p -> p;
+            case ValueLayout v -> v.withByteAlignment(align);
+            case GroupLayout g -> {
+                MemoryLayout[] alignedMembers = g.memberLayouts().stream()
+                        .map(m -> align(m, align)).toArray(MemoryLayout[]::new);
+                yield g instanceof StructLayout ?
+                        MemoryLayout.structLayout(alignedMembers) : MemoryLayout.unionLayout(alignedMembers);
+            }
+            case SequenceLayout s -> MemoryLayout.sequenceLayout(s.elementCount(), align(s.elementLayout(), align));
+        };
+    }
 
     static final SymbolLookup SYMBOL_LOOKUP = SymbolLookup.loaderLookup()
             .or(Linker.nativeLinker().defaultLookup());
 
+    public static final ValueLayout.OfBoolean C_BOOL = ValueLayout.JAVA_BOOLEAN;
+    public static final ValueLayout.OfByte C_CHAR = ValueLayout.JAVA_BYTE;
+    public static final ValueLayout.OfShort C_SHORT = ValueLayout.JAVA_SHORT;
+    public static final ValueLayout.OfInt C_INT = ValueLayout.JAVA_INT;
+    public static final ValueLayout.OfLong C_LONG_LONG = ValueLayout.JAVA_LONG;
+    public static final ValueLayout.OfFloat C_FLOAT = ValueLayout.JAVA_FLOAT;
+    public static final ValueLayout.OfDouble C_DOUBLE = ValueLayout.JAVA_DOUBLE;
+    public static final AddressLayout C_POINTER = ValueLayout.ADDRESS
+            .withTargetLayout(MemoryLayout.sequenceLayout(java.lang.Long.MAX_VALUE, JAVA_BYTE));
+    public static final ValueLayout.OfLong C_LONG = ValueLayout.JAVA_LONG;
     private static final int COBALT_OPUS_OK = (int)0L;
     /**
      * {@snippet lang=c :
@@ -222,7 +267,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_create");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_create");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -269,8 +314,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_create", fs, channels, application, outEnc);
             }
             return (int)mh$.invokeExact(fs, channels, application, outEnc);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -281,7 +324,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_destroy");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_destroy");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -328,8 +371,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_destroy", enc);
             }
             mh$.invokeExact(enc);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -345,7 +386,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encode");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encode");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -392,8 +433,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encode", enc, pcm, frameSize, data, maxBytes);
             }
             return (int)mh$.invokeExact(enc, pcm, frameSize, data, maxBytes);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -406,7 +445,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_bitrate");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_bitrate");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -453,8 +492,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_bitrate", enc, bitrateBps);
             }
             return (int)mh$.invokeExact(enc, bitrateBps);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -467,7 +504,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_vbr");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_vbr");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -514,8 +551,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_vbr", enc, vbr);
             }
             return (int)mh$.invokeExact(enc, vbr);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -528,7 +563,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_vbr_constraint");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_vbr_constraint");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -575,8 +610,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_vbr_constraint", enc, constraint);
             }
             return (int)mh$.invokeExact(enc, constraint);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -589,7 +622,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_complexity");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_complexity");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -636,8 +669,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_complexity", enc, complexity);
             }
             return (int)mh$.invokeExact(enc, complexity);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -650,7 +681,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_inband_fec");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_inband_fec");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -697,8 +728,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_inband_fec", enc, fec);
             }
             return (int)mh$.invokeExact(enc, fec);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -711,7 +740,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_packet_loss_perc");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_packet_loss_perc");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -758,8 +787,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_packet_loss_perc", enc, lossPerc);
             }
             return (int)mh$.invokeExact(enc, lossPerc);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -772,7 +799,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_dtx");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_dtx");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -819,8 +846,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_dtx", enc, dtx);
             }
             return (int)mh$.invokeExact(enc, dtx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -833,7 +858,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_force_channels");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_force_channels");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -880,8 +905,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_force_channels", enc, channels);
             }
             return (int)mh$.invokeExact(enc, channels);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -894,7 +917,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_signal");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_signal");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -941,8 +964,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_signal", enc, signal);
             }
             return (int)mh$.invokeExact(enc, signal);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -955,7 +976,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_lsb_depth");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_lsb_depth");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1002,8 +1023,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_lsb_depth", enc, depth);
             }
             return (int)mh$.invokeExact(enc, depth);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1016,7 +1035,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_bandwidth");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_bandwidth");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1063,8 +1082,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_bandwidth", enc, bandwidth);
             }
             return (int)mh$.invokeExact(enc, bandwidth);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1077,7 +1094,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_max_bandwidth");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_max_bandwidth");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1124,8 +1141,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_max_bandwidth", enc, bandwidth);
             }
             return (int)mh$.invokeExact(enc, bandwidth);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1138,7 +1153,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_expert_frame_duration");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_expert_frame_duration");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1185,8 +1200,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_expert_frame_duration", enc, frameDuration);
             }
             return (int)mh$.invokeExact(enc, frameDuration);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1199,7 +1212,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_set_prediction_disabled");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_set_prediction_disabled");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1246,8 +1259,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_set_prediction_disabled", enc, disabled);
             }
             return (int)mh$.invokeExact(enc, disabled);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1260,7 +1271,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_get_lookahead");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_get_lookahead");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1307,8 +1318,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_get_lookahead", enc, out);
             }
             return (int)mh$.invokeExact(enc, out);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1320,7 +1329,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_encoder_reset_state");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_encoder_reset_state");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1367,8 +1376,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_encoder_reset_state", enc);
             }
             return (int)mh$.invokeExact(enc);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1382,7 +1389,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_decoder_create");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_decoder_create");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1429,8 +1436,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_decoder_create", fs, channels, outDec);
             }
             return (int)mh$.invokeExact(fs, channels, outDec);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1441,7 +1446,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_decoder_destroy");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_decoder_destroy");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1488,8 +1493,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_decoder_destroy", dec);
             }
             mh$.invokeExact(dec);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1506,7 +1509,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_decode");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_decode");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1553,8 +1556,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_decode", dec, data, len, pcm, frameSize, decodeFec);
             }
             return (int)mh$.invokeExact(dec, data, len, pcm, frameSize, decodeFec);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1566,7 +1567,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_decoder_reset_state");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_decoder_reset_state");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1613,8 +1614,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_decoder_reset_state", dec);
             }
             return (int)mh$.invokeExact(dec);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1626,7 +1625,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_repacketizer_create");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_repacketizer_create");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1673,8 +1672,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_repacketizer_create", outRp);
             }
             return (int)mh$.invokeExact(outRp);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1685,7 +1682,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_repacketizer_destroy");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_repacketizer_destroy");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1732,8 +1729,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_repacketizer_destroy", rp);
             }
             mh$.invokeExact(rp);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1745,7 +1740,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_repacketizer_init");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_repacketizer_init");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1792,8 +1787,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_repacketizer_init", rp);
             }
             return (int)mh$.invokeExact(rp);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1807,7 +1800,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_repacketizer_cat");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_repacketizer_cat");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1854,8 +1847,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_repacketizer_cat", rp, data, len);
             }
             return (int)mh$.invokeExact(rp, data, len);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1867,7 +1858,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_repacketizer_get_nb_frames");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_repacketizer_get_nb_frames");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1914,8 +1905,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_repacketizer_get_nb_frames", rp);
             }
             return (int)mh$.invokeExact(rp);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1931,7 +1920,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_repacketizer_out_range");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_repacketizer_out_range");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1978,8 +1967,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_repacketizer_out_range", rp, begin, end, data, maxLen);
             }
             return (int)mh$.invokeExact(rp, begin, end, data, maxLen);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1993,7 +1980,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_repacketizer_out");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_repacketizer_out");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2040,8 +2027,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_repacketizer_out", rp, data, maxLen);
             }
             return (int)mh$.invokeExact(rp, data, maxLen);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2058,7 +2043,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_packet_parse");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_packet_parse");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2105,8 +2090,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_packet_parse", data, len, outToc, outFrameOffsets, outFrameSizes, outPayloadOffset);
             }
             return (int)mh$.invokeExact(data, len, outToc, outFrameOffsets, outFrameSizes, outPayloadOffset);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2119,7 +2102,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_packet_get_nb_frames");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_packet_get_nb_frames");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2166,8 +2149,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_packet_get_nb_frames", data, len);
             }
             return (int)mh$.invokeExact(data, len);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2180,7 +2161,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_packet_get_samples_per_frame");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_packet_get_samples_per_frame");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2227,8 +2208,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_packet_get_samples_per_frame", data, fs);
             }
             return (int)mh$.invokeExact(data, fs);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2240,7 +2219,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_packet_get_bandwidth");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_packet_get_bandwidth");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2287,8 +2266,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_packet_get_bandwidth", data);
             }
             return (int)mh$.invokeExact(data);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2300,7 +2277,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_packet_get_nb_channels");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_packet_get_nb_channels");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2347,8 +2324,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_packet_get_nb_channels", data);
             }
             return (int)mh$.invokeExact(data);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2361,7 +2336,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_packet_has_lbrr");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_packet_has_lbrr");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2408,8 +2383,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_packet_has_lbrr", data, len);
             }
             return (int)mh$.invokeExact(data, len);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2421,7 +2394,7 @@ public class CobaltOpus extends CobaltOpus$shared {
             CobaltOpus.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_strerror");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_strerror");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2468,8 +2441,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_strerror", err);
             }
             return (MemorySegment)mh$.invokeExact(err);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -2479,7 +2450,7 @@ public class CobaltOpus extends CobaltOpus$shared {
         public static final FunctionDescriptor DESC = FunctionDescriptor.of(
             CobaltOpus.C_POINTER    );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_opus_get_version_string");
+        public static final MemorySegment ADDR = CobaltOpus.findOrThrow("cobalt_opus_get_version_string");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -2526,8 +2497,6 @@ public class CobaltOpus extends CobaltOpus$shared {
                 traceDowncall("cobalt_opus_get_version_string");
             }
             return (MemorySegment)mh$.invokeExact();
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }

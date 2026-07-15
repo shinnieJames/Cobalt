@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -52,7 +56,7 @@ public class AVHWAccel {
         return name$LAYOUT;
     }
 
-    private static final long name$OFFSET = $LAYOUT.byteOffset(groupElement("name"));
+    private static final long name$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -96,7 +100,7 @@ public class AVHWAccel {
         return type$LAYOUT;
     }
 
-    private static final long type$OFFSET = $LAYOUT.byteOffset(groupElement("type"));
+    private static final long type$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -140,7 +144,7 @@ public class AVHWAccel {
         return id$LAYOUT;
     }
 
-    private static final long id$OFFSET = $LAYOUT.byteOffset(groupElement("id"));
+    private static final long id$OFFSET = 12;
 
     /**
      * Offset for field:
@@ -184,7 +188,7 @@ public class AVHWAccel {
         return pix_fmt$LAYOUT;
     }
 
-    private static final long pix_fmt$OFFSET = $LAYOUT.byteOffset(groupElement("pix_fmt"));
+    private static final long pix_fmt$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -228,7 +232,7 @@ public class AVHWAccel {
         return capabilities$LAYOUT;
     }
 
-    private static final long capabilities$OFFSET = $LAYOUT.byteOffset(groupElement("capabilities"));
+    private static final long capabilities$OFFSET = 20;
 
     /**
      * Offset for field:

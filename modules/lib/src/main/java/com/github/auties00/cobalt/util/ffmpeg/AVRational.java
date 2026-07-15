@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -46,7 +50,7 @@ public class AVRational {
         return num$LAYOUT;
     }
 
-    private static final long num$OFFSET = $LAYOUT.byteOffset(groupElement("num"));
+    private static final long num$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -90,7 +94,7 @@ public class AVRational {
         return den$LAYOUT;
     }
 
-    private static final long den$OFFSET = $LAYOUT.byteOffset(groupElement("den"));
+    private static final long den$OFFSET = 4;
 
     /**
      * Offset for field:

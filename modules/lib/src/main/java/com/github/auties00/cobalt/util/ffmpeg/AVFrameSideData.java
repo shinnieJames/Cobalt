@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -29,7 +33,7 @@ public class AVFrameSideData {
         Ffmpeg.C_INT.withName("type"),
         MemoryLayout.paddingLayout(4),
         Ffmpeg.C_POINTER.withName("data"),
-        Ffmpeg.C_LONG_LONG.withName("size"),
+        Ffmpeg.C_LONG.withName("size"),
         Ffmpeg.C_POINTER.withName("metadata"),
         Ffmpeg.C_POINTER.withName("buf")
     ).withName("AVFrameSideData");
@@ -53,7 +57,7 @@ public class AVFrameSideData {
         return type$LAYOUT;
     }
 
-    private static final long type$OFFSET = $LAYOUT.byteOffset(groupElement("type"));
+    private static final long type$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -97,7 +101,7 @@ public class AVFrameSideData {
         return data$LAYOUT;
     }
 
-    private static final long data$OFFSET = $LAYOUT.byteOffset(groupElement("data"));
+    private static final long data$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -141,7 +145,7 @@ public class AVFrameSideData {
         return size$LAYOUT;
     }
 
-    private static final long size$OFFSET = $LAYOUT.byteOffset(groupElement("size"));
+    private static final long size$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -185,7 +189,7 @@ public class AVFrameSideData {
         return metadata$LAYOUT;
     }
 
-    private static final long metadata$OFFSET = $LAYOUT.byteOffset(groupElement("metadata"));
+    private static final long metadata$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -229,7 +233,7 @@ public class AVFrameSideData {
         return buf$LAYOUT;
     }
 
-    private static final long buf$OFFSET = $LAYOUT.byteOffset(groupElement("buf"));
+    private static final long buf$OFFSET = 32;
 
     /**
      * Offset for field:

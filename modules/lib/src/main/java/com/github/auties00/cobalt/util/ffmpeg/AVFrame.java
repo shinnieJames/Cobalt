@@ -4,7 +4,10 @@ package com.github.auties00.cobalt.util.ffmpeg;
 
 import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -77,8 +80,8 @@ public class AVFrame {
         Ffmpeg.C_INT.withName("key_frame"),
         Ffmpeg.C_INT.withName("pict_type"),
         AVRational.layout().withName("sample_aspect_ratio"),
-        Ffmpeg.C_LONG_LONG.withName("pts"),
-        Ffmpeg.C_LONG_LONG.withName("pkt_dts"),
+        Ffmpeg.C_LONG.withName("pts"),
+        Ffmpeg.C_LONG.withName("pkt_dts"),
         AVRational.layout().withName("time_base"),
         Ffmpeg.C_INT.withName("quality"),
         MemoryLayout.paddingLayout(4),
@@ -102,20 +105,20 @@ public class AVFrame {
         Ffmpeg.C_INT.withName("colorspace"),
         Ffmpeg.C_INT.withName("chroma_location"),
         MemoryLayout.paddingLayout(4),
-        Ffmpeg.C_LONG_LONG.withName("best_effort_timestamp"),
-        Ffmpeg.C_LONG_LONG.withName("pkt_pos"),
+        Ffmpeg.C_LONG.withName("best_effort_timestamp"),
+        Ffmpeg.C_LONG.withName("pkt_pos"),
         Ffmpeg.C_POINTER.withName("metadata"),
         Ffmpeg.C_INT.withName("decode_error_flags"),
         Ffmpeg.C_INT.withName("pkt_size"),
         Ffmpeg.C_POINTER.withName("hw_frames_ctx"),
         Ffmpeg.C_POINTER.withName("opaque_ref"),
-        Ffmpeg.C_LONG_LONG.withName("crop_top"),
-        Ffmpeg.C_LONG_LONG.withName("crop_bottom"),
-        Ffmpeg.C_LONG_LONG.withName("crop_left"),
-        Ffmpeg.C_LONG_LONG.withName("crop_right"),
+        Ffmpeg.C_LONG.withName("crop_top"),
+        Ffmpeg.C_LONG.withName("crop_bottom"),
+        Ffmpeg.C_LONG.withName("crop_left"),
+        Ffmpeg.C_LONG.withName("crop_right"),
         Ffmpeg.C_POINTER.withName("private_ref"),
         AVChannelLayout.layout().withName("ch_layout"),
-        Ffmpeg.C_LONG_LONG.withName("duration")
+        Ffmpeg.C_LONG.withName("duration")
     ).withName("AVFrame");
 
     /**
@@ -137,7 +140,7 @@ public class AVFrame {
         return data$LAYOUT;
     }
 
-    private static final long data$OFFSET = $LAYOUT.byteOffset(groupElement("data"));
+    private static final long data$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -189,7 +192,7 @@ public class AVFrame {
      * }
      */
     public static MemorySegment data(MemorySegment struct, long index0) {
-        return (MemorySegment)data$ELEM_HANDLE.get(struct, data$OFFSET, index0);
+        return (MemorySegment)data$ELEM_HANDLE.get(struct, 0L, index0);
     }
 
     /**
@@ -199,7 +202,7 @@ public class AVFrame {
      * }
      */
     public static void data(MemorySegment struct, long index0, MemorySegment fieldValue) {
-        data$ELEM_HANDLE.set(struct, data$OFFSET, index0, fieldValue);
+        data$ELEM_HANDLE.set(struct, 0L, index0, fieldValue);
     }
 
     private static final SequenceLayout linesize$LAYOUT = (SequenceLayout)$LAYOUT.select(groupElement("linesize"));
@@ -214,7 +217,7 @@ public class AVFrame {
         return linesize$LAYOUT;
     }
 
-    private static final long linesize$OFFSET = $LAYOUT.byteOffset(groupElement("linesize"));
+    private static final long linesize$OFFSET = 64;
 
     /**
      * Offset for field:
@@ -266,7 +269,7 @@ public class AVFrame {
      * }
      */
     public static int linesize(MemorySegment struct, long index0) {
-        return (int)linesize$ELEM_HANDLE.get(struct, linesize$OFFSET, index0);
+        return (int)linesize$ELEM_HANDLE.get(struct, 0L, index0);
     }
 
     /**
@@ -276,7 +279,7 @@ public class AVFrame {
      * }
      */
     public static void linesize(MemorySegment struct, long index0, int fieldValue) {
-        linesize$ELEM_HANDLE.set(struct, linesize$OFFSET, index0, fieldValue);
+        linesize$ELEM_HANDLE.set(struct, 0L, index0, fieldValue);
     }
 
     private static final AddressLayout extended_data$LAYOUT = (AddressLayout)$LAYOUT.select(groupElement("extended_data"));
@@ -291,7 +294,7 @@ public class AVFrame {
         return extended_data$LAYOUT;
     }
 
-    private static final long extended_data$OFFSET = $LAYOUT.byteOffset(groupElement("extended_data"));
+    private static final long extended_data$OFFSET = 96;
 
     /**
      * Offset for field:
@@ -335,7 +338,7 @@ public class AVFrame {
         return width$LAYOUT;
     }
 
-    private static final long width$OFFSET = $LAYOUT.byteOffset(groupElement("width"));
+    private static final long width$OFFSET = 104;
 
     /**
      * Offset for field:
@@ -379,7 +382,7 @@ public class AVFrame {
         return height$LAYOUT;
     }
 
-    private static final long height$OFFSET = $LAYOUT.byteOffset(groupElement("height"));
+    private static final long height$OFFSET = 108;
 
     /**
      * Offset for field:
@@ -423,7 +426,7 @@ public class AVFrame {
         return nb_samples$LAYOUT;
     }
 
-    private static final long nb_samples$OFFSET = $LAYOUT.byteOffset(groupElement("nb_samples"));
+    private static final long nb_samples$OFFSET = 112;
 
     /**
      * Offset for field:
@@ -467,7 +470,7 @@ public class AVFrame {
         return format$LAYOUT;
     }
 
-    private static final long format$OFFSET = $LAYOUT.byteOffset(groupElement("format"));
+    private static final long format$OFFSET = 116;
 
     /**
      * Offset for field:
@@ -511,7 +514,7 @@ public class AVFrame {
         return key_frame$LAYOUT;
     }
 
-    private static final long key_frame$OFFSET = $LAYOUT.byteOffset(groupElement("key_frame"));
+    private static final long key_frame$OFFSET = 120;
 
     /**
      * Offset for field:
@@ -555,7 +558,7 @@ public class AVFrame {
         return pict_type$LAYOUT;
     }
 
-    private static final long pict_type$OFFSET = $LAYOUT.byteOffset(groupElement("pict_type"));
+    private static final long pict_type$OFFSET = 124;
 
     /**
      * Offset for field:
@@ -599,7 +602,7 @@ public class AVFrame {
         return sample_aspect_ratio$LAYOUT;
     }
 
-    private static final long sample_aspect_ratio$OFFSET = $LAYOUT.byteOffset(groupElement("sample_aspect_ratio"));
+    private static final long sample_aspect_ratio$OFFSET = 128;
 
     /**
      * Offset for field:
@@ -643,7 +646,7 @@ public class AVFrame {
         return pts$LAYOUT;
     }
 
-    private static final long pts$OFFSET = $LAYOUT.byteOffset(groupElement("pts"));
+    private static final long pts$OFFSET = 136;
 
     /**
      * Offset for field:
@@ -687,7 +690,7 @@ public class AVFrame {
         return pkt_dts$LAYOUT;
     }
 
-    private static final long pkt_dts$OFFSET = $LAYOUT.byteOffset(groupElement("pkt_dts"));
+    private static final long pkt_dts$OFFSET = 144;
 
     /**
      * Offset for field:
@@ -731,7 +734,7 @@ public class AVFrame {
         return time_base$LAYOUT;
     }
 
-    private static final long time_base$OFFSET = $LAYOUT.byteOffset(groupElement("time_base"));
+    private static final long time_base$OFFSET = 152;
 
     /**
      * Offset for field:
@@ -775,7 +778,7 @@ public class AVFrame {
         return quality$LAYOUT;
     }
 
-    private static final long quality$OFFSET = $LAYOUT.byteOffset(groupElement("quality"));
+    private static final long quality$OFFSET = 160;
 
     /**
      * Offset for field:
@@ -819,7 +822,7 @@ public class AVFrame {
         return opaque$LAYOUT;
     }
 
-    private static final long opaque$OFFSET = $LAYOUT.byteOffset(groupElement("opaque"));
+    private static final long opaque$OFFSET = 168;
 
     /**
      * Offset for field:
@@ -863,7 +866,7 @@ public class AVFrame {
         return repeat_pict$LAYOUT;
     }
 
-    private static final long repeat_pict$OFFSET = $LAYOUT.byteOffset(groupElement("repeat_pict"));
+    private static final long repeat_pict$OFFSET = 176;
 
     /**
      * Offset for field:
@@ -907,7 +910,7 @@ public class AVFrame {
         return interlaced_frame$LAYOUT;
     }
 
-    private static final long interlaced_frame$OFFSET = $LAYOUT.byteOffset(groupElement("interlaced_frame"));
+    private static final long interlaced_frame$OFFSET = 180;
 
     /**
      * Offset for field:
@@ -951,7 +954,7 @@ public class AVFrame {
         return top_field_first$LAYOUT;
     }
 
-    private static final long top_field_first$OFFSET = $LAYOUT.byteOffset(groupElement("top_field_first"));
+    private static final long top_field_first$OFFSET = 184;
 
     /**
      * Offset for field:
@@ -995,7 +998,7 @@ public class AVFrame {
         return palette_has_changed$LAYOUT;
     }
 
-    private static final long palette_has_changed$OFFSET = $LAYOUT.byteOffset(groupElement("palette_has_changed"));
+    private static final long palette_has_changed$OFFSET = 188;
 
     /**
      * Offset for field:
@@ -1039,7 +1042,7 @@ public class AVFrame {
         return sample_rate$LAYOUT;
     }
 
-    private static final long sample_rate$OFFSET = $LAYOUT.byteOffset(groupElement("sample_rate"));
+    private static final long sample_rate$OFFSET = 192;
 
     /**
      * Offset for field:
@@ -1083,7 +1086,7 @@ public class AVFrame {
         return buf$LAYOUT;
     }
 
-    private static final long buf$OFFSET = $LAYOUT.byteOffset(groupElement("buf"));
+    private static final long buf$OFFSET = 200;
 
     /**
      * Offset for field:
@@ -1135,7 +1138,7 @@ public class AVFrame {
      * }
      */
     public static MemorySegment buf(MemorySegment struct, long index0) {
-        return (MemorySegment)buf$ELEM_HANDLE.get(struct, buf$OFFSET, index0);
+        return (MemorySegment)buf$ELEM_HANDLE.get(struct, 0L, index0);
     }
 
     /**
@@ -1145,7 +1148,7 @@ public class AVFrame {
      * }
      */
     public static void buf(MemorySegment struct, long index0, MemorySegment fieldValue) {
-        buf$ELEM_HANDLE.set(struct, buf$OFFSET, index0, fieldValue);
+        buf$ELEM_HANDLE.set(struct, 0L, index0, fieldValue);
     }
 
     private static final AddressLayout extended_buf$LAYOUT = (AddressLayout)$LAYOUT.select(groupElement("extended_buf"));
@@ -1160,7 +1163,7 @@ public class AVFrame {
         return extended_buf$LAYOUT;
     }
 
-    private static final long extended_buf$OFFSET = $LAYOUT.byteOffset(groupElement("extended_buf"));
+    private static final long extended_buf$OFFSET = 264;
 
     /**
      * Offset for field:
@@ -1204,7 +1207,7 @@ public class AVFrame {
         return nb_extended_buf$LAYOUT;
     }
 
-    private static final long nb_extended_buf$OFFSET = $LAYOUT.byteOffset(groupElement("nb_extended_buf"));
+    private static final long nb_extended_buf$OFFSET = 272;
 
     /**
      * Offset for field:
@@ -1248,7 +1251,7 @@ public class AVFrame {
         return side_data$LAYOUT;
     }
 
-    private static final long side_data$OFFSET = $LAYOUT.byteOffset(groupElement("side_data"));
+    private static final long side_data$OFFSET = 280;
 
     /**
      * Offset for field:
@@ -1292,7 +1295,7 @@ public class AVFrame {
         return nb_side_data$LAYOUT;
     }
 
-    private static final long nb_side_data$OFFSET = $LAYOUT.byteOffset(groupElement("nb_side_data"));
+    private static final long nb_side_data$OFFSET = 288;
 
     /**
      * Offset for field:
@@ -1336,7 +1339,7 @@ public class AVFrame {
         return flags$LAYOUT;
     }
 
-    private static final long flags$OFFSET = $LAYOUT.byteOffset(groupElement("flags"));
+    private static final long flags$OFFSET = 292;
 
     /**
      * Offset for field:
@@ -1380,7 +1383,7 @@ public class AVFrame {
         return color_range$LAYOUT;
     }
 
-    private static final long color_range$OFFSET = $LAYOUT.byteOffset(groupElement("color_range"));
+    private static final long color_range$OFFSET = 296;
 
     /**
      * Offset for field:
@@ -1424,7 +1427,7 @@ public class AVFrame {
         return color_primaries$LAYOUT;
     }
 
-    private static final long color_primaries$OFFSET = $LAYOUT.byteOffset(groupElement("color_primaries"));
+    private static final long color_primaries$OFFSET = 300;
 
     /**
      * Offset for field:
@@ -1468,7 +1471,7 @@ public class AVFrame {
         return color_trc$LAYOUT;
     }
 
-    private static final long color_trc$OFFSET = $LAYOUT.byteOffset(groupElement("color_trc"));
+    private static final long color_trc$OFFSET = 304;
 
     /**
      * Offset for field:
@@ -1512,7 +1515,7 @@ public class AVFrame {
         return colorspace$LAYOUT;
     }
 
-    private static final long colorspace$OFFSET = $LAYOUT.byteOffset(groupElement("colorspace"));
+    private static final long colorspace$OFFSET = 308;
 
     /**
      * Offset for field:
@@ -1556,7 +1559,7 @@ public class AVFrame {
         return chroma_location$LAYOUT;
     }
 
-    private static final long chroma_location$OFFSET = $LAYOUT.byteOffset(groupElement("chroma_location"));
+    private static final long chroma_location$OFFSET = 312;
 
     /**
      * Offset for field:
@@ -1600,7 +1603,7 @@ public class AVFrame {
         return best_effort_timestamp$LAYOUT;
     }
 
-    private static final long best_effort_timestamp$OFFSET = $LAYOUT.byteOffset(groupElement("best_effort_timestamp"));
+    private static final long best_effort_timestamp$OFFSET = 320;
 
     /**
      * Offset for field:
@@ -1644,7 +1647,7 @@ public class AVFrame {
         return pkt_pos$LAYOUT;
     }
 
-    private static final long pkt_pos$OFFSET = $LAYOUT.byteOffset(groupElement("pkt_pos"));
+    private static final long pkt_pos$OFFSET = 328;
 
     /**
      * Offset for field:
@@ -1688,7 +1691,7 @@ public class AVFrame {
         return metadata$LAYOUT;
     }
 
-    private static final long metadata$OFFSET = $LAYOUT.byteOffset(groupElement("metadata"));
+    private static final long metadata$OFFSET = 336;
 
     /**
      * Offset for field:
@@ -1732,7 +1735,7 @@ public class AVFrame {
         return decode_error_flags$LAYOUT;
     }
 
-    private static final long decode_error_flags$OFFSET = $LAYOUT.byteOffset(groupElement("decode_error_flags"));
+    private static final long decode_error_flags$OFFSET = 344;
 
     /**
      * Offset for field:
@@ -1776,7 +1779,7 @@ public class AVFrame {
         return pkt_size$LAYOUT;
     }
 
-    private static final long pkt_size$OFFSET = $LAYOUT.byteOffset(groupElement("pkt_size"));
+    private static final long pkt_size$OFFSET = 348;
 
     /**
      * Offset for field:
@@ -1820,7 +1823,7 @@ public class AVFrame {
         return hw_frames_ctx$LAYOUT;
     }
 
-    private static final long hw_frames_ctx$OFFSET = $LAYOUT.byteOffset(groupElement("hw_frames_ctx"));
+    private static final long hw_frames_ctx$OFFSET = 352;
 
     /**
      * Offset for field:
@@ -1864,7 +1867,7 @@ public class AVFrame {
         return opaque_ref$LAYOUT;
     }
 
-    private static final long opaque_ref$OFFSET = $LAYOUT.byteOffset(groupElement("opaque_ref"));
+    private static final long opaque_ref$OFFSET = 360;
 
     /**
      * Offset for field:
@@ -1908,7 +1911,7 @@ public class AVFrame {
         return crop_top$LAYOUT;
     }
 
-    private static final long crop_top$OFFSET = $LAYOUT.byteOffset(groupElement("crop_top"));
+    private static final long crop_top$OFFSET = 368;
 
     /**
      * Offset for field:
@@ -1952,7 +1955,7 @@ public class AVFrame {
         return crop_bottom$LAYOUT;
     }
 
-    private static final long crop_bottom$OFFSET = $LAYOUT.byteOffset(groupElement("crop_bottom"));
+    private static final long crop_bottom$OFFSET = 376;
 
     /**
      * Offset for field:
@@ -1996,7 +1999,7 @@ public class AVFrame {
         return crop_left$LAYOUT;
     }
 
-    private static final long crop_left$OFFSET = $LAYOUT.byteOffset(groupElement("crop_left"));
+    private static final long crop_left$OFFSET = 384;
 
     /**
      * Offset for field:
@@ -2040,7 +2043,7 @@ public class AVFrame {
         return crop_right$LAYOUT;
     }
 
-    private static final long crop_right$OFFSET = $LAYOUT.byteOffset(groupElement("crop_right"));
+    private static final long crop_right$OFFSET = 392;
 
     /**
      * Offset for field:
@@ -2084,7 +2087,7 @@ public class AVFrame {
         return private_ref$LAYOUT;
     }
 
-    private static final long private_ref$OFFSET = $LAYOUT.byteOffset(groupElement("private_ref"));
+    private static final long private_ref$OFFSET = 400;
 
     /**
      * Offset for field:
@@ -2128,7 +2131,7 @@ public class AVFrame {
         return ch_layout$LAYOUT;
     }
 
-    private static final long ch_layout$OFFSET = $LAYOUT.byteOffset(groupElement("ch_layout"));
+    private static final long ch_layout$OFFSET = 408;
 
     /**
      * Offset for field:
@@ -2172,7 +2175,7 @@ public class AVFrame {
         return duration$LAYOUT;
     }
 
-    private static final long duration$OFFSET = $LAYOUT.byteOffset(groupElement("duration"));
+    private static final long duration$OFFSET = 432;
 
     /**
      * Offset for field:

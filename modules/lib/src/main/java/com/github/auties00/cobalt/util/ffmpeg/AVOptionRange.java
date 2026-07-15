@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -55,7 +59,7 @@ public class AVOptionRange {
         return str$LAYOUT;
     }
 
-    private static final long str$OFFSET = $LAYOUT.byteOffset(groupElement("str"));
+    private static final long str$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -99,7 +103,7 @@ public class AVOptionRange {
         return value_min$LAYOUT;
     }
 
-    private static final long value_min$OFFSET = $LAYOUT.byteOffset(groupElement("value_min"));
+    private static final long value_min$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -143,7 +147,7 @@ public class AVOptionRange {
         return value_max$LAYOUT;
     }
 
-    private static final long value_max$OFFSET = $LAYOUT.byteOffset(groupElement("value_max"));
+    private static final long value_max$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -187,7 +191,7 @@ public class AVOptionRange {
         return component_min$LAYOUT;
     }
 
-    private static final long component_min$OFFSET = $LAYOUT.byteOffset(groupElement("component_min"));
+    private static final long component_min$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -231,7 +235,7 @@ public class AVOptionRange {
         return component_max$LAYOUT;
     }
 
-    private static final long component_max$OFFSET = $LAYOUT.byteOffset(groupElement("component_max"));
+    private static final long component_max$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -275,7 +279,7 @@ public class AVOptionRange {
         return is_range$LAYOUT;
     }
 
-    private static final long is_range$OFFSET = $LAYOUT.byteOffset(groupElement("is_range"));
+    private static final long is_range$OFFSET = 40;
 
     /**
      * Offset for field:

@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -48,7 +52,7 @@ public class AVDeviceInfoList {
         return devices$LAYOUT;
     }
 
-    private static final long devices$OFFSET = $LAYOUT.byteOffset(groupElement("devices"));
+    private static final long devices$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -92,7 +96,7 @@ public class AVDeviceInfoList {
         return nb_devices$LAYOUT;
     }
 
-    private static final long nb_devices$OFFSET = $LAYOUT.byteOffset(groupElement("nb_devices"));
+    private static final long nb_devices$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -136,7 +140,7 @@ public class AVDeviceInfoList {
         return default_device$LAYOUT;
     }
 
-    private static final long default_device$OFFSET = $LAYOUT.byteOffset(groupElement("default_device"));
+    private static final long default_device$OFFSET = 12;
 
     /**
      * Offset for field:

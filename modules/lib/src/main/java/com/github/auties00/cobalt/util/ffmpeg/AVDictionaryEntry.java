@@ -2,9 +2,14 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
+import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
 
 /**
@@ -45,7 +50,7 @@ public class AVDictionaryEntry {
         return key$LAYOUT;
     }
 
-    private static final long key$OFFSET = $LAYOUT.byteOffset(groupElement("key"));
+    private static final long key$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -89,7 +94,7 @@ public class AVDictionaryEntry {
         return value$LAYOUT;
     }
 
-    private static final long value$OFFSET = $LAYOUT.byteOffset(groupElement("value"));
+    private static final long value$OFFSET = 8;
 
     /**
      * Offset for field:

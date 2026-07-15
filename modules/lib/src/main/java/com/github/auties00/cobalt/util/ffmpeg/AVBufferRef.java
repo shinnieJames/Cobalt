@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -26,7 +30,7 @@ public class AVBufferRef {
     private static final GroupLayout $LAYOUT = MemoryLayout.structLayout(
         Ffmpeg.C_POINTER.withName("buffer"),
         Ffmpeg.C_POINTER.withName("data"),
-        Ffmpeg.C_LONG_LONG.withName("size")
+        Ffmpeg.C_LONG.withName("size")
     ).withName("AVBufferRef");
 
     /**
@@ -48,7 +52,7 @@ public class AVBufferRef {
         return buffer$LAYOUT;
     }
 
-    private static final long buffer$OFFSET = $LAYOUT.byteOffset(groupElement("buffer"));
+    private static final long buffer$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -92,7 +96,7 @@ public class AVBufferRef {
         return data$LAYOUT;
     }
 
-    private static final long data$OFFSET = $LAYOUT.byteOffset(groupElement("data"));
+    private static final long data$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -136,7 +140,7 @@ public class AVBufferRef {
         return size$LAYOUT;
     }
 
-    private static final long size$OFFSET = $LAYOUT.byteOffset(groupElement("size"));
+    private static final long size$OFFSET = 16;
 
     /**
      * Offset for field:

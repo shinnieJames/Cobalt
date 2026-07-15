@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -62,7 +66,7 @@ public class AVCodecParameters {
         Ffmpeg.C_POINTER.withName("coded_side_data"),
         Ffmpeg.C_INT.withName("nb_coded_side_data"),
         Ffmpeg.C_INT.withName("format"),
-        Ffmpeg.C_LONG_LONG.withName("bit_rate"),
+        Ffmpeg.C_LONG.withName("bit_rate"),
         Ffmpeg.C_INT.withName("bits_per_coded_sample"),
         Ffmpeg.C_INT.withName("bits_per_raw_sample"),
         Ffmpeg.C_INT.withName("profile"),
@@ -107,7 +111,7 @@ public class AVCodecParameters {
         return codec_type$LAYOUT;
     }
 
-    private static final long codec_type$OFFSET = $LAYOUT.byteOffset(groupElement("codec_type"));
+    private static final long codec_type$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -151,7 +155,7 @@ public class AVCodecParameters {
         return codec_id$LAYOUT;
     }
 
-    private static final long codec_id$OFFSET = $LAYOUT.byteOffset(groupElement("codec_id"));
+    private static final long codec_id$OFFSET = 4;
 
     /**
      * Offset for field:
@@ -195,7 +199,7 @@ public class AVCodecParameters {
         return codec_tag$LAYOUT;
     }
 
-    private static final long codec_tag$OFFSET = $LAYOUT.byteOffset(groupElement("codec_tag"));
+    private static final long codec_tag$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -239,7 +243,7 @@ public class AVCodecParameters {
         return extradata$LAYOUT;
     }
 
-    private static final long extradata$OFFSET = $LAYOUT.byteOffset(groupElement("extradata"));
+    private static final long extradata$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -283,7 +287,7 @@ public class AVCodecParameters {
         return extradata_size$LAYOUT;
     }
 
-    private static final long extradata_size$OFFSET = $LAYOUT.byteOffset(groupElement("extradata_size"));
+    private static final long extradata_size$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -327,7 +331,7 @@ public class AVCodecParameters {
         return coded_side_data$LAYOUT;
     }
 
-    private static final long coded_side_data$OFFSET = $LAYOUT.byteOffset(groupElement("coded_side_data"));
+    private static final long coded_side_data$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -371,7 +375,7 @@ public class AVCodecParameters {
         return nb_coded_side_data$LAYOUT;
     }
 
-    private static final long nb_coded_side_data$OFFSET = $LAYOUT.byteOffset(groupElement("nb_coded_side_data"));
+    private static final long nb_coded_side_data$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -415,7 +419,7 @@ public class AVCodecParameters {
         return format$LAYOUT;
     }
 
-    private static final long format$OFFSET = $LAYOUT.byteOffset(groupElement("format"));
+    private static final long format$OFFSET = 44;
 
     /**
      * Offset for field:
@@ -459,7 +463,7 @@ public class AVCodecParameters {
         return bit_rate$LAYOUT;
     }
 
-    private static final long bit_rate$OFFSET = $LAYOUT.byteOffset(groupElement("bit_rate"));
+    private static final long bit_rate$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -503,7 +507,7 @@ public class AVCodecParameters {
         return bits_per_coded_sample$LAYOUT;
     }
 
-    private static final long bits_per_coded_sample$OFFSET = $LAYOUT.byteOffset(groupElement("bits_per_coded_sample"));
+    private static final long bits_per_coded_sample$OFFSET = 56;
 
     /**
      * Offset for field:
@@ -547,7 +551,7 @@ public class AVCodecParameters {
         return bits_per_raw_sample$LAYOUT;
     }
 
-    private static final long bits_per_raw_sample$OFFSET = $LAYOUT.byteOffset(groupElement("bits_per_raw_sample"));
+    private static final long bits_per_raw_sample$OFFSET = 60;
 
     /**
      * Offset for field:
@@ -591,7 +595,7 @@ public class AVCodecParameters {
         return profile$LAYOUT;
     }
 
-    private static final long profile$OFFSET = $LAYOUT.byteOffset(groupElement("profile"));
+    private static final long profile$OFFSET = 64;
 
     /**
      * Offset for field:
@@ -635,7 +639,7 @@ public class AVCodecParameters {
         return level$LAYOUT;
     }
 
-    private static final long level$OFFSET = $LAYOUT.byteOffset(groupElement("level"));
+    private static final long level$OFFSET = 68;
 
     /**
      * Offset for field:
@@ -679,7 +683,7 @@ public class AVCodecParameters {
         return width$LAYOUT;
     }
 
-    private static final long width$OFFSET = $LAYOUT.byteOffset(groupElement("width"));
+    private static final long width$OFFSET = 72;
 
     /**
      * Offset for field:
@@ -723,7 +727,7 @@ public class AVCodecParameters {
         return height$LAYOUT;
     }
 
-    private static final long height$OFFSET = $LAYOUT.byteOffset(groupElement("height"));
+    private static final long height$OFFSET = 76;
 
     /**
      * Offset for field:
@@ -767,7 +771,7 @@ public class AVCodecParameters {
         return sample_aspect_ratio$LAYOUT;
     }
 
-    private static final long sample_aspect_ratio$OFFSET = $LAYOUT.byteOffset(groupElement("sample_aspect_ratio"));
+    private static final long sample_aspect_ratio$OFFSET = 80;
 
     /**
      * Offset for field:
@@ -811,7 +815,7 @@ public class AVCodecParameters {
         return framerate$LAYOUT;
     }
 
-    private static final long framerate$OFFSET = $LAYOUT.byteOffset(groupElement("framerate"));
+    private static final long framerate$OFFSET = 88;
 
     /**
      * Offset for field:
@@ -855,7 +859,7 @@ public class AVCodecParameters {
         return field_order$LAYOUT;
     }
 
-    private static final long field_order$OFFSET = $LAYOUT.byteOffset(groupElement("field_order"));
+    private static final long field_order$OFFSET = 96;
 
     /**
      * Offset for field:
@@ -899,7 +903,7 @@ public class AVCodecParameters {
         return color_range$LAYOUT;
     }
 
-    private static final long color_range$OFFSET = $LAYOUT.byteOffset(groupElement("color_range"));
+    private static final long color_range$OFFSET = 100;
 
     /**
      * Offset for field:
@@ -943,7 +947,7 @@ public class AVCodecParameters {
         return color_primaries$LAYOUT;
     }
 
-    private static final long color_primaries$OFFSET = $LAYOUT.byteOffset(groupElement("color_primaries"));
+    private static final long color_primaries$OFFSET = 104;
 
     /**
      * Offset for field:
@@ -987,7 +991,7 @@ public class AVCodecParameters {
         return color_trc$LAYOUT;
     }
 
-    private static final long color_trc$OFFSET = $LAYOUT.byteOffset(groupElement("color_trc"));
+    private static final long color_trc$OFFSET = 108;
 
     /**
      * Offset for field:
@@ -1031,7 +1035,7 @@ public class AVCodecParameters {
         return color_space$LAYOUT;
     }
 
-    private static final long color_space$OFFSET = $LAYOUT.byteOffset(groupElement("color_space"));
+    private static final long color_space$OFFSET = 112;
 
     /**
      * Offset for field:
@@ -1075,7 +1079,7 @@ public class AVCodecParameters {
         return chroma_location$LAYOUT;
     }
 
-    private static final long chroma_location$OFFSET = $LAYOUT.byteOffset(groupElement("chroma_location"));
+    private static final long chroma_location$OFFSET = 116;
 
     /**
      * Offset for field:
@@ -1119,7 +1123,7 @@ public class AVCodecParameters {
         return video_delay$LAYOUT;
     }
 
-    private static final long video_delay$OFFSET = $LAYOUT.byteOffset(groupElement("video_delay"));
+    private static final long video_delay$OFFSET = 120;
 
     /**
      * Offset for field:
@@ -1163,7 +1167,7 @@ public class AVCodecParameters {
         return ch_layout$LAYOUT;
     }
 
-    private static final long ch_layout$OFFSET = $LAYOUT.byteOffset(groupElement("ch_layout"));
+    private static final long ch_layout$OFFSET = 128;
 
     /**
      * Offset for field:
@@ -1207,7 +1211,7 @@ public class AVCodecParameters {
         return sample_rate$LAYOUT;
     }
 
-    private static final long sample_rate$OFFSET = $LAYOUT.byteOffset(groupElement("sample_rate"));
+    private static final long sample_rate$OFFSET = 152;
 
     /**
      * Offset for field:
@@ -1251,7 +1255,7 @@ public class AVCodecParameters {
         return block_align$LAYOUT;
     }
 
-    private static final long block_align$OFFSET = $LAYOUT.byteOffset(groupElement("block_align"));
+    private static final long block_align$OFFSET = 156;
 
     /**
      * Offset for field:
@@ -1295,7 +1299,7 @@ public class AVCodecParameters {
         return frame_size$LAYOUT;
     }
 
-    private static final long frame_size$OFFSET = $LAYOUT.byteOffset(groupElement("frame_size"));
+    private static final long frame_size$OFFSET = 160;
 
     /**
      * Offset for field:
@@ -1339,7 +1343,7 @@ public class AVCodecParameters {
         return initial_padding$LAYOUT;
     }
 
-    private static final long initial_padding$OFFSET = $LAYOUT.byteOffset(groupElement("initial_padding"));
+    private static final long initial_padding$OFFSET = 164;
 
     /**
      * Offset for field:
@@ -1383,7 +1387,7 @@ public class AVCodecParameters {
         return trailing_padding$LAYOUT;
     }
 
-    private static final long trailing_padding$OFFSET = $LAYOUT.byteOffset(groupElement("trailing_padding"));
+    private static final long trailing_padding$OFFSET = 168;
 
     /**
      * Offset for field:
@@ -1427,7 +1431,7 @@ public class AVCodecParameters {
         return seek_preroll$LAYOUT;
     }
 
-    private static final long seek_preroll$OFFSET = $LAYOUT.byteOffset(groupElement("seek_preroll"));
+    private static final long seek_preroll$OFFSET = 172;
 
     /**
      * Offset for field:

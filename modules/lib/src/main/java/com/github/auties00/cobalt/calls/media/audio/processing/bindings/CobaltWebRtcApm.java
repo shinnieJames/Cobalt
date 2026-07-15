@@ -12,17 +12,62 @@ import java.util.stream.*;
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
 
-public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
+public class CobaltWebRtcApm {
 
     CobaltWebRtcApm() {
         // Should not be called directly
     }
 
     static final Arena LIBRARY_ARENA = Arena.ofAuto();
+    static final boolean TRACE_DOWNCALLS = Boolean.getBoolean("jextract.trace.downcalls");
+
+    static void traceDowncall(String name, Object... args) {
+         String traceArgs = Arrays.stream(args)
+                       .map(Object::toString)
+                       .collect(Collectors.joining(", "));
+         System.out.printf("%s(%s)\n", name, traceArgs);
+    }
+
+    static MemorySegment findOrThrow(String symbol) {
+        return SYMBOL_LOOKUP.find(symbol)
+            .orElseThrow(() -> new UnsatisfiedLinkError("unresolved symbol: " + symbol));
+    }
+
+    static MethodHandle upcallHandle(Class<?> fi, String name, FunctionDescriptor fdesc) {
+        try {
+            return MethodHandles.lookup().findVirtual(fi, name, fdesc.toMethodType());
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    static MemoryLayout align(MemoryLayout layout, long align) {
+        return switch (layout) {
+            case PaddingLayout p -> p;
+            case ValueLayout v -> v.withByteAlignment(align);
+            case GroupLayout g -> {
+                MemoryLayout[] alignedMembers = g.memberLayouts().stream()
+                        .map(m -> align(m, align)).toArray(MemoryLayout[]::new);
+                yield g instanceof StructLayout ?
+                        MemoryLayout.structLayout(alignedMembers) : MemoryLayout.unionLayout(alignedMembers);
+            }
+            case SequenceLayout s -> MemoryLayout.sequenceLayout(s.elementCount(), align(s.elementLayout(), align));
+        };
+    }
 
     static final SymbolLookup SYMBOL_LOOKUP = SymbolLookup.loaderLookup()
             .or(Linker.nativeLinker().defaultLookup());
 
+    public static final ValueLayout.OfBoolean C_BOOL = ValueLayout.JAVA_BOOLEAN;
+    public static final ValueLayout.OfByte C_CHAR = ValueLayout.JAVA_BYTE;
+    public static final ValueLayout.OfShort C_SHORT = ValueLayout.JAVA_SHORT;
+    public static final ValueLayout.OfInt C_INT = ValueLayout.JAVA_INT;
+    public static final ValueLayout.OfLong C_LONG_LONG = ValueLayout.JAVA_LONG;
+    public static final ValueLayout.OfFloat C_FLOAT = ValueLayout.JAVA_FLOAT;
+    public static final ValueLayout.OfDouble C_DOUBLE = ValueLayout.JAVA_DOUBLE;
+    public static final AddressLayout C_POINTER = ValueLayout.ADDRESS
+            .withTargetLayout(MemoryLayout.sequenceLayout(java.lang.Long.MAX_VALUE, JAVA_BYTE));
+    public static final ValueLayout.OfLong C_LONG = ValueLayout.JAVA_LONG;
     private static final int COBALT_APM_OK = (int)0L;
     /**
      * {@snippet lang=c :
@@ -88,7 +133,7 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
             CobaltWebRtcApm.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_webrtc_apm_create");
+        public static final MemorySegment ADDR = CobaltWebRtcApm.findOrThrow("cobalt_webrtc_apm_create");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -135,8 +180,6 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
                 traceDowncall("cobalt_webrtc_apm_create", aec_mode, ns_enabled, ns_use_denoiser, ns_denoiser_intensity, agc_enabled);
             }
             return (MemorySegment)mh$.invokeExact(aec_mode, ns_enabled, ns_use_denoiser, ns_denoiser_intensity, agc_enabled);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -149,7 +192,7 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
             CobaltWebRtcApm.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_webrtc_apm_process_reverse");
+        public static final MemorySegment ADDR = CobaltWebRtcApm.findOrThrow("cobalt_webrtc_apm_process_reverse");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -196,8 +239,6 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
                 traceDowncall("cobalt_webrtc_apm_process_reverse", apm, frame);
             }
             return (int)mh$.invokeExact(apm, frame);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -210,7 +251,7 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
             CobaltWebRtcApm.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_webrtc_apm_process");
+        public static final MemorySegment ADDR = CobaltWebRtcApm.findOrThrow("cobalt_webrtc_apm_process");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -257,8 +298,6 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
                 traceDowncall("cobalt_webrtc_apm_process", apm, frame);
             }
             return (int)mh$.invokeExact(apm, frame);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -271,7 +310,7 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
             CobaltWebRtcApm.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_webrtc_apm_set_stream_delay_ms");
+        public static final MemorySegment ADDR = CobaltWebRtcApm.findOrThrow("cobalt_webrtc_apm_set_stream_delay_ms");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -318,8 +357,6 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
                 traceDowncall("cobalt_webrtc_apm_set_stream_delay_ms", apm, delay_ms);
             }
             return (int)mh$.invokeExact(apm, delay_ms);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -330,7 +367,7 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
             CobaltWebRtcApm.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_webrtc_apm_destroy");
+        public static final MemorySegment ADDR = CobaltWebRtcApm.findOrThrow("cobalt_webrtc_apm_destroy");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -377,8 +414,6 @@ public class CobaltWebRtcApm extends CobaltWebRtcApm$shared {
                 traceDowncall("cobalt_webrtc_apm_destroy", apm);
             }
             mh$.invokeExact(apm);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }

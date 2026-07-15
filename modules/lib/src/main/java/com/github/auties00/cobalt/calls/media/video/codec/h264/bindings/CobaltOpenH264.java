@@ -12,17 +12,62 @@ import java.util.stream.*;
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
 
-public class CobaltOpenH264 extends CobaltOpenH264$shared {
+public class CobaltOpenH264 {
 
     CobaltOpenH264() {
         // Should not be called directly
     }
 
     static final Arena LIBRARY_ARENA = Arena.ofAuto();
+    static final boolean TRACE_DOWNCALLS = Boolean.getBoolean("jextract.trace.downcalls");
+
+    static void traceDowncall(String name, Object... args) {
+         String traceArgs = Arrays.stream(args)
+                       .map(Object::toString)
+                       .collect(Collectors.joining(", "));
+         System.out.printf("%s(%s)\n", name, traceArgs);
+    }
+
+    static MemorySegment findOrThrow(String symbol) {
+        return SYMBOL_LOOKUP.find(symbol)
+            .orElseThrow(() -> new UnsatisfiedLinkError("unresolved symbol: " + symbol));
+    }
+
+    static MethodHandle upcallHandle(Class<?> fi, String name, FunctionDescriptor fdesc) {
+        try {
+            return MethodHandles.lookup().findVirtual(fi, name, fdesc.toMethodType());
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    static MemoryLayout align(MemoryLayout layout, long align) {
+        return switch (layout) {
+            case PaddingLayout p -> p;
+            case ValueLayout v -> v.withByteAlignment(align);
+            case GroupLayout g -> {
+                MemoryLayout[] alignedMembers = g.memberLayouts().stream()
+                        .map(m -> align(m, align)).toArray(MemoryLayout[]::new);
+                yield g instanceof StructLayout ?
+                        MemoryLayout.structLayout(alignedMembers) : MemoryLayout.unionLayout(alignedMembers);
+            }
+            case SequenceLayout s -> MemoryLayout.sequenceLayout(s.elementCount(), align(s.elementLayout(), align));
+        };
+    }
 
     static final SymbolLookup SYMBOL_LOOKUP = SymbolLookup.loaderLookup()
             .or(Linker.nativeLinker().defaultLookup());
 
+    public static final ValueLayout.OfBoolean C_BOOL = ValueLayout.JAVA_BOOLEAN;
+    public static final ValueLayout.OfByte C_CHAR = ValueLayout.JAVA_BYTE;
+    public static final ValueLayout.OfShort C_SHORT = ValueLayout.JAVA_SHORT;
+    public static final ValueLayout.OfInt C_INT = ValueLayout.JAVA_INT;
+    public static final ValueLayout.OfLong C_LONG_LONG = ValueLayout.JAVA_LONG;
+    public static final ValueLayout.OfFloat C_FLOAT = ValueLayout.JAVA_FLOAT;
+    public static final ValueLayout.OfDouble C_DOUBLE = ValueLayout.JAVA_DOUBLE;
+    public static final AddressLayout C_POINTER = ValueLayout.ADDRESS
+            .withTargetLayout(MemoryLayout.sequenceLayout(java.lang.Long.MAX_VALUE, JAVA_BYTE));
+    public static final ValueLayout.OfLong C_LONG = ValueLayout.JAVA_LONG;
     private static final int COBALT_H264_USAGE_CAMERA_REALTIME = (int)0L;
     /**
      * {@snippet lang=c :
@@ -118,7 +163,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
         public static final FunctionDescriptor DESC = FunctionDescriptor.of(
             CobaltOpenH264.C_POINTER    );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_version");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_version");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -165,8 +210,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_version");
             }
             return (MemorySegment)mh$.invokeExact();
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -193,7 +236,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_encoder_create");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_encoder_create");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -240,8 +283,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_encoder_create", width, height, targetBitrateBps, maxBitrateBps, frameRate, usageType, rcMode, complexity, temporalLayers, intraPeriod, minQp, maxQp, idrBitrateRatio, frameSkip, longTermReference, outCtx);
             }
             return (int)mh$.invokeExact(width, height, targetBitrateBps, maxBitrateBps, frameRate, usageType, rcMode, complexity, temporalLayers, intraPeriod, minQp, maxQp, idrBitrateRatio, frameSkip, longTermReference, outCtx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -255,7 +296,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_encoder_set_rates");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_encoder_set_rates");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -302,8 +343,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_encoder_set_rates", ctx, targetBitrateBps, frameRate);
             }
             return (int)mh$.invokeExact(ctx, targetBitrateBps, frameRate);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -315,7 +354,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_encoder_force_idr");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_encoder_force_idr");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -362,8 +401,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_encoder_force_idr", ctx);
             }
             return (int)mh$.invokeExact(ctx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -374,13 +411,13 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_INT,
             CobaltOpenH264.C_POINTER,
             CobaltOpenH264.C_POINTER,
-            CobaltOpenH264.C_LONG_LONG,
+            CobaltOpenH264.C_LONG,
             CobaltOpenH264.C_INT,
             CobaltOpenH264.C_INT,
-            CobaltOpenH264.C_LONG_LONG
+            CobaltOpenH264.C_LONG
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_encoder_encode");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_encoder_encode");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -427,8 +464,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_encoder_encode", ctx, i420, len, width, height, ptsMillis);
             }
             return (int)mh$.invokeExact(ctx, i420, len, width, height, ptsMillis);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -443,7 +478,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_encoder_get_packet");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_encoder_get_packet");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -490,8 +525,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_encoder_get_packet", ctx, outBuf, outLen, outIsKeyframe);
             }
             return (int)mh$.invokeExact(ctx, outBuf, outLen, outIsKeyframe);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -503,7 +536,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_encoder_destroy");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_encoder_destroy");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -550,8 +583,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_encoder_destroy", ctx);
             }
             return (int)mh$.invokeExact(ctx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -563,7 +594,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_decoder_create");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_decoder_create");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -610,8 +641,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_decoder_create", outCtx);
             }
             return (int)mh$.invokeExact(outCtx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -622,10 +651,10 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_INT,
             CobaltOpenH264.C_POINTER,
             CobaltOpenH264.C_POINTER,
-            CobaltOpenH264.C_LONG_LONG
+            CobaltOpenH264.C_LONG
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_decoder_decode");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_decoder_decode");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -672,8 +701,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_decoder_decode", ctx, data, len);
             }
             return (int)mh$.invokeExact(ctx, data, len);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -686,7 +713,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_decoder_get_frame");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_decoder_get_frame");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -733,8 +760,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_decoder_get_frame", ctx, outImg);
             }
             return (int)mh$.invokeExact(ctx, outImg);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -747,7 +772,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_img_plane");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_img_plane");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -794,8 +819,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_img_plane", img, plane);
             }
             return (MemorySegment)mh$.invokeExact(img, plane);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -808,7 +831,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_img_stride");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_img_stride");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -855,8 +878,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_img_stride", img, plane);
             }
             return (int)mh$.invokeExact(img, plane);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -868,7 +889,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_img_width");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_img_width");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -915,8 +936,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_img_width", img);
             }
             return (int)mh$.invokeExact(img);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -928,7 +947,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_img_height");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_img_height");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -975,8 +994,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_img_height", img);
             }
             return (int)mh$.invokeExact(img);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -988,7 +1005,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_decoder_destroy");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_decoder_destroy");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1035,8 +1052,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_decoder_destroy", ctx);
             }
             return (int)mh$.invokeExact(ctx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1048,7 +1063,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_last_native_status");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_last_native_status");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1095,8 +1110,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_last_native_status", ctx);
             }
             return (int)mh$.invokeExact(ctx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -1108,7 +1121,7 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
             CobaltOpenH264.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_h264_strerror");
+        public static final MemorySegment ADDR = CobaltOpenH264.findOrThrow("cobalt_h264_strerror");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -1155,8 +1168,6 @@ public class CobaltOpenH264 extends CobaltOpenH264$shared {
                 traceDowncall("cobalt_h264_strerror", err);
             }
             return (MemorySegment)mh$.invokeExact(err);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }

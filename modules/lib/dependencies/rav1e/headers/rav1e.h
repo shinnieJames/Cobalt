@@ -413,6 +413,8 @@ typedef struct RaContext RaContext;
  */
 typedef struct RaFrame RaFrame;
 
+typedef struct RaRefType RaRefType;
+
 /**
  * Transform Size
  */
@@ -504,6 +506,10 @@ typedef struct {
      */
     RaFrame *source;
 } RaPacket;
+
+typedef int8_t RaTxfmShift[3];
+
+typedef RaTxfmShift RaTxfmShifts[3];
 
 #ifdef __cplusplus
 extern "C" {

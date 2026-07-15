@@ -4,7 +4,10 @@ package com.github.auties00.cobalt.util.ffmpeg;
 
 import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -50,7 +53,7 @@ public class AVChannelCustom {
         return id$LAYOUT;
     }
 
-    private static final long id$OFFSET = $LAYOUT.byteOffset(groupElement("id"));
+    private static final long id$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -94,7 +97,7 @@ public class AVChannelCustom {
         return name$LAYOUT;
     }
 
-    private static final long name$OFFSET = $LAYOUT.byteOffset(groupElement("name"));
+    private static final long name$OFFSET = 4;
 
     /**
      * Offset for field:
@@ -146,7 +149,7 @@ public class AVChannelCustom {
      * }
      */
     public static byte name(MemorySegment struct, long index0) {
-        return (byte)name$ELEM_HANDLE.get(struct, name$OFFSET, index0);
+        return (byte)name$ELEM_HANDLE.get(struct, 0L, index0);
     }
 
     /**
@@ -156,7 +159,7 @@ public class AVChannelCustom {
      * }
      */
     public static void name(MemorySegment struct, long index0, byte fieldValue) {
-        name$ELEM_HANDLE.set(struct, name$OFFSET, index0, fieldValue);
+        name$ELEM_HANDLE.set(struct, 0L, index0, fieldValue);
     }
 
     private static final AddressLayout opaque$LAYOUT = (AddressLayout)$LAYOUT.select(groupElement("opaque"));
@@ -171,7 +174,7 @@ public class AVChannelCustom {
         return opaque$LAYOUT;
     }
 
-    private static final long opaque$OFFSET = $LAYOUT.byteOffset(groupElement("opaque"));
+    private static final long opaque$OFFSET = 24;
 
     /**
      * Offset for field:

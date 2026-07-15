@@ -12,17 +12,62 @@ import java.util.stream.*;
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
 
-public class CobaltDav1d extends CobaltDav1d$shared {
+public class CobaltDav1d {
 
     CobaltDav1d() {
         // Should not be called directly
     }
 
     static final Arena LIBRARY_ARENA = Arena.ofAuto();
+    static final boolean TRACE_DOWNCALLS = Boolean.getBoolean("jextract.trace.downcalls");
+
+    static void traceDowncall(String name, Object... args) {
+         String traceArgs = Arrays.stream(args)
+                       .map(Object::toString)
+                       .collect(Collectors.joining(", "));
+         System.out.printf("%s(%s)\n", name, traceArgs);
+    }
+
+    static MemorySegment findOrThrow(String symbol) {
+        return SYMBOL_LOOKUP.find(symbol)
+            .orElseThrow(() -> new UnsatisfiedLinkError("unresolved symbol: " + symbol));
+    }
+
+    static MethodHandle upcallHandle(Class<?> fi, String name, FunctionDescriptor fdesc) {
+        try {
+            return MethodHandles.lookup().findVirtual(fi, name, fdesc.toMethodType());
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    static MemoryLayout align(MemoryLayout layout, long align) {
+        return switch (layout) {
+            case PaddingLayout p -> p;
+            case ValueLayout v -> v.withByteAlignment(align);
+            case GroupLayout g -> {
+                MemoryLayout[] alignedMembers = g.memberLayouts().stream()
+                        .map(m -> align(m, align)).toArray(MemoryLayout[]::new);
+                yield g instanceof StructLayout ?
+                        MemoryLayout.structLayout(alignedMembers) : MemoryLayout.unionLayout(alignedMembers);
+            }
+            case SequenceLayout s -> MemoryLayout.sequenceLayout(s.elementCount(), align(s.elementLayout(), align));
+        };
+    }
 
     static final SymbolLookup SYMBOL_LOOKUP = SymbolLookup.loaderLookup()
             .or(Linker.nativeLinker().defaultLookup());
 
+    public static final ValueLayout.OfBoolean C_BOOL = ValueLayout.JAVA_BOOLEAN;
+    public static final ValueLayout.OfByte C_CHAR = ValueLayout.JAVA_BYTE;
+    public static final ValueLayout.OfShort C_SHORT = ValueLayout.JAVA_SHORT;
+    public static final ValueLayout.OfInt C_INT = ValueLayout.JAVA_INT;
+    public static final ValueLayout.OfLong C_LONG_LONG = ValueLayout.JAVA_LONG;
+    public static final ValueLayout.OfFloat C_FLOAT = ValueLayout.JAVA_FLOAT;
+    public static final ValueLayout.OfDouble C_DOUBLE = ValueLayout.JAVA_DOUBLE;
+    public static final AddressLayout C_POINTER = ValueLayout.ADDRESS
+            .withTargetLayout(MemoryLayout.sequenceLayout(java.lang.Long.MAX_VALUE, JAVA_BYTE));
+    public static final ValueLayout.OfLong C_LONG = ValueLayout.JAVA_LONG;
     private static final int COBALT_DAV1D_LAYOUT_I400 = (int)0L;
     /**
      * {@snippet lang=c :
@@ -73,7 +118,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
         public static final FunctionDescriptor DESC = FunctionDescriptor.of(
             CobaltDav1d.C_POINTER    );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_version");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_version");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -120,8 +165,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_version");
             }
             return (MemorySegment)mh$.invokeExact();
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -134,7 +177,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_open");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_open");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -181,8 +224,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_open", nThreads, outCtx);
             }
             return (int)mh$.invokeExact(nThreads, outCtx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -193,10 +234,10 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_INT,
             CobaltDav1d.C_POINTER,
             CobaltDav1d.C_POINTER,
-            CobaltDav1d.C_LONG_LONG
+            CobaltDav1d.C_LONG
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_send_data");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_send_data");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -243,8 +284,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_send_data", ctx, data, len);
             }
             return (int)mh$.invokeExact(ctx, data, len);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -257,7 +296,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_get_picture");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_get_picture");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -304,8 +343,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_get_picture", ctx, outPic);
             }
             return (int)mh$.invokeExact(ctx, outPic);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -318,7 +355,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_pic_plane");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_pic_plane");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -365,8 +402,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_pic_plane", pic, plane);
             }
             return (MemorySegment)mh$.invokeExact(pic, plane);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -374,12 +409,12 @@ public class CobaltDav1d extends CobaltDav1d$shared {
 
     private static class cobalt_dav1d_pic_stride {
         public static final FunctionDescriptor DESC = FunctionDescriptor.of(
-            CobaltDav1d.C_LONG_LONG,
+            CobaltDav1d.C_LONG,
             CobaltDav1d.C_POINTER,
             CobaltDav1d.C_INT
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_pic_stride");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_pic_stride");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -426,8 +461,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_pic_stride", pic, plane);
             }
             return (long)mh$.invokeExact(pic, plane);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -439,7 +472,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_pic_width");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_pic_width");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -486,8 +519,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_pic_width", pic);
             }
             return (int)mh$.invokeExact(pic);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -499,7 +530,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_pic_height");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_pic_height");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -546,8 +577,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_pic_height", pic);
             }
             return (int)mh$.invokeExact(pic);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -559,7 +588,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_pic_bitdepth");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_pic_bitdepth");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -606,8 +635,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_pic_bitdepth", pic);
             }
             return (int)mh$.invokeExact(pic);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -619,7 +646,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_pic_layout");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_pic_layout");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -666,8 +693,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_pic_layout", pic);
             }
             return (int)mh$.invokeExact(pic);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -678,7 +703,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_picture_unref");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_picture_unref");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -725,8 +750,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_picture_unref", pic);
             }
             mh$.invokeExact(pic);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }
@@ -738,7 +761,7 @@ public class CobaltDav1d extends CobaltDav1d$shared {
             CobaltDav1d.C_POINTER
         );
 
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("cobalt_dav1d_close");
+        public static final MemorySegment ADDR = CobaltDav1d.findOrThrow("cobalt_dav1d_close");
 
         public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
     }
@@ -785,8 +808,6 @@ public class CobaltDav1d extends CobaltDav1d$shared {
                 traceDowncall("cobalt_dav1d_close", ctx);
             }
             return (int)mh$.invokeExact(ctx);
-        } catch (Error | RuntimeException ex) {
-           throw ex;
         } catch (Throwable ex$) {
            throw new AssertionError("should not reach here", ex$);
         }

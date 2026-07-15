@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -40,7 +44,7 @@ public class AVStreamGroup {
         Ffmpeg.C_POINTER.withName("priv_data"),
         Ffmpeg.C_INT.withName("index"),
         MemoryLayout.paddingLayout(4),
-        Ffmpeg.C_LONG_LONG.withName("id"),
+        Ffmpeg.C_LONG.withName("id"),
         Ffmpeg.C_INT.withName("type"),
         MemoryLayout.paddingLayout(4),
         AVStreamGroup.params.layout().withName("params"),
@@ -71,7 +75,7 @@ public class AVStreamGroup {
         return av_class$LAYOUT;
     }
 
-    private static final long av_class$OFFSET = $LAYOUT.byteOffset(groupElement("av_class"));
+    private static final long av_class$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -115,7 +119,7 @@ public class AVStreamGroup {
         return priv_data$LAYOUT;
     }
 
-    private static final long priv_data$OFFSET = $LAYOUT.byteOffset(groupElement("priv_data"));
+    private static final long priv_data$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -159,7 +163,7 @@ public class AVStreamGroup {
         return index$LAYOUT;
     }
 
-    private static final long index$OFFSET = $LAYOUT.byteOffset(groupElement("index"));
+    private static final long index$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -203,7 +207,7 @@ public class AVStreamGroup {
         return id$LAYOUT;
     }
 
-    private static final long id$OFFSET = $LAYOUT.byteOffset(groupElement("id"));
+    private static final long id$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -247,7 +251,7 @@ public class AVStreamGroup {
         return type$LAYOUT;
     }
 
-    private static final long type$OFFSET = $LAYOUT.byteOffset(groupElement("type"));
+    private static final long type$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -321,7 +325,7 @@ public class AVStreamGroup {
             return iamf_audio_element$LAYOUT;
         }
 
-        private static final long iamf_audio_element$OFFSET = $LAYOUT.byteOffset(groupElement("iamf_audio_element"));
+        private static final long iamf_audio_element$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -365,7 +369,7 @@ public class AVStreamGroup {
             return iamf_mix_presentation$LAYOUT;
         }
 
-        private static final long iamf_mix_presentation$OFFSET = $LAYOUT.byteOffset(groupElement("iamf_mix_presentation"));
+        private static final long iamf_mix_presentation$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -409,7 +413,7 @@ public class AVStreamGroup {
             return tile_grid$LAYOUT;
         }
 
-        private static final long tile_grid$OFFSET = $LAYOUT.byteOffset(groupElement("tile_grid"));
+        private static final long tile_grid$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -453,7 +457,7 @@ public class AVStreamGroup {
             return lcevc$LAYOUT;
         }
 
-        private static final long lcevc$OFFSET = $LAYOUT.byteOffset(groupElement("lcevc"));
+        private static final long lcevc$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -547,7 +551,7 @@ public class AVStreamGroup {
         return params$LAYOUT;
     }
 
-    private static final long params$OFFSET = $LAYOUT.byteOffset(groupElement("params"));
+    private static final long params$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -606,7 +610,7 @@ public class AVStreamGroup {
         return metadata$LAYOUT;
     }
 
-    private static final long metadata$OFFSET = $LAYOUT.byteOffset(groupElement("metadata"));
+    private static final long metadata$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -650,7 +654,7 @@ public class AVStreamGroup {
         return nb_streams$LAYOUT;
     }
 
-    private static final long nb_streams$OFFSET = $LAYOUT.byteOffset(groupElement("nb_streams"));
+    private static final long nb_streams$OFFSET = 56;
 
     /**
      * Offset for field:
@@ -694,7 +698,7 @@ public class AVStreamGroup {
         return streams$LAYOUT;
     }
 
-    private static final long streams$OFFSET = $LAYOUT.byteOffset(groupElement("streams"));
+    private static final long streams$OFFSET = 64;
 
     /**
      * Offset for field:
@@ -738,7 +742,7 @@ public class AVStreamGroup {
         return disposition$LAYOUT;
     }
 
-    private static final long disposition$OFFSET = $LAYOUT.byteOffset(groupElement("disposition"));
+    private static final long disposition$OFFSET = 72;
 
     /**
      * Offset for field:

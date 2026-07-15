@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -23,7 +27,7 @@ public class AVProducerReferenceTime {
     }
 
     private static final GroupLayout $LAYOUT = MemoryLayout.structLayout(
-        Ffmpeg.C_LONG_LONG.withName("wallclock"),
+        Ffmpeg.C_LONG.withName("wallclock"),
         Ffmpeg.C_INT.withName("flags"),
         MemoryLayout.paddingLayout(4)
     ).withName("AVProducerReferenceTime");
@@ -47,7 +51,7 @@ public class AVProducerReferenceTime {
         return wallclock$LAYOUT;
     }
 
-    private static final long wallclock$OFFSET = $LAYOUT.byteOffset(groupElement("wallclock"));
+    private static final long wallclock$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -91,7 +95,7 @@ public class AVProducerReferenceTime {
         return flags$LAYOUT;
     }
 
-    private static final long flags$OFFSET = $LAYOUT.byteOffset(groupElement("flags"));
+    private static final long flags$OFFSET = 8;
 
     /**
      * Offset for field:

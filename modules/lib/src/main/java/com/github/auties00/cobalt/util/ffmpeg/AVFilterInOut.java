@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -51,7 +55,7 @@ public class AVFilterInOut {
         return name$LAYOUT;
     }
 
-    private static final long name$OFFSET = $LAYOUT.byteOffset(groupElement("name"));
+    private static final long name$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -95,7 +99,7 @@ public class AVFilterInOut {
         return filter_ctx$LAYOUT;
     }
 
-    private static final long filter_ctx$OFFSET = $LAYOUT.byteOffset(groupElement("filter_ctx"));
+    private static final long filter_ctx$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -139,7 +143,7 @@ public class AVFilterInOut {
         return pad_idx$LAYOUT;
     }
 
-    private static final long pad_idx$OFFSET = $LAYOUT.byteOffset(groupElement("pad_idx"));
+    private static final long pad_idx$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -183,7 +187,7 @@ public class AVFilterInOut {
         return next$LAYOUT;
     }
 
-    private static final long next$OFFSET = $LAYOUT.byteOffset(groupElement("next"));
+    private static final long next$OFFSET = 24;
 
     /**
      * Offset for field:

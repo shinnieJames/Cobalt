@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -61,7 +65,7 @@ public class AVFilterGraph {
         return av_class$LAYOUT;
     }
 
-    private static final long av_class$OFFSET = $LAYOUT.byteOffset(groupElement("av_class"));
+    private static final long av_class$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -105,7 +109,7 @@ public class AVFilterGraph {
         return filters$LAYOUT;
     }
 
-    private static final long filters$OFFSET = $LAYOUT.byteOffset(groupElement("filters"));
+    private static final long filters$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -149,7 +153,7 @@ public class AVFilterGraph {
         return nb_filters$LAYOUT;
     }
 
-    private static final long nb_filters$OFFSET = $LAYOUT.byteOffset(groupElement("nb_filters"));
+    private static final long nb_filters$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -193,7 +197,7 @@ public class AVFilterGraph {
         return scale_sws_opts$LAYOUT;
     }
 
-    private static final long scale_sws_opts$OFFSET = $LAYOUT.byteOffset(groupElement("scale_sws_opts"));
+    private static final long scale_sws_opts$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -237,7 +241,7 @@ public class AVFilterGraph {
         return thread_type$LAYOUT;
     }
 
-    private static final long thread_type$OFFSET = $LAYOUT.byteOffset(groupElement("thread_type"));
+    private static final long thread_type$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -281,7 +285,7 @@ public class AVFilterGraph {
         return nb_threads$LAYOUT;
     }
 
-    private static final long nb_threads$OFFSET = $LAYOUT.byteOffset(groupElement("nb_threads"));
+    private static final long nb_threads$OFFSET = 36;
 
     /**
      * Offset for field:
@@ -325,7 +329,7 @@ public class AVFilterGraph {
         return opaque$LAYOUT;
     }
 
-    private static final long opaque$OFFSET = $LAYOUT.byteOffset(groupElement("opaque"));
+    private static final long opaque$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -369,7 +373,7 @@ public class AVFilterGraph {
         return execute$LAYOUT;
     }
 
-    private static final long execute$OFFSET = $LAYOUT.byteOffset(groupElement("execute"));
+    private static final long execute$OFFSET = 48;
 
     /**
      * Offset for field:
@@ -413,7 +417,7 @@ public class AVFilterGraph {
         return aresample_swr_opts$LAYOUT;
     }
 
-    private static final long aresample_swr_opts$OFFSET = $LAYOUT.byteOffset(groupElement("aresample_swr_opts"));
+    private static final long aresample_swr_opts$OFFSET = 56;
 
     /**
      * Offset for field:

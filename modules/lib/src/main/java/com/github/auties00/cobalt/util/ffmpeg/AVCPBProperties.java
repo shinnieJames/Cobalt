@@ -2,8 +2,12 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -26,11 +30,11 @@ public class AVCPBProperties {
     }
 
     private static final GroupLayout $LAYOUT = MemoryLayout.structLayout(
-        Ffmpeg.C_LONG_LONG.withName("max_bitrate"),
-        Ffmpeg.C_LONG_LONG.withName("min_bitrate"),
-        Ffmpeg.C_LONG_LONG.withName("avg_bitrate"),
-        Ffmpeg.C_LONG_LONG.withName("buffer_size"),
-        Ffmpeg.C_LONG_LONG.withName("vbv_delay")
+        Ffmpeg.C_LONG.withName("max_bitrate"),
+        Ffmpeg.C_LONG.withName("min_bitrate"),
+        Ffmpeg.C_LONG.withName("avg_bitrate"),
+        Ffmpeg.C_LONG.withName("buffer_size"),
+        Ffmpeg.C_LONG.withName("vbv_delay")
     ).withName("AVCPBProperties");
 
     /**
@@ -52,7 +56,7 @@ public class AVCPBProperties {
         return max_bitrate$LAYOUT;
     }
 
-    private static final long max_bitrate$OFFSET = $LAYOUT.byteOffset(groupElement("max_bitrate"));
+    private static final long max_bitrate$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -96,7 +100,7 @@ public class AVCPBProperties {
         return min_bitrate$LAYOUT;
     }
 
-    private static final long min_bitrate$OFFSET = $LAYOUT.byteOffset(groupElement("min_bitrate"));
+    private static final long min_bitrate$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -140,7 +144,7 @@ public class AVCPBProperties {
         return avg_bitrate$LAYOUT;
     }
 
-    private static final long avg_bitrate$OFFSET = $LAYOUT.byteOffset(groupElement("avg_bitrate"));
+    private static final long avg_bitrate$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -184,7 +188,7 @@ public class AVCPBProperties {
         return buffer_size$LAYOUT;
     }
 
-    private static final long buffer_size$OFFSET = $LAYOUT.byteOffset(groupElement("buffer_size"));
+    private static final long buffer_size$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -228,7 +232,7 @@ public class AVCPBProperties {
         return vbv_delay$LAYOUT;
     }
 
-    private static final long vbv_delay$OFFSET = $LAYOUT.byteOffset(groupElement("vbv_delay"));
+    private static final long vbv_delay$OFFSET = 32;
 
     /**
      * Offset for field:

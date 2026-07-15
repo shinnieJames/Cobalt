@@ -4,7 +4,10 @@ package com.github.auties00.cobalt.util.ffmpeg;
 
 import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
@@ -69,7 +72,7 @@ public class AVStreamGroupTileGrid {
         return av_class$LAYOUT;
     }
 
-    private static final long av_class$OFFSET = $LAYOUT.byteOffset(groupElement("av_class"));
+    private static final long av_class$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -113,7 +116,7 @@ public class AVStreamGroupTileGrid {
         return nb_tiles$LAYOUT;
     }
 
-    private static final long nb_tiles$OFFSET = $LAYOUT.byteOffset(groupElement("nb_tiles"));
+    private static final long nb_tiles$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -157,7 +160,7 @@ public class AVStreamGroupTileGrid {
         return coded_width$LAYOUT;
     }
 
-    private static final long coded_width$OFFSET = $LAYOUT.byteOffset(groupElement("coded_width"));
+    private static final long coded_width$OFFSET = 12;
 
     /**
      * Offset for field:
@@ -201,7 +204,7 @@ public class AVStreamGroupTileGrid {
         return coded_height$LAYOUT;
     }
 
-    private static final long coded_height$OFFSET = $LAYOUT.byteOffset(groupElement("coded_height"));
+    private static final long coded_height$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -273,7 +276,7 @@ public class AVStreamGroupTileGrid {
             return idx$LAYOUT;
         }
 
-        private static final long idx$OFFSET = $LAYOUT.byteOffset(groupElement("idx"));
+        private static final long idx$OFFSET = 0;
 
         /**
          * Offset for field:
@@ -317,7 +320,7 @@ public class AVStreamGroupTileGrid {
             return horizontal$LAYOUT;
         }
 
-        private static final long horizontal$OFFSET = $LAYOUT.byteOffset(groupElement("horizontal"));
+        private static final long horizontal$OFFSET = 4;
 
         /**
          * Offset for field:
@@ -361,7 +364,7 @@ public class AVStreamGroupTileGrid {
             return vertical$LAYOUT;
         }
 
-        private static final long vertical$OFFSET = $LAYOUT.byteOffset(groupElement("vertical"));
+        private static final long vertical$OFFSET = 8;
 
         /**
          * Offset for field:
@@ -454,7 +457,7 @@ public class AVStreamGroupTileGrid {
         return offsets$LAYOUT;
     }
 
-    private static final long offsets$OFFSET = $LAYOUT.byteOffset(groupElement("offsets"));
+    private static final long offsets$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -510,7 +513,7 @@ public class AVStreamGroupTileGrid {
         return background$LAYOUT;
     }
 
-    private static final long background$OFFSET = $LAYOUT.byteOffset(groupElement("background"));
+    private static final long background$OFFSET = 32;
 
     /**
      * Offset for field:
@@ -562,7 +565,7 @@ public class AVStreamGroupTileGrid {
      * }
      */
     public static byte background(MemorySegment struct, long index0) {
-        return (byte)background$ELEM_HANDLE.get(struct, background$OFFSET, index0);
+        return (byte)background$ELEM_HANDLE.get(struct, 0L, index0);
     }
 
     /**
@@ -572,7 +575,7 @@ public class AVStreamGroupTileGrid {
      * }
      */
     public static void background(MemorySegment struct, long index0, byte fieldValue) {
-        background$ELEM_HANDLE.set(struct, background$OFFSET, index0, fieldValue);
+        background$ELEM_HANDLE.set(struct, 0L, index0, fieldValue);
     }
 
     private static final OfInt horizontal_offset$LAYOUT = (OfInt)$LAYOUT.select(groupElement("horizontal_offset"));
@@ -587,7 +590,7 @@ public class AVStreamGroupTileGrid {
         return horizontal_offset$LAYOUT;
     }
 
-    private static final long horizontal_offset$OFFSET = $LAYOUT.byteOffset(groupElement("horizontal_offset"));
+    private static final long horizontal_offset$OFFSET = 36;
 
     /**
      * Offset for field:
@@ -631,7 +634,7 @@ public class AVStreamGroupTileGrid {
         return vertical_offset$LAYOUT;
     }
 
-    private static final long vertical_offset$OFFSET = $LAYOUT.byteOffset(groupElement("vertical_offset"));
+    private static final long vertical_offset$OFFSET = 40;
 
     /**
      * Offset for field:
@@ -675,7 +678,7 @@ public class AVStreamGroupTileGrid {
         return width$LAYOUT;
     }
 
-    private static final long width$OFFSET = $LAYOUT.byteOffset(groupElement("width"));
+    private static final long width$OFFSET = 44;
 
     /**
      * Offset for field:
@@ -719,7 +722,7 @@ public class AVStreamGroupTileGrid {
         return height$LAYOUT;
     }
 
-    private static final long height$OFFSET = $LAYOUT.byteOffset(groupElement("height"));
+    private static final long height$OFFSET = 48;
 
     /**
      * Offset for field:

@@ -2,9 +2,14 @@
 
 package com.github.auties00.cobalt.util.ffmpeg;
 
+import java.lang.invoke.*;
 import java.lang.foreign.*;
+import java.nio.ByteOrder;
+import java.util.*;
 import java.util.function.*;
+import java.util.stream.*;
 
+import static java.lang.foreign.ValueLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.*;
 
 /**
@@ -51,7 +56,7 @@ public class AVFilterFormatsConfig {
         return formats$LAYOUT;
     }
 
-    private static final long formats$OFFSET = $LAYOUT.byteOffset(groupElement("formats"));
+    private static final long formats$OFFSET = 0;
 
     /**
      * Offset for field:
@@ -95,7 +100,7 @@ public class AVFilterFormatsConfig {
         return samplerates$LAYOUT;
     }
 
-    private static final long samplerates$OFFSET = $LAYOUT.byteOffset(groupElement("samplerates"));
+    private static final long samplerates$OFFSET = 8;
 
     /**
      * Offset for field:
@@ -139,7 +144,7 @@ public class AVFilterFormatsConfig {
         return channel_layouts$LAYOUT;
     }
 
-    private static final long channel_layouts$OFFSET = $LAYOUT.byteOffset(groupElement("channel_layouts"));
+    private static final long channel_layouts$OFFSET = 16;
 
     /**
      * Offset for field:
@@ -183,7 +188,7 @@ public class AVFilterFormatsConfig {
         return color_spaces$LAYOUT;
     }
 
-    private static final long color_spaces$OFFSET = $LAYOUT.byteOffset(groupElement("color_spaces"));
+    private static final long color_spaces$OFFSET = 24;
 
     /**
      * Offset for field:
@@ -227,7 +232,7 @@ public class AVFilterFormatsConfig {
         return color_ranges$LAYOUT;
     }
 
-    private static final long color_ranges$OFFSET = $LAYOUT.byteOffset(groupElement("color_ranges"));
+    private static final long color_ranges$OFFSET = 32;
 
     /**
      * Offset for field:
