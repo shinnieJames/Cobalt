@@ -424,6 +424,7 @@ EOF
     rm -rf "$b" && mkdir -p "$b"
     ( cd "$b" && PKG_CONFIG_LIBDIR="$FFMPEG_PC_DIR" "$FFMPEG_SRC/configure" \
         --prefix="$b/inst" \
+        --cc="${CC:-cc}" --cxx="${CXX:-c++}" \
         --extra-cflags="${CFLAGS:-} $FFMPEG_EXTRA_CFLAGS" \
         --disable-everything --disable-programs \
         --disable-doc --disable-htmlpages --disable-manpages --disable-podpages --disable-txtpages \
