@@ -422,6 +422,12 @@ EOF
 
     local b="$BUILD/build-ffmpeg/build"
     rm -rf "$b" && mkdir -p "$b"
+    # MSYS2 base is x86_64 but the toolchain targets aarch64; pin ffmpeg's arch.
+    local ffmpeg_extra=""
+    if [ "$OS" = windows ] && [ "$ARCH" = aarch64 ]; then
+        ffmpeg_extra="--enable-cross-compile --arch=aarch64 --target-os=mingw32"
+    fi
+    # shellcheck disable=SC2086
     ( cd "$b" && PKG_CONFIG_LIBDIR="$FFMPEG_PC_DIR" "$FFMPEG_SRC/configure" \
         --prefix="$b/inst" \
         --cc="${CC:-cc}" --cxx="${CXX:-c++}" \
@@ -447,7 +453,8 @@ EOF
         --enable-libvpx     --enable-encoder=libvpx_vp8 --enable-decoder=libvpx_vp8 \
         --enable-libwebp    --enable-encoder=libwebp    --enable-decoder=libwebp    \
         --disable-decoder=h264,opus,vp8 \
-        --disable-encoder=vp9 )
+        --disable-encoder=vp9 \
+        $ffmpeg_extra )
     make -C "$b" -j "$JOBS"
     make -C "$b" install
     vendor_ffmpeg_headers "$b/inst/include"
