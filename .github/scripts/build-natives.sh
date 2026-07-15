@@ -425,7 +425,7 @@ EOF
     # MSYS2 base is x86_64 but the toolchain targets aarch64; pin ffmpeg's arch.
     local ffmpeg_extra=""
     if [ "$OS" = windows ] && [ "$ARCH" = aarch64 ]; then
-        ffmpeg_extra="--enable-cross-compile --arch=aarch64 --target-os=mingw32"
+        ffmpeg_extra="--arch=aarch64 --target-os=mingw32"
     fi
     # shellcheck disable=SC2086
     ( cd "$b" && PKG_CONFIG_LIBDIR="$FFMPEG_PC_DIR" "$FFMPEG_SRC/configure" \
